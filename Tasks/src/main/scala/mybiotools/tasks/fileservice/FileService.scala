@@ -26,79 +26,25 @@
 
 package tasks.fileservice
 
-import akka.actor.{ Actor, PoisonPill, ActorRef, Props, ActorRefFactory }
-import akka.actor.Actor._
+import akka.actor._
 import akka.pattern.ask
 import akka.pattern.pipe
-import scala.concurrent.{ Future, Await, ExecutionContext }
-import java.lang.Class
-import java.io.{ File, InputStream, FileInputStream, BufferedInputStream }
-import scala.concurrent.duration._
-import java.util.concurrent.{ TimeUnit, ScheduledFuture }
-import java.nio.channels.{ WritableByteChannel, ReadableByteChannel }
-import tasks.util._
-import scala.util.{ Try, Failure, Success }
+
 import com.google.common.hash._
 
+import scala.concurrent.duration._
 import scala.concurrent._
 import scala.util._
+
+import java.lang.Class
+import java.io.{ File, InputStream, FileInputStream, BufferedInputStream }
+import java.util.concurrent.{ TimeUnit, ScheduledFuture }
+import java.nio.channels.{ WritableByteChannel, ReadableByteChannel }
 import java.net.URL
 
+import tasks.util._
 import tasks.util.eq._
 import tasks.caching._
-
-sealed trait FileServiceMessage
-
-@SerialVersionUID(1L)
-case class GetListOfFilesInStorage(regexp: String) extends FileServiceMessage
-
-@SerialVersionUID(1L)
-case class NewFile(f: File, p: ProposedManagedFilePath) extends FileServiceMessage
-
-@SerialVersionUID(1L)
-case class GetPaths(p: SharedFile) extends FileServiceMessage
-
-@SerialVersionUID(1L)
-case class KnownPaths(paths: List[File]) extends FileServiceMessage
-
-@SerialVersionUID(1L)
-case class KnownPathsWithStorage(paths: List[File], storage: FileStorage) extends FileServiceMessage
-
-@SerialVersionUID(1L)
-case class TransferToMe(actor: ActorRef) extends FileServiceMessage
-
-@SerialVersionUID(1L)
-case class TransferFileToUser(actor: ActorRef, sf: SharedFile)
-
-@SerialVersionUID(1L)
-case class NewPath(p: SharedFile, path: File) extends FileServiceMessage
-
-@SerialVersionUID(1L)
-case object WaitingForSharedFile extends FileServiceMessage
-
-@SerialVersionUID(1L)
-case object WaitingForPath extends FileServiceMessage
-
-@SerialVersionUID(1L)
-case class FileNotFound(e: Throwable) extends FileServiceMessage
-
-@SerialVersionUID(1L)
-case class TryToDownload(storage: FileStorage) extends FileServiceMessage
-
-@SerialVersionUID(1L)
-case class TryToUpload(storage: FileStorage) extends FileServiceMessage
-
-@SerialVersionUID(1L)
-case class Uploaded(length: Long, hash: Int, file: File, p: ManagedFilePath) extends FileServiceMessage
-
-@SerialVersionUID(1L)
-case class CouldNotUpload(p: ProposedManagedFilePath) extends FileServiceMessage
-
-@SerialVersionUID(1L)
-case class IsInStorageAnswer(value: Boolean) extends FileServiceMessage
-
-@SerialVersionUID(1L)
-case class ErrorWhileAccessingStore(e: Throwable) extends FileServiceMessage
 
 @SerialVersionUID(1L)
 case class FileServiceActor(actor: ActorRef)
@@ -110,19 +56,10 @@ case class FileServicePrefix(list: Vector[String]) {
 }
 
 @SerialVersionUID(1L)
-case class NewRemote(url: URL)
-
-@SerialVersionUID(1L)
 case class ProposedManagedFilePath(list: Vector[String]) {
   def name = list.last
   def toManaged = ManagedFilePath(list)
 }
-
-@SerialVersionUID(1L)
-case class IsAccessible(sf: SharedFile)
-
-@SerialVersionUID(1L)
-case class GetURL(sf: SharedFile)
 
 object SharedFileHelper {
 

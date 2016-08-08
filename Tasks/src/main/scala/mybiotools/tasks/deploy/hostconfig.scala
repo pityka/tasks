@@ -31,21 +31,23 @@ import tasks.caching._
 import tasks.queue._
 import tasks.util._
 import tasks.fileservice._
-import akka.actor.{ Actor, ActorRef, PoisonPill, ActorSystem, Props, ActorRefFactory }
 import tasks._
-import java.io.File
-import akka.actor.Actor._
 
+import akka.actor.Actor._
+import akka.pattern.ask
+import akka.util.Timeout
+
+import java.io.File
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.InetAddress
+
 import scala.concurrent.duration._
 import scala.concurrent._
-import akka.pattern.ask
-import com.typesafe.config.{ ConfigFactory, Config }
 import scala.concurrent.Await
-import collection.JavaConversions._
-import akka.util.Timeout
+import scala.collection.JavaConversions._
+
+import com.typesafe.config.{ ConfigFactory, Config }
 
 sealed trait Role
 object MASTER extends Role
@@ -104,6 +106,7 @@ object LocalConfigurationFromConfig extends LocalConfiguration(config.global.get
  * Cardinality is determined from hosts.numCPU config
  */
 object MasterSlaveFromConfig extends MasterSlaveConfiguration {
+
   val myPort = chooseNetworkPort
 
   val hostname = config.global.getString("hosts.hostname")

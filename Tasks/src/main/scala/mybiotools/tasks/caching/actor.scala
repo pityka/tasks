@@ -39,21 +39,6 @@ import tasks.util.eq._
 import tasks.queue._
 import tasks.fileservice._
 
-@SerialVersionUID(1L)
-case class CacheActor(actor: ActorRef) extends Serializable
-
-@SerialVersionUID(1L)
-private[tasks] case class SaveResult(sch: ScheduleTask, r: Result) extends Serializable
-
-@SerialVersionUID(1L)
-private[tasks] case class CheckResult(sch: ScheduleTask, sender: ActorRef) extends Serializable
-
-@SerialVersionUID(1L)
-private[tasks] case class TaskNotFoundInCache(v: Boolean = true) extends Serializable
-
-@SerialVersionUID(1L)
-private[tasks] case class AnswerFromCache(message: Either[TaskNotFoundInCache, Option[Result]], sender: ActorRef, sch: ScheduleTask) extends Serializable
-
 class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor) extends Actor with akka.actor.ActorLogging {
 
   implicit def fs: FileServiceActor = fileService
