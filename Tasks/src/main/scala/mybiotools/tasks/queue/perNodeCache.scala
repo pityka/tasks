@@ -27,22 +27,15 @@ package tasks.queue
 
 import akka.actor.{ Actor, ActorRef }
 import akka.pattern.ask
-import concurrent.duration._
-import concurrent.ExecutionContext
-import concurrent.Future
-
-@SerialVersionUID(1L)
-case class LookUp(s: String)
-
-@SerialVersionUID(1L)
-case class Save(s: String, v: Any)
+import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext
+import scala.concurrent.Future
 
 @SerialVersionUID(1L)
 case object YouShouldSetIt
 
 object NodeLocalCache {
 
-  // This method blocks. Only ever call from Computation.apply
   def getItemBlocking[A](key: String)(orElse: => A)(implicit nlc: NodeLocalCacheActor): A = {
     implicit val to = akka.util.Timeout(168 hours)
     val f = (nlc.actor ? LookUp(key))

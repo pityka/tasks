@@ -27,19 +27,19 @@
 package tasks.queue
 
 import akka.actor.{ Actor, PoisonPill, ActorRef, Cancellable, Props }
-import akka.actor.Actor._
-import scala.concurrent.Future
-import scala.concurrent.duration._
-import java.util.concurrent.{ TimeUnit, ScheduledFuture }
-import scala.concurrent.duration.Duration
-import java.util.concurrent.TimeUnit.{ SECONDS }
 import akka.remote.DeadlineFailureDetector
 import akka.remote.FailureDetector.Clock
 import akka.remote.DisassociatedEvent
+import akka.pattern.ask
+
+import scala.concurrent.Future
+import scala.concurrent.duration._
+import scala.concurrent.duration.Duration
+import java.util.concurrent.TimeUnit.{ SECONDS }
+import java.util.concurrent.{ TimeUnit, ScheduledFuture }
 
 import scala.collection.immutable.Seq
 import scala.collection.mutable.Queue
-import akka.pattern.ask
 
 import tasks.util.eq._
 import tasks.shared._
@@ -47,39 +47,6 @@ import tasks.shared.monitor._
 import tasks.fileservice._
 import tasks.caching._
 import tasks.util._
-
-@SerialVersionUID(1L)
-private case object ATaskWasForwarded
-
-@SerialVersionUID(1L)
-private[tasks] case class QueueInfo(q: Map[ScheduleTask, List[ActorRef]])
-
-@SerialVersionUID(1L)
-private[tasks] case object GetQueueInformation
-
-@SerialVersionUID(1L)
-private case class QueryTask(sch: ScheduleTask, ac: ActorRef) extends Serializable
-
-@SerialVersionUID(1L)
-private[tasks] case class LauncherDown(ac: ActorRef) extends Serializable
-
-@SerialVersionUID(1L)
-private case class TaskDone(sch: ScheduleTask, result: Result) extends Serializable
-
-@SerialVersionUID(1L)
-private case class TaskFailedMessageToQueue(sch: ScheduleTask, cause: Throwable) extends Serializable
-
-@SerialVersionUID(1L)
-private case class TaskFailedMessageToProxy(sch: ScheduleTask, cause: Throwable) extends Serializable
-
-@SerialVersionUID(1L)
-private case class AskForWork(resources: CPUMemoryAvailable) extends Serializable
-
-@SerialVersionUID(1L)
-case object HowLoadedAreYou extends Serializable
-
-@SerialVersionUID(1L)
-private case object CheckHeartBeat
 
 class HeartBeatActor(target: ActorRef) extends Actor with akka.actor.ActorLogging {
 
@@ -100,8 +67,6 @@ class HeartBeatActor(target: ActorRef) extends Actor with akka.actor.ActorLoggin
         message = CheckHeartBeat
       )
 
-    // context.system.eventStream.subscribe(self, classOf[RemoteClientShutdown])
-    // context.system.eventStream.subscribe(self, classOf[RemoteServerClientDisconnected])
   }
 
   override def postStop {
@@ -120,19 +85,13 @@ class HeartBeatActor(target: ActorRef) extends Actor with akka.actor.ActorLoggin
       log.warning("DisassociatedEvent received. TargetDown.")
       targetDown
     }
-    // case RemoteServerClientDisconnected(transport, Some(remoteAddress)) if remoteAddress == target.path.address => {
-    //   log.info("RemoteServerClientDisconnected. TargetDown.")
-    //   targetDown
-    // }
     case CheckHeartBeat => {
       if (!failureDetector.isAvailable) {
         targetDown
       } else {
         target ! Ping
       }
-
     }
-
     case Pong | true => {
       failureDetector.heartbeat
 

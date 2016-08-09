@@ -27,13 +27,14 @@
 package tasks.queue
 
 import akka.actor.{ Actor, PoisonPill, ActorRef, ActorContext, ActorRefFactory }
-
 import akka.util.Timeout
+import akka.pattern.ask
+
 import scala.concurrent.duration._
 import scala.concurrent.Future
-import akka.pattern.ask
-import java.io.File
 import scala.concurrent.ExecutionContext
+
+import java.io.File
 
 import tasks.fileservice._
 import tasks.util._
@@ -137,16 +138,6 @@ case class WhatAreYourChildren[A <: Prerequisitive[A], B <: Result](
   notification: ActorRef,
   updater: UpdatePrerequisitive[A, B]
 )
-case class SaveUpdater[A <: Prerequisitive[A], B <: Result](updater: UpdatePrerequisitive[A, B])
-case object UpdaterSaved
-case object GetBackResult
-private case class ChildrenMessage[A <: Prerequisitive[A], B <: Result](mytargets: Set[ActorRef], notification: ActorRef, updater: UpdatePrerequisitive[A, B])
-private case class InternalMessageFromTask(actor: ActorRef, result: Result) extends Serializable
-private case class InternalMessageTaskFailed(actor: ActorRef, cause: Throwable) extends Serializable
-private case class FailureMessageFromProxyToProxy(cause: Throwable)
-
-case class MessageFromTask(result: Result) extends Serializable
-case object SaveDone
 
 object ProxyTask {
 

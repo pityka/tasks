@@ -28,10 +28,12 @@ package tasks.queue
 
 import akka.actor.{ Actor, PoisonPill, ActorRef, Props, Cancellable, ActorRefFactory }
 import akka.actor.Actor._
+
 import scala.concurrent.Future
+import scala.concurrent.duration._
+
 import java.lang.Class
 import java.io.File
-import scala.concurrent.duration._
 import java.util.concurrent.{ ScheduledFuture }
 
 import tasks.util._
@@ -40,15 +42,6 @@ import tasks.shared._
 import tasks.fileservice._
 import tasks.caching._
 import tasks.elastic._
-// private class ActorInEnvelope(actor: ActorRef) extends Serializable {
-
-//   private val bytes: Array[Byte] = Compression.LZF.compress(toRemoteActorRefProtocol(actor).toByteArray)
-
-//   def revive: ActorRef = fromBinaryToRemoteActorRef(Compression.LZF.uncompress(bytes))
-// }
-
-@SerialVersionUID(1L)
-private case class Ack(allocated: CPUMemoryAllocated)
 
 @SerialVersionUID(1L)
 case class ScheduleWithProxy(sch: ScheduleTask, ac: List[ActorRef]) extends Serializable
@@ -64,12 +57,6 @@ case class TaskDescription(taskID: String, startData: Prerequisitive[_]) extends
 }
 
 @SerialVersionUID(1L)
-case class BlockOn(request: CPUMemoryRequest) extends Serializable
-
-@SerialVersionUID(1L)
-case class BlockOff(request: CPUMemoryRequest) extends Serializable
-
-@SerialVersionUID(1L)
 case class ScheduleTask(
     description: TaskDescription,
     taskImplementation: String,
@@ -82,24 +69,6 @@ case class ScheduleTask(
 
   def startData = description.startData
 }
-
-@SerialVersionUID(1L)
-private case class RegisterForNotification(actor: ActorRef) extends Serializable
-
-@SerialVersionUID(1L)
-private case object GetMaximumSlots
-
-@SerialVersionUID(1L)
-private case object GetAvailableSlots
-
-@SerialVersionUID(1L)
-private case object Ping
-
-@SerialVersionUID(1L)
-private case object Pong
-
-@SerialVersionUID(1L)
-private case object CheckQueue
 
 class TaskLauncher(
     taskQueue: ActorRef,
