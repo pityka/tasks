@@ -160,16 +160,9 @@ trait LSFHostConfiguration extends HostConfiguration {
 
   private val myPort = chooseNetworkPort
 
-  private def mpiAvailable: Boolean = false //searchForFileInPath("mpirun")
-
   lazy val myAddress = new InetSocketAddress(hosts._1, myPort)
 
   lazy val myCardinality = math.max(0, hosts._2 - reservedCPU)
-
-  lazy val hostsForMPI: Seq[HostForMPI] = {
-    if (mpiAvailable) hostsAndSlots.map(x => HostForMPI(x._1, x._2))
-    else Nil
-  }
 
 }
 

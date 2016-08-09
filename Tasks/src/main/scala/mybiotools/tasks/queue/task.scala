@@ -90,8 +90,6 @@ case class QueueActor(actor: ActorRef) extends Serializable
 @SerialVersionUID(1L)
 case class LauncherActor(actor: ActorRef) extends Serializable
 
-case class HostForMPI(hostname: String, slots: Int)
-
 object LauncherActor {
   def block[T](request: CPUMemoryRequest)(k: => T)(implicit l: LauncherActor) = {
     l.actor ! BlockOn(request)
@@ -103,7 +101,6 @@ object LauncherActor {
 
 case class ComputationEnvironment(
     val resourceAllocated: CPUMemoryAllocated,
-    val availableHostsForMPI: Seq[HostForMPI],
     implicit val components: TaskSystemComponents,
     implicit val log: akka.event.LoggingAdapter,
     implicit val launcher: LauncherActor
@@ -120,12 +117,6 @@ case class ComputationEnvironment(
   implicit def queue: QueueActor = components.queue
 
   implicit def cache: CacheActor = components.cache
-
-  def mpiHostFile = {
-    val tmp = TempFile.createTempFile(".txt")
-    writeToFile(tmp, availableHostsForMPI.map(x => s"${x.hostname} slots=${x.slots}").mkString("\n"))
-    tmp
-  }
 
   def toTaskSystemComponents =
     components
@@ -177,7 +168,6 @@ private class Task[P <: Prerequisitive[P], Q <: Result](
     globalCacheActor: ActorRef,
     nodeLocalCache: ActorRef,
     resourceAllocated: CPUMemoryAllocated,
-    hostsForMPI: Seq[HostForMPI],
     fileServicePrefix: FileServicePrefix
 ) extends Actor with akka.actor.ActorLogging {
 
@@ -204,7 +194,6 @@ private class Task[P <: Prerequisitive[P], Q <: Result](
 
         val ce = ComputationEnvironment(
           resourceAllocated,
-          hostsForMPI,
           TaskSystemComponents(
             QueueActor(balancerActor),
             FileServiceActor(fileServiceActor),

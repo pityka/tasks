@@ -374,12 +374,8 @@ akka {
   )
 
   private val launcherActor = if (numberOfCores > 0) {
-    val hostsForMPI: Seq[HostForMPI] = hostConfig match {
-      case hc: LSFHostConfiguration => hc.hostsForMPI
-      case _ => Nil
-    }
     val refresh: FiniteDuration = (new DurationLong(config.getMilliseconds("tasks.askInterval")).millisecond)
-    val ac = system.actorOf(Props(new TaskLauncher(balancerActor, nodeLocalCacheActor, CPUMemoryAvailable(cpu = numberOfCores, memory = availableMemory), refreshRate = refresh, hostsForMPI = hostsForMPI)).withDispatcher("launcher"), "launcher")
+    val ac = system.actorOf(Props(new TaskLauncher(balancerActor, nodeLocalCacheActor, CPUMemoryAvailable(cpu = numberOfCores, memory = availableMemory), refreshRate = refresh)).withDispatcher("launcher"), "launcher")
     reaperActor ! WatchMe(ac)
     Some(ac)
   } else None

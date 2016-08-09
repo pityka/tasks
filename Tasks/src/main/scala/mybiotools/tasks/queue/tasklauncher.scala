@@ -74,8 +74,7 @@ class TaskLauncher(
     taskQueue: ActorRef,
     nodeLocalCache: ActorRef,
     slots: CPUMemoryAvailable = CPUMemoryAvailable(cpu = 1, memory = 2000),
-    refreshRate: FiniteDuration = 100 milliseconds,
-    hostsForMPI: Seq[HostForMPI] = Nil
+    refreshRate: FiniteDuration = 100 milliseconds
 ) extends Actor with akka.actor.ActorLogging {
 
   private[this] val maxResources: CPUMemoryAvailable = slots
@@ -95,11 +94,6 @@ class TaskLauncher(
     val allocatedResource = availableResources.maximum(sch.resource)
     availableResources = availableResources.substract(allocatedResource)
 
-    // if all cpu have been allocated for this job then allow use of MPI
-    // reason is that the hostsForMPI resources are not properly tracked so
-    // one job has to use all of them at once
-    val hostsForMPIEdited = if (availableResources.cpu == 0) hostsForMPI else Nil
-
     val actor = context.actorOf(
       Props(
         classOf[Task[_, _]],
@@ -110,7 +104,6 @@ class TaskLauncher(
         sch.cacheActor,
         nodeLocalCache,
         allocatedResource,
-        hostsForMPIEdited,
         sch.fileServicePrefix.append(sch.description.taskID)
       ).withDispatcher("task-worker-blocker-dispatcher")
     )
