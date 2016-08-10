@@ -72,22 +72,23 @@ trait Messages {
   @SerialVersionUID(1L)
   private[tasks] case object CheckHeartBeat
 
+  case class AddTarget[A <: Prerequisitive[A], B <: Result](target: ActorRef, updater: UpdatePrerequisitive[A, B])
+
   case class SaveUpdater[A <: Prerequisitive[A], B <: Result](updater: UpdatePrerequisitive[A, B])
+
   case object UpdaterSaved
+
   case object GetBackResult
-  private[tasks] case class ChildrenMessage[A <: Prerequisitive[A], B <: Result](mytargets: Set[ActorRef], notification: ActorRef, updater: UpdatePrerequisitive[A, B])
+
   private[tasks] case class InternalMessageFromTask(actor: ActorRef, result: Result) extends Serializable
+
   private[tasks] case class InternalMessageTaskFailed(actor: ActorRef, cause: Throwable) extends Serializable
+
   private[tasks] case class FailureMessageFromProxyToProxy(cause: Throwable)
 
   case class MessageFromTask(result: Result) extends Serializable
+
   case object SaveDone
-
-  @SerialVersionUID(1L)
-  case class BlockOn(request: CPUMemoryRequest) extends Serializable
-
-  @SerialVersionUID(1L)
-  case class BlockOff(request: CPUMemoryRequest) extends Serializable
 
   @SerialVersionUID(1L)
   private[tasks] case class Ack(allocated: CPUMemoryAllocated)

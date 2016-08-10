@@ -145,7 +145,7 @@ akka {
 
   val logFile: Option[File] = config.getString("tasks.logFile") match {
     case x if x == "" => None
-    case x => Some(new File(x + System.nanoTime.toString + ".log"))
+    case x => Some(new File(x + System.currentTimeMillis.toString + ".log"))
   }
 
   logFile.foreach { f =>
@@ -153,7 +153,10 @@ akka {
     registerFileLoggerToErrorStream(new File(f.getCanonicalPath + ".errors"))
   }
 
-  tasksystemlog.info("My address, numCPU, memory and role: " + hostConfig.myAddress.toString + "," + hostConfig.myCardinality.toString + "," + hostConfig.availableMemory + "," + hostConfig.myRole.toString)
+  tasksystemlog.info("Listening on: " + hostConfig.myAddress.toString)
+  tasksystemlog.info("CPU: " + hostConfig.myCardinality.toString)
+  tasksystemlog.info("RAM: " + hostConfig.availableMemory.toString)
+  tasksystemlog.info("Role: " + hostConfig.myRole.toString)
 
   if (hostConfig.myCardinality > Runtime.getRuntime().availableProcessors()) {
     tasksystemlog.warning("Number of CPUs in the machine is " + Runtime.getRuntime().availableProcessors + ". numCPU should not be greater than this.")

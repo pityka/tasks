@@ -42,20 +42,6 @@ import tasks.shared._
 import tasks._
 import tasks.caching._
 
-case class ProxyTaskActorRef[B <: Prerequisitive[B], T <: Result](private val actor: ActorRef) {
-  def ~>[C <: Prerequisitive[C], A <: Result](child: ProxyTaskActorRef[C, A])(implicit updater: UpdatePrerequisitive[C, T]): ProxyTaskActorRef[C, A] = {
-    ProxyTask.addTarget(actor, child.actor, updater)
-    child
-  }
-  def ?(implicit ec: ExecutionContext) = ProxyTask.getBackResultFuture(actor).asInstanceOf[Future[T]]
-  def ?!(implicit ec: ExecutionContext) = ProxyTask.getBackResult(actor).asInstanceOf[T]
-
-  def <~[A <: Result](result: A)(implicit updater: UpdatePrerequisitive[B, A]) {
-    ProxyTask.sendStartData(actor, List(result))
-  }
-
-}
-
 // This is the output of a task
 trait Result extends Serializable {
   def verifyAfterCache(implicit service: FileServiceActor, context: ActorRefFactory): Boolean = true
@@ -78,24 +64,6 @@ trait SimplePrerequisitive[+A] extends Prerequisitive[A] with Product { self =>
   def ready = productIterator.forall {
     case x: Option[_] => x.isDefined
     case _ => throw new RuntimeException("SimplePrerequisitive should be a product of Options")
-  }
-}
-
-@SerialVersionUID(1L)
-case class NodeLocalCacheActor(actor: ActorRef) extends Serializable
-
-@SerialVersionUID(1L)
-case class QueueActor(actor: ActorRef) extends Serializable
-
-@SerialVersionUID(1L)
-case class LauncherActor(actor: ActorRef) extends Serializable
-
-object LauncherActor {
-  def block[T](request: CPUMemoryRequest)(k: => T)(implicit l: LauncherActor) = {
-    l.actor ! BlockOn(request)
-    val x = k
-    l.actor ! BlockOff(request)
-    k
   }
 }
 
@@ -122,13 +90,6 @@ case class ComputationEnvironment(
     components
 
 }
-
-case class AddTarget[A <: Prerequisitive[A], B <: Result](target: ActorRef, updater: UpdatePrerequisitive[A, B])
-case class AddTargetNoCheck(target: ActorRef)
-case class WhatAreYourChildren[A <: Prerequisitive[A], B <: Result](
-  notification: ActorRef,
-  updater: UpdatePrerequisitive[A, B]
-)
 
 object ProxyTask {
 
@@ -292,8 +253,6 @@ abstract class ProxyTask(
 
   private var taskIsQueued = false
 
-  private var targetNegotiation = 0
-
   private def distributeResult {
     log.debug("Distributing result to targets: " + _targets.toString + ", " + _channels.toString)
     result.foreach(r => _targets.foreach { t => t ! r })
@@ -334,72 +293,47 @@ abstract class ProxyTask(
   }
 
   def receive = {
-    case x: AddTarget[_, _] => {
+    case x: AddTarget[_, _] =>
       if (x.target == self) sender ! false
       else {
-        targetNegotiation += 1
-        x.target ! WhatAreYourChildren(sender, x.updater)
+        x.target ! SaveUpdater(x.updater)
       }
 
-    }
-    case x: WhatAreYourChildren[_, _] => {
-      log.debug("whatareyourchildren")
-      if (targetNegotiation > 0) {
-        self forward WhatAreYourChildren(x.notification, x.updater)
-      } else {
-        sender ! ChildrenMessage(_targets, x.notification, x.updater)
-      }
-    }
-    case x: ChildrenMessage[_, _] => {
-      val newtarget = sender
-
-      if (newtarget == self || x.mytargets.contains(self)) {
-        log.error("Adding " + newtarget.toString + " to the dependency graph would introduce a cycle in the graph.")
-        targetNegotiation -= 1
-        x.notification ! false
-      } else {
-        sender ! SaveUpdater(x.updater)
-        x.notification ! true
-      }
-
-    }
-    case x: SaveUpdater[_, _] => {
+    case x: SaveUpdater[_, _] =>
       _updatePrerequisitives = x.updater.asInstanceOf[UpdatePrerequisitive[MyPrerequisitive, Result]] :: _updatePrerequisitives
       sender ! UpdaterSaved
-    }
-    case UpdaterSaved => {
-      targetNegotiation -= 1
 
+    case UpdaterSaved =>
       log.debug("target added")
       _targets = _targets + sender
       result.foreach(r => sender ! r)
-    }
-    case msg: Result => {
+
+    case msg: Result =>
       log.debug("Message received, handling in handleIncomingResult. ")
       handleIncomingResult(msg)
       if (incomings.ready && !taskIsQueued) startTask
-    }
-    case MessageFromTask(incomingResult) => {
+
+    case MessageFromTask(incomingResult) =>
       log.debug("Message received from: " + sender.toString + ", ")
       if (result.isEmpty) {
         result = Some(incomingResult)
         distributeResult
       }
-    }
-    case GetBackResult => {
+
+    case GetBackResult =>
       log.debug("GetBackResult message received. Registering for notification: " + sender.toString)
       _channels = _channels + sender //.asInstanceOf[Channel[Result]]
       distributeResult
-    }
-    case ATaskWasForwarded => {
+
+    case ATaskWasForwarded =>
       log.debug("The loadbalancer received the message and queued it.")
       taskIsQueued = true
-    }
-    case TaskFailedMessageToProxy(sch, cause) => {
+
+    case TaskFailedMessageToProxy(sch, cause) =>
       log.error(cause, "Execution failed. ")
       notifyListenersOnFailure(cause)
       self ! PoisonPill
-    }
+
     case FailureMessageFromProxyToProxy(cause) => {
       notifyListenersOnFailure(cause)
       self ! PoisonPill

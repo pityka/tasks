@@ -213,12 +213,6 @@ class TaskLauncher(
         sender ! Working
       }
     }
-    case BlockOn(request) => {
-      availableResources = availableResources.addBack(CPUMemoryAllocated(request.cpu._1, request.memory))
-    }
-    case BlockOff(request) => {
-      availableResources = availableResources.substract(CPUMemoryAllocated(request.cpu._1, request.memory))
-    }
 
     case x => log.debug("unhandled" + x)
 
