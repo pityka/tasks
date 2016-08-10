@@ -77,7 +77,6 @@ object EC2Settings {
 
   val endpoint: String = config.global.getString("tasks.elastic.aws.endpoint")
 
-  // in $
   val spotPrice: Double = config.global.getDouble("tasks.elastic.aws.spotPrice")
 
   val amiID: String = config.global.getString("tasks.elastic.aws.ami")
@@ -350,7 +349,7 @@ class EC2NodeKiller(
     val targetLauncherActor: ActorRef,
     val targetNode: Node
 ) extends NodeKillerImpl with EC2Shutdown with akka.actor.ActorLogging {
-  val ec2 = new AmazonEC2Client(new InstanceProfileCredentialsProvider())
+  val ec2 = new AmazonEC2Client()
   ec2.setEndpoint(EC2Settings.endpoint)
 }
 
@@ -359,7 +358,7 @@ class EC2NodeRegistry(
     val targetQueue: ActorRef,
     override val unmanagedResource: CPUMemoryAvailable
 ) extends EC2NodeRegistryImp with NodeCreatorImpl with SimpleDecideNewNode with EC2Shutdown with akka.actor.ActorLogging {
-  val ec2 = new AmazonEC2Client(new InstanceProfileCredentialsProvider())
+  val ec2 = new AmazonEC2Client()
   ec2.setEndpoint(EC2Settings.endpoint)
 }
 
@@ -393,7 +392,7 @@ class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
 
   private def s3Client = {
     if (_client == null) {
-      _client = new AmazonS3Client(new InstanceProfileCredentialsProvider());
+      _client = new AmazonS3Client();
     }
     _client
   }
