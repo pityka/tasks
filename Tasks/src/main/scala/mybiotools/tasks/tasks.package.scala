@@ -89,10 +89,14 @@ package object tasks {
     t.actor.path.address.host.get + ":" + t.actor.path.address.port.get
   else s.system.settings.config.getString("akka.remote.netty.tcp.hostname") + ":" + s.system.settings.config.getString("akka.remote.netty.tcp.port")
 
-  def withTaskSystem[T](f: TaskSystem => T): T = {
+  def withTaskSystem[T](f: TaskSystemComponents => T): T = {
     val ts = defaultTaskSystem
-    val r = f(ts)
-    ts.shutdown
+    val r = try {
+      f(ts.components)
+    } finally {
+      ts.shutdown
+    }
+
     r
   }
 

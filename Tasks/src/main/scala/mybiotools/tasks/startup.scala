@@ -450,7 +450,7 @@ akka {
 
   }
 
-  def initFailed {
+  private def initFailed {
     if (isLauncherOnly) {
       remotenoderegistry.foreach(_ ! InitFailed(PendingJobId(getNodeName)))
     }
@@ -472,6 +472,7 @@ akka {
         noderegistry.foreach(_ ! PoisonPill)
       }
       nodeLocalCacheActor ! PoisonPill
+      Reaper.await(reaperActor)
     } else {
       system.shutdown
     }
@@ -484,7 +485,7 @@ akka {
     tasksystemlog.warning("JVM is shutting down - called tasksystem shutdown.")
   }
 
-  def getNodeName: String = gridengine match {
+  private def getNodeName: String = gridengine match {
     case LSFGrid => System.getenv("LSB_JOBID")
     case SSHGrid => {
       val pid = java.lang.management.ManagementFactory.getRuntimeMXBean().getName().split("@").head

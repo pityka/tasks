@@ -25,18 +25,19 @@
 
 package tasks.util
 
-// TODO block on this on shutdown hook
-
+import java.util.concurrent.CountDownLatch
 import akka.actor.{ Actor, ActorRef, Terminated }
 import scala.collection.mutable.ArrayBuffer
 
 // Used by others to register an Actor for watching
 case class WatchMe(ref: ActorRef)
+case class Latch(c: CountDownLatch)
 
 abstract class Reaper extends Actor with akka.actor.ActorLogging {
 
   // Keep track of what we're watching
   val watched = ArrayBuffer.empty[ActorRef]
+  val latches = ArrayBuffer.empty[CountDownLatch]
 
   // Derivations need to implement this method.  It's the
   // hook that's called when everything's dead
@@ -44,13 +45,26 @@ abstract class Reaper extends Actor with akka.actor.ActorLogging {
 
   // Watch and check for termination
   final def receive = {
+    case Latch(l) =>
+      latches += l
     case WatchMe(ref) =>
       log.debug("Watching: " + ref)
       context.watch(ref) // This ensures that the Terminated message will come
       watched += ref
     case Terminated(ref) =>
       watched -= ref
-      if (watched.isEmpty) allSoulsReaped()
+      if (watched.isEmpty) {
+        latches.foreach(_.countDown)
+        allSoulsReaped()
+      }
+  }
+}
+
+object Reaper {
+  def await(r: ActorRef) = {
+    val c = new CountDownLatch(1)
+    r ! Latch(c)
+    c.await
   }
 }
 
