@@ -56,6 +56,11 @@ import tasks.elastic.ssh._
 
 package object tasks {
 
+  type CPUMemoryRequest = tasks.shared.CPUMemoryRequest
+
+  def CPUMemoryRequest(cpu: (Int, Int), memory: Int) = tasks.shared.CPUMemoryRequest(cpu, memory)
+  def CPUMemoryRequest(cpu: Int, memory: Int) = tasks.shared.CPUMemoryRequest(cpu, memory)
+
   def createLogger(s: AnyRef)(implicit component: TaskSystemComponents): akka.event.LoggingAdapter = component.getLogger(s)
 
   implicit def tsc(implicit ts: TaskSystem): TaskSystemComponents = ts.components
@@ -101,7 +106,9 @@ package object tasks {
   }
 
   def defaultTaskSystem: TaskSystem = defaultTaskSystem(config.global, None)
+
   def defaultTaskSystem(string: String): TaskSystem = defaultTaskSystem(config.global, Some(ConfigFactory.parseString(string)))
+  
   def defaultTaskSystem(defaultConf: Config, extraConf: Option[Config]): TaskSystem = {
     val akkaconf = ConfigFactory.parseResources("akkaoverrides.conf")
 
@@ -119,28 +126,13 @@ package object tasks {
 
   type CompFun[A <: Prerequisitive[A], B <: Result] = A => ComputationEnvironment => B
 
-  class TaskDefinition[A <: Prerequisitive[A], B <: Result](val computation: CompFun[A, B], val taskID: String) {
-
-    def this(computation: CompFun[A, B]) = this(computation, computation.getClass.getName)
-
-    def apply(a: A)(resource: CPUMemoryRequest)(implicit components: TaskSystemComponents): ProxyTaskActorRef[A, B] = newTask[B, A](a, resource, computation, taskID)
-
-  }
   def TaskDefinition[A <: Prerequisitive[A], B <: Result](computation: CompFun[A, B]) = new TaskDefinition(computation)
 
   def NamedTaskDefinition[A <: Prerequisitive[A], B <: Result](taskID: String)(computation: CompFun[A, B]) = new TaskDefinition(computation, taskID)
 
-  case class UpdatePrerequisitive[A <: Prerequisitive[A], B <: Result](pf: PartialFunction[(A, B), A]) extends PartialFunction[(A, B), A] {
-    def apply(v1: (A, B)) = pf.apply(v1)
-    def isDefinedAt(x: (A, B)) = pf.isDefinedAt(x)
-  }
-
   def identity[A <: Prerequisitive[A]]: UpdatePrerequisitive[A, Result] = UpdatePrerequisitive[A, Result] {
     case (x, _) => x
   }
-
-  case class STP1[A1](a1: Option[A1]) extends SimplePrerequisitive[STP1[A1]]
-  case class STP2[A1, A2](a1: Option[A1], a2: Option[A2]) extends SimplePrerequisitive[STP2[A1, A2]]
 
   implicit def tupleConverter[A1](t: (A1)): STP1[A1] = STP1(Some(t))
   implicit def tupleConverter[A1, A2](t: (A1, A2)): STP2[A1, A2] = STP2(Some(t._1), Some(t._2))
@@ -203,12 +195,5 @@ package object tasks {
     }
     akka.event.Logging(as, sourceObject)(logSource)
   }
-
-  sealed trait GridEngine
-  case object LSFGrid extends GridEngine
-  case object EC2Grid extends GridEngine
-  case object SGEGrid extends GridEngine
-  case object NoGrid extends GridEngine
-  case object SSHGrid extends GridEngine
 
 }

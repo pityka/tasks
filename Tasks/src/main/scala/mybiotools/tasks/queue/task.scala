@@ -229,7 +229,7 @@ abstract class ProxyTask(
 
   protected type MyResult <: Result
 
-  protected def resourceConsumed = CPUMemoryRequest(cpu = 1, memory = 500)
+  protected def resourceConsumed = tasks.CPUMemoryRequest(cpu = 1, memory = 500)
 
   def handleIncomingResult(r: Result) {
     incomings = _updatePrerequisitives.foldLeft(identity[MyPrerequisitive])((b, a) => UpdatePrerequisitive(a orElse b)).apply((incomings, r))
