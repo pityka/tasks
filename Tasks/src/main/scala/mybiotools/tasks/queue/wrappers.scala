@@ -1,35 +1,35 @@
 /*
-* The MIT License
-*
-* Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
-* Group Fellay
-* Copyright (c) 2016 Istvan Bartha
-*
-* Permission is hereby granted, free of charge, to any person obtaining
-* a copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the Software
-* is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in all
-* copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * The MIT License
+ *
+ * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
+ * Group Fellay
+ * Copyright (c) 2016 Istvan Bartha
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the Software
+ * is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 package tasks.queue
 
 import tasks._
 import akka.actor._
 
-import scala.concurrent.{ ExecutionContext, Future }
+import scala.concurrent.{ExecutionContext, Future}
 
 @SerialVersionUID(1L)
 case class NodeLocalCacheActor(actor: ActorRef) extends Serializable
@@ -40,16 +40,22 @@ case class QueueActor(actor: ActorRef) extends Serializable
 @SerialVersionUID(1L)
 case class LauncherActor(actor: ActorRef) extends Serializable
 
-case class ProxyTaskActorRef[B <: Prerequisitive[B], T <: Result](private val actor: ActorRef) {
+case class ProxyTaskActorRef[B <: Prerequisitive[B], T <: Result](
+    private val actor: ActorRef) {
 
-  def ~>[C <: Prerequisitive[C], A <: Result](child: ProxyTaskActorRef[C, A])(implicit updater: UpdatePrerequisitive[C, T]): ProxyTaskActorRef[C, A] = {
+  def ~>[C <: Prerequisitive[C], A <: Result](child: ProxyTaskActorRef[C, A])(
+      implicit updater: UpdatePrerequisitive[C, T])
+    : ProxyTaskActorRef[C, A] = {
     ProxyTask.addTarget(actor, child.actor, updater)
     child
   }
-  def ?(implicit ec: ExecutionContext) = ProxyTask.getBackResultFuture(actor).asInstanceOf[Future[T]]
-  def ?!(implicit ec: ExecutionContext) = ProxyTask.getBackResult(actor).asInstanceOf[T]
+  def ?(implicit ec: ExecutionContext) =
+    ProxyTask.getBackResultFuture(actor).asInstanceOf[Future[T]]
+  def ?!(implicit ec: ExecutionContext) =
+    ProxyTask.getBackResult(actor).asInstanceOf[T]
 
-  def <~[A <: Result](result: A)(implicit updater: UpdatePrerequisitive[B, A]) {
+  def <~[A <: Result](result: A)(
+      implicit updater: UpdatePrerequisitive[B, A]) {
     ProxyTask.sendStartData(actor, List(result))
   }
 

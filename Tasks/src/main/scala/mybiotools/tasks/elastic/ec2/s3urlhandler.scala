@@ -12,7 +12,6 @@ class S3Handler extends URLStreamHandler {
   private val s3Client = new AmazonS3Client();
 
   def openConnection(url: URL): URLConnection =
-
     new URLConnection(url) {
 
       val bucket = url.getHost

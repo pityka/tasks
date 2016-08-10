@@ -1,33 +1,33 @@
 /*
-* The MIT License
-*
-* Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
-* Group Fellay
-*
-* Permission is hereby granted, free of charge, to any person obtaining
-* a copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the Software
-* is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in all
-* copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * The MIT License
+ *
+ * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
+ * Group Fellay
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the Software
+ * is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 package tasks.elastic
 
-import akka.actor.{ Actor, PoisonPill, ActorRef, Props, Cancellable }
+import akka.actor.{Actor, PoisonPill, ActorRef, Props, Cancellable}
 import scala.concurrent.duration._
-import java.util.concurrent.{ TimeUnit, ScheduledFuture }
+import java.util.concurrent.{TimeUnit, ScheduledFuture}
 import java.net.InetSocketAddress
 import akka.actor.Actor._
 import akka.event.LoggingAdapter
@@ -61,7 +61,9 @@ private[tasks] case class InitFailed(nodename: PendingJobId)
 
 private[tasks] case class NodeIsDown(node: Node)
 
-case class Node(name: RunningJobId, size: CPUMemoryAvailable, launcherActor: ActorRef)
+case class Node(name: RunningJobId,
+                size: CPUMemoryAvailable,
+                launcherActor: ActorRef)
 
 trait ShutdownNode {
 
@@ -76,7 +78,10 @@ trait CreateNode {
 }
 
 trait DecideNewNode {
-  def needNewNode(q: QueueStat, registeredNodes: Seq[CPUMemoryAvailable], pendingNodes: Seq[CPUMemoryAvailable]): Map[CPUMemoryRequest, Int]
+  def needNewNode(
+      q: QueueStat,
+      registeredNodes: Seq[CPUMemoryAvailable],
+      pendingNodes: Seq[CPUMemoryAvailable]): Map[CPUMemoryRequest, Int]
 }
 
 trait NodeRegistry {
@@ -99,21 +104,26 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
 
   def log: LoggingAdapter
 
-  def requestOneNewJobFromGridScheduler(k: CPUMemoryRequest): Try[Tuple2[PendingJobId, CPUMemoryAvailable]]
+  def requestOneNewJobFromGridScheduler(
+      k: CPUMemoryRequest): Try[Tuple2[PendingJobId, CPUMemoryAvailable]]
 
   def initializeNode(n: Node): Unit
 
-  def convertRunningToPending(p: RunningJobId): Option[PendingJobId] = Some(PendingJobId(p.value))
+  def convertRunningToPending(p: RunningJobId): Option[PendingJobId] =
+    Some(PendingJobId(p.value))
 
-  private val jobregistry = scala.collection.mutable.Set[Tuple2[RunningJobId, CPUMemoryAvailable]]()
+  private val jobregistry =
+    scala.collection.mutable.Set[Tuple2[RunningJobId, CPUMemoryAvailable]]()
 
-  private val pending = scala.collection.mutable.Set[Tuple2[PendingJobId, CPUMemoryAvailable]]()
+  private val pending =
+    scala.collection.mutable.Set[Tuple2[PendingJobId, CPUMemoryAvailable]]()
 
   private def toPend(p: PendingJobId, size: CPUMemoryAvailable) {
     pending += ((p, size))
   }
 
-  def allRegisteredNodes = Set[Tuple2[RunningJobId, CPUMemoryAvailable]](jobregistry.toSeq: _*)
+  def allRegisteredNodes =
+    Set[Tuple2[RunningJobId, CPUMemoryAvailable]](jobregistry.toSeq: _*)
 
   def pendingNodes = {
     Set[Tuple2[PendingJobId, CPUMemoryAvailable]](pending.toSeq: _*)
@@ -123,14 +133,16 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
     if (types.values.sum > 0) {
       if (MaxNodes > (jobregistry.size + pending.size)) {
 
-        log.info("Request " + types.size + " node. One from each: " + types.keySet)
+        log.info(
+            "Request " + types.size + " node. One from each: " + types.keySet)
 
         types.foreach {
           case (request, n) =>
             val jobinfo = requestOneNewJobFromGridScheduler(request)
 
             jobinfo match {
-              case Failure(e) => log.warning("Request failed: " + e.getMessage + " " + e)
+              case Failure(e) =>
+                log.warning("Request failed: " + e.getMessage + " " + e)
               case _ => ()
             }
 
@@ -142,7 +154,8 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
         }
 
       } else {
-        log.info("New node request will not proceed: pending nodes or reached max nodes. max: " + MaxNodes + ", pending: " + pending.size + ", running: " + jobregistry.size)
+        log.info(
+            "New node request will not proceed: pending nodes or reached max nodes. max: " + MaxNodes + ", pending: " + pending.size + ", running: " + jobregistry.size)
       }
     }
   }
@@ -159,7 +172,8 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
       }
     } else {
       val activePendings = refreshPendingList
-      val removal = pending.toSeq.map(_._1).filter(x => !activePendings.contains(x))
+      val removal =
+        pending.toSeq.map(_._1).filter(x => !activePendings.contains(x))
       removal.foreach { r =>
         pending -= (pending.filter(_._1 == r).head)
       }
@@ -190,24 +204,31 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
 
 trait SimpleDecideNewNode extends DecideNewNode {
 
-  def needNewNode(q: QueueStat, registeredNodes: Seq[CPUMemoryAvailable], pendingNodes: Seq[CPUMemoryAvailable]): Map[CPUMemoryRequest, Int] = {
+  def needNewNode(
+      q: QueueStat,
+      registeredNodes: Seq[CPUMemoryAvailable],
+      pendingNodes: Seq[CPUMemoryAvailable]): Map[CPUMemoryRequest, Int] = {
     // QueueStat(queued: List[(String, CPUMemoryRequest)], running: List[(String,CPUMemoryAllocated)]
 
     val resourceNeeded: List[CPUMemoryRequest] = q.queued.map(_._2)
 
-    val availableResources: List[CPUMemoryAvailable] = (registeredNodes ++ pendingNodes).toList
+    val availableResources: List[CPUMemoryAvailable] =
+      (registeredNodes ++ pendingNodes).toList
 
-    val (remainingResources, allocatedResources) = resourceNeeded.foldLeft((availableResources, List[CPUMemoryRequest]())) {
-      case ((available, allocated), request) =>
+    val (remainingResources, allocatedResources) =
+      resourceNeeded.foldLeft((availableResources, List[CPUMemoryRequest]())) {
+        case ((available, allocated), request) =>
+          val (prefix, suffix) =
+            available.span(x => !x.canFulfillRequest(request))
+          val chosen = suffix.headOption
+          chosen.foreach(x => assert(x.canFulfillRequest(request)))
 
-        val (prefix, suffix) = available.span(x => !x.canFulfillRequest(request))
-        val chosen = suffix.headOption
-        chosen.foreach(x => assert(x.canFulfillRequest(request)))
-
-        val transformed = chosen.map(_.substract(request))
-        if (chosen.isDefined) (prefix ::: (transformed.get :: suffix.tail)).filterNot(_.isEmpty) -> (request :: allocated)
-        else (available, allocated)
-    }
+          val transformed = chosen.map(_.substract(request))
+          if (chosen.isDefined)
+            (prefix ::: (transformed.get :: suffix.tail))
+              .filterNot(_.isEmpty) -> (request :: allocated)
+          else (available, allocated)
+      }
 
     val nonAllocatedResources: Map[CPUMemoryRequest, Int] = {
       val map1 = resourceNeeded.groupBy(x => x).map(x => x._1 -> x._2.size)
@@ -222,7 +243,7 @@ trait SimpleDecideNewNode extends DecideNewNode {
     // }
 
     if (!nonAllocatedResources.isEmpty
-      && (pendingNodes.size < MaxPendingNodes)) {
+        && (pendingNodes.size < MaxPendingNodes)) {
 
       nonAllocatedResources
 
@@ -231,7 +252,12 @@ trait SimpleDecideNewNode extends DecideNewNode {
 
 }
 
-trait NodeCreatorImpl extends Actor with CreateNode with DecideNewNode with NodeRegistry with ShutdownNode {
+trait NodeCreatorImpl
+    extends Actor
+    with CreateNode
+    with DecideNewNode
+    with NodeRegistry
+    with ShutdownNode {
 
   def log: LoggingAdapter
 
@@ -245,10 +271,10 @@ trait NodeCreatorImpl extends Actor with CreateNode with DecideNewNode with Node
     import context.dispatcher
 
     scheduler = context.system.scheduler.schedule(
-      initialDelay = QueueCheckInitialDelay seconds,
-      interval = QueueCheckInterval seconds,
-      receiver = self,
-      message = MeasureTime
+        initialDelay = QueueCheckInitialDelay seconds,
+        interval = QueueCheckInterval seconds,
+        receiver = self,
+        message = MeasureTime
     )
 
     context.system.eventStream.subscribe(self, classOf[NodeIsDown])
@@ -281,9 +307,16 @@ trait NodeCreatorImpl extends Actor with CreateNode with DecideNewNode with Node
 
     case m: QueueStat => {
       if (logQueueStatus) {
-        log.info(s"Queued tasks: ${m.queued.size}. Running tasks: ${m.running.size}. Pending nodes: ${pendingNodes.size} . Running nodes: ${allRegisteredNodes.size}. Largest request: ${m.queued.sortBy(_._2.cpu).lastOption}/${m.queued.sortBy(_._2.memory).lastOption}")
+        log.info(
+            s"Queued tasks: ${m.queued.size}. Running tasks: ${m.running.size}. Pending nodes: ${pendingNodes.size} . Running nodes: ${allRegisteredNodes.size}. Largest request: ${m.queued
+          .sortBy(_._2.cpu)
+          .lastOption}/${m.queued.sortBy(_._2.memory).lastOption}")
       }
-      startNewNode(needNewNode(m, allRegisteredNodes.toSeq.map(_._2) ++ Seq(unmanagedResource), pendingNodes.toSeq.map(_._2)))
+      startNewNode(
+          needNewNode(
+              m,
+              allRegisteredNodes.toSeq.map(_._2) ++ Seq(unmanagedResource),
+              pendingNodes.toSeq.map(_._2)))
     }
 
     case NodeComingUp(node) => {
@@ -301,7 +334,8 @@ trait NodeCreatorImpl extends Actor with CreateNode with DecideNewNode with Node
       initfailed(pending)
       shutdownPendingNode(pending)
     }
-    case GetNodeRegistryStat => sender ! NodeRegistryStat(allRegisteredNodes, pendingNodes)
+    case GetNodeRegistryStat =>
+      sender ! NodeRegistryStat(allRegisteredNodes, pendingNodes)
 
   }
 
@@ -318,15 +352,16 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
   private var scheduler: Cancellable = null
 
   override def preStart {
-    log.debug("NodeKiller start. Monitoring actor: " + targetLauncherActor + " on node: " + targetNode.name)
+    log.debug(
+        "NodeKiller start. Monitoring actor: " + targetLauncherActor + " on node: " + targetNode.name)
 
     import context.dispatcher
 
     scheduler = context.system.scheduler.schedule(
-      initialDelay = 0 seconds,
-      interval = NodeKillerMonitorInterval seconds,
-      receiver = self,
-      message = MeasureTime
+        initialDelay = 0 seconds,
+        interval = NodeKillerMonitorInterval seconds,
+        receiver = self,
+        message = MeasureTime
     )
 
     context.system.eventStream.subscribe(self, classOf[LauncherDown])
@@ -345,7 +380,8 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
   var targetIsIdle = true
 
   def shutdown {
-    log.info("Shutting down target node: name= " + targetNode.name + " , actor= " + targetLauncherActor)
+    log.info(
+        "Shutting down target node: name= " + targetNode.name + " , actor= " + targetLauncherActor)
     shutdownRunningNode(targetNode.name)
     context.system.eventStream.publish(NodeIsDown(targetNode))
     scheduler.cancel
@@ -356,9 +392,11 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
     case LauncherDown(down) if targetLauncherActor == down => shutdown
     case MeasureTime => {
       if (targetIsIdle &&
-        (System.nanoTime() - lastIdleSessionStart) >= KillIdleNodeAfterSeconds * 1E9) {
+          (System
+                .nanoTime() - lastIdleSessionStart) >= KillIdleNodeAfterSeconds * 1E9) {
         try {
-          log.info("Target is idle. Start shutdown sequence. Send PrepareForShutdown to " + targetLauncherActor)
+          log.info(
+              "Target is idle. Start shutdown sequence. Send PrepareForShutdown to " + targetLauncherActor)
           targetLauncherActor ! PrepareForShutdown
           log.info("PrepareForShutdown sent to " + targetLauncherActor)
         } catch {
@@ -401,7 +439,8 @@ trait SelfShutdown extends Actor with akka.actor.ActorLogging {
 
   override def preStart {
     context.system.eventStream.subscribe(self, classOf[LauncherDown])
-    context.system.eventStream.subscribe(self, classOf[akka.remote.DisassociatedEvent])
+    context.system.eventStream
+      .subscribe(self, classOf[akka.remote.DisassociatedEvent])
 
   }
   def receive = {
@@ -410,7 +449,8 @@ trait SelfShutdown extends Actor with akka.actor.ActorLogging {
       shutdown
     }
     case de: akka.remote.DisassociatedEvent => {
-      log.error("DisassociatedEvent. " + de.remoteAddress + " vs " + balancerActor.path.address)
+      log.error(
+          "DisassociatedEvent. " + de.remoteAddress + " vs " + balancerActor.path.address)
       if (de.remoteAddress == balancerActor.path.address) {
         shutdown
       }

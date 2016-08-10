@@ -1,32 +1,32 @@
 /*
-* The MIT License
-*
-* Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
-* Group Fellay
-* Copyright (c) 2016 Istvan Bartha
-*
-* Permission is hereby granted, free of charge, to any person obtaining
-* a copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the Software
-* is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in all
-* copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * The MIT License
+ *
+ * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
+ * Group Fellay
+ * Copyright (c) 2016 Istvan Bartha
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the Software
+ * is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 package tasks.queue
 
-import akka.actor.{ Actor, PoisonPill, ActorRef, ActorContext, ActorRefFactory }
+import akka.actor.{Actor, PoisonPill, ActorRef, ActorContext, ActorRefFactory}
 import akka.util.Timeout
 import akka.pattern.ask
 
@@ -44,12 +44,19 @@ import tasks.caching._
 
 // This is the output of a task
 trait Result extends Serializable {
-  def verifyAfterCache(implicit service: FileServiceActor, context: ActorRefFactory): Boolean = true
+  def verifyAfterCache(implicit service: FileServiceActor,
+                       context: ActorRefFactory): Boolean = true
 }
 
-abstract class ResultWithSharedFiles(sf: SharedFile*) extends Result with Product {
+abstract class ResultWithSharedFiles(sf: SharedFile*)
+    extends Result
+    with Product {
   def files = sf
-  override def verifyAfterCache(implicit service: FileServiceActor, context: ActorRefFactory) = files.forall(_.isAccessible) && productIterator.filter(_.isInstanceOf[ResultWithSharedFiles]).forall(_.asInstanceOf[ResultWithSharedFiles].verifyAfterCache)
+  override def verifyAfterCache(implicit service: FileServiceActor,
+                                context: ActorRefFactory) =
+    files.forall(_.isAccessible) && productIterator
+      .filter(_.isInstanceOf[ResultWithSharedFiles])
+      .forall(_.asInstanceOf[ResultWithSharedFiles].verifyAfterCache)
 }
 
 // This is the prerequisitives of a task
@@ -63,7 +70,9 @@ trait SimplePrerequisitive[+A] extends Prerequisitive[A] with Product { self =>
 
   def ready = productIterator.forall {
     case x: Option[_] => x.isDefined
-    case _ => throw new RuntimeException("SimplePrerequisitive should be a product of Options")
+    case _ =>
+      throw new RuntimeException(
+          "SimplePrerequisitive should be a product of Options")
   }
 }
 
@@ -93,16 +102,25 @@ case class ComputationEnvironment(
 
 object ProxyTask {
 
-  def getBackResultFuture(actor: ActorRef, timeoutp: Int = config.ProxyTaskGetBackResult)(implicit ec: ExecutionContext): Future[Result] = {
+  def getBackResultFuture(actor: ActorRef,
+                          timeoutp: Int = config.ProxyTaskGetBackResult)(
+      implicit ec: ExecutionContext): Future[Result] = {
 
     implicit val timout = akka.util.Timeout(timeoutp seconds)
     (actor ? (GetBackResult)).asInstanceOf[Future[Result]]
 
   }
 
-  def getBackResult(actor: ActorRef, timeoutp: Int = config.ProxyTaskGetBackResult)(implicit ec: ExecutionContext): Result = scala.concurrent.Await.result(getBackResultFuture(actor, timeoutp), timeoutp second)
+  def getBackResult(actor: ActorRef,
+                    timeoutp: Int = config.ProxyTaskGetBackResult)(
+      implicit ec: ExecutionContext): Result =
+    scala.concurrent.Await
+      .result(getBackResultFuture(actor, timeoutp), timeoutp second)
 
-  def addTarget[B <: Prerequisitive[B], A <: Result](parent: ActorRef, child: ActorRef, updater: UpdatePrerequisitive[B, A]) {
+  def addTarget[B <: Prerequisitive[B], A <: Result](
+      parent: ActorRef,
+      child: ActorRef,
+      updater: UpdatePrerequisitive[B, A]) {
 
     val f = parent ! AddTarget(child, updater)
   }
@@ -130,7 +148,8 @@ private class Task[P <: Prerequisitive[P], Q <: Result](
     nodeLocalCache: ActorRef,
     resourceAllocated: CPUMemoryAllocated,
     fileServicePrefix: FileServicePrefix
-) extends Actor with akka.actor.ActorLogging {
+) extends Actor
+    with akka.actor.ActorLogging {
 
   override def preStart {
     log.debug("Prestart of Task class")
@@ -154,17 +173,17 @@ private class Task[P <: Prerequisitive[P], Q <: Result](
         log.debug("Starttask from the executing dispatcher (future).")
 
         val ce = ComputationEnvironment(
-          resourceAllocated,
-          TaskSystemComponents(
-            QueueActor(balancerActor),
-            FileServiceActor(fileServiceActor),
-            context.system,
-            CacheActor(globalCacheActor),
-            NodeLocalCacheActor(nodeLocalCache),
-            fileServicePrefix
-          ),
-          getApplicationLogger(runTask)(context.system),
-          LauncherActor(launcherActor)
+            resourceAllocated,
+            TaskSystemComponents(
+                QueueActor(balancerActor),
+                FileServiceActor(fileServiceActor),
+                context.system,
+                CacheActor(globalCacheActor),
+                NodeLocalCacheActor(nodeLocalCache),
+                fileServicePrefix
+            ),
+            getApplicationLogger(runTask)(context.system),
+            LauncherActor(launcherActor)
         )
 
         log.debug("CE" + ce)
@@ -174,15 +193,18 @@ private class Task[P <: Prerequisitive[P], Q <: Result](
 
         resultG = result
 
-        log.debug("Task job ended. sending to launcher. from the executing dispatcher (future).")
+        log.debug(
+            "Task job ended. sending to launcher. from the executing dispatcher (future).")
 
-        log.debug("Sending results over to proxies, etc: " + notificationRegister.toString)
+        log.debug(
+            "Sending results over to proxies, etc: " + notificationRegister.toString)
 
         notificationRegister.foreach(_ ! MessageFromTask(resultG))
 
         launcherActor ! InternalMessageFromTask(mainActor, result)
 
-        log.debug("Task ended. Result sent to launcherActor. Taking PoisonPill")
+        log.debug(
+            "Task ended. Result sent to launcherActor. Taking PoisonPill")
 
         self ! PoisonPill
 
@@ -190,14 +212,18 @@ private class Task[P <: Prerequisitive[P], Q <: Result](
         case x: Exception => {
           val y = x.getStackTrace
           x.printStackTrace()
-          log.error(x, "Exception caught in the executing dispatcher of a task. " + x.getMessage)
+          log.error(
+              x,
+              "Exception caught in the executing dispatcher of a task. " + x.getMessage)
           launcherActor ! InternalMessageTaskFailed(mainActor, x)
           self ! PoisonPill
         }
         case x: AssertionError => {
           val y = x.getStackTrace
           x.printStackTrace()
-          log.error(x, "Exception caught in the executing dispatcher of a task. " + x.getMessage)
+          log.error(
+              x,
+              "Exception caught in the executing dispatcher of a task. " + x.getMessage)
           launcherActor ! InternalMessageTaskFailed(mainActor, x)
           self ! PoisonPill
         }
@@ -223,16 +249,21 @@ abstract class ProxyTask(
     fileServiceActor: ActorRef,
     fileServicePrefix: FileServicePrefix,
     cacheActor: ActorRef
-) extends Actor with akka.actor.ActorLogging {
+) extends Actor
+    with akka.actor.ActorLogging {
 
   protected type MyPrerequisitive <: Prerequisitive[MyPrerequisitive]
 
   protected type MyResult <: Result
 
-  protected def resourceConsumed = tasks.CPUMemoryRequest(cpu = 1, memory = 500)
+  protected def resourceConsumed =
+    tasks.CPUMemoryRequest(cpu = 1, memory = 500)
 
   def handleIncomingResult(r: Result) {
-    incomings = _updatePrerequisitives.foldLeft(identity[MyPrerequisitive])((b, a) => UpdatePrerequisitive(a orElse b)).apply((incomings, r))
+    incomings = _updatePrerequisitives
+      .foldLeft(identity[MyPrerequisitive])((b, a) =>
+            UpdatePrerequisitive(a orElse b))
+      .apply((incomings, r))
   }
 
   val runTaskClass: java.lang.Class[_ <: CompFun[MyPrerequisitive, MyResult]]
@@ -245,7 +276,8 @@ abstract class ProxyTask(
 
   def emptyResultSet: MyPrerequisitive
 
-  private[this] var _updatePrerequisitives = List[UpdatePrerequisitive[MyPrerequisitive, Result]]()
+  private[this] var _updatePrerequisitives =
+    List[UpdatePrerequisitive[MyPrerequisitive, Result]]()
 
   protected var incomings: MyPrerequisitive = emptyResultSet
 
@@ -254,9 +286,16 @@ abstract class ProxyTask(
   private var taskIsQueued = false
 
   private def distributeResult {
-    log.debug("Distributing result to targets: " + _targets.toString + ", " + _channels.toString)
-    result.foreach(r => _targets.foreach { t => t ! r })
-    result.foreach(r => _channels.foreach { ch => ch ! r })
+    log.debug(
+        "Distributing result to targets: " + _targets.toString + ", " + _channels.toString)
+    result.foreach(r =>
+          _targets.foreach { t =>
+        t ! r
+    })
+    result.foreach(r =>
+          _channels.foreach { ch =>
+        ch ! r
+    })
   }
 
   private def notifyListenersOnFailure(cause: Throwable) {
@@ -268,11 +307,13 @@ abstract class ProxyTask(
     if (result.isEmpty) {
 
       val s = ScheduleTask(
-        TaskDescription(taskID, incomings), runTaskClass.getName, resourceConsumed,
-        starter, // new ActorInEnvelope(starter),
-        fileServiceActor,
-        fileServicePrefix,
-        cacheActor
+          TaskDescription(taskID, incomings),
+          runTaskClass.getName,
+          resourceConsumed,
+          starter, // new ActorInEnvelope(starter),
+          fileServiceActor,
+          fileServicePrefix,
+          cacheActor
       )
 
       log.debug("proxy submitting ScheduleTask object to queue.")
@@ -300,7 +341,9 @@ abstract class ProxyTask(
       }
 
     case x: SaveUpdater[_, _] =>
-      _updatePrerequisitives = x.updater.asInstanceOf[UpdatePrerequisitive[MyPrerequisitive, Result]] :: _updatePrerequisitives
+      _updatePrerequisitives = x.updater.asInstanceOf[UpdatePrerequisitive[
+                MyPrerequisitive,
+                Result]] :: _updatePrerequisitives
       sender ! UpdaterSaved
 
     case UpdaterSaved =>
@@ -321,7 +364,8 @@ abstract class ProxyTask(
       }
 
     case GetBackResult =>
-      log.debug("GetBackResult message received. Registering for notification: " + sender.toString)
+      log.debug(
+          "GetBackResult message received. Registering for notification: " + sender.toString)
       _channels = _channels + sender //.asInstanceOf[Channel[Result]]
       distributeResult
 
@@ -338,7 +382,9 @@ abstract class ProxyTask(
       notifyListenersOnFailure(cause)
       self ! PoisonPill
     }
-    case msg => log.warning("Unhandled message " + msg.toString.take(100) + sender.toString)
+    case msg =>
+      log.warning(
+          "Unhandled message " + msg.toString.take(100) + sender.toString)
   }
 
 }

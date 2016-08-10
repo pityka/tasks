@@ -1,32 +1,32 @@
 /*
-* The MIT License
-*
-* Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
-* Group Fellay
-* Copyright (c) 2016 Istvan Bartha
-*
-* Permission is hereby granted, free of charge, to any person obtaining
-* a copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the Software
-* is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in all
-* copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * The MIT License
+ *
+ * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
+ * Group Fellay
+ * Copyright (c) 2016 Istvan Bartha
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the Software
+ * is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 package tasks.queue
 
-import akka.actor.{ Actor, PoisonPill, ActorRef, Cancellable, Props }
+import akka.actor.{Actor, PoisonPill, ActorRef, Cancellable, Props}
 import akka.remote.DeadlineFailureDetector
 import akka.remote.FailureDetector.Clock
 import akka.remote.DisassociatedEvent
@@ -35,8 +35,8 @@ import akka.pattern.ask
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.concurrent.duration.Duration
-import java.util.concurrent.TimeUnit.{ SECONDS }
-import java.util.concurrent.{ TimeUnit, ScheduledFuture }
+import java.util.concurrent.TimeUnit.{SECONDS}
+import java.util.concurrent.{TimeUnit, ScheduledFuture}
 
 import scala.collection.immutable.Seq
 import scala.collection.mutable.Queue
@@ -48,24 +48,27 @@ import tasks.fileservice._
 import tasks.caching._
 import tasks.util._
 
-class HeartBeatActor(target: ActorRef) extends Actor with akka.actor.ActorLogging {
+class HeartBeatActor(target: ActorRef)
+    extends Actor
+    with akka.actor.ActorLogging {
 
   private var scheduledHeartBeats: Cancellable = null
 
-  private var failureDetector = new DeadlineFailureDetector(config.AcceptableHeartbeatPause)
+  private var failureDetector = new DeadlineFailureDetector(
+      config.AcceptableHeartbeatPause)
 
   override def preStart {
-    log.debug("HeartBeatActor start for: " + target + " " + failureDetector.acceptableHeartbeatPause)
+    log.debug(
+        "HeartBeatActor start for: " + target + " " + failureDetector.acceptableHeartbeatPause)
 
     import context.dispatcher
 
-    scheduledHeartBeats =
-      context.system.scheduler.schedule(
+    scheduledHeartBeats = context.system.scheduler.schedule(
         initialDelay = 0 seconds,
         interval = config.LauncherActorHeartBeatInterval,
         receiver = self,
         message = CheckHeartBeat
-      )
+    )
 
   }
 
@@ -81,7 +84,8 @@ class HeartBeatActor(target: ActorRef) extends Actor with akka.actor.ActorLoggin
   }
 
   def receive = {
-    case DisassociatedEvent(localAddress, remoteAddress, inbound) if remoteAddress === target.path.address => {
+    case DisassociatedEvent(localAddress, remoteAddress, inbound)
+        if remoteAddress === target.path.address => {
       log.warning("DisassociatedEvent received. TargetDown.")
       targetDown
     }
@@ -103,10 +107,12 @@ class HeartBeatActor(target: ActorRef) extends Actor with akka.actor.ActorLoggin
 class TaskQueue extends Actor with akka.actor.ActorLogging {
 
   // ActorRef here is the proxy of the task
-  private val queuedTasks = collection.mutable.Map[ScheduleTask, List[ActorRef]]()
+  private val queuedTasks =
+    collection.mutable.Map[ScheduleTask, List[ActorRef]]()
 
   // Map(task -> (launcher,allocated,list of proxies))
-  private val routedMessages = scala.collection.mutable.Map[ScheduleTask, (ActorRef, CPUMemoryAllocated, List[ActorRef])]()
+  private val routedMessages = scala.collection.mutable
+    .Map[ScheduleTask, (ActorRef, CPUMemoryAllocated, List[ActorRef])]()
 
   private val knownLaunchers = scala.collection.mutable.HashSet[ActorRef]()
 
@@ -147,11 +153,15 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
       case (launcher, allocation, proxies) =>
         routedMessages.remove(sch)
         if (config.resubmitFailedTask) {
-          log.error(cause, "Task execution failed ( resubmitting infinite time until done): " + sch.toString)
+          log.error(
+              cause,
+              "Task execution failed ( resubmitting infinite time until done): " + sch.toString)
           enQueue(sch, proxies)
           log.info("Requeued 1 message. Queue size: " + queuedTasks.keys.size)
         } else {
-          proxies.foreach { ac => ac ! TaskFailedMessageToProxy(sch, cause) }
+          proxies.foreach { ac =>
+            ac ! TaskFailedMessageToProxy(sch, cause)
+          }
           log.error(cause, "Task execution failed: " + sch.toString)
         }
     }
@@ -160,13 +170,15 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
 
   private def launcherCrashed(crashedLauncher: ActorRef) {
     // put back the jobs into the queue
-    val msgs = routedMessages.toSeq.filter(_._2._1 === crashedLauncher).map(_._1)
+    val msgs =
+      routedMessages.toSeq.filter(_._2._1 === crashedLauncher).map(_._1)
     msgs.foreach { (sch: ScheduleTask) =>
       val proxies = routedMessages(sch)._3
       routedMessages.remove(sch)
       enQueue(sch, proxies)
     }
-    log.info("Requeued " + msgs.size + " messages. Queue size: " + queuedTasks.keys.size)
+    log.info(
+        "Requeued " + msgs.size + " messages. Queue size: " + queuedTasks.keys.size)
 
     knownLaunchers -= crashedLauncher
   }
@@ -184,11 +196,16 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
       log.debug("Received ScheduleTask.")
       if ((queuedTasks.contains(m) && (!queuedTasks(m).has(sender)))) {
         enQueue(m, sender :: Nil)
-      } else if (routedMessages.get(m).map {
-        case (_, _, proxies) =>
-          !proxies.isEmpty && !proxies.contains(sender)
-      }.getOrElse(false)) {
-        log.warning("Scheduletask received multiple times from different proxies. Not queuing this one, but delivering result if ready. {}", m)
+      } else if (routedMessages
+                   .get(m)
+                   .map {
+                     case (_, _, proxies) =>
+                       !proxies.isEmpty && !proxies.contains(sender)
+                   }
+                   .getOrElse(false)) {
+        log.warning(
+            "Scheduletask received multiple times from different proxies. Not queuing this one, but delivering result if ready. {}",
+            m)
         val (launcher, allocation, proxies) = routedMessages(m)
         routedMessages.update(m, (launcher, allocation, sender :: proxies))
       } else {
@@ -220,10 +237,19 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
     }
     case AskForWork(resource) => {
       if (!negotiation) {
-        log.debug("AskForWork. Sender: {}. Resource: {}. Negotition state: {}. Queue state: {}", sender, resource, negotiation, queuedTasks.map(x => (x._1.description.taskID, x._1.resource)).toSeq)
+        log.debug(
+            "AskForWork. Sender: {}. Resource: {}. Negotition state: {}. Queue state: {}",
+            sender,
+            resource,
+            negotiation,
+            queuedTasks
+              .map(x => (x._1.description.taskID, x._1.resource))
+              .toSeq)
 
         val launcher = sender
-        val dequeued = queuedTasks.find { case (k, v) => resource.canFulfillRequest(k.resource) }
+        val dequeued = queuedTasks.find {
+          case (k, v) => resource.canFulfillRequest(k.resource)
+        }
         dequeued.foreach {
           case (k, v) =>
             queuedTasks.remove(k)
@@ -240,20 +266,25 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
 
           if (!knownLaunchers.contains(launcher)) {
             knownLaunchers += launcher
-            context.actorOf(Props(new HeartBeatActor(launcher)).withDispatcher("heartbeat"), "heartbeatOf" + launcher.path.address.toString.replace("://", "___") + launcher.path.name)
+            context.actorOf(Props(new HeartBeatActor(launcher))
+                              .withDispatcher("heartbeat"),
+                            "heartbeatOf" + launcher.path.address.toString
+                              .replace("://", "___") + launcher.path.name)
             context.system.eventStream.subscribe(self, classOf[LauncherDown])
           }
 
           try {
 
             // val resp = (launcher.?(ScheduleWithProxy(task._1, new ActorInEnvelope(task._2)))(timeout = 30 seconds))
-            val resp = (launcher.?(ScheduleWithProxy(task._1, task._2))(timeout = 30 seconds))
+            val resp = (launcher.?(ScheduleWithProxy(task._1, task._2))(
+                timeout = 30 seconds))
 
             import context.dispatcher
 
             resp onFailure {
               case error => {
-                log.debug("TaskLauncher did not Ack'd back on sending task. Requeueing.")
+                log.debug(
+                    "TaskLauncher did not Ack'd back on sending task. Requeueing.")
                 negotiation = false
                 queuedTasks.update(task._1, task._2)
               }
@@ -269,7 +300,8 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
             }
           } catch {
             case x: java.nio.channels.ClosedChannelException => {
-              log.debug("TaskLauncher did not Ack'd back on sending task. Requeueing.")
+              log.debug(
+                  "TaskLauncher did not Ack'd back on sending task. Requeueing.")
               queuedTasks.update(task._1, task._2)
             }
             case e: Throwable => {
@@ -301,7 +333,13 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
 
     case HowLoadedAreYou => {
       // EventHandler.debug(this,queue.toString+routedMessages.toString)
-      val qs = QueueStat(queuedTasks.toList.map(_._1).map(x => (x.description.taskID, x.resource)).toList, routedMessages.toSeq.map(x => x._1.description.taskID -> x._2._2).toList)
+      val qs = QueueStat(queuedTasks.toList
+                           .map(_._1)
+                           .map(x => (x.description.taskID, x.resource))
+                           .toList,
+                         routedMessages.toSeq
+                           .map(x => x._1.description.taskID -> x._2._2)
+                           .toList)
       context.system.eventStream.publish(qs)
       sender ! qs
     }

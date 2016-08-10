@@ -20,8 +20,8 @@
 package tasks.util
 
 /**
- * Type safe equality http://hseeberger.github.io/blog/2013/05/31/implicits-unchained-type-safe-equality-part2/
- */
+  * Type safe equality http://hseeberger.github.io/blog/2013/05/31/implicits-unchained-type-safe-equality-part2/
+  */
 object eq {
 
   implicit class Equal[L](val left: L) extends AnyVal {
@@ -30,7 +30,8 @@ object eq {
     def !==[R](right: R)(implicit equality: Equality[L, R]): Boolean =
       equality.areNotEqual(left, right)
   }
-  @scala.annotation.implicitNotFound("TypeWiseBalancedEquality requires ${L} and ${R} to be in a subtype relationship!")
+  @scala.annotation.implicitNotFound(
+      "TypeWiseBalancedEquality requires ${L} and ${R} to be in a subtype relationship!")
   trait Equality[L, R] {
     def areEqual(left: L, right: R): Boolean
     def areNotEqual(left: L, right: R): Boolean

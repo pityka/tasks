@@ -6,10 +6,10 @@ import akka.event.Logging.LogEvent
 
 @SerialVersionUID(1L)
 case class Introduction(
-  queueActor: ActorRef,
-  fileActor: ActorRef,
-  nodeRegistry: Option[ActorRef],
-  configuration: Config
+    queueActor: ActorRef,
+    fileActor: ActorRef,
+    nodeRegistry: Option[ActorRef],
+    configuration: Config
 ) extends Serializable
 
 @SerialVersionUID(1L)

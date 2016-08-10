@@ -1,28 +1,28 @@
 /*
-* The MIT License
-*
-* Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
-* Group Fellay
-* Copyright (c) 2016 Istvan Bartha
-*
-* Permission is hereby granted, free of charge, to any person obtaining
-* a copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the Software
-* is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in all
-* copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * The MIT License
+ *
+ * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
+ * Group Fellay
+ * Copyright (c) 2016 Istvan Bartha
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the Software
+ * is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 package tasks.deploy
 
@@ -47,7 +47,7 @@ import scala.concurrent._
 import scala.concurrent.Await
 import scala.collection.JavaConversions._
 
-import com.typesafe.config.{ ConfigFactory, Config }
+import com.typesafe.config.{ConfigFactory, Config}
 
 sealed trait Role
 object MASTER extends Role
@@ -69,27 +69,36 @@ trait CacheHostConfiguration {
 
 }
 
-trait MasterSlaveConfiguration extends HostConfiguration with CacheHostConfiguration {
+trait MasterSlaveConfiguration
+    extends HostConfiguration
+    with CacheHostConfiguration {
 
-  lazy val master: InetSocketAddress = if (System.getProperty("hosts.master", "") != "") {
-    val h = System.getProperty("hosts.master").split(":")(0)
-    val p = System.getProperty("hosts.master").split(":")(1).toInt
-    new InetSocketAddress(h, p)
-  } else myAddress
+  lazy val master: InetSocketAddress =
+    if (System.getProperty("hosts.master", "") != "") {
+      val h = System.getProperty("hosts.master").split(":")(0)
+      val p = System.getProperty("hosts.master").split(":")(1).toInt
+      new InetSocketAddress(h, p)
+    } else myAddress
 
-  lazy val myRole = if (System.getProperty("hosts.master", "") != "") SLAVE else {
-    if (myAddress == master) MASTER else SLAVE
-  }
+  lazy val myRole =
+    if (System.getProperty("hosts.master", "") != "") SLAVE
+    else {
+      if (myAddress == master) MASTER else SLAVE
+    }
 
-  lazy val cacheAddress: Option[InetSocketAddress] = if (config.global.getString("hosts.remoteCacheAddress") != "none") {
-    val h = config.global.getString("hosts.remoteCacheAddress").split(":")(0)
-    val p = config.global.getString("hosts.remoteCacheAddress").split(":")(1).toInt
-    Some(new InetSocketAddress(h, p))
-  } else None
+  lazy val cacheAddress: Option[InetSocketAddress] =
+    if (config.global.getString("hosts.remoteCacheAddress") != "none") {
+      val h = config.global.getString("hosts.remoteCacheAddress").split(":")(0)
+      val p =
+        config.global.getString("hosts.remoteCacheAddress").split(":")(1).toInt
+      Some(new InetSocketAddress(h, p))
+    } else None
 
 }
 
-class LocalConfiguration(val myCardinality: Int, val availableMemory: Int) extends MasterSlaveConfiguration {
+class LocalConfiguration(val myCardinality: Int, val availableMemory: Int)
+    extends MasterSlaveConfiguration {
+
   override lazy val myRole = MASTER
 
   override lazy val master = new InetSocketAddress("localhost", 0)
@@ -97,14 +106,16 @@ class LocalConfiguration(val myCardinality: Int, val availableMemory: Int) exten
   val myAddress = master
 }
 
-object LocalConfigurationFromConfig extends LocalConfiguration(config.global.getInt("hosts.numCPU"), config.global.getInt("hosts.RAM"))
+object LocalConfigurationFromConfig
+    extends LocalConfiguration(config.global.getInt("hosts.numCPU"),
+                               config.global.getInt("hosts.RAM"))
 
 /**
- * Needs a hosts.master system property to infer master location and role
- * Self address is bind to the hosts.hostname config.
- * Port is chosen automatically.
- * Cardinality is determined from hosts.numCPU config
- */
+  * Needs a hosts.master system property to infer master location and role
+  * Self address is bind to the hosts.hostname config.
+  * Port is chosen automatically.
+  * Cardinality is determined from hosts.numCPU config
+  */
 object MasterSlaveFromConfig extends MasterSlaveConfiguration {
 
   val myPort = chooseNetworkPort
@@ -120,8 +131,8 @@ object MasterSlaveFromConfig extends MasterSlaveConfiguration {
 }
 
 /**
- * A master slave configuration for full manual setup.
- */
+  * A master slave configuration for full manual setup.
+  */
 class ManualMasterSlaveConfiguration(
     val myCardinality: Int,
     val availableMemory: Int,

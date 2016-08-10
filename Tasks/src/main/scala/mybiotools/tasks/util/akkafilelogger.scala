@@ -1,27 +1,27 @@
 /*
-* The MIT License
-*
-* Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
-* Group Fellay
-*
-* Permission is hereby granted, free of charge, to any person obtaining
-* a copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the Software
-* is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in all
-* copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * The MIT License
+ *
+ * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
+ * Group Fellay
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the Software
+ * is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 package tasks.util
 
@@ -31,7 +31,7 @@ import akka.event.Logging.Error
 import akka.event.Logging.Warning
 import akka.event.Logging.Info
 import akka.event.Logging.Debug
-import akka.actor.{ Actor }
+import akka.actor.{Actor}
 import akka.event.Logging.LogEvent
 import scala.util.control.NoStackTrace
 
@@ -82,43 +82,50 @@ class FileLogger(file: java.io.File, filter: Option[String]) extends Actor {
   def other(e: Any): Unit = writer.write(e + "\n")
 
   def error(event: Error): Unit = {
-    val f = if (event.cause == Error.NoCause) errorFormatWithoutCause else errorFormat
-    writer.write(f.format(
-      timestamp,
-      event.thread.getName,
-      event.logSource,
-      event.message,
-      stackTraceFor(event.cause)
-    ))
+    val f =
+      if (event.cause == Error.NoCause) errorFormatWithoutCause
+      else errorFormat
+    writer.write(
+        f.format(
+            timestamp,
+            event.thread.getName,
+            event.logSource,
+            event.message,
+            stackTraceFor(event.cause)
+        ))
   }
 
   def warning(event: Warning): Unit =
-    writer.write(warningFormat.format(
-      timestamp,
-      event.thread.getName,
-      event.logSource,
-      event.message
-    ))
+    writer.write(
+        warningFormat.format(
+            timestamp,
+            event.thread.getName,
+            event.logSource,
+            event.message
+        ))
 
   def info(event: Info): Unit =
-    writer.write(infoFormat.format(
-      timestamp,
-      event.thread.getName,
-      event.logSource,
-      event.message
-    ))
+    writer.write(
+        infoFormat.format(
+            timestamp,
+            event.thread.getName,
+            event.logSource,
+            event.message
+        ))
 
   def debug(event: Debug): Unit =
-    writer.write(debugFormat.format(
-      timestamp,
-      event.thread.getName,
-      event.logSource,
-      event.message
-    ))
+    writer.write(
+        debugFormat.format(
+            timestamp,
+            event.thread.getName,
+            event.logSource,
+            event.message
+        ))
 
   def receive = {
     case InitializeLogger(_) => sender ! LoggerInitialized
-    case x: LogEvent if filter.map(f => x.logSource.startsWith(f)).getOrElse(true) => {
+    case x: LogEvent
+        if filter.map(f => x.logSource.startsWith(f)).getOrElse(true) => {
       print(x)
       writer.flush
     }
@@ -145,12 +152,27 @@ class LogPublishActor(filter: Option[String]) extends Actor {
   private val dateFormat = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss.SSS")
   def receive = {
     case InitializeLogger(_) => sender ! LoggerInitialized
-    case x: Error if filter.map(f => x.logSource.startsWith(f)).getOrElse(true) =>
-      context.system.eventStream.publish(LogMessage("ERROR", x.message.toString, dateFormat.format(new Date), stackTraceFor(x.cause)))
-    case x: Warning if filter.map(f => x.logSource.startsWith(f)).getOrElse(true) =>
-      context.system.eventStream.publish(LogMessage("WARNING", x.message.toString, dateFormat.format(new Date), ""))
-    case x: Info if filter.map(f => x.logSource.startsWith(f)).getOrElse(true) => {
-      context.system.eventStream.publish(LogMessage("INFO", x.message.toString, dateFormat.format(new Date), ""))
+    case x: Error
+        if filter.map(f => x.logSource.startsWith(f)).getOrElse(true) =>
+      context.system.eventStream.publish(
+          LogMessage("ERROR",
+                     x.message.toString,
+                     dateFormat.format(new Date),
+                     stackTraceFor(x.cause)))
+    case x: Warning
+        if filter.map(f => x.logSource.startsWith(f)).getOrElse(true) =>
+      context.system.eventStream.publish(
+          LogMessage("WARNING",
+                     x.message.toString,
+                     dateFormat.format(new Date),
+                     ""))
+    case x: Info
+        if filter.map(f => x.logSource.startsWith(f)).getOrElse(true) => {
+      context.system.eventStream.publish(
+          LogMessage("INFO",
+                     x.message.toString,
+                     dateFormat.format(new Date),
+                     ""))
     }
 
     case x => {}

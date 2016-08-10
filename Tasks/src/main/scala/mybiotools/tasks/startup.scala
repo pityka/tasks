@@ -1,28 +1,28 @@
 /*
-* The MIT License
-*
-* Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
-* Group Fellay
-* Copyright (c) 2016 Istvan Bartha
-*
-* Permission is hereby granted, free of charge, to any person obtaining
-* a copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the Software
-* is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in all
-* copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * The MIT License
+ *
+ * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
+ * Group Fellay
+ * Copyright (c) 2016 Istvan Bartha
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the Software
+ * is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 package tasks
 
@@ -40,7 +40,7 @@ import tasks.elastic.ssh._
 import tasks.shared._
 import tasks.shared.monitor._
 
-import akka.actor.{ Actor, ActorRef, PoisonPill, ActorSystem, Props, ActorRefFactory }
+import akka.actor.{Actor, ActorRef, PoisonPill, ActorSystem, Props, ActorRefFactory}
 import tasks._
 import java.io.File
 import akka.actor.Actor._
@@ -51,7 +51,7 @@ import java.net.InetAddress
 import scala.concurrent.duration._
 import scala.concurrent._
 import akka.pattern.ask
-import com.typesafe.config.{ ConfigFactory, Config }
+import com.typesafe.config.{ConfigFactory, Config}
 import scala.concurrent.Await
 import collection.JavaConversions._
 import akka.util.Timeout
@@ -68,17 +68,23 @@ case class TaskSystemComponents(
   def getLogger(caller: AnyRef) = getApplicationLogger(caller)(actorsystem)
 
   def registerApplicationFileLogger(f: File) = {
-    val fileLogger = actorsystem.actorOf(Props(new FileLogger(f, Some("APPLICATION"))))
-    val fileLoggerAll = actorsystem.actorOf(Props(new FileLogger(new File(f.getAbsolutePath + ".log.all"))))
-    actorsystem.eventStream.subscribe(fileLogger, classOf[akka.event.Logging.LogEvent])
-    actorsystem.eventStream.subscribe(fileLoggerAll, classOf[akka.event.Logging.LogEvent])
+    val fileLogger =
+      actorsystem.actorOf(Props(new FileLogger(f, Some("APPLICATION"))))
+    val fileLoggerAll = actorsystem.actorOf(
+        Props(new FileLogger(new File(f.getAbsolutePath + ".log.all"))))
+    actorsystem.eventStream
+      .subscribe(fileLogger, classOf[akka.event.Logging.LogEvent])
+    actorsystem.eventStream
+      .subscribe(fileLoggerAll, classOf[akka.event.Logging.LogEvent])
     fileLogger
   }
 
-  def childPrefix(name: String) = this.copy(filePrefix = this.filePrefix.append(name))
+  def childPrefix(name: String) =
+    this.copy(filePrefix = this.filePrefix.append(name))
 }
 
-class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration, config: Config) {
+class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
+                                 config: Config) {
 
   val configuration = {
     val actorProvider = hostConfig match {
@@ -105,10 +111,11 @@ akka {
     }
  }
 }
-  """ + (if (tasks.util.config.logToStandardOutput) """
+  """ + (if (tasks.util.config.logToStandardOutput)
+           """
     akka.loggers = ["akka.event.Logging$DefaultLogger"]
     """
-    else "")
+         else "")
 
     val customConf = ConfigFactory.parseString(configSource)
 
@@ -125,11 +132,13 @@ akka {
 
   private val tasksystemlog = tasks.getLogger(this)(system)
 
-  def registerApplicationFileLogger(f: File) = components.registerApplicationFileLogger(f)
+  def registerApplicationFileLogger(f: File) =
+    components.registerApplicationFileLogger(f)
 
   def registerFileLogger(f: File) = {
     val fileLogger = system.actorOf(Props(new FileLogger(f)))
-    system.eventStream.subscribe(fileLogger, classOf[akka.event.Logging.LogEvent])
+    system.eventStream
+      .subscribe(fileLogger, classOf[akka.event.Logging.LogEvent])
     fileLogger
   }
 
@@ -159,7 +168,10 @@ akka {
   tasksystemlog.info("Role: " + hostConfig.myRole.toString)
 
   if (hostConfig.myCardinality > Runtime.getRuntime().availableProcessors()) {
-    tasksystemlog.warning("Number of CPUs in the machine is " + Runtime.getRuntime().availableProcessors + ". numCPU should not be greater than this.")
+    tasksystemlog.warning(
+        "Number of CPUs in the machine is " + Runtime
+          .getRuntime()
+          .availableProcessors + ". numCPU should not be greater than this.")
   }
 
   tasksystemlog.info("Master node address is: " + hostConfig.master.toString)
@@ -196,18 +208,36 @@ akka {
   }
 
   val reaperActor = gridengine match {
-    case EC2Grid => system.actorOf(Props(new EC2Reaper(logFile.toList, config.getString("tasks.elastic.aws.fileStoreBucket"), config.getString("tasks.elastic.aws.fileStoreBucketFolderPrefix"))), name = "reaper")
-    case LSFGrid => system.actorOf(Props(new LSFReaper(RunningJobId(getNodeName))), name = "reaper")
-    case SGEGrid => system.actorOf(Props(new SGEReaper(RunningJobId(getNodeName))), name = "reaper")
-    case _ => system.actorOf(Props[ProductionReaper], name = "reaper") // this also works for SSHgrid
+    case EC2Grid =>
+      system.actorOf(
+          Props(
+              new EC2Reaper(
+                  logFile.toList,
+                  config.getString("tasks.elastic.aws.fileStoreBucket"),
+                  config.getString(
+                      "tasks.elastic.aws.fileStoreBucketFolderPrefix"))),
+          name = "reaper")
+    case LSFGrid =>
+      system.actorOf(Props(new LSFReaper(RunningJobId(getNodeName))),
+                     name = "reaper")
+    case SGEGrid =>
+      system.actorOf(Props(new SGEReaper(RunningJobId(getNodeName))),
+                     name = "reaper")
+    case _ =>
+      system
+        .actorOf(Props[ProductionReaper], name = "reaper") // this also works for SSHgrid
   }
 
-  val remotenoderegistry = if (isLauncherOnly && ElasticNodeAllocationEnabled) {
-    val remotepath = s"akka.tcp://tasks@${balancerAndCacherAddress.getHostName}:${balancerAndCacherAddress.getPort}/user/noderegistry"
-    val noderegistry = Await.result(system.actorSelection(remotepath).resolveOne(600 seconds), atMost = 600 seconds)
-    tasksystemlog.info("NodeRegistry: " + noderegistry)
-    Some(noderegistry)
-  } else None
+  val remotenoderegistry =
+    if (isLauncherOnly && ElasticNodeAllocationEnabled) {
+      val remotepath =
+        s"akka.tcp://tasks@${balancerAndCacherAddress.getHostName}:${balancerAndCacherAddress.getPort}/user/noderegistry"
+      val noderegistry = Await.result(
+          system.actorSelection(remotepath).resolveOne(600 seconds),
+          atMost = 600 seconds)
+      tasksystemlog.info("NodeRegistry: " + noderegistry)
+      Some(noderegistry)
+    } else None
 
   val cacheFile: Option[File] = try {
     if (config.getBoolean("tasks.cacheEnabled") && !isLauncherOnly) {
@@ -227,10 +257,12 @@ akka {
     // system.actorOf(Props(new S3Updater(cacheFile.toList ++ logFile.toList, config.getString("tasks.fileServiceBaseFolder"))), name = "s3updater")
   }
 
-  val storageURI = new java.net.URI(config.getString("tasks.fileService.storageURI"))
-  val s3bucket = if (storageURI.getScheme != null && storageURI.getScheme == "s3") {
-    Some((storageURI.getAuthority, storageURI.getPath.drop(1)))
-  } else None
+  val storageURI =
+    new java.net.URI(config.getString("tasks.fileService.storageURI"))
+  val s3bucket =
+    if (storageURI.getScheme != null && storageURI.getScheme == "s3") {
+      Some((storageURI.getAuthority, storageURI.getPath.drop(1)))
+    } else None
 
   val fileActor = try {
     if (!isLauncherOnly) {
@@ -244,7 +276,8 @@ akka {
             if (storageURI.getScheme == null) storageURI.getPath
             else if (storageURI.getScheme == "file") storageURI.getPath
             else {
-              tasksystemlog.error(s"$storageURI unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative")
+              tasksystemlog.error(
+                  s"$storageURI unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative")
               System.exit(1)
               throw new RuntimeException("dsf")
             }
@@ -257,10 +290,16 @@ akka {
             tasksystemlog.warning(s"Folder $folder1 does not exists. mkdir ")
             folder1.mkdirs
           }
-          val folders2 = config.getStringList("tasks.fileServiceExtendedFolders").map(x => new File(x).getCanonicalFile).toList.filter(_.isDirectory)
-          val centralized = config.getBoolean("tasks.fileServiceBaseFolderIsShared")
+          val folders2 = config
+            .getStringList("tasks.fileServiceExtendedFolders")
+            .map(x => new File(x).getCanonicalFile)
+            .toList
+            .filter(_.isDirectory)
+          val centralized =
+            config.getBoolean("tasks.fileServiceBaseFolderIsShared")
           if (folder1.list.size != 0) {
-            tasksystemlog.warning(s"fileServiceBaseFolder (${folder1.getCanonicalPath}) is not empty. This is only safe if you restart a pipeline. ")
+            tasksystemlog.warning(
+                s"fileServiceBaseFolder (${folder1.getCanonicalPath}) is not empty. This is only safe if you restart a pipeline. ")
           }
           new FolderFileStorage(folder1, centralized, folders2)
         }
@@ -270,16 +309,23 @@ akka {
 
       val threadpoolsize = config.getInt("tasks.fileServiceThreadPoolSize")
 
-      val fileListPath = new File(config.getString("tasks.fileServiceFileList"))
+      val fileListPath = new File(
+          config.getString("tasks.fileServiceFileList"))
 
       val fileList = new FileList(new DirectLevelDBWrapper(fileListPath))
 
-      val ac = system.actorOf(Props(new FileService(filestore, fileList, threadpoolsize)).withDispatcher("my-pinned-dispatcher"), "fileservice")
+      val ac = system.actorOf(
+          Props(new FileService(filestore, fileList, threadpoolsize))
+            .withDispatcher("my-pinned-dispatcher"),
+          "fileservice")
       reaperActor ! WatchMe(ac)
       ac
     } else {
-      val actorpath = s"akka.tcp://tasks@${balancerAndCacherAddress.getHostName}:${balancerAndCacherAddress.getPort}/user/fileservice"
-      val globalFileService = Await.result(system.actorSelection(actorpath).resolveOne(600 seconds), atMost = 600 seconds)
+      val actorpath =
+        s"akka.tcp://tasks@${balancerAndCacherAddress.getHostName}:${balancerAndCacherAddress.getPort}/user/fileservice"
+      val globalFileService = Await.result(
+          system.actorSelection(actorpath).resolveOne(600 seconds),
+          atMost = 600 seconds)
 
       tasksystemlog.info("FileService: " + globalFileService)
       globalFileService
@@ -304,16 +350,23 @@ akka {
         }
         case false => new DisabledCache
       }
-      val ac = system.actorOf(Props(new TaskResultCache(cache, FileServiceActor(fileActor))).withDispatcher("my-pinned-dispatcher"), "cache")
+      val ac = system.actorOf(
+          Props(new TaskResultCache(cache, FileServiceActor(fileActor)))
+            .withDispatcher("my-pinned-dispatcher"),
+          "cache")
       reaperActor ! WatchMe(ac)
       ac
     } else {
       if (hostConfig.cacheAddress.isEmpty) {
-        val actorpath = s"akka.tcp://tasks@${balancerAndCacherAddress.getHostName}:${balancerAndCacherAddress.getPort}/user/cache"
-        Await.result(system.actorSelection(actorpath).resolveOne(600 seconds), atMost = 600 seconds)
+        val actorpath =
+          s"akka.tcp://tasks@${balancerAndCacherAddress.getHostName}:${balancerAndCacherAddress.getPort}/user/cache"
+        Await.result(system.actorSelection(actorpath).resolveOne(600 seconds),
+                     atMost = 600 seconds)
       } else {
-        val actorpath = s"akka.tcp://tasks@${hostConfig.cacheAddress.get.getHostName}:${hostConfig.cacheAddress.get.getPort}/user/cache"
-        Await.result(system.actorSelection(actorpath).resolveOne(600 seconds), atMost = 600 seconds)
+        val actorpath =
+          s"akka.tcp://tasks@${hostConfig.cacheAddress.get.getHostName}:${hostConfig.cacheAddress.get.getPort}/user/cache"
+        Await.result(system.actorSelection(actorpath).resolveOne(600 seconds),
+                     atMost = 600 seconds)
       }
     }
   } catch {
@@ -325,12 +378,16 @@ akka {
 
   val balancerActor = try {
     if (!isLauncherOnly) {
-      val ac = system.actorOf(Props[TaskQueue].withDispatcher("taskqueue"), "queue")
+      val ac =
+        system.actorOf(Props[TaskQueue].withDispatcher("taskqueue"), "queue")
       reaperActor ! WatchMe(ac)
       ac
     } else {
-      val actorpath = s"akka.tcp://tasks@${balancerAndCacherAddress.getHostName}:${balancerAndCacherAddress.getPort}/user/queue"
-      val ac = Await.result(system.actorSelection(actorpath).resolveOne(600 seconds), atMost = 600 seconds)
+      val actorpath =
+        s"akka.tcp://tasks@${balancerAndCacherAddress.getHostName}:${balancerAndCacherAddress.getPort}/user/queue"
+      val ac = Await.result(
+          system.actorSelection(actorpath).resolveOne(600 seconds),
+          atMost = 600 seconds)
       tasksystemlog.info("Queue: " + ac)
       ac
     }
@@ -342,43 +399,82 @@ akka {
   }
 
   // start up noderegistry
-  val noderegistry: Option[ActorRef] = if (!isLauncherOnly && ElasticNodeAllocationEnabled) {
-    val resource = CPUMemoryAvailable(cpu = hostConfig.myCardinality, memory = hostConfig.availableMemory)
-    val ac = gridengine match {
-      case LSFGrid => system.actorOf(Props(new LSFNodeRegistry(hostConfig.myAddress, balancerActor, resource)).withDispatcher("my-pinned-dispatcher"), "noderegistry")
-      case SGEGrid => system.actorOf(Props(new SGENodeRegistry(hostConfig.myAddress, balancerActor, resource)).withDispatcher("my-pinned-dispatcher"), "noderegistry")
-      case EC2Grid => system.actorOf(Props(new EC2NodeRegistry(hostConfig.myAddress, balancerActor, resource)).withDispatcher("my-pinned-dispatcher"), "noderegistry")
-      case SSHGrid => system.actorOf(Props(new SSHNodeRegistry(hostConfig.myAddress, balancerActor, resource)).withDispatcher("my-pinned-dispatcher"), "noderegistry")
-      case NoGrid => throw new RuntimeException("ElasticNodeAllocation and NoGrid are incompatible")
-    }
+  val noderegistry: Option[ActorRef] =
+    if (!isLauncherOnly && ElasticNodeAllocationEnabled) {
+      val resource = CPUMemoryAvailable(cpu = hostConfig.myCardinality,
+                                        memory = hostConfig.availableMemory)
+      val ac = gridengine match {
+        case LSFGrid =>
+          system.actorOf(Props(
+                             new LSFNodeRegistry(hostConfig.myAddress,
+                                                 balancerActor,
+                                                 resource))
+                           .withDispatcher("my-pinned-dispatcher"),
+                         "noderegistry")
+        case SGEGrid =>
+          system.actorOf(Props(
+                             new SGENodeRegistry(hostConfig.myAddress,
+                                                 balancerActor,
+                                                 resource))
+                           .withDispatcher("my-pinned-dispatcher"),
+                         "noderegistry")
+        case EC2Grid =>
+          system.actorOf(Props(
+                             new EC2NodeRegistry(hostConfig.myAddress,
+                                                 balancerActor,
+                                                 resource))
+                           .withDispatcher("my-pinned-dispatcher"),
+                         "noderegistry")
+        case SSHGrid =>
+          system.actorOf(Props(
+                             new SSHNodeRegistry(hostConfig.myAddress,
+                                                 balancerActor,
+                                                 resource))
+                           .withDispatcher("my-pinned-dispatcher"),
+                         "noderegistry")
+        case NoGrid =>
+          throw new RuntimeException(
+              "ElasticNodeAllocation and NoGrid are incompatible")
+      }
 
-    reaperActor ! WatchMe(ac)
+      reaperActor ! WatchMe(ac)
 
-    Some(ac)
-  } else None
+      Some(ac)
+    } else None
 
   val queueActor = QueueActor(balancerActor)
 
   val fileServiceActor = FileServiceActor(fileActor)
 
-  val nodeLocalCacheActor = system.actorOf(Props[NodeLocalCache].withDispatcher("my-pinned-dispatcher"), name = "nodeLocalCache")
+  val nodeLocalCacheActor = system.actorOf(
+      Props[NodeLocalCache].withDispatcher("my-pinned-dispatcher"),
+      name = "nodeLocalCache")
 
   reaperActor ! WatchMe(nodeLocalCacheActor)
 
   val nodeLocalCache = NodeLocalCacheActor(nodeLocalCacheActor)
 
   implicit val components = TaskSystemComponents(
-    queue = queueActor,
-    fs = fileServiceActor,
-    actorsystem = system,
-    cache = CacheActor(cacherActor),
-    nodeLocalCache = nodeLocalCache,
-    filePrefix = FileServicePrefix(Vector())
+      queue = queueActor,
+      fs = fileServiceActor,
+      actorsystem = system,
+      cache = CacheActor(cacherActor),
+      nodeLocalCache = nodeLocalCache,
+      filePrefix = FileServicePrefix(Vector())
   )
 
   private val launcherActor = if (numberOfCores > 0) {
-    val refresh: FiniteDuration = (new DurationLong(config.getMilliseconds("tasks.askInterval")).millisecond)
-    val ac = system.actorOf(Props(new TaskLauncher(balancerActor, nodeLocalCacheActor, CPUMemoryAvailable(cpu = numberOfCores, memory = availableMemory), refreshRate = refresh)).withDispatcher("launcher"), "launcher")
+    val refresh: FiniteDuration = (new DurationLong(
+        config.getMilliseconds("tasks.askInterval")).millisecond)
+    val ac = system.actorOf(
+        Props(
+            new TaskLauncher(balancerActor,
+                             nodeLocalCacheActor,
+                             CPUMemoryAvailable(cpu = numberOfCores,
+                                                memory = availableMemory),
+                             refreshRate = refresh))
+          .withDispatcher("launcher"),
+        "launcher")
     reaperActor ! WatchMe(ac)
     Some(ac)
   } else None
@@ -386,22 +482,42 @@ akka {
   if (isLauncherOnly && ElasticNodeAllocationEnabled && launcherActor.isDefined) {
     val nodeName = getNodeName
 
-    tasksystemlog.info("This is worker node. ElasticNodeAllocation is enabled. Node name: " + nodeName)
+    tasksystemlog.info(
+        "This is worker node. ElasticNodeAllocation is enabled. Node name: " + nodeName)
     if (nodeName != null) {
       // ActorInEnvelope
       val acenv = launcherActor.get
 
-      val resource = CPUMemoryAvailable(hostConfig.myCardinality, hostConfig.availableMemory)
-      remotenoderegistry.get ! NodeComingUp(Node(RunningJobId(nodeName), resource, acenv))
+      val resource = CPUMemoryAvailable(hostConfig.myCardinality,
+                                        hostConfig.availableMemory)
+      remotenoderegistry.get ! NodeComingUp(
+          Node(RunningJobId(nodeName), resource, acenv))
 
-      val balancerHeartbeat = system.actorOf(Props(new HeartBeatActor(balancerActor)).withDispatcher("heartbeat"), "heartbeatOf" + balancerActor.path.address.toString.replace("://", "___") + balancerActor.path.name)
+      val balancerHeartbeat = system.actorOf(
+          Props(new HeartBeatActor(balancerActor)).withDispatcher("heartbeat"),
+          "heartbeatOf" + balancerActor.path.address.toString
+            .replace("://", "___") + balancerActor.path.name)
 
       gridengine match {
-        case LSFGrid => system.actorOf(Props(new LSFSelfShutdown(RunningJobId(nodeName), balancerActor)).withDispatcher("my-pinned-dispatcher"))
-        case SGEGrid => system.actorOf(Props(new SGESelfShutdown(RunningJobId(nodeName), balancerActor)).withDispatcher("my-pinned-dispatcher"))
-        case EC2Grid => system.actorOf(Props(new EC2SelfShutdown(RunningJobId(nodeName), balancerActor)).withDispatcher("my-pinned-dispatcher"))
-        case SSHGrid => system.actorOf(Props(new SSHSelfShutdown(RunningJobId(nodeName), balancerActor)).withDispatcher("my-pinned-dispatcher"))
-        case NoGrid => throw new RuntimeException("ElasticNodeAllocation and NoGrid are incompatible")
+        case LSFGrid =>
+          system.actorOf(
+              Props(new LSFSelfShutdown(RunningJobId(nodeName), balancerActor))
+                .withDispatcher("my-pinned-dispatcher"))
+        case SGEGrid =>
+          system.actorOf(
+              Props(new SGESelfShutdown(RunningJobId(nodeName), balancerActor))
+                .withDispatcher("my-pinned-dispatcher"))
+        case EC2Grid =>
+          system.actorOf(
+              Props(new EC2SelfShutdown(RunningJobId(nodeName), balancerActor))
+                .withDispatcher("my-pinned-dispatcher"))
+        case SSHGrid =>
+          system.actorOf(
+              Props(new SSHSelfShutdown(RunningJobId(nodeName), balancerActor))
+                .withDispatcher("my-pinned-dispatcher"))
+        case NoGrid =>
+          throw new RuntimeException(
+              "ElasticNodeAllocation and NoGrid are incompatible")
 
       }
 
@@ -413,8 +529,11 @@ akka {
   scala.util.Try {
     if (hostConfig.myRole == MASTER) {
       val address = config.getString("tasks.monitor")
-      val actorpath = s"akka.tcp://taskmonitorweb@$address/user/monitorendpoint"
-      val ac = Await.result(system.actorSelection(actorpath).resolveOne(600 seconds), atMost = 600 seconds)
+      val actorpath =
+        s"akka.tcp://taskmonitorweb@$address/user/monitorendpoint"
+      val ac =
+        Await.result(system.actorSelection(actorpath).resolveOne(600 seconds),
+                     atMost = 600 seconds)
       tasksystemlog.info("Monitor: " + ac)
       setupMonitor(ac)
 
@@ -427,16 +546,17 @@ akka {
     {
       implicit val timeout = akka.util.Timeout(50 seconds)
       (mon ? Introduction(
-        queueActor = balancerActor,
-        fileActor = fileActor,
-        nodeRegistry = noderegistry,
-        configuration = config
-      )).onSuccess {
+              queueActor = balancerActor,
+              fileActor = fileActor,
+              nodeRegistry = noderegistry,
+              configuration = config
+          )).onSuccess {
         case ListenerEnvelope(listener, id) => {
 
           system.eventStream.subscribe(listener, classOf[LogMessage])
           system.eventStream.subscribe(listener, classOf[monitor.QueueStat])
-          system.eventStream.subscribe(listener, classOf[monitor.NodeRegistryStat])
+          system.eventStream
+            .subscribe(listener, classOf[monitor.NodeRegistryStat])
           implicit val timeout = akka.util.Timeout(4 * 168 hours)
           (mon ? WaitingForShutdownCommand(id)) onSuccess {
             case ShutdownCommand => {
@@ -480,7 +600,8 @@ akka {
   }
 
   scala.sys.addShutdownHook {
-    tasksystemlog.warning("JVM is shutting down - will call tasksystem shutdown.")
+    tasksystemlog.warning(
+        "JVM is shutting down - will call tasksystem shutdown.")
     shutdown
     tasksystemlog.warning("JVM is shutting down - called tasksystem shutdown.")
   }
@@ -488,13 +609,19 @@ akka {
   private def getNodeName: String = gridengine match {
     case LSFGrid => System.getenv("LSB_JOBID")
     case SSHGrid => {
-      val pid = java.lang.management.ManagementFactory.getRuntimeMXBean().getName().split("@").head
+      val pid = java.lang.management.ManagementFactory
+        .getRuntimeMXBean()
+        .getName()
+        .split("@")
+        .head
       val hostname = tasks.util.config.global.getString("hosts.hostname")
       hostname + ":" + pid
     }
     case SGEGrid => System.getenv("JOB_ID")
     case EC2Grid => EC2Operations.readMetadata("instance-id").head
-    case NoGrid => throw new RuntimeException("ElasticNodeAllocation and NoGrid are incompatible")
+    case NoGrid =>
+      throw new RuntimeException(
+          "ElasticNodeAllocation and NoGrid are incompatible")
   }
 
 }

@@ -1,27 +1,27 @@
 /*
-* The MIT License
-*
-* Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
-* Group Fellay
-*
-* Permission is hereby granted, free of charge, to any person obtaining
-* a copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the Software
-* is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in all
-* copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * The MIT License
+ *
+ * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
+ * Group Fellay
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the Software
+ * is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 package tasks.util
 
@@ -51,9 +51,10 @@ object TempFile {
       x.deleteOnExit
       x
     } else {
-      throw new IllegalStateException("Failed to create directory within "
-        + max + " attempts (tried "
-        + baseDir.getAbsolutePath + "/" + baseName + "0 to " + baseName + (max - 1) + ')');
+      throw new IllegalStateException(
+          "Failed to create directory within "
+            + max + " attempts (tried "
+            + baseDir.getAbsolutePath + "/" + baseName + "0 to " + baseName + (max - 1) + ')');
 
     }
 
@@ -66,12 +67,12 @@ object TempFile {
 
   val prefix = "bio" + id
 
-  lazy val folder =
-    synchronized {
-      createTempDir(prefix)
-    }
+  lazy val folder = synchronized {
+    createTempDir(prefix)
+  }
 
-  def createTempFile(suffix: String): File = File.createTempFile(prefix, suffix, folder)
+  def createTempFile(suffix: String): File =
+    File.createTempFile(prefix, suffix, folder)
 
   def createFileInTempFolderIfPossibleWithName(fileName: String): File = {
     val f = new File(folder, fileName)
@@ -82,22 +83,24 @@ object TempFile {
 
   val writtenExecutables = collection.mutable.Map[String, File]()
 
-  def getExecutableFromJar(name: String): File = writtenExecutables.get(name).getOrElse {
-    synchronized {
-      val f = writeFreshExecutable(name)
+  def getExecutableFromJar(name: String): File =
+    writtenExecutables.get(name).getOrElse {
+      synchronized {
+        val f = writeFreshExecutable(name)
 
-      writtenExecutables.update(name, f)
+        writtenExecutables.update(name, f)
 
-      f
+        f
+      }
     }
-  }
 
   private def writeFreshExecutable(name: String): File = {
     val tmpFile = createTempFile(".executable")
     tmpFile.deleteOnExit()
     tmpFile.setExecutable(true)
 
-    val d = readStreamAndClose(getClass().getResource(name).openStream()).toArray
+    val d =
+      readStreamAndClose(getClass().getResource(name).openStream()).toArray
     writeBinaryToFile(tmpFile.getAbsolutePath, d)
     tmpFile
 

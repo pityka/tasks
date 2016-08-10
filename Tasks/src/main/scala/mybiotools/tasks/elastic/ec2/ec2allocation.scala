@@ -1,35 +1,35 @@
 /*
-* The MIT License
-*
-* Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
-* Group Fellay
-* Copyright (c) 2016 Istvan Bartha
+ * The MIT License
+ *
+ * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
+ * Group Fellay
+ * Copyright (c) 2016 Istvan Bartha
 
-*
-* Permission is hereby granted, free of charge, to any person obtaining
-* a copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the Software
-* is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in all
-* copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the Software
+ * is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 package tasks.elastic.ec2
 
-import akka.actor.{ Actor, PoisonPill, ActorRef, Props, Cancellable }
+import akka.actor.{Actor, PoisonPill, ActorRef, Props, Cancellable}
 import scala.concurrent.duration._
-import java.util.concurrent.{ TimeUnit, ScheduledFuture }
+import java.util.concurrent.{TimeUnit, ScheduledFuture}
 import java.net.InetSocketAddress
 import akka.actor.Actor._
 import akka.event.LoggingAdapter
@@ -71,31 +71,40 @@ import com.amazonaws.AmazonServiceException
 import java.net.URL
 
 import collection.JavaConversions._
-import java.io.{ File, InputStream }
+import java.io.{File, InputStream}
 
 object EC2Settings {
 
   val endpoint: String = config.global.getString("tasks.elastic.aws.endpoint")
 
-  val spotPrice: Double = config.global.getDouble("tasks.elastic.aws.spotPrice")
+  val spotPrice: Double =
+    config.global.getDouble("tasks.elastic.aws.spotPrice")
 
   val amiID: String = config.global.getString("tasks.elastic.aws.ami")
 
-  val instanceType = EC2Helpers.instanceTypes.find(_._1 == config.global.getString("tasks.elastic.aws.instanceType")).get
+  val instanceType = EC2Helpers.instanceTypes
+    .find(_._1 == config.global.getString("tasks.elastic.aws.instanceType"))
+    .get
 
-  val securityGroup: String = config.global.getString("tasks.elastic.aws.securityGroup")
+  val securityGroup: String =
+    config.global.getString("tasks.elastic.aws.securityGroup")
 
-  val jarBucket: String = config.global.getString("tasks.elastic.aws.jarBucket")
+  val jarBucket: String =
+    config.global.getString("tasks.elastic.aws.jarBucket")
 
-  val jarObject: String = config.global.getString("tasks.elastic.aws.jarObject")
+  val jarObject: String =
+    config.global.getString("tasks.elastic.aws.jarObject")
 
   val keyName = config.global.getString("tasks.elastic.aws.keyName")
 
-  val extraFilesFromS3: List[String] = config.global.getStringList("tasks.elastic.aws.extraFilesFromS3").toList
+  val extraFilesFromS3: List[String] =
+    config.global.getStringList("tasks.elastic.aws.extraFilesFromS3").toList
 
-  val extraStartupscript: String = config.global.getString("tasks.elastic.aws.extraStartupScript")
+  val extraStartupscript: String =
+    config.global.getString("tasks.elastic.aws.extraStartupScript")
 
-  val additionalJavaCommandline = config.global.getString("tasks.elastic.aws.extraJavaCommandline")
+  val additionalJavaCommandline =
+    config.global.getString("tasks.elastic.aws.extraJavaCommandline")
 
   val iamRole = {
     val s = config.global.getString("tasks.elastic.aws.iamRole")
@@ -103,33 +112,36 @@ object EC2Settings {
     else Some(s)
   }
 
-  val S3UpdateInterval = config.global.getInt("tasks.elastic.aws.uploadInterval")
+  val S3UpdateInterval =
+    config.global.getInt("tasks.elastic.aws.uploadInterval")
 
-  val placementGroup: Option[String] = config.global.getString("tasks.elastic.aws.placementGroup") match {
-    case x if x == "" => None
-    case x => Some(x)
-  }
+  val placementGroup: Option[String] =
+    config.global.getString("tasks.elastic.aws.placementGroup") match {
+      case x if x == "" => None
+      case x => Some(x)
+    }
 
-  val jvmMaxHeapFactor = config.global.getDouble("tasks.elastic.aws.jvmMaxHeapFactor")
+  val jvmMaxHeapFactor =
+    config.global.getDouble("tasks.elastic.aws.jvmMaxHeapFactor")
 
 }
 
 object EC2Helpers {
 
   val instanceTypes = List(
-    "m3.medium" -> CPUMemoryAvailable(1, 3750),
-    "c3.large" -> CPUMemoryAvailable(2, 3750),
-    "m3.xlarge" -> CPUMemoryAvailable(4, 7500),
-    "c3.xlarge" -> CPUMemoryAvailable(4, 7500),
-    "r3.large" -> CPUMemoryAvailable(2, 15000),
-    "m3.2xlarge" -> CPUMemoryAvailable(8, 15000),
-    "c3.2xlarge" -> CPUMemoryAvailable(8, 15000),
-    "r3.xlarge" -> CPUMemoryAvailable(4, 30000),
-    "c3.4xlarge" -> CPUMemoryAvailable(16, 30000),
-    "r3.2xlarge" -> CPUMemoryAvailable(8, 60000),
-    "c3.8xlarge" -> CPUMemoryAvailable(32, 60000),
-    "r3.4xlarge" -> CPUMemoryAvailable(16, 120000),
-    "r3.8xlarge" -> CPUMemoryAvailable(32, 240000)
+      "m3.medium" -> CPUMemoryAvailable(1, 3750),
+      "c3.large" -> CPUMemoryAvailable(2, 3750),
+      "m3.xlarge" -> CPUMemoryAvailable(4, 7500),
+      "c3.xlarge" -> CPUMemoryAvailable(4, 7500),
+      "r3.large" -> CPUMemoryAvailable(2, 15000),
+      "m3.2xlarge" -> CPUMemoryAvailable(8, 15000),
+      "c3.2xlarge" -> CPUMemoryAvailable(8, 15000),
+      "r3.xlarge" -> CPUMemoryAvailable(4, 30000),
+      "c3.4xlarge" -> CPUMemoryAvailable(16, 30000),
+      "r3.2xlarge" -> CPUMemoryAvailable(8, 60000),
+      "c3.8xlarge" -> CPUMemoryAvailable(32, 60000),
+      "r3.4xlarge" -> CPUMemoryAvailable(16, 120000),
+      "r3.8xlarge" -> CPUMemoryAvailable(32, 240000)
   )
 
 }
@@ -163,13 +175,13 @@ object EC2Operations {
     }.get
   }
 
-  def readMetadata(key: String): List[String] =
-    {
-      val source = scala.io.Source.fromURL("http://169.254.169.254/latest/meta-data/" + key)
-      val list = source.getLines.toList
-      source.close
-      list
-    }
+  def readMetadata(key: String): List[String] = {
+    val source =
+      scala.io.Source.fromURL("http://169.254.169.254/latest/meta-data/" + key)
+    val list = source.getLines.toList
+    source.close
+    list
+  }
 
 }
 
@@ -210,15 +222,18 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
   override def refreshPendingList: List[PendingJobId] = {
     val describeResult = ec2.describeSpotInstanceRequests();
     val spotInstanceRequests = describeResult.getSpotInstanceRequests();
-    spotInstanceRequests.map(x => PendingJobId(x.getSpotInstanceRequestId)).toList
+    spotInstanceRequests
+      .map(x => PendingJobId(x.getSpotInstanceRequestId))
+      .toList
   }
 
   override def convertRunningToPending(p: RunningJobId): Option[PendingJobId] = {
     val describeResult = ec2.describeSpotInstanceRequests();
     val spotInstanceRequests = describeResult.getSpotInstanceRequests();
 
-    spotInstanceRequests.filter(_.getInstanceId == p.value).headOption.map { x =>
-      PendingJobId(x.getSpotInstanceRequestId)
+    spotInstanceRequests.filter(_.getInstanceId == p.value).headOption.map {
+      x =>
+        PendingJobId(x.getSpotInstanceRequestId)
     }
 
   }
@@ -230,7 +245,8 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     // Initializes a Spot Instance Request
     val requestRequest = new RequestSpotInstancesRequest();
 
-    if (EC2Settings.spotPrice > 2.4) throw new RuntimeException("Spotprice too high:" + EC2Settings.spotPrice)
+    if (EC2Settings.spotPrice > 2.4)
+      throw new RuntimeException("Spotprice too high:" + EC2Settings.spotPrice)
 
     requestRequest.setSpotPrice(EC2Settings.spotPrice.toString);
     requestRequest.setInstanceCount(1);
@@ -248,7 +264,8 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     blockDeviceMappingSDC.setDeviceName("/dev/sdc");
     blockDeviceMappingSDC.setVirtualName("ephemeral1");
 
-    launchSpecification.setBlockDeviceMappings(List(blockDeviceMappingSDB, blockDeviceMappingSDC));
+    launchSpecification.setBlockDeviceMappings(
+        List(blockDeviceMappingSDB, blockDeviceMappingSDC));
 
     EC2Settings.iamRole.foreach { iamRole =>
       val iamprofile = new IamInstanceProfileSpecification()
@@ -262,12 +279,16 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
       launchSpecification.setPlacement(placement);
     }
 
-    val extraFiles = EC2Settings.extraFilesFromS3.grouped(3).map { l =>
-      s"python getFile.py ${l(0)} ${l(1)} ${l(2)} && chmod u+x ${l(2)} "
-    }.mkString("\n")
+    val extraFiles = EC2Settings.extraFilesFromS3
+      .grouped(3)
+      .map { l =>
+        s"python getFile.py ${l(0)} ${l(1)} ${l(2)} && chmod u+x ${l(2)} "
+      }
+      .mkString("\n")
 
     val launchCommand = if (TaskAllocationConstants.LaunchWithDocker.isEmpty) {
-      val javacommand = s"nohup java -Xmx${(selectedInstanceType._2.memory.toDouble * EC2Settings.jvmMaxHeapFactor).toInt}M -Dhosts.gridengine=EC2 ${EC2Settings.additionalJavaCommandline} -Dconfig.file=rendered.conf -Dhosts.master=${masterAddress.getHostName + ":" + masterAddress.getPort} -jar pipeline.jar > pipelinestdout &"
+      val javacommand =
+        s"nohup java -Xmx${(selectedInstanceType._2.memory.toDouble * EC2Settings.jvmMaxHeapFactor).toInt}M -Dhosts.gridengine=EC2 ${EC2Settings.additionalJavaCommandline} -Dconfig.file=rendered.conf -Dhosts.master=${masterAddress.getHostName + ":" + masterAddress.getPort} -jar pipeline.jar > pipelinestdout &"
 
       s"python getFile.py ${EC2Settings.jarBucket} ${EC2Settings.jarObject} pipeline.jar" ::
         s"""cat << EOF > rendered.conf
@@ -303,17 +324,18 @@ mkdir -m 1777 /media/ephemeral0/tmp/
 mkdir -m 1777 /media/ephemeral0/tmp/scatch
 mount --bind /media/ephemeral0/tmp/ /tmp
 """ ::
-        extraFiles ::
-        EC2Settings.extraStartupscript ::
-        """export PATH=./:$PATH""" ::
-        launchCommand ::
-        Nil
+          extraFiles ::
+            EC2Settings.extraStartupscript ::
+              """export PATH=./:$PATH""" ::
+                launchCommand ::
+                  Nil
 
     launchSpecification.setUserData(gzipBase64(userdata.mkString("\n")))
 
     // Add the security group to the request.
-    val securitygroups =
-      (Set(EC2Settings.securityGroup) & EC2Operations.readMetadata("security-groups").toSet).toList
+    val securitygroups = (Set(EC2Settings.securityGroup) & EC2Operations
+          .readMetadata("security-groups")
+          .toSet).toList
     launchSpecification.setSecurityGroups(securitygroups)
 
     // Add the launch specification.
@@ -322,16 +344,20 @@ mount --bind /media/ephemeral0/tmp/ /tmp
     // Call the RequestSpotInstance API.
     val requestResult = ec2.requestSpotInstances(requestRequest)
 
-    (requestResult.getSpotInstanceRequests.map(_.getSpotInstanceRequestId).head, selectedInstanceType)
+    (requestResult.getSpotInstanceRequests
+       .map(_.getSpotInstanceRequestId)
+       .head,
+     selectedInstanceType)
 
   }
 
-  def requestOneNewJobFromGridScheduler(request: CPUMemoryRequest): Try[Tuple2[PendingJobId, CPUMemoryAvailable]] = Try {
+  def requestOneNewJobFromGridScheduler(request: CPUMemoryRequest)
+    : Try[Tuple2[PendingJobId, CPUMemoryAvailable]] = Try {
     val (requestid, instancetype) = requestSpotInstance(request)
     val jobid = PendingJobId(requestid)
     val size = CPUMemoryAvailable(
-      cpu = instancetype._2.cpu,
-      memory = instancetype._2.memory
+        cpu = instancetype._2.cpu,
+        memory = instancetype._2.memory
     )
     (jobid, size)
   }
@@ -339,7 +365,10 @@ mount --bind /media/ephemeral0/tmp/ /tmp
   def initializeNode(node: Node): Unit = {
     val ac = node.launcherActor //.revive
 
-    val ackil = context.actorOf(Props(new EC2NodeKiller(ac, node)).withDispatcher("my-pinned-dispatcher"), "nodekiller" + node.name.value.replace("://", "___"))
+    val ackil = context.actorOf(
+        Props(new EC2NodeKiller(ac, node))
+          .withDispatcher("my-pinned-dispatcher"),
+        "nodekiller" + node.name.value.replace("://", "___"))
 
   }
 
@@ -348,7 +377,9 @@ mount --bind /media/ephemeral0/tmp/ /tmp
 class EC2NodeKiller(
     val targetLauncherActor: ActorRef,
     val targetNode: Node
-) extends NodeKillerImpl with EC2Shutdown with akka.actor.ActorLogging {
+) extends NodeKillerImpl
+    with EC2Shutdown
+    with akka.actor.ActorLogging {
   val ec2 = new AmazonEC2Client()
   ec2.setEndpoint(EC2Settings.endpoint)
 }
@@ -357,7 +388,11 @@ class EC2NodeRegistry(
     val masterAddress: InetSocketAddress,
     val targetQueue: ActorRef,
     override val unmanagedResource: CPUMemoryAvailable
-) extends EC2NodeRegistryImp with NodeCreatorImpl with SimpleDecideNewNode with EC2Shutdown with akka.actor.ActorLogging {
+) extends EC2NodeRegistryImp
+    with NodeCreatorImpl
+    with SimpleDecideNewNode
+    with EC2Shutdown
+    with akka.actor.ActorLogging {
   val ec2 = new AmazonEC2Client()
   ec2.setEndpoint(EC2Settings.endpoint)
 }
@@ -370,7 +405,9 @@ trait EC2HostConfiguration extends HostConfiguration {
 
   lazy val myAddress = new InetSocketAddress(myhostname, myPort)
 
-  private lazy val instancetype = EC2Helpers.instanceTypes.find(_._1 == EC2Operations.readMetadata("instance-type").head).get
+  private lazy val instancetype = EC2Helpers.instanceTypes
+    .find(_._1 == EC2Operations.readMetadata("instance-type").head)
+    .get
 
   lazy val availableMemory = instancetype._2.memory
 
@@ -378,7 +415,9 @@ trait EC2HostConfiguration extends HostConfiguration {
 
 }
 
-object EC2MasterSlave extends MasterSlaveConfiguration with EC2HostConfiguration
+object EC2MasterSlave
+    extends MasterSlaveConfiguration
+    with EC2HostConfiguration
 
 class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
 
@@ -407,7 +446,8 @@ class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
   def contains(path: ManagedFilePath, size: Long, hash: Int): Boolean = {
     val tr = retry(5) {
       try {
-        val metadata = s3Client.getObjectMetadata(bucketName, assembleName(path))
+        val metadata =
+          s3Client.getObjectMetadata(bucketName, assembleName(path))
         val (size1, hash1) = getLengthAndHash(metadata)
         size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1)
       } catch {
@@ -423,29 +463,36 @@ class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
   def getLengthAndHash(metadata: ObjectMetadata): (Long, Int) =
     metadata.getInstanceLength -> metadata.getETag.hashCode
 
-  private def assembleName(path: ManagedFilePath) = (if (folderPrefix != "") folderPrefix + "/" else "") + path.pathElements.mkString("/")
+  private def assembleName(path: ManagedFilePath) =
+    (if (folderPrefix != "") folderPrefix + "/" else "") + path.pathElements
+      .mkString("/")
 
-  def importFile(f: File, path: ProposedManagedFilePath): Try[(Long, Int, File, ManagedFilePath)] = {
+  def importFile(f: File, path: ProposedManagedFilePath)
+    : Try[(Long, Int, File, ManagedFilePath)] = {
     val managed = path.toManaged
 
     retry(5) {
 
-      val putrequest = new PutObjectRequest(bucketName, assembleName(managed), f)
+      val putrequest =
+        new PutObjectRequest(bucketName, assembleName(managed), f)
 
       putrequest.setCannedAcl(CannedAccessControlList.Private)
 
       { // set server side encryption
         val objectMetadata = new ObjectMetadata();
-        objectMetadata.setSSEAlgorithm(ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
+        objectMetadata.setSSEAlgorithm(
+            ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
         putrequest.setMetadata(objectMetadata);
       }
       val upload = tm.upload(putrequest);
       upload.waitForCompletion
 
-      val metadata = s3Client.getObjectMetadata(bucketName, assembleName(managed))
+      val metadata =
+        s3Client.getObjectMetadata(bucketName, assembleName(managed))
       val (size1, hash1) = getLengthAndHash(metadata)
 
-      if (size1 !== f.length) throw new RuntimeException("S3: Uploaded file length != on disk")
+      if (size1 !== f.length)
+        throw new RuntimeException("S3: Uploaded file length != on disk")
 
       (size1, hash1, f, managed)
 
@@ -466,7 +513,8 @@ class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
 
       val metadata = s3Client.getObjectMetadata(bucketName, assembleName(path))
       val (size1, hash1) = getLengthAndHash(metadata)
-      if (size1 !== file.length) throw new RuntimeException("S3: Downloaded file length != metadata")
+      if (size1 !== file.length)
+        throw new RuntimeException("S3: Downloaded file length != metadata")
 
       file
     }
@@ -477,12 +525,18 @@ class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
 
 }
 
-class EC2SelfShutdown(val id: RunningJobId, val balancerActor: ActorRef) extends SelfShutdown with EC2Shutdown {
+class EC2SelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
+    extends SelfShutdown
+    with EC2Shutdown {
   val ec2 = new AmazonEC2Client()
 
 }
 
-class EC2Reaper(filesToSave: List[File], bucketName: String, folderPrefix: String) extends Reaper with EC2Shutdown {
+class EC2Reaper(filesToSave: List[File],
+                bucketName: String,
+                folderPrefix: String)
+    extends Reaper
+    with EC2Shutdown {
 
   val ec2 = new AmazonEC2Client()
   val s3Client = new AmazonS3Client();
@@ -496,13 +550,15 @@ class EC2Reaper(filesToSave: List[File], bucketName: String, folderPrefix: Strin
     val tm = new TransferManager(s3Client);
     // Asynchronous call.
     filesToSave.foreach { f =>
-      val putrequest = new PutObjectRequest(bucketName, folderPrefix + "/" + f.getName, f)
+      val putrequest =
+        new PutObjectRequest(bucketName, folderPrefix + "/" + f.getName, f)
 
       putrequest.setCannedAcl(CannedAccessControlList.Private)
 
       { // set server side encryption
         val objectMetadata = new ObjectMetadata();
-        objectMetadata.setSSEAlgorithm(ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
+        objectMetadata.setSSEAlgorithm(
+            ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
         putrequest.setMetadata(objectMetadata);
       }
 
@@ -515,7 +571,11 @@ class EC2Reaper(filesToSave: List[File], bucketName: String, folderPrefix: Strin
   }
 }
 
-class S3Updater(filesToSave: List[File], bucketName: String, folderPrefix: String) extends Actor with akka.actor.ActorLogging {
+class S3Updater(filesToSave: List[File],
+                bucketName: String,
+                folderPrefix: String)
+    extends Actor
+    with akka.actor.ActorLogging {
   case object Tick
 
   override def preStart {
@@ -523,13 +583,12 @@ class S3Updater(filesToSave: List[File], bucketName: String, folderPrefix: Strin
 
     import context.dispatcher
 
-    timer =
-      context.system.scheduler.schedule(
+    timer = context.system.scheduler.schedule(
         initialDelay = 0 seconds,
         interval = EC2Settings.S3UpdateInterval seconds,
         receiver = self,
         message = Tick
-      )
+    )
   }
 
   val s3Client = new AmazonS3Client();
@@ -544,22 +603,22 @@ class S3Updater(filesToSave: List[File], bucketName: String, folderPrefix: Strin
 
   def upload {
     Try {
-      filesToSave.foreach {
-        f =>
+      filesToSave.foreach { f =>
+        val putrequest =
+          new PutObjectRequest(bucketName, folderPrefix + "/" + f.getName, f)
 
-          val putrequest = new PutObjectRequest(bucketName, folderPrefix + "/" + f.getName, f)
+        putrequest.setCannedAcl(CannedAccessControlList.Private)
 
-          putrequest.setCannedAcl(CannedAccessControlList.Private)
+        { // set server side encryption
+          val objectMetadata = new ObjectMetadata();
+          objectMetadata.setSSEAlgorithm(
+              ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
+          putrequest.setMetadata(objectMetadata);
+        }
 
-          { // set server side encryption
-            val objectMetadata = new ObjectMetadata();
-            objectMetadata.setSSEAlgorithm(ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
-            putrequest.setMetadata(objectMetadata);
-          }
-
-          val upload = tm.upload(putrequest);
-          upload.waitForCompletion
-          log.debug("Uploaded " + f.toString)
+        val upload = tm.upload(putrequest);
+        upload.waitForCompletion
+        log.debug("Uploaded " + f.toString)
       }
     }
   }

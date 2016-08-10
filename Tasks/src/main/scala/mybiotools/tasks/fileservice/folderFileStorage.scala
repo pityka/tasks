@@ -1,41 +1,41 @@
 /*
-* The MIT License
-*
-* Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
-* Group Fellay
-* Copyright (c) 2016 Istvan Bartha
-*
-* Permission is hereby granted, free of charge, to any person obtaining
-* a copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the Software
-* is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in all
-* copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * The MIT License
+ *
+ * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
+ * Group Fellay
+ * Copyright (c) 2016 Istvan Bartha
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the Software
+ * is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 package tasks.fileservice
 
-import akka.actor.{ Actor, PoisonPill, ActorRef, Props, ActorRefFactory }
+import akka.actor.{Actor, PoisonPill, ActorRef, Props, ActorRefFactory}
 import akka.actor.Actor._
 import akka.pattern.ask
 import akka.pattern.pipe
-import scala.concurrent.{ Future, Await, ExecutionContext }
+import scala.concurrent.{Future, Await, ExecutionContext}
 import java.lang.Class
-import java.io.{ File, InputStream, FileInputStream, BufferedInputStream }
+import java.io.{File, InputStream, FileInputStream, BufferedInputStream}
 import scala.concurrent.duration._
-import java.util.concurrent.{ TimeUnit, ScheduledFuture }
-import java.nio.channels.{ WritableByteChannel, ReadableByteChannel }
+import java.util.concurrent.{TimeUnit, ScheduledFuture}
+import java.nio.channels.{WritableByteChannel, ReadableByteChannel}
 import tasks.util._
 import scala.util._
 import com.google.common.hash._
@@ -55,7 +55,8 @@ object FolderFileStorage {
   }
 
   private def fileIsRelativeToNonLocalFileSystem(f: File): Boolean = {
-    val nonLocalFileSystemsCanonical = tasks.util.config.nonLocalFileSystems.map(_.getCanonicalPath)
+    val nonLocalFileSystemsCanonical =
+      tasks.util.config.nonLocalFileSystems.map(_.getCanonicalPath)
 
     val canonical = f.getCanonicalFile
 
@@ -65,19 +66,25 @@ object FolderFileStorage {
 
     val canonicalParents = getParents(canonical, Nil).map(_.getCanonicalPath)
 
-    (nonLocalFileSystemsCanonical)
-      .exists(path => canonicalParents.contains(path))
+    (nonLocalFileSystemsCanonical).exists(path =>
+          canonicalParents.contains(path))
   }
 }
 
-class FolderFileStorage(val basePath: File, val centralized: Boolean, val extendedPaths: List[File] = Nil) extends FileStorage {
+class FolderFileStorage(val basePath: File,
+                        val centralized: Boolean,
+                        val extendedPaths: List[File] = Nil)
+    extends FileStorage {
 
-  if (basePath.exists && !basePath.isDirectory) throw new IllegalArgumentException(s"$basePath exists and not a folder")
+  if (basePath.exists && !basePath.isDirectory)
+    throw new IllegalArgumentException(s"$basePath exists and not a folder")
   else if (!basePath.exists) basePath.mkdirs
 
-  if (!basePath.isDirectory) throw new RuntimeException(s"Could not create $basePath")
+  if (!basePath.isDirectory)
+    throw new RuntimeException(s"Could not create $basePath")
 
-  override def toString = s"FolderFileStorage(basePath=$basePath, centralized=$centralized, extendedPaths=$extendedPaths)"
+  override def toString =
+    s"FolderFileStorage(basePath=$basePath, centralized=$centralized, extendedPaths=$extendedPaths)"
 
   private val canonicalExtendedPaths = extendedPaths.map(_.getCanonicalPath)
   private val canonicalBasePath = basePath.getCanonicalPath
@@ -91,14 +98,15 @@ class FolderFileStorage(val basePath: File, val centralized: Boolean, val extend
 
     val canonicalParents = getParents(canonical, Nil).map(_.getCanonicalPath)
 
-    (canonicalBasePath :: canonicalExtendedPaths)
-      .exists(path => canonicalParents.contains(path))
+    (canonicalBasePath :: canonicalExtendedPaths).exists(path =>
+          canonicalParents.contains(path))
 
   }
 
   def contains(path: ManagedFilePath, size: Long, hash: Int): Boolean = {
     val f = assemblePath(path)
-    f.canRead && f.length === size && (tasks.util.config.skipContentHashVerificationAfterCache || FolderFileStorage.getContentHash(f) === hash)
+    f.canRead && f.length === size && (tasks.util.config.skipContentHashVerificationAfterCache || FolderFileStorage
+          .getContentHash(f) === hash)
   }
 
   def openStream(path: ManagedFilePath): Try[InputStream] =
@@ -123,51 +131,60 @@ class FolderFileStorage(val basePath: File, val centralized: Boolean, val extend
   }
 
   private def assemblePath(path: ManagedFilePath): File = {
-    new File(basePath.getAbsolutePath + File.separator + path.pathElements.mkString(File.separator))
+    new File(
+        basePath.getAbsolutePath + File.separator + path.pathElements.mkString(
+            File.separator))
   }
 
   private def assemblePath(path: ManagedFilePath, str: String): File = {
-    new File(basePath.getAbsolutePath + File.separator + path.pathElements.mkString(File.separator) + str)
+    new File(
+        basePath.getAbsolutePath + File.separator + path.pathElements.mkString(
+            File.separator) + str)
   }
 
-  def importFile(file: File, proposed: ProposedManagedFilePath): Try[(Long, Int, File, ManagedFilePath)] = Try({
+  def importFile(file: File, proposed: ProposedManagedFilePath)
+    : Try[(Long, Int, File, ManagedFilePath)] =
+    Try({
 
-    val size = file.length
-    val hash = FolderFileStorage.getContentHash(file)
-    val managed = proposed.toManaged
+      val size = file.length
+      val hash = FolderFileStorage.getContentHash(file)
+      val managed = proposed.toManaged
 
-    if (fileIsRelativeToBaseOrExtended(file)) (size, hash, file, managed)
-    else if (assemblePath(managed).canRead) {
-      val finalFile = assemblePath(managed)
-      if (com.google.common.io.Files.equal(finalFile, file)) (size, hash, finalFile, managed)
-      else {
+      if (fileIsRelativeToBaseOrExtended(file)) (size, hash, file, managed)
+      else if (assemblePath(managed).canRead) {
+        val finalFile = assemblePath(managed)
+        if (com.google.common.io.Files.equal(finalFile, file))
+          (size, hash, finalFile, managed)
+        else {
 
-        def candidates(i: Int, past: List[File]): List[File] = {
-          val candidate = assemblePath(managed, ".old." + i)
-          if (candidate.canRead) candidates(i + 1, candidate :: past)
-          else past
-        }
-
-        candidates(0, Nil)
-          .map(f => (f.getName.drop(managed.name.size).drop(5).toInt + 1, f))
-          .sortBy(_._1)
-          .reverse
-          .foreach {
-            case (newversion, f) =>
-              com.google.common.io.Files.move(f, assemblePath(managed, ".old." + newversion))
+          def candidates(i: Int, past: List[File]): List[File] = {
+            val candidate = assemblePath(managed, ".old." + i)
+            if (candidate.canRead) candidates(i + 1, candidate :: past)
+            else past
           }
 
-        com.google.common.io.Files.move(finalFile, assemblePath(managed, ".old.0"))
+          candidates(0, Nil)
+            .map(f => (f.getName.drop(managed.name.size).drop(5).toInt + 1, f))
+            .sortBy(_._1)
+            .reverse
+            .foreach {
+              case (newversion, f) =>
+                com.google.common.io.Files
+                  .move(f, assemblePath(managed, ".old." + newversion))
+            }
 
-        copyFile(file, finalFile)
-        (size, hash, finalFile, managed)
+          com.google.common.io.Files
+            .move(finalFile, assemblePath(managed, ".old.0"))
+
+          copyFile(file, finalFile)
+          (size, hash, finalFile, managed)
+        }
+
+      } else {
+        copyFile(file, assemblePath(managed))
+        (size, hash, assemblePath(managed), managed)
       }
-
-    } else {
-      copyFile(file, assemblePath(managed))
-      (size, hash, assemblePath(managed), managed)
-    }
-  })
+    })
 
   def url(mp: ManagedFilePath) = {
     val path = assemblePath(mp).toURI.toURL
@@ -177,17 +194,22 @@ class FolderFileStorage(val basePath: File, val centralized: Boolean, val extend
 
   def list(pattern: String): List[SharedFile] = {
     import scala.collection.JavaConversions._
-    val stream = java.nio.file.Files.newDirectoryStream(basePath.toPath, pattern)
+    val stream =
+      java.nio.file.Files.newDirectoryStream(basePath.toPath, pattern)
     try {
-      stream
-        .toList
-        .filter(_.toFile.isFile)
-        .map { path =>
-          val file = path.toFile
-          val l = file.length
-          val h = FolderFileStorage.getContentHash(file)
-          new SharedFile(ManagedFilePath(basePath.toPath.relativize(path).iterator.map(_.toString).toVector), l, h)
-        }
+      stream.toList.filter(_.toFile.isFile).map { path =>
+        val file = path.toFile
+        val l = file.length
+        val h = FolderFileStorage.getContentHash(file)
+        new SharedFile(ManagedFilePath(
+                           basePath.toPath
+                             .relativize(path)
+                             .iterator
+                             .map(_.toString)
+                             .toVector),
+                       l,
+                       h)
+      }
     } catch {
       case x: Throwable => throw x
     } finally {
