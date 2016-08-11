@@ -26,7 +26,6 @@
 package tasks.elastic.drmaa
 
 import org.ggf.drmaa.{Session, JobTemplate, SessionFactory, DrmaaException}
-import tasks.elastic.TaskAllocationConstants._
 import java.net.InetSocketAddress
 import akka.actor.Actor._
 import akka.actor.{ActorRef, Actor, Props}
@@ -39,18 +38,6 @@ import tasks.elastic._
 import tasks.shared._
 import tasks.deploy._
 import tasks.util._
-
-object DRMAAConfig {
-  // val NumberOfCoresOfNewLauncher = config.global.getInt("tasks.elastic.drmaa.newNodeSize")
-  //
-  // val NumberOfCoresPerNode = scala.util.Try(config.global.getInt("tasks.elastic.lsf.span")).toOption.getOrElse(NumbeNumberOfCoresOfNewLauncher)
-  //
-  // val RequestedMemOfNewNode = config.global.getInt("tasks.elastic.lsf.requestedMemOfNewNode")
-
-  val EmailAddress = config.global.getString("tasks.elastic.drmaa.email")
-
-}
-import DRMAAConfig._
 
 object DRMAA {
 
@@ -121,13 +108,13 @@ trait DRMAAJobRegistry
 
     log.debug("request new node start (send new job to gridengine).")
 
-    val jarpath = NewNodeJarPath
+    val jarpath = config.newNodeJarPath
     val mem = RequestedMemOfNewNode
-    val email = EmailAddress
+    val email = config.emailAddress
 
     val javaargs: List[String] = "-Dconfig.file=" + System.getProperty(
           "config.file") :: "-Dhosts.gridengine=SGE" ::
-        AdditionalSystemProperties :::
+        config.additionalSystemProperties :::
           "-Dhosts.master=" + masterAddress.getHostName + ":" + masterAddress.getPort :: jarpath :: Nil
 
     val factory = SessionFactory.getFactory();
@@ -194,7 +181,7 @@ object SGEMasterSlave
   val sge_hostname_var = (System.getProperty("hosts.hostname", "") match {
     case x if x == "" =>
       System.getenv("HOSTNAME") match {
-        case x if x == null => config.global.getString("hosts.hostname")
+        case x if x == null => config.hostName
         case x => x
       }
     case x => x
@@ -203,12 +190,12 @@ object SGEMasterSlave
   val myCardinality = (System.getProperty("hosts.numCPU", "") match {
     case x if x == "" =>
       System.getenv("NSLOTS") match {
-        case x if x == null => config.global.getString("hosts.numCPU")
-        case x => x
+        case x if x == null => config.hostNumCPU
+        case x => x.toInt
       }
-    case x => x
-  }).toInt
+    case x => x.toInt
+  })
 
-  val availableMemory = config.global.getInt("hosts.RAM")
+  val availableMemory = config.hostRAM
 
 }

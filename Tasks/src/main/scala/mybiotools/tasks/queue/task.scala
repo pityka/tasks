@@ -102,19 +102,20 @@ case class ComputationEnvironment(
 private[tasks] object ProxyTask {
 
   def getBackResultFuture(actor: ActorRef,
-                          timeoutp: Int = config.proxyTaskGetBackResult)(
+                          timeoutp: FiniteDuration =
+                            config.proxyTaskGetBackResult)(
       implicit ec: ExecutionContext): Future[Result] = {
 
-    implicit val timout = akka.util.Timeout(timeoutp seconds)
+    implicit val timout = Timeout(timeoutp)
     (actor ? (GetBackResult)).asInstanceOf[Future[Result]]
 
   }
 
   def getBackResult(actor: ActorRef,
-                    timeoutp: Int = config.proxyTaskGetBackResult)(
+                    timeoutp: FiniteDuration = config.proxyTaskGetBackResult)(
       implicit ec: ExecutionContext): Result =
     scala.concurrent.Await
-      .result(getBackResultFuture(actor, timeoutp), timeoutp second)
+      .result(getBackResultFuture(actor, timeoutp), timeoutp)
 
   def addTarget[B <: Prerequisitive[B], A <: Result](
       parent: ActorRef,

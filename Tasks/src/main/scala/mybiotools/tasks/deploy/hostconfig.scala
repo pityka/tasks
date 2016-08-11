@@ -87,10 +87,9 @@ trait MasterSlaveConfiguration
     }
 
   lazy val cacheAddress: Option[InetSocketAddress] =
-    if (config.global.getString("hosts.remoteCacheAddress") != "none") {
-      val h = config.global.getString("hosts.remoteCacheAddress").split(":")(0)
-      val p =
-        config.global.getString("hosts.remoteCacheAddress").split(":")(1).toInt
+    if (config.remoteCacheAddress != "none") {
+      val h = config.remoteCacheAddress.split(":")(0)
+      val p = config.remoteCacheAddress.split(":")(1).toInt
       Some(new InetSocketAddress(h, p))
     } else None
 
@@ -107,8 +106,7 @@ class LocalConfiguration(val myCardinality: Int, val availableMemory: Int)
 }
 
 object LocalConfigurationFromConfig
-    extends LocalConfiguration(config.global.getInt("hosts.numCPU"),
-                               config.global.getInt("hosts.RAM"))
+    extends LocalConfiguration(config.hostNumCPU, config.hostRAM)
 
 /**
   * Needs a hosts.master system property to infer master location and role
@@ -120,13 +118,13 @@ object MasterSlaveFromConfig extends MasterSlaveConfiguration {
 
   val myPort = chooseNetworkPort
 
-  val hostname = config.global.getString("hosts.hostname")
+  val hostname = config.hostName
 
   val myAddress = new java.net.InetSocketAddress(hostname, myPort)
 
-  val myCardinality = config.global.getInt("hosts.numCPU")
+  val myCardinality = config.hostNumCPU
 
-  val availableMemory = config.global.getInt("hosts.RAM")
+  val availableMemory = config.hostRAM
 
 }
 

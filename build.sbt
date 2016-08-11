@@ -19,6 +19,7 @@ lazy val Tasks = project.in(file("Tasks"))
       "com.typesafe.akka" %% "akka-actor" % "2.3.15",
       "com.typesafe.akka" %% "akka-remote" % "2.3.15",
       "com.typesafe.akka" %% "akka-testkit" % "2.3.15",
+      "com.typesafe" % "config" % "1.3.0",
       "com.google.guava" % "guava" % "18.0",
       "com.google.code.findbugs" % "jsr305" % "1.3.9",
       "com.amazonaws" % "aws-java-sdk-s3" % "1.11.24",

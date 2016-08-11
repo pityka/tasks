@@ -41,7 +41,7 @@ import scala.util._
 package object util {
 
   def chooseNetworkPort: Int =
-    Try(config.global.getInt("hosts.port")).flatMap { p =>
+    Try(config.hostPort).flatMap { p =>
       Try {
         // try it
         val s = new java.net.ServerSocket(p);

@@ -573,7 +573,7 @@ akka {
         .getName()
         .split("@")
         .head
-      val hostname = tasks.util.config.global.getString("hosts.hostname")
+      val hostname = tasks.util.config.hostName
       hostname + ":" + pid
     }
     case SGEGrid => System.getenv("JOB_ID")

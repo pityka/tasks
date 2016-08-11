@@ -43,7 +43,6 @@ import tasks.shared._
 import tasks.shared.monitor._
 import tasks.util._
 import tasks.queue._
-import tasks.elastic.TaskAllocationConstants._
 
 object SSHSettings {
 
@@ -68,15 +67,11 @@ object SSHSettings {
   }
 
   val hosts: collection.mutable.Map[String, (Host, Boolean)] =
-    collection.mutable.Map(
-        config.global
-          .getObject("tasks.elastic.ssh.hosts")
-          .map {
-        case (key, value) =>
-          val host = Host.fromConfig(value.asInstanceOf[ConfigObject].toConfig)
-          (host.hostname, (host, true))
-      }
-          .toList: _*)
+    collection.mutable.Map(config.sshHosts.map {
+      case (key, value) =>
+        val host = Host.fromConfig(value.asInstanceOf[ConfigObject].toConfig)
+        (host.hostname, (host, true))
+    }.toList: _*)
 
   def disableHost(h: String) = synchronized {
     if (hosts.contains(h)) {
@@ -163,7 +158,7 @@ trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
           // Try(
           SSHOperations.openSession(host) { session =>
             val command =
-              s"""source .bash_profile ; nohup java -Xmx${(host.memory * JVMMaxHeapFactor).toInt}M -Dhosts.RAM=${host.memory} -Dhosts.numCPU=${host.cpu} ${AdditionalSystemProperties
+              s"""source .bash_profile ; nohup java -Xmx${(host.memory * config.jVMMaxHeapFactor).toInt}M -Dhosts.RAM=${host.memory} -Dhosts.numCPU=${host.cpu} ${config.additionalSystemProperties
                 .mkString(" ")} ${host.extraArgs} -Dhosts.hostname=${host.hostname} -Dhosts.master=${masterAddress.getHostName + ":" + masterAddress.getPort} -Dtasks.elastic.enabled=true -Dhosts.gridengine=SSH ${host.mainClassWithClassPathOrJar} >> remote.nohup.out  2>&1 </dev/null &  echo $$! """
 
             session.execCommand(command)

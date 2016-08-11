@@ -73,59 +73,6 @@ import java.net.URL
 import collection.JavaConversions._
 import java.io.{File, InputStream}
 
-object EC2Settings {
-
-  val endpoint: String = config.global.getString("tasks.elastic.aws.endpoint")
-
-  val spotPrice: Double =
-    config.global.getDouble("tasks.elastic.aws.spotPrice")
-
-  val amiID: String = config.global.getString("tasks.elastic.aws.ami")
-
-  val instanceType = EC2Helpers.instanceTypes
-    .find(_._1 == config.global.getString("tasks.elastic.aws.instanceType"))
-    .get
-
-  val securityGroup: String =
-    config.global.getString("tasks.elastic.aws.securityGroup")
-
-  val jarBucket: String =
-    config.global.getString("tasks.elastic.aws.jarBucket")
-
-  val jarObject: String =
-    config.global.getString("tasks.elastic.aws.jarObject")
-
-  val keyName = config.global.getString("tasks.elastic.aws.keyName")
-
-  val extraFilesFromS3: List[String] =
-    config.global.getStringList("tasks.elastic.aws.extraFilesFromS3").toList
-
-  val extraStartupscript: String =
-    config.global.getString("tasks.elastic.aws.extraStartupScript")
-
-  val additionalJavaCommandline =
-    config.global.getString("tasks.elastic.aws.extraJavaCommandline")
-
-  val iamRole = {
-    val s = config.global.getString("tasks.elastic.aws.iamRole")
-    if (s == "" || s == "-") None
-    else Some(s)
-  }
-
-  val S3UpdateInterval =
-    config.global.getInt("tasks.elastic.aws.uploadInterval")
-
-  val placementGroup: Option[String] =
-    config.global.getString("tasks.elastic.aws.placementGroup") match {
-      case x if x == "" => None
-      case x => Some(x)
-    }
-
-  val jvmMaxHeapFactor =
-    config.global.getDouble("tasks.elastic.aws.jvmMaxHeapFactor")
-
-}
-
 object EC2Helpers {
 
   val instanceTypes = List(
@@ -240,22 +187,22 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 
   private def requestSpotInstance(size: CPUMemoryRequest) = {
     // size is ignored, instance specification is set in configuration
-    val selectedInstanceType = EC2Settings.instanceType
+    val selectedInstanceType = config.instanceType
 
     // Initializes a Spot Instance Request
     val requestRequest = new RequestSpotInstancesRequest();
 
-    if (EC2Settings.spotPrice > 2.4)
-      throw new RuntimeException("Spotprice too high:" + EC2Settings.spotPrice)
+    if (config.spotPrice > 2.4)
+      throw new RuntimeException("Spotprice too high:" + config.spotPrice)
 
-    requestRequest.setSpotPrice(EC2Settings.spotPrice.toString);
+    requestRequest.setSpotPrice(config.spotPrice.toString);
     requestRequest.setInstanceCount(1);
     requestRequest.setType(SpotInstanceType.OneTime)
 
     val launchSpecification = new LaunchSpecification();
-    launchSpecification.setImageId(EC2Settings.amiID);
+    launchSpecification.setImageId(config.amiID);
     launchSpecification.setInstanceType(selectedInstanceType._1);
-    launchSpecification.setKeyName(EC2Settings.keyName)
+    launchSpecification.setKeyName(config.keyName)
 
     val blockDeviceMappingSDB = new BlockDeviceMapping();
     blockDeviceMappingSDB.setDeviceName("/dev/sdb");
@@ -267,35 +214,35 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     launchSpecification.setBlockDeviceMappings(
         List(blockDeviceMappingSDB, blockDeviceMappingSDC));
 
-    EC2Settings.iamRole.foreach { iamRole =>
+    config.iamRole.foreach { iamRole =>
       val iamprofile = new IamInstanceProfileSpecification()
       iamprofile.setName(iamRole)
       launchSpecification.setIamInstanceProfile(iamprofile)
     }
 
-    EC2Settings.placementGroup.foreach { string =>
+    config.placementGroup.foreach { string =>
       val placement = new SpotPlacement();
       placement.setGroupName(string);
       launchSpecification.setPlacement(placement);
     }
 
-    val extraFiles = EC2Settings.extraFilesFromS3
+    val extraFiles = config.extraFilesFromS3
       .grouped(3)
       .map { l =>
         s"python getFile.py ${l(0)} ${l(1)} ${l(2)} && chmod u+x ${l(2)} "
       }
       .mkString("\n")
 
-    val launchCommand = if (TaskAllocationConstants.LaunchWithDocker.isEmpty) {
+    val launchCommand = if (config.launchWithDocker.isEmpty) {
       val javacommand =
-        s"nohup java -Xmx${(selectedInstanceType._2.memory.toDouble * EC2Settings.jvmMaxHeapFactor).toInt}M -Dhosts.gridengine=EC2 ${EC2Settings.additionalJavaCommandline} -Dconfig.file=rendered.conf -Dhosts.master=${masterAddress.getHostName + ":" + masterAddress.getPort} -jar pipeline.jar > pipelinestdout &"
+        s"nohup java -Xmx${(selectedInstanceType._2.memory.toDouble * config.jvmMaxHeapFactor).toInt}M -Dhosts.gridengine=EC2 ${config.additionalJavaCommandline} -Dconfig.file=rendered.conf -Dhosts.master=${masterAddress.getHostName + ":" + masterAddress.getPort} -jar pipeline.jar > pipelinestdout &"
 
-      s"python getFile.py ${EC2Settings.jarBucket} ${EC2Settings.jarObject} pipeline.jar" ::
+      s"python getFile.py ${config.jarBucket} ${config.jarObject} pipeline.jar" ::
         s"""cat << EOF > rendered.conf
-${config.global.root.render}
+${config.asString}
 EOF""" :: javacommand :: Nil
     } else {
-      s"docker run --rm -v /media/ephemeral0/tmp/scatch:/scratch ${TaskAllocationConstants.LaunchWithDocker.get._1}/${TaskAllocationConstants.LaunchWithDocker.get._2} -J-Dhosts.master=${masterAddress.getHostName + ":" + masterAddress.getPort} 1> stdout 2> stderr &" :: Nil
+      s"docker run --rm -v /media/ephemeral0/tmp/scatch:/scratch ${config.launchWithDocker.get._1}/${config.launchWithDocker.get._2} -J-Dhosts.master=${masterAddress.getHostName + ":" + masterAddress.getPort} 1> stdout 2> stderr &" :: Nil
     }
 
     val userdata =
@@ -325,7 +272,7 @@ mkdir -m 1777 /media/ephemeral0/tmp/scatch
 mount --bind /media/ephemeral0/tmp/ /tmp
 """ ::
           extraFiles ::
-            EC2Settings.extraStartupscript ::
+            config.extraStartupscript ::
               """export PATH=./:$PATH""" ::
                 launchCommand ::
                   Nil
@@ -333,7 +280,7 @@ mount --bind /media/ephemeral0/tmp/ /tmp
     launchSpecification.setUserData(gzipBase64(userdata.mkString("\n")))
 
     // Add the security group to the request.
-    val securitygroups = (Set(EC2Settings.securityGroup) & EC2Operations
+    val securitygroups = (Set(config.securityGroup) & EC2Operations
           .readMetadata("security-groups")
           .toSet).toList
     launchSpecification.setSecurityGroups(securitygroups)
@@ -381,7 +328,7 @@ class EC2NodeKiller(
     with EC2Shutdown
     with akka.actor.ActorLogging {
   val ec2 = new AmazonEC2Client()
-  ec2.setEndpoint(EC2Settings.endpoint)
+  ec2.setEndpoint(config.endpoint)
 }
 
 class EC2NodeRegistry(
@@ -394,7 +341,7 @@ class EC2NodeRegistry(
     with EC2Shutdown
     with akka.actor.ActorLogging {
   val ec2 = new AmazonEC2Client()
-  ec2.setEndpoint(EC2Settings.endpoint)
+  ec2.setEndpoint(config.endpoint)
 }
 
 trait EC2HostConfiguration extends HostConfiguration {
@@ -585,7 +532,7 @@ class S3Updater(filesToSave: List[File],
 
     timer = context.system.scheduler.schedule(
         initialDelay = 0 seconds,
-        interval = EC2Settings.S3UpdateInterval seconds,
+        interval = config.s3UpdateInterval,
         receiver = self,
         message = Tick
     )

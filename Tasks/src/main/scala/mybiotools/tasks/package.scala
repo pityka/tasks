@@ -132,10 +132,12 @@ package object tasks {
     r
   }
 
-  def defaultTaskSystem: TaskSystem = defaultTaskSystem(config.global, None)
+  def defaultTaskSystem: TaskSystem =
+    defaultTaskSystem(ConfigFactory.load(), None)
 
   def defaultTaskSystem(string: String): TaskSystem =
-    defaultTaskSystem(config.global, Some(ConfigFactory.parseString(string)))
+    defaultTaskSystem(ConfigFactory.load(),
+                      Some(ConfigFactory.parseString(string)))
 
   def defaultTaskSystem(defaultConf: Config,
                         extraConf: Option[Config]): TaskSystem = {
@@ -147,12 +149,12 @@ package object tasks {
           .withFallback(extraConf.get)
           .withFallback(akkaconf)
           .withFallback(defaultConf)
-          .withFallback(config.global)
+          .withFallback(ConfigFactory.load)
       else
         com.typesafe.config.ConfigFactory.defaultOverrides
           .withFallback(akkaconf)
           .withFallback(defaultConf)
-          .withFallback(config.global)
+          .withFallback(ConfigFactory.load)
     new TaskSystem(MasterSlaveGridEngineChosenFromConfig, conf)
   }
   def customTaskSystem(hostConfig: MasterSlaveConfiguration,
@@ -221,7 +223,7 @@ package object tasks {
   def MasterSlaveGridEngineChosenFromConfig: MasterSlaveConfiguration = {
     if (config.disableRemoting) LocalConfigurationFromConfig
     else
-      config.global.getString("hosts.gridengine") match {
+      config.gridEngine match {
         case x if x == "LSF" => LSFMasterSlave
         case x if x == "SGE" => SGEMasterSlave
         case x if x == "EC2" => EC2MasterSlave

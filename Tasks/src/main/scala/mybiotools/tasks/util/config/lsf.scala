@@ -24,38 +24,20 @@
  * SOFTWARE.
  */
 
-package tasks.fileservice
+package tasks.util.config
 
-import scala.collection.JavaConversions._
-import java.io.File
-import tasks._
-import tasks.deploy._
-import tasks.util._
+trait LSFConfig {
+  val numberOfCoresOfNewLauncher =
+    global.getInt("tasks.elastic.lsf.newNodeSize")
 
-object SharedFileTestApp extends App {
-  val ts = defaultTaskSystem
-  import ts._
-  if (ts.hostConfig.myRole == MASTER) {} else {
-    0 to 10 foreach { i =>
-      val tmp = TempFile.createTempFile("random.txt")
-      writeToFile(tmp, scala.util.Random.nextInt.toString)
-      println("A")
-      SharedFile(tmp, name = "random" + i.toString)
-      println("B")
-    }
-    0 to 10 foreach { i =>
-      println("C")
+  val numberOfCoresPerNode = scala.util
+    .Try(global.getInt("tasks.elastic.lsf.span"))
+    .toOption
+    .getOrElse(numberOfCoresOfNewLauncher)
 
-      val tmp = TempFile.createTempFile("fix.txt")
-      writeToFile(tmp, i.toString)
-      SharedFile(tmp, name = "fix" + i.toString)
-      println("D")
+  val requestedMemOfNewNode =
+    global.getInt("tasks.elastic.lsf.requestedMemOfNewNode")
 
-    }
-    tasks.util.config.load.getString("importfiles").split(",").map { f =>
-      SharedFile(new File(f), name = new File(f).getName)
-    }
-    ts.shutdown
-  }
-  // t
+  val queueName = global.getString("tasks.elastic.lsf.queue")
+
 }

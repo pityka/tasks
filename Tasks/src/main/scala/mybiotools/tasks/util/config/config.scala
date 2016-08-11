@@ -29,16 +29,27 @@ import com.typesafe.config.ConfigFactory
 import scala.collection.JavaConversions._
 import scala.concurrent.duration._
 
-package object config {
+package object config
+    extends TaskAllocationConstants
+    with EC2Settings
+    with LSFConfig {
 
-  val global = ConfigFactory.load()
+  type FD = FiniteDuration
 
-  val proxyTaskGetBackResult =
-    global.getInt("tasks.proxytaskGetBackResultTimeoutInSeconds")
+  implicit def asFiniteDuration(d: java.time.Duration) =
+    scala.concurrent.duration.Duration.fromNanos(d.toNanos)
 
-  val launcherActorHeartBeatInterval = Duration(
-      global.getMilliseconds("tasks.failuredetector.heartbeat-interval"),
-      MILLISECONDS)
+  private[config] val global = ConfigFactory.load()
+
+  def load = ConfigFactory.load()
+
+  val asString = global.root.render
+
+  val proxyTaskGetBackResult: FD =
+    global.getDuration("tasks.proxytaskGetBackResultTimeout")
+
+  val launcherActorHeartBeatInterval: FD =
+    global.getDuration("tasks.failuredetector.heartbeat-interval")
 
   val fileSendChunkSize = global.getBytes("tasks.fileSendChunkSize").toInt
 
@@ -61,9 +72,21 @@ package object config {
   val skipContentHashVerificationAfterCache =
     global.getBoolean("tasks.skipContentHashVerificationAfterCache")
 
-  val acceptableHeartbeatPause = Duration(
-      global.getMilliseconds(
-          "tasks.failuredetector.acceptable-heartbeat-pause"),
-      MILLISECONDS)
+  val acceptableHeartbeatPause: FD =
+    global.getDuration("tasks.failuredetector.acceptable-heartbeat-pause")
+
+  val remoteCacheAddress = global.getString("hosts.remoteCacheAddress")
+
+  val hostNumCPU = global.getInt("hosts.numCPU")
+
+  val hostRAM = global.getInt("hosts.RAM")
+
+  val hostName = global.getString("hosts.hostname")
+
+  val hostReservedCPU = global.getInt("hosts.reservedCPU")
+
+  val hostPort = global.getInt("hosts.port")
+
+  val sshHosts = global.getObject("tasks.elastic.ssh.hosts")
 
 }

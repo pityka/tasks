@@ -37,17 +37,16 @@ import scala.util._
 import tasks.shared.monitor._
 import tasks.shared._
 import tasks.util._
-import tasks.elastic.TaskAllocationConstants._
 import tasks.queue._
 
 @SerialVersionUID(1L)
 case object GetNodeRegistryStat extends Serializable
 
+private[elastic] case object MeasureTime
+
 private[tasks] case class Idling(state: Long)
 
 private[tasks] case object Working
-
-private[tasks] case object MeasureTime
 
 private[tasks] case object WhatAreYouDoing
 
@@ -131,7 +130,7 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
 
   def requestNewNodes(types: Map[CPUMemoryRequest, Int]) = {
     if (types.values.sum > 0) {
-      if (MaxNodes > (jobregistry.size + pending.size)) {
+      if (config.maxNodes > (jobregistry.size + pending.size)) {
 
         log.info(
             "Request " + types.size + " node. One from each: " + types.keySet)
@@ -155,7 +154,7 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
 
       } else {
         log.info(
-            "New node request will not proceed: pending nodes or reached max nodes. max: " + MaxNodes + ", pending: " + pending.size + ", running: " + jobregistry.size)
+            "New node request will not proceed: pending nodes or reached max nodes. max: " + config.maxNodes + ", pending: " + pending.size + ", running: " + jobregistry.size)
       }
     }
   }
@@ -243,7 +242,7 @@ trait SimpleDecideNewNode extends DecideNewNode {
     // }
 
     if (!nonAllocatedResources.isEmpty
-        && (pendingNodes.size < MaxPendingNodes)) {
+        && (pendingNodes.size < config.maxPendingNodes)) {
 
       nonAllocatedResources
 
@@ -271,8 +270,8 @@ trait NodeCreatorImpl
     import context.dispatcher
 
     scheduler = context.system.scheduler.schedule(
-        initialDelay = QueueCheckInitialDelay seconds,
-        interval = QueueCheckInterval seconds,
+        initialDelay = config.queueCheckInitialDelay,
+        interval = config.queueCheckInterval,
         receiver = self,
         message = MeasureTime
     )
@@ -306,7 +305,7 @@ trait NodeCreatorImpl
     }
 
     case m: QueueStat => {
-      if (logQueueStatus) {
+      if (config.logQueueStatus) {
         log.info(
             s"Queued tasks: ${m.queued.size}. Running tasks: ${m.running.size}. Pending nodes: ${pendingNodes.size} . Running nodes: ${allRegisteredNodes.size}. Largest request: ${m.queued
           .sortBy(_._2.cpu)
@@ -359,7 +358,7 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
 
     scheduler = context.system.scheduler.schedule(
         initialDelay = 0 seconds,
-        interval = NodeKillerMonitorInterval seconds,
+        interval = config.nodeKillerMonitorInterval,
         receiver = self,
         message = MeasureTime
     )
@@ -392,8 +391,7 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
     case HeartBeatStopped(down) if targetLauncherActor == down => shutdown
     case MeasureTime =>
       if (targetIsIdle &&
-          (System
-                .nanoTime() - lastIdleSessionStart) >= KillIdleNodeAfterSeconds * 1E9) {
+          (System.nanoTime() - lastIdleSessionStart) >= config.idleNodeTimeout.toNanos) {
         try {
           log.info(
               "Target is idle. Start shutdown sequence. Send PrepareForShutdown to " + targetLauncherActor)
