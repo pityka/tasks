@@ -81,6 +81,9 @@ class TaskLauncher(
 ) extends Actor
     with akka.actor.ActorLogging {
 
+  @SerialVersionUID(1L)
+  private case object CheckQueue
+
   private[this] val maxResources: CPUMemoryAvailable = slots
   private[this] var availableResources: CPUMemoryAvailable = maxResources
 
@@ -194,7 +197,7 @@ class TaskLauncher(
   }
 
   def receive = {
-    case ScheduleWithProxy(sch, acs) => {
+    case ScheduleWithProxy(sch, acs) =>
       log.debug(s"Received ScheduleWithProxy from $acs")
       if (!denyWorkBeforeShutdown) {
 
@@ -205,31 +208,30 @@ class TaskLauncher(
         sender ! Ack(allocated)
         askForWork
       }
-    }
-    case InternalMessageFromTask(actor, result) => {
+
+    case InternalMessageFromTask(actor, result) =>
       taskFinished(actor, result);
       askForWork
-    }
-    case InternalMessageTaskFailed(actor, cause) => {
+
+    case InternalMessageTaskFailed(actor, cause) =>
       taskFailed(actor, cause)
       askForWork
-    }
+
     case CheckQueue => askForWork
     case Ping => sender ! Pong
-    case PrepareForShutdown => {
+    case PrepareForShutdown =>
       if (idle) {
         denyWorkBeforeShutdown = true
         sender ! ReadyForShutdown
       }
-    }
-    case WhatAreYouDoing => {
+
+    case WhatAreYouDoing =>
       log.debug(s"Received WhatAreYouDoing. idle:$idle, idleState:$idleState")
       if (idle) {
         sender ! Idling(idleState)
       } else {
         sender ! Working
       }
-    }
 
     case x => log.debug("unhandled" + x)
 

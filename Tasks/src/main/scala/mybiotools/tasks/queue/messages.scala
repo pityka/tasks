@@ -111,7 +111,4 @@ trait Messages {
   @SerialVersionUID(1L)
   private[tasks] case object GetAvailableSlots
 
-  @SerialVersionUID(1L)
-  private[tasks] case object CheckQueue
-
 }

@@ -49,14 +49,14 @@ case class ProxyTaskActorRef[B <: Prerequisitive[B], T <: Result](
     ProxyTask.addTarget(actor, child.actor, updater)
     child
   }
+
   def ?(implicit ec: ExecutionContext) =
     ProxyTask.getBackResultFuture(actor).asInstanceOf[Future[T]]
+
   def ?!(implicit ec: ExecutionContext) =
     ProxyTask.getBackResult(actor).asInstanceOf[T]
 
   def <~[A <: Result](result: A)(
-      implicit updater: UpdatePrerequisitive[B, A]) {
-    ProxyTask.sendStartData(actor, List(result))
-  }
+      implicit updater: UpdatePrerequisitive[B, A]): Unit = actor ! result
 
 }

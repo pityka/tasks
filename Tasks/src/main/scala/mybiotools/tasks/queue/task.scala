@@ -62,7 +62,6 @@ abstract class ResultWithSharedFiles(sf: SharedFile*)
 // This is the prerequisitives of a task
 trait Prerequisitive[+A] extends Serializable {
   def ready: Boolean
-
   def persistent: Prerequisitive[A] = this
 }
 
@@ -100,7 +99,7 @@ case class ComputationEnvironment(
 
 }
 
-object ProxyTask {
+private[tasks] object ProxyTask {
 
   def getBackResultFuture(actor: ActorRef,
                           timeoutp: Int = config.proxyTaskGetBackResult)(
@@ -125,18 +124,6 @@ object ProxyTask {
     val f = parent ! AddTarget(child, updater)
   }
 
-  def sendStartData(target: ActorRef, stuff: Seq[Result]) {
-
-    stuff.foreach { x =>
-      (target ! x)
-    }
-  }
-
-  def sendStartDataWithRetry(target: ActorRef, stuff: Seq[Result]) {
-    sendStartData(target, stuff)
-
-  }
-
 }
 
 private class Task[P <: Prerequisitive[P], Q <: Result](
@@ -159,14 +146,11 @@ private class Task[P <: Prerequisitive[P], Q <: Result](
     log.debug("Task stopped.")
   }
 
-  private[this] var done = false
-  private[this] var started = false
   private[this] var notificationRegister: List[ActorRef] = List[ActorRef]()
   private[this] val mainActor = this.self
   private var resultG: Result = null
 
   private def startTask(msg: P) {
-    started = true
 
     Future {
       try {
@@ -232,15 +216,15 @@ private class Task[P <: Prerequisitive[P], Q <: Result](
   }
 
   def receive = {
-    case msg: Prerequisitive[_] => {
+    case msg: Prerequisitive[_] =>
       log.debug("StartTask, from taskactor")
       startTask(msg.asInstanceOf[P])
-    }
-    case RegisterForNotification(ac) => {
+
+    case RegisterForNotification(ac) =>
       log.debug("Received: " + ac.toString)
       notificationRegister = ac :: notificationRegister
-    }
-    case x => log.debug("received unknown message" + x)
+
+    case x => log.error("received unknown message" + x)
   }
 }
 
@@ -310,7 +294,7 @@ abstract class ProxyTask(
           TaskDescription(taskID, incomings),
           runTaskClass.getName,
           resourceConsumed,
-          starter, // new ActorInEnvelope(starter),
+          starter,
           fileServiceActor,
           fileServicePrefix,
           cacheActor
@@ -383,7 +367,7 @@ abstract class ProxyTask(
       self ! PoisonPill
     }
     case msg =>
-      log.warning(
+      log.error(
           "Unhandled message " + msg.toString.take(100) + sender.toString)
   }
 
