@@ -44,9 +44,7 @@ class TransferIn(output: WritableByteChannel, notification: ActorRef)
     with akka.actor.ActorLogging {
 
   def receive = {
-    case Chunk(bytestring) => {
-      // log.debug("Received chunk:" + bytestring)
-
+    case Chunk(bytestring) =>
       Try {
         output.write(bytestring.asByteBuffer)
       } match {
@@ -58,14 +56,10 @@ class TransferIn(output: WritableByteChannel, notification: ActorRef)
         }
       }
 
-    }
-
-    case EndChunk => {
-      // log.debug("endchunk received")
-
+    case EndChunk =>
       notification ! FileSaved
       self ! PoisonPill
-    }
+
   }
 }
 
@@ -110,9 +104,7 @@ class TransferOut(file: ReadableByteChannel,
   }
 
   def receive = {
-    case Ack => {
-      send
-    }
+    case Ack => send
     case CannotSaveFile(_) => self ! PoisonPill
   }
 }

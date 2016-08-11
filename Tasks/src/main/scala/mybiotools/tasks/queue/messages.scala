@@ -53,9 +53,6 @@ trait Messages {
       extends Serializable
 
   @SerialVersionUID(1L)
-  private[tasks] case class LauncherDown(ac: ActorRef) extends Serializable
-
-  @SerialVersionUID(1L)
   private[tasks] case class TaskDone(sch: ScheduleTask, result: Result)
       extends Serializable
 
@@ -75,9 +72,6 @@ trait Messages {
 
   @SerialVersionUID(1L)
   case object HowLoadedAreYou extends Serializable
-
-  @SerialVersionUID(1L)
-  private[tasks] case object CheckHeartBeat
 
   case class AddTarget[A <: Prerequisitive[A], B <: Result](
       target: ActorRef,
@@ -116,12 +110,6 @@ trait Messages {
 
   @SerialVersionUID(1L)
   private[tasks] case object GetAvailableSlots
-
-  @SerialVersionUID(1L)
-  private[tasks] case object Ping
-
-  @SerialVersionUID(1L)
-  private[tasks] case object Pong
 
   @SerialVersionUID(1L)
   private[tasks] case object CheckQueue

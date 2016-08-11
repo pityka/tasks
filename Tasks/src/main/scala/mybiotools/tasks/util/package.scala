@@ -36,7 +36,7 @@ import java.nio.charset.CodingErrorAction
 import scala.io.Codec
 import util.eq._
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Try
+import scala.util._
 
 package object util {
 
@@ -76,16 +76,15 @@ package object util {
 
   def rethrow[T](messageOnError: => String)(block: => T): T =
     rethrow(messageOnError, new RuntimeException(_, _))(block)
-  //
+
   /** Retry the given block n times. */
   @annotation.tailrec
-  def retry[T](n: Int)(fn: => T): scala.util.Try[T] = {
-    scala.util.Try { fn } match {
-      case x: scala.util.Success[T] => x
+  def retry[T](n: Int)(fn: => T): Try[T] =
+    Try(fn) match {
+      case x: Success[T] => x
       case _ if n > 1 => retry(n - 1)(fn)
       case f => f
     }
-  }
 
   /**
     * Returns the result of the block, and closes the resource.

@@ -50,13 +50,8 @@ object TempFile {
       val x = t.get
       x.deleteOnExit
       x
-    } else {
-      throw new IllegalStateException(
-          "Failed to create directory within "
-            + max + " attempts (tried "
-            + baseDir.getAbsolutePath + "/" + baseName + "0 to " + baseName + (max - 1) + ')');
-
-    }
+    } else
+      throw new RuntimeException("Failed to create temp folder")
 
   }
 
@@ -81,7 +76,7 @@ object TempFile {
     else createTempFile(suffix = fileName)
   }
 
-  val writtenExecutables = collection.mutable.Map[String, File]()
+  private val writtenExecutables = collection.mutable.Map[String, File]()
 
   def getExecutableFromJar(name: String): File =
     writtenExecutables.get(name).getOrElse {

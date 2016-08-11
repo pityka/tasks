@@ -54,17 +54,9 @@ abstract class Reaper extends Actor with akka.actor.ActorLogging {
     case Terminated(ref) =>
       watched -= ref
       if (watched.isEmpty) {
-        latches.foreach(_.countDown)
         allSoulsReaped()
+        latches.foreach(_.countDown)
       }
-  }
-}
-
-object Reaper {
-  def await(r: ActorRef) = {
-    val c = new CountDownLatch(1)
-    r ! Latch(c)
-    c.await
   }
 }
 

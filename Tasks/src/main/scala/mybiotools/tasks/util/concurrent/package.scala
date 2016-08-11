@@ -29,9 +29,6 @@ import java.util.concurrent.{ForkJoinPool, ForkJoinWorkerThread}
 
 package object concurrent {
 
-  class CustomNamedJoinWorkerThread(_pool: ForkJoinPool)
-      extends ForkJoinWorkerThread(_pool)
-
   def newExecutionContext(prefix: String, parallelism: Int) = {
     val fp = newJavaForkJoinPoolWithNamePrefix(prefix, parallelism)
     scala.concurrent.ExecutionContext.fromExecutorService(fp)
@@ -54,4 +51,8 @@ package object concurrent {
         true
     )
   }
+
+  private class CustomNamedJoinWorkerThread(_pool: ForkJoinPool)
+      extends ForkJoinWorkerThread(_pool)
+
 }

@@ -103,7 +103,7 @@ case class ComputationEnvironment(
 object ProxyTask {
 
   def getBackResultFuture(actor: ActorRef,
-                          timeoutp: Int = config.ProxyTaskGetBackResult)(
+                          timeoutp: Int = config.proxyTaskGetBackResult)(
       implicit ec: ExecutionContext): Future[Result] = {
 
     implicit val timout = akka.util.Timeout(timeoutp seconds)
@@ -112,7 +112,7 @@ object ProxyTask {
   }
 
   def getBackResult(actor: ActorRef,
-                    timeoutp: Int = config.ProxyTaskGetBackResult)(
+                    timeoutp: Int = config.proxyTaskGetBackResult)(
       implicit ec: ExecutionContext): Result =
     scala.concurrent.Await
       .result(getBackResultFuture(actor, timeoutp), timeoutp second)

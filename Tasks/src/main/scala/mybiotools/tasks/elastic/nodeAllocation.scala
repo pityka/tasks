@@ -364,7 +364,7 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
         message = MeasureTime
     )
 
-    context.system.eventStream.subscribe(self, classOf[LauncherDown])
+    context.system.eventStream.subscribe(self, classOf[HeartBeatStopped])
 
   }
 
@@ -389,8 +389,8 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
   }
 
   def receive = {
-    case LauncherDown(down) if targetLauncherActor == down => shutdown
-    case MeasureTime => {
+    case HeartBeatStopped(down) if targetLauncherActor == down => shutdown
+    case MeasureTime =>
       if (targetIsIdle &&
           (System
                 .nanoTime() - lastIdleSessionStart) >= KillIdleNodeAfterSeconds * 1E9) {
@@ -405,20 +405,16 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
       } else {
         targetLauncherActor ! WhatAreYouDoing
       }
-    }
 
-    case Idling(state) => {
+    case Idling(state) =>
       if (lastIdleState < state) {
         lastIdleSessionStart = System.nanoTime()
         lastIdleState = state
       }
       targetIsIdle = true
 
-    }
-
-    case Working => {
+    case Working =>
       targetIsIdle = false
-    }
 
     case ReadyForShutdown => shutdown
   }
@@ -438,23 +434,23 @@ trait SelfShutdown extends Actor with akka.actor.ActorLogging {
   }
 
   override def preStart {
-    context.system.eventStream.subscribe(self, classOf[LauncherDown])
+    context.system.eventStream.subscribe(self, classOf[HeartBeatStopped])
     context.system.eventStream
       .subscribe(self, classOf[akka.remote.DisassociatedEvent])
 
   }
   def receive = {
-    case LauncherDown(actor) if actor == balancerActor => {
-      log.error("LauncherDown for balancerActor received. Shutting down.")
+    case HeartBeatStopped(actor) if actor == balancerActor =>
+      log.error("HeartBeatStopped for balancerActor received. Shutting down.")
       shutdown
-    }
-    case de: akka.remote.DisassociatedEvent => {
+
+    case de: akka.remote.DisassociatedEvent =>
       log.error(
           "DisassociatedEvent. " + de.remoteAddress + " vs " + balancerActor.path.address)
       if (de.remoteAddress == balancerActor.path.address) {
         shutdown
       }
-    }
+
   }
 }
 

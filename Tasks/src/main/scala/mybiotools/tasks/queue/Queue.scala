@@ -48,62 +48,6 @@ import tasks.fileservice._
 import tasks.caching._
 import tasks.util._
 
-class HeartBeatActor(target: ActorRef)
-    extends Actor
-    with akka.actor.ActorLogging {
-
-  private var scheduledHeartBeats: Cancellable = null
-
-  private var failureDetector = new DeadlineFailureDetector(
-      config.AcceptableHeartbeatPause)
-
-  override def preStart {
-    log.debug(
-        "HeartBeatActor start for: " + target + " " + failureDetector.acceptableHeartbeatPause)
-
-    import context.dispatcher
-
-    scheduledHeartBeats = context.system.scheduler.schedule(
-        initialDelay = 0 seconds,
-        interval = config.LauncherActorHeartBeatInterval,
-        receiver = self,
-        message = CheckHeartBeat
-    )
-
-  }
-
-  override def postStop {
-    scheduledHeartBeats.cancel
-    log.info("HeartBeatActor stopped.")
-  }
-
-  private def targetDown {
-    context.system.eventStream.publish(LauncherDown(target))
-
-    self ! PoisonPill
-  }
-
-  def receive = {
-    case DisassociatedEvent(localAddress, remoteAddress, inbound)
-        if remoteAddress === target.path.address => {
-      log.warning("DisassociatedEvent received. TargetDown.")
-      targetDown
-    }
-    case CheckHeartBeat => {
-      if (!failureDetector.isAvailable) {
-        targetDown
-      } else {
-        target ! Ping
-      }
-    }
-    case Pong | true => {
-      failureDetector.heartbeat
-
-    }
-  }
-
-}
-
 class TaskQueue extends Actor with akka.actor.ActorLogging {
 
   // ActorRef here is the proxy of the task
@@ -270,7 +214,8 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
                               .withDispatcher("heartbeat"),
                             "heartbeatOf" + launcher.path.address.toString
                               .replace("://", "___") + launcher.path.name)
-            context.system.eventStream.subscribe(self, classOf[LauncherDown])
+            context.system.eventStream
+              .subscribe(self, classOf[HeartBeatStopped])
           }
 
           try {
@@ -320,8 +265,8 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
       taskDone(m.sch, m.result)
     }
     case TaskFailedMessageToQueue(sch, cause) => taskFailed(sch, cause)
-    case m: LauncherDown => {
-      log.info("LauncherDown: " + m)
+    case m: HeartBeatStopped => {
+      log.info("HeartBeatStopped: " + m)
 
       launcherCrashed(m.ac)
 

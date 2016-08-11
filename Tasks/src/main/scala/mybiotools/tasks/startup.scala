@@ -526,50 +526,6 @@ akka {
     }
   }
 
-  scala.util.Try {
-    if (hostConfig.myRole == MASTER) {
-      val address = config.getString("tasks.monitor")
-      val actorpath =
-        s"akka.tcp://taskmonitorweb@$address/user/monitorendpoint"
-      val ac =
-        Await.result(system.actorSelection(actorpath).resolveOne(600 seconds),
-                     atMost = 600 seconds)
-      tasksystemlog.info("Monitor: " + ac)
-      setupMonitor(ac)
-
-    }
-  }
-
-  def setupMonitor(mon: ActorRef) {
-    import system.dispatcher
-
-    {
-      implicit val timeout = akka.util.Timeout(50 seconds)
-      (mon ? Introduction(
-              queueActor = balancerActor,
-              fileActor = fileActor,
-              nodeRegistry = noderegistry,
-              configuration = config
-          )).onSuccess {
-        case ListenerEnvelope(listener, id) => {
-
-          system.eventStream.subscribe(listener, classOf[LogMessage])
-          system.eventStream.subscribe(listener, classOf[monitor.QueueStat])
-          system.eventStream
-            .subscribe(listener, classOf[monitor.NodeRegistryStat])
-          implicit val timeout = akka.util.Timeout(4 * 168 hours)
-          (mon ? WaitingForShutdownCommand(id)) onSuccess {
-            case ShutdownCommand => {
-              tasksystemlog.warning("ShutdownCommand received from monitor.")
-              this.shutdown
-            }
-          }
-        }
-      }
-    }
-
-  }
-
   private def initFailed {
     if (isLauncherOnly) {
       remotenoderegistry.foreach(_ ! InitFailed(PendingJobId(getNodeName)))
@@ -580,6 +536,9 @@ akka {
     if (hostConfig.myRole == MASTER) {
       implicit val timeout = akka.util.Timeout(10 seconds)
       import system.dispatcher
+
+      val latch = new java.util.concurrent.CountDownLatch(1)
+      reaperActor ! Latch(latch)
 
       balancerActor ! PoisonPill
       cacherActor ! PoisonPill
@@ -592,7 +551,7 @@ akka {
         noderegistry.foreach(_ ! PoisonPill)
       }
       nodeLocalCacheActor ! PoisonPill
-      Reaper.await(reaperActor)
+      latch.await
     } else {
       system.shutdown
     }

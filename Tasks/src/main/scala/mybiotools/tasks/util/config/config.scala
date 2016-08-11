@@ -33,14 +33,12 @@ package object config {
 
   val global = ConfigFactory.load()
 
-  // Everything in seconds
-  val ProxyTaskGetBackResult = global.getInt(
-      "tasks.proxytaskGetBackResultTimeoutInSeconds") //60 * 60 * 168 * 4
-  val PingTimeout = 60
-  val LauncherActorHeartBeatInterval = Duration(
+  val proxyTaskGetBackResult =
+    global.getInt("tasks.proxytaskGetBackResultTimeoutInSeconds")
+
+  val launcherActorHeartBeatInterval = Duration(
       global.getMilliseconds("tasks.failuredetector.heartbeat-interval"),
-      MILLISECONDS) // seconds
-  val WaitForSaveTimeOut = 60 * 2
+      MILLISECONDS)
 
   val fileSendChunkSize = global.getBytes("tasks.fileSendChunkSize").toInt
 
@@ -63,7 +61,7 @@ package object config {
   val skipContentHashVerificationAfterCache =
     global.getBoolean("tasks.skipContentHashVerificationAfterCache")
 
-  val AcceptableHeartbeatPause = Duration(
+  val acceptableHeartbeatPause = Duration(
       global.getMilliseconds(
           "tasks.failuredetector.acceptable-heartbeat-pause"),
       MILLISECONDS)
