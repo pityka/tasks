@@ -532,26 +532,31 @@ akka {
     }
   }
 
-  def shutdown {
+  var shuttingDown = false
+
+  def shutdown = synchronized {
     if (hostConfig.myRole == MASTER) {
-      implicit val timeout = akka.util.Timeout(10 seconds)
-      import system.dispatcher
+      if (!shuttingDown) {
+        shuttingDown = true
+        implicit val timeout = akka.util.Timeout(10 seconds)
+        import system.dispatcher
 
-      val latch = new java.util.concurrent.CountDownLatch(1)
-      reaperActor ! Latch(latch)
+        val latch = new java.util.concurrent.CountDownLatch(1)
+        reaperActor ! Latch(latch)
 
-      balancerActor ! PoisonPill
-      cacherActor ! PoisonPill
-      fileActor ! PoisonPill
-      system.actorSelection("/user/fileservice_*") ! PoisonPill
-      system.actorSelection("/user/cache_*") ! PoisonPill
+        balancerActor ! PoisonPill
+        cacherActor ! PoisonPill
+        fileActor ! PoisonPill
+        system.actorSelection("/user/fileservice_*") ! PoisonPill
+        system.actorSelection("/user/cache_*") ! PoisonPill
 
-      launcherActor.foreach(_ ! PoisonPill)
-      if (!isLauncherOnly) {
-        noderegistry.foreach(_ ! PoisonPill)
+        launcherActor.foreach(_ ! PoisonPill)
+        if (!isLauncherOnly) {
+          noderegistry.foreach(_ ! PoisonPill)
+        }
+        nodeLocalCacheActor ! PoisonPill
+        latch.await
       }
-      nodeLocalCacheActor ! PoisonPill
-      latch.await
     } else {
       system.shutdown
     }
