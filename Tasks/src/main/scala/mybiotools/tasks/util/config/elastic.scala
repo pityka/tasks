@@ -28,6 +28,11 @@ package tasks.util.config
 
 trait TaskAllocationConstants {
 
+  val tarball =
+    if (global.hasPath("tasks.elastic.tarball"))
+      Some(new java.net.URL(global.getString("tasks.elastic.tarball")))
+    else None
+
   val gridEngine = global.getString("hosts.gridengine")
 
   val launchWithDocker = if (global.hasPath("tasks.elastic.docker")) {

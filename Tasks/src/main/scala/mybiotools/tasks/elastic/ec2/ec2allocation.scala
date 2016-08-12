@@ -95,14 +95,14 @@ object EC2Helpers {
 
 object EC2Operations {
 
-  def terminateInstance(ec2: AmazonEC2Client, instanceId: String) {
+  def terminateInstance(ec2: AmazonEC2Client, instanceId: String): Unit = {
     retry(5) {
       val terminateRequest = new TerminateInstancesRequest(List(instanceId));
       ec2.terminateInstances(terminateRequest);
     }
   }
 
-  def S3contains(bucketName: String, name: String): Boolean = {
+  def s3contains(bucketName: String, name: String): Boolean = {
     val s3Client = new AmazonS3Client()
 
     Try(s3Client.getObjectMetadata(bucketName, name)) match {
@@ -170,6 +170,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     val describeResult = ec2.describeSpotInstanceRequests();
     val spotInstanceRequests = describeResult.getSpotInstanceRequests();
     spotInstanceRequests
+      .filter(x => x.getState == "open")
       .map(x => PendingJobId(x.getSpotInstanceRequestId))
       .toList
   }
@@ -192,7 +193,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     // Initializes a Spot Instance Request
     val requestRequest = new RequestSpotInstancesRequest();
 
-    if (config.spotPrice > 2.4)
+    if (config.spotPrice > 2.5)
       throw new RuntimeException("Spotprice too high:" + config.spotPrice)
 
     requestRequest.setSpotPrice(config.spotPrice.toString);
@@ -226,58 +227,14 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
       launchSpecification.setPlacement(placement);
     }
 
-    val extraFiles = config.extraFilesFromS3
-      .grouped(3)
-      .map { l =>
-        s"python getFile.py ${l(0)} ${l(1)} ${l(2)} && chmod u+x ${l(2)} "
-      }
-      .mkString("\n")
+    val userdata = Deployment.script(
+        memory = selectedInstanceType._2.memory,
+        gridEngine = tasks.EC2Grid,
+        masterAddress = masterAddress,
+        tarball = config.tarball.get
+    )
 
-    val launchCommand = if (config.launchWithDocker.isEmpty) {
-      val javacommand =
-        s"nohup java -Xmx${(selectedInstanceType._2.memory.toDouble * config.jvmMaxHeapFactor).toInt}M -Dhosts.gridengine=EC2 ${config.additionalJavaCommandline} -Dconfig.file=rendered.conf -Dhosts.master=${masterAddress.getHostName + ":" + masterAddress.getPort} -jar pipeline.jar > pipelinestdout &"
-
-      s"python getFile.py ${config.jarBucket} ${config.jarObject} pipeline.jar" ::
-        s"""cat << EOF > rendered.conf
-${config.asString}
-EOF""" :: javacommand :: Nil
-    } else {
-      s"docker run --rm -v /media/ephemeral0/tmp/scatch:/scratch ${config.launchWithDocker.get._1}/${config.launchWithDocker.get._2} -J-Dhosts.master=${masterAddress.getHostName + ":" + masterAddress.getPort} 1> stdout 2> stderr &" :: Nil
-    }
-
-    val userdata =
-      "#!/bin/bash" ::
-        """
-# Download myFile
-cat << EOF > getFile.py
-import boto;import sys;boto.connect_s3().get_bucket(sys.argv[1]).get_key(sys.argv[2]).get_contents_to_filename(sys.argv[3])
-EOF
-
-# Set up LVM on all the ephemeral disks
-EPHEMERALS=`curl http://169.254.169.254/latest/meta-data/block-device-mapping/ | grep ephemeral`
-DEVICES=$(for i in $EPHEMERALS
- do
- DEVICE=`curl http://169.254.169.254/latest/meta-data/block-device-mapping/$i/`
- umount /dev/$DEVICE
- echo /dev/$DEVICE
-done)
-pvcreate $DEVICES
-vgcreate vg $DEVICES
-TOTALPE=`vgdisplay vg | grep "Total PE" | awk '{print $3;}'`
-lvcreate -l $TOTALPE vg
-mkfs -t ext4 /dev/vg/lvol0
-mount /dev/vg/lvol0 /media/ephemeral0/
-mkdir -m 1777 /media/ephemeral0/tmp/
-mkdir -m 1777 /media/ephemeral0/tmp/scatch
-mount --bind /media/ephemeral0/tmp/ /tmp
-""" ::
-          extraFiles ::
-            config.extraStartupscript ::
-              """export PATH=./:$PATH""" ::
-                launchCommand ::
-                  Nil
-
-    launchSpecification.setUserData(gzipBase64(userdata.mkString("\n")))
+    launchSpecification.setUserData(gzipBase64(userdata))
 
     // Add the security group to the request.
     val securitygroups = (Set(config.securityGroup) & EC2Operations
@@ -310,7 +267,7 @@ mount --bind /media/ephemeral0/tmp/ /tmp
   }
 
   def initializeNode(node: Node): Unit = {
-    val ac = node.launcherActor //.revive
+    val ac = node.launcherActor
 
     val ackil = context.actorOf(
         Props(new EC2NodeKiller(ac, node))
@@ -375,7 +332,8 @@ class EC2SelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
 
 class EC2Reaper(filesToSave: List[File],
                 bucketName: String,
-                folderPrefix: String)
+                folderPrefix: String,
+                terminateSelf: Boolean)
     extends Reaper
     with EC2Shutdown {
 
@@ -389,66 +347,11 @@ class EC2Reaper(filesToSave: List[File],
     import com.amazonaws.auth.InstanceProfileCredentialsProvider
 
     val tm = new TransferManager(s3Client);
-    // Asynchronous call.
-    filesToSave.foreach { f =>
-      val putrequest =
-        new PutObjectRequest(bucketName, folderPrefix + "/" + f.getName, f)
-
-      putrequest.setCannedAcl(CannedAccessControlList.Private)
-
-      { // set server side encryption
-        val objectMetadata = new ObjectMetadata();
-        objectMetadata.setSSEAlgorithm(
-            ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
-        putrequest.setMetadata(objectMetadata);
-      }
-
-      val upload = tm.upload(putrequest);
-      upload.waitForCompletion
-    }
-
-    val nodename = EC2Operations.readMetadata("instance-id").head
-    EC2Operations.terminateInstance(ec2, nodename)
-  }
-}
-
-class S3Updater(filesToSave: List[File],
-                bucketName: String,
-                folderPrefix: String)
-    extends Actor
-    with akka.actor.ActorLogging {
-  case object Tick
-
-  override def preStart {
-    log.debug("S3Updater start (" + filesToSave + ")")
-
-    import context.dispatcher
-
-    timer = context.system.scheduler.schedule(
-        initialDelay = 0 seconds,
-        interval = config.s3UpdateInterval,
-        receiver = self,
-        message = Tick
-    )
-  }
-
-  val s3Client = new AmazonS3Client();
-  val tm = new TransferManager(s3Client);
-
-  private var timer: Cancellable = null
-
-  override def postStop {
-    timer.cancel
-    log.info("HeartBeatActor stopped.")
-  }
-
-  def upload {
-    Try {
+    try {
+      // Asynchronous call.
       filesToSave.foreach { f =>
         val putrequest =
           new PutObjectRequest(bucketName, folderPrefix + "/" + f.getName, f)
-
-        putrequest.setCannedAcl(CannedAccessControlList.Private)
 
         { // set server side encryption
           val objectMetadata = new ObjectMetadata();
@@ -459,13 +362,14 @@ class S3Updater(filesToSave: List[File],
 
         val upload = tm.upload(putrequest);
         upload.waitForCompletion
-        log.debug("Uploaded " + f.toString)
       }
+    } finally {
+      tm.shutdownNow
     }
+    if (terminateSelf) {
+      val nodename = EC2Operations.readMetadata("instance-id").head
+      EC2Operations.terminateInstance(ec2, nodename)
+    }
+    context.system.shutdown
   }
-
-  def receive = {
-    case Tick => upload
-  }
-
 }

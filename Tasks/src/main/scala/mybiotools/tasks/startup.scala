@@ -215,7 +215,8 @@ akka {
                   logFile.toList,
                   config.getString("tasks.elastic.aws.fileStoreBucket"),
                   config.getString(
-                      "tasks.elastic.aws.fileStoreBucketFolderPrefix"))),
+                      "tasks.elastic.aws.fileStoreBucketFolderPrefix"),
+                  config.getBoolean("tasks.elastic.aws.terminateMaster"))),
           name = "reaper")
     case LSFGrid =>
       system.actorOf(Props(new LSFReaper(RunningJobId(getNodeName))),
