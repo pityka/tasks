@@ -228,12 +228,12 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
       launchSpecification.setPlacement(placement);
     }
 
-    val userdata = Deployment.script(
-        memory = selectedInstanceType._2.memory,
-        gridEngine = tasks.EC2Grid,
-        masterAddress = masterAddress,
-        packageFile = config.global.tarball.get
-    )
+    val userdata = "#!/usr/bin/env bash\n" + Deployment.script(
+          memory = selectedInstanceType._2.memory,
+          gridEngine = tasks.EC2Grid,
+          masterAddress = masterAddress,
+          packageFile = config.global.tarball.get
+      )
 
     launchSpecification.setUserData(gzipBase64(userdata))
 

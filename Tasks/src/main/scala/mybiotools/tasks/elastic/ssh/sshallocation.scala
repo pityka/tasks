@@ -153,11 +153,16 @@ trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
       .iterator
       .map {
         case (name, (host, _)) =>
+          val script = Deployment.script(
+              memory = requestSize.memory,
+              gridEngine = tasks.SSHGrid,
+              masterAddress = masterAddress,
+              packageFile = config.global.tarball.get
+          )
           // Try(
           SSHOperations.openSession(host) { session =>
             val command =
-              s"""source .bash_profile ; nohup java -Xmx${(host.memory * config.global.jvmMaxHeapFactor).toInt}M -Dhosts.RAM=${host.memory} -Dhosts.numCPU=${host.cpu} ${config.global.additionalSystemProperties
-                .mkString(" ")} ${host.extraArgs} -Dhosts.hostname=${host.hostname} -Dhosts.master=${masterAddress.getHostName + ":" + masterAddress.getPort} -Dtasks.elastic.enabled=true -Dhosts.gridengine=SSH ${host.mainClassWithClassPathOrJar} >> remote.nohup.out  2>&1 </dev/null &  echo $$! """
+              "source .bash_profile; " + script
 
             session.execCommand(command)
 
