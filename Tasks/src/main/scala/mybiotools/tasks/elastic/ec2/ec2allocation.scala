@@ -188,22 +188,23 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 
   private def requestSpotInstance(size: CPUMemoryRequest) = {
     // size is ignored, instance specification is set in configuration
-    val selectedInstanceType = config.instanceType
+    val selectedInstanceType = config.global.instanceType
 
     // Initializes a Spot Instance Request
     val requestRequest = new RequestSpotInstancesRequest();
 
-    if (config.spotPrice > 2.5)
-      throw new RuntimeException("Spotprice too high:" + config.spotPrice)
+    if (config.global.spotPrice > 2.5)
+      throw new RuntimeException(
+          "Spotprice too high:" + config.global.spotPrice)
 
-    requestRequest.setSpotPrice(config.spotPrice.toString);
+    requestRequest.setSpotPrice(config.global.spotPrice.toString);
     requestRequest.setInstanceCount(1);
     requestRequest.setType(SpotInstanceType.OneTime)
 
     val launchSpecification = new LaunchSpecification();
-    launchSpecification.setImageId(config.amiID);
+    launchSpecification.setImageId(config.global.amiID);
     launchSpecification.setInstanceType(selectedInstanceType._1);
-    launchSpecification.setKeyName(config.keyName)
+    launchSpecification.setKeyName(config.global.keyName)
 
     val blockDeviceMappingSDB = new BlockDeviceMapping();
     blockDeviceMappingSDB.setDeviceName("/dev/sdb");
@@ -215,13 +216,13 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     launchSpecification.setBlockDeviceMappings(
         List(blockDeviceMappingSDB, blockDeviceMappingSDC));
 
-    config.iamRole.foreach { iamRole =>
+    config.global.iamRole.foreach { iamRole =>
       val iamprofile = new IamInstanceProfileSpecification()
       iamprofile.setName(iamRole)
       launchSpecification.setIamInstanceProfile(iamprofile)
     }
 
-    config.placementGroup.foreach { string =>
+    config.global.placementGroup.foreach { string =>
       val placement = new SpotPlacement();
       placement.setGroupName(string);
       launchSpecification.setPlacement(placement);
@@ -231,13 +232,13 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
         memory = selectedInstanceType._2.memory,
         gridEngine = tasks.EC2Grid,
         masterAddress = masterAddress,
-        tarball = config.tarball.get
+        packageFile = config.global.tarball.get
     )
 
     launchSpecification.setUserData(gzipBase64(userdata))
 
     // Add the security group to the request.
-    val securitygroups = (Set(config.securityGroup) & EC2Operations
+    val securitygroups = (Set(config.global.securityGroup) & EC2Operations
           .readMetadata("security-groups")
           .toSet).toList
     launchSpecification.setSecurityGroups(securitygroups)
@@ -285,7 +286,7 @@ class EC2NodeKiller(
     with EC2Shutdown
     with akka.actor.ActorLogging {
   val ec2 = new AmazonEC2Client()
-  ec2.setEndpoint(config.endpoint)
+  ec2.setEndpoint(config.global.endpoint)
 }
 
 class EC2NodeRegistry(
@@ -298,7 +299,7 @@ class EC2NodeRegistry(
     with EC2Shutdown
     with akka.actor.ActorLogging {
   val ec2 = new AmazonEC2Client()
-  ec2.setEndpoint(config.endpoint)
+  ec2.setEndpoint(config.global.endpoint)
 }
 
 trait EC2HostConfiguration extends HostConfiguration {
@@ -331,8 +332,7 @@ class EC2SelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
 }
 
 class EC2Reaper(filesToSave: List[File],
-                bucketName: String,
-                folderPrefix: String,
+                s3path: Option[(String, String)],
                 terminateSelf: Boolean)
     extends Reaper
     with EC2Shutdown {
@@ -342,29 +342,33 @@ class EC2Reaper(filesToSave: List[File],
 
   def allSoulsReaped(): Unit = {
     log.debug("All souls reaped. Calling system.shutdown.")
-    context.system.shutdown()
-    import com.amazonaws.services.ec2.AmazonEC2Client
-    import com.amazonaws.auth.InstanceProfileCredentialsProvider
 
-    val tm = new TransferManager(s3Client);
-    try {
-      // Asynchronous call.
-      filesToSave.foreach { f =>
-        val putrequest =
-          new PutObjectRequest(bucketName, folderPrefix + "/" + f.getName, f)
+    if (s3path.isDefined) {
+      import com.amazonaws.services.ec2.AmazonEC2Client
+      import com.amazonaws.auth.InstanceProfileCredentialsProvider
 
-        { // set server side encryption
-          val objectMetadata = new ObjectMetadata();
-          objectMetadata.setSSEAlgorithm(
-              ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
-          putrequest.setMetadata(objectMetadata);
+      val tm = new TransferManager(s3Client);
+      try {
+        // Asynchronous call.
+        filesToSave.foreach { f =>
+          val putrequest =
+            new PutObjectRequest(s3path.get._1,
+                                 s3path.get._2 + "/" + f.getName,
+                                 f)
+
+          { // set server side encryption
+            val objectMetadata = new ObjectMetadata();
+            objectMetadata.setSSEAlgorithm(
+                ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
+            putrequest.setMetadata(objectMetadata);
+          }
+
+          val upload = tm.upload(putrequest);
+          upload.waitForCompletion
         }
-
-        val upload = tm.upload(putrequest);
-        upload.waitForCompletion
+      } finally {
+        tm.shutdownNow
       }
-    } finally {
-      tm.shutdownNow
     }
     if (terminateSelf) {
       val nodename = EC2Operations.readMetadata("instance-id").head

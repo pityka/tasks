@@ -26,49 +26,63 @@
 
 package tasks.util.config
 
+import tasks._
+
 trait TaskAllocationConstants {
 
+  val raw: com.typesafe.config.Config
+
+  val sshHosts = raw.getObject("tasks.elastic.ssh.hosts")
+
+  val elasticNodeAllocationEnabled = raw.getBoolean("tasks.elastic.enabled")
+
   val tarball =
-    if (global.hasPath("tasks.elastic.tarball"))
-      Some(new java.net.URL(global.getString("tasks.elastic.tarball")))
+    if (raw.hasPath("tasks.elastic.tarball"))
+      Some(new java.net.URL(raw.getString("tasks.elastic.tarball")))
     else None
 
-  val gridEngine = global.getString("hosts.gridengine")
+  val gridEngine = raw.getString("hosts.gridengine") match {
+    case x if x == "EC2" => EC2Grid
+    case x if x == "LSF" => LSFGrid
+    case x if x == "SGE" => SGEGrid
+    case x if x == "SSH" => SSHGrid
+    case _ => NoGrid
+  }
 
-  val launchWithDocker = if (global.hasPath("tasks.elastic.docker")) {
+  val launchWithDocker = if (raw.hasPath("tasks.elastic.docker")) {
     Some(
-        global.getString("tasks.elastic.docker.registry") -> global.getString(
+        raw.getString("tasks.elastic.docker.registry") -> raw.getString(
             "tasks.elastic.docker.image"))
   } else None
 
-  val idleNodeTimeout: FD = global.getDuration("tasks.elastic.idleNodeTimeout")
+  val idleNodeTimeout: FD = raw.getDuration("tasks.elastic.idleNodeTimeout")
 
-  val maxNodes = global.getInt("tasks.elastic.maxNodes")
+  val maxNodes = raw.getInt("tasks.elastic.maxNodes")
 
-  val maxPendingNodes = global.getInt("tasks.elastic.maxPending")
+  val maxPendingNodes = raw.getInt("tasks.elastic.maxPending")
 
   val newNodeJarPath =
-    global.getString("tasks.elastic.mainClassWithClassPathOrJar")
+    raw.getString("tasks.elastic.mainClassWithClassPathOrJar")
 
   val queueCheckInterval: FD =
-    global.getDuration("tasks.elastic.queueCheckInterval")
+    raw.getDuration("tasks.elastic.queueCheckInterval")
 
   val queueCheckInitialDelay: FD =
-    global.getDuration("tasks.elastic.queueCheckInitialDelay")
+    raw.getDuration("tasks.elastic.queueCheckInitialDelay")
 
   val nodeKillerMonitorInterval: FD =
-    global.getDuration("tasks.elastic.nodeKillerMonitorInterval")
+    raw.getDuration("tasks.elastic.nodeKillerMonitorInterval")
 
-  val jVMMaxHeapFactor = global.getDouble("tasks.elastic.jvmMaxHeapFactor")
+  val jvmMaxHeapFactor = raw.getDouble("tasks.elastic.jvmMaxHeapFactor")
 
-  val logQueueStatus = global.getBoolean("tasks.elastic.logQueueStatus")
+  val logQueueStatus = raw.getBoolean("tasks.elastic.logQueueStatus")
 
-  val additionalSystemProperties: List[String] = global
+  val additionalSystemProperties: List[String] = raw
     .getStringList("tasks.elastic.additionalSystemProperties")
     .toArray
     .map(_.asInstanceOf[String])
     .toList
 
-  val emailAddress = global.getString("tasks.elastic.email")
+  val emailAddress = raw.getString("tasks.elastic.email")
 
 }

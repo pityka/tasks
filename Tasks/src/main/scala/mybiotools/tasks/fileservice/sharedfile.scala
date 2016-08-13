@@ -151,7 +151,7 @@ object SharedFile {
                         context: ActorRefFactory,
                         prefix: FileServicePrefix): SharedFile =
     apply(file,
-          if (tasks.util.config.includeFullPathInDefaultSharedName)
+          if (tasks.util.config.global.includeFullPathInDefaultSharedName)
             file.getAbsolutePath.replace(File.separator, "_")
           else file.getName)
 

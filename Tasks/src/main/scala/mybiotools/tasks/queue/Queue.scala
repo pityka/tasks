@@ -96,7 +96,7 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
     routedMessages.get(sch).foreach {
       case (launcher, allocation, proxies) =>
         routedMessages.remove(sch)
-        if (config.resubmitFailedTask) {
+        if (config.global.resubmitFailedTask) {
           log.error(
               cause,
               "Task execution failed ( resubmitting infinite time until done): " + sch.toString)

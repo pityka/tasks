@@ -145,13 +145,13 @@ package object tasks {
 
     val conf =
       if (extraConf.isDefined)
-        com.typesafe.config.ConfigFactory.defaultOverrides
+        ConfigFactory.defaultOverrides
           .withFallback(extraConf.get)
           .withFallback(akkaconf)
           .withFallback(defaultConf)
           .withFallback(ConfigFactory.load)
       else
-        com.typesafe.config.ConfigFactory.defaultOverrides
+        ConfigFactory.defaultOverrides
           .withFallback(akkaconf)
           .withFallback(defaultConf)
           .withFallback(ConfigFactory.load)
@@ -161,10 +161,10 @@ package object tasks {
                        extraConf: Config): TaskSystem = {
     val akkaconf = ConfigFactory.parseResources("akkaoverrides.conf")
 
-    val conf = com.typesafe.config.ConfigFactory.defaultOverrides
+    val conf = ConfigFactory.defaultOverrides
       .withFallback(extraConf)
       .withFallback(akkaconf)
-      .withFallback(com.typesafe.config.ConfigFactory.defaultReference)
+      .withFallback(ConfigFactory.defaultReference)
     new TaskSystem(hostConfig, conf)
   }
 
@@ -221,9 +221,9 @@ package object tasks {
   }
 
   def MasterSlaveGridEngineChosenFromConfig: MasterSlaveConfiguration = {
-    if (config.disableRemoting) LocalConfigurationFromConfig
+    if (config.global.disableRemoting) LocalConfigurationFromConfig
     else
-      config.gridEngine match {
+      config.global.gridEngine match {
         case x if x == "LSF" => LSFMasterSlave
         case x if x == "SGE" => SGEMasterSlave
         case x if x == "EC2" => EC2MasterSlave

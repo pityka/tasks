@@ -56,7 +56,7 @@ object FolderFileStorage {
 
   private def fileIsRelativeToNonLocalFileSystem(f: File): Boolean = {
     val nonLocalFileSystemsCanonical =
-      tasks.util.config.nonLocalFileSystems.map(_.getCanonicalPath)
+      tasks.util.config.global.nonLocalFileSystems.map(_.getCanonicalPath)
 
     val canonical = f.getCanonicalFile
 
@@ -105,7 +105,7 @@ class FolderFileStorage(val basePath: File,
 
   def contains(path: ManagedFilePath, size: Long, hash: Int): Boolean = {
     val f = assemblePath(path)
-    f.canRead && f.length === size && (tasks.util.config.skipContentHashVerificationAfterCache || FolderFileStorage
+    f.canRead && f.length === size && (tasks.util.config.global.skipContentHashVerificationAfterCache || FolderFileStorage
           .getContentHash(f) === hash)
   }
 

@@ -108,13 +108,13 @@ trait DRMAAJobRegistry
 
     log.debug("request new node start (send new job to gridengine).")
 
-    val jarpath = config.newNodeJarPath
+    val jarpath = config.global.newNodeJarPath
     val mem = RequestedMemOfNewNode
-    val email = config.emailAddress
+    val email = config.global.emailAddress
 
-    val javaargs: List[String] = "-Dconfig.file=" + System.getProperty(
-          "config.file") :: "-Dhosts.gridengine=SGE" ::
-        config.additionalSystemProperties :::
+    val javaargs: List[String] = "-Dconfig.global.file=" + System.getProperty(
+          "config.global.file") :: "-Dhosts.gridengine=SGE" ::
+        config.global.additionalSystemProperties :::
           "-Dhosts.master=" + masterAddress.getHostName + ":" + masterAddress.getPort :: jarpath :: Nil
 
     val factory = SessionFactory.getFactory();
@@ -181,7 +181,7 @@ object SGEMasterSlave
   val sge_hostname_var = (System.getProperty("hosts.hostname", "") match {
     case x if x == "" =>
       System.getenv("HOSTNAME") match {
-        case x if x == null => config.hostName
+        case x if x == null => config.global.hostName
         case x => x
       }
     case x => x
@@ -190,12 +190,12 @@ object SGEMasterSlave
   val myCardinality = (System.getProperty("hosts.numCPU", "") match {
     case x if x == "" =>
       System.getenv("NSLOTS") match {
-        case x if x == null => config.hostNumCPU
+        case x if x == null => config.global.hostNumCPU
         case x => x.toInt
       }
     case x => x.toInt
   })
 
-  val availableMemory = config.hostRAM
+  val availableMemory = config.global.hostRAM
 
 }

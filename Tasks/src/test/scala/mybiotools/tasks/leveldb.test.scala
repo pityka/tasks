@@ -27,7 +27,7 @@
 package mybiotools.tasks
 
 import org.scalatest._
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.global.ConfigFactory
 
 class LeveldBDCacheTestSuite extends FunSuite with BeforeAndAfterAll {
   val file = new java.io.File(mybiotools.TempFile.createTempFile(".leveldb").getAbsolutePath + ".2")

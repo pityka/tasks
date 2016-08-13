@@ -1,8 +1,6 @@
 /*
  * The MIT License
  *
- * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
- * Group Fellay
  * Copyright (c) 2016 Istvan Bartha
  *
  * Permission is hereby granted, free of charge, to any person obtaining
@@ -24,22 +22,19 @@
  * SOFTWARE.
  */
 
-package tasks.util.config
+package tasks.util
 
-trait LSFConfig {
+import com.typesafe.config.{Config, ConfigFactory}
+import scala.concurrent.duration._
 
-  val raw: com.typesafe.config.Config
+package object config {
 
-  val numberOfCoresOfNewLauncher = raw.getInt("tasks.elastic.lsf.newNodeSize")
+  type FD = FiniteDuration
 
-  val numberOfCoresPerNode = scala.util
-    .Try(raw.getInt("tasks.elastic.lsf.span"))
-    .toOption
-    .getOrElse(numberOfCoresOfNewLauncher)
+  implicit def asFiniteDuration(d: java.time.Duration) =
+    scala.concurrent.duration.Duration.fromNanos(d.toNanos)
 
-  val requestedMemOfNewNode =
-    raw.getInt("tasks.elastic.lsf.requestedMemOfNewNode")
+  def load = ConfigFactory.load
 
-  val queueName = raw.getString("tasks.elastic.lsf.queue")
-
+  val global = new TasksConfig(load)
 }

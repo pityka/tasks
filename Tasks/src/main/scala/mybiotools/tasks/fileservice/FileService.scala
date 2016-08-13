@@ -346,7 +346,7 @@ class FileSender(file: File,
 
     case TransferToMe(transferin) =>
       val readablechannel = new java.io.FileInputStream(file).getChannel
-      val chunksize = tasks.util.config.fileSendChunkSize
+      val chunksize = tasks.util.config.global.fileSendChunkSize
       context.actorOf(
           Props(new TransferOut(readablechannel, transferin, chunksize))
             .withDispatcher("transferout"))
@@ -416,7 +416,7 @@ trait FileStorage extends Serializable {
   def contains(path: RemoteFilePath, size: Long, hash: Int): Boolean =
     getSizeAndHash(path).map {
       case (size1, hash1) =>
-        size1 === size && (tasks.util.config.skipContentHashVerificationAfterCache || hash === hash1)
+        size1 === size && (tasks.util.config.global.skipContentHashVerificationAfterCache || hash === hash1)
     }.getOrElse(false)
 
   def importFile(
@@ -703,7 +703,7 @@ class FileService(storage: FileStorage,
           case None => storage.exportFile(sf).get
         }
         val readablechannel = new java.io.FileInputStream(file).getChannel
-        val chunksize = tasks.util.config.fileSendChunkSize
+        val chunksize = tasks.util.config.global.fileSendChunkSize
         context.actorOf(
             Props(new TransferOut(readablechannel, transferinActor, chunksize))
               .withDispatcher("transferout"))

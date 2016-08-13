@@ -84,7 +84,7 @@ class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
         val metadata =
           s3Client.getObjectMetadata(bucketName, assembleName(path))
         val (size1, hash1) = getLengthAndHash(metadata)
-        size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1)
+        size1 === size && (config.global.skipContentHashVerificationAfterCache || hash === hash1)
       } catch {
         case x: AmazonServiceException => false
       }

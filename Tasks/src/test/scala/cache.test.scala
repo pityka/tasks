@@ -27,7 +27,7 @@
 package mybiotools.tasks
 
 import org.scalatest._
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.global.ConfigFactory
 
 case class A(x: Int) extends Result
 

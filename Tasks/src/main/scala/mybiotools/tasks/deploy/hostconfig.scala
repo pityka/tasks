@@ -47,8 +47,6 @@ import scala.concurrent._
 import scala.concurrent.Await
 import scala.collection.JavaConversions._
 
-import com.typesafe.config.{ConfigFactory, Config}
-
 sealed trait Role
 object MASTER extends Role
 object SLAVE extends Role
@@ -87,9 +85,9 @@ trait MasterSlaveConfiguration
     }
 
   lazy val cacheAddress: Option[InetSocketAddress] =
-    if (config.remoteCacheAddress != "none") {
-      val h = config.remoteCacheAddress.split(":")(0)
-      val p = config.remoteCacheAddress.split(":")(1).toInt
+    if (config.global.remoteCacheAddress != "none") {
+      val h = config.global.remoteCacheAddress.split(":")(0)
+      val p = config.global.remoteCacheAddress.split(":")(1).toInt
       Some(new InetSocketAddress(h, p))
     } else None
 
@@ -106,11 +104,11 @@ class LocalConfiguration(val myCardinality: Int, val availableMemory: Int)
 }
 
 object LocalConfigurationFromConfig
-    extends LocalConfiguration(config.hostNumCPU, config.hostRAM)
+    extends LocalConfiguration(config.global.hostNumCPU, config.global.hostRAM)
 
 /**
   * Needs a hosts.master system property to infer master location and role
-  * Self address is bind to the hosts.hostname config.
+  * Self address is bind to the hosts.hostname config.global.
   * Port is chosen automatically.
   * Cardinality is determined from hosts.numCPU config
   */
@@ -118,13 +116,13 @@ object MasterSlaveFromConfig extends MasterSlaveConfiguration {
 
   val myPort = chooseNetworkPort
 
-  val hostname = config.hostName
+  val hostname = config.global.hostName
 
   val myAddress = new java.net.InetSocketAddress(hostname, myPort)
 
-  val myCardinality = config.hostNumCPU
+  val myCardinality = config.global.hostNumCPU
 
-  val availableMemory = config.hostRAM
+  val availableMemory = config.global.hostRAM
 
 }
 

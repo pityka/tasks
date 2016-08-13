@@ -39,7 +39,7 @@ import akka.actor.Actor._
 import scala.concurrent._
 import duration._
 import Duration._
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.global.ConfigFactory
 import scala.concurrent.ExecutionContext.Implicits.global
 
 object Fib {

@@ -103,7 +103,7 @@ private[tasks] object ProxyTask {
 
   def getBackResultFuture(actor: ActorRef,
                           timeoutp: FiniteDuration =
-                            config.proxyTaskGetBackResult)(
+                            config.global.proxyTaskGetBackResult)(
       implicit ec: ExecutionContext): Future[Result] = {
 
     implicit val timout = Timeout(timeoutp)
@@ -112,7 +112,8 @@ private[tasks] object ProxyTask {
   }
 
   def getBackResult(actor: ActorRef,
-                    timeoutp: FiniteDuration = config.proxyTaskGetBackResult)(
+                    timeoutp: FiniteDuration =
+                      config.global.proxyTaskGetBackResult)(
       implicit ec: ExecutionContext): Result =
     scala.concurrent.Await
       .result(getBackResultFuture(actor, timeoutp), timeoutp)

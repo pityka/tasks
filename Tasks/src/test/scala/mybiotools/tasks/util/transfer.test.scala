@@ -5,7 +5,7 @@ import scala.concurrent.duration._
 import akka.testkit.TestKit
 import akka.testkit.ImplicitSender
 import akka.actor.{ Actor, PoisonPill, ActorRef, Props, ActorSystem }
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.global.ConfigFactory
 
 import java.io._
 import mybiotools._

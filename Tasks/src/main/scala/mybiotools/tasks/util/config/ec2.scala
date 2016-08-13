@@ -31,49 +31,57 @@ import scala.collection.JavaConversions._
 
 trait EC2Settings {
 
-  val endpoint: String = global.getString("tasks.elastic.aws.endpoint")
+  val raw: com.typesafe.config.Config
 
-  val spotPrice: Double = global.getDouble("tasks.elastic.aws.spotPrice")
+  val endpoint: String = raw.getString("tasks.elastic.aws.endpoint")
 
-  val amiID: String = global.getString("tasks.elastic.aws.ami")
+  val spotPrice: Double = raw.getDouble("tasks.elastic.aws.spotPrice")
+
+  val amiID: String = raw.getString("tasks.elastic.aws.ami")
 
   val instanceType = EC2Helpers.instanceTypes
-    .find(_._1 == global.getString("tasks.elastic.aws.instanceType"))
+    .find(_._1 == raw.getString("tasks.elastic.aws.instanceType"))
     .get
 
-  val securityGroup: String =
-    global.getString("tasks.elastic.aws.securityGroup")
+  val securityGroup: String = raw.getString("tasks.elastic.aws.securityGroup")
 
-  val jarBucket: String = global.getString("tasks.elastic.aws.jarBucket")
+  val jarBucket: String = raw.getString("tasks.elastic.aws.jarBucket")
 
-  val jarObject: String = global.getString("tasks.elastic.aws.jarObject")
+  val jarObject: String = raw.getString("tasks.elastic.aws.jarObject")
 
-  val keyName = global.getString("tasks.elastic.aws.keyName")
+  val keyName = raw.getString("tasks.elastic.aws.keyName")
 
   val extraFilesFromS3: List[String] =
-    global.getStringList("tasks.elastic.aws.extraFilesFromS3").toList
+    raw.getStringList("tasks.elastic.aws.extraFilesFromS3").toList
 
   val extraStartupscript: String =
-    global.getString("tasks.elastic.aws.extraStartupScript")
+    raw.getString("tasks.elastic.aws.extraStartupScript")
 
   val additionalJavaCommandline =
-    global.getString("tasks.elastic.aws.extraJavaCommandline")
+    raw.getString("tasks.elastic.aws.extraJavaCommandline")
 
   val iamRole = {
-    val s = global.getString("tasks.elastic.aws.iamRole")
+    val s = raw.getString("tasks.elastic.aws.iamRole")
     if (s == "" || s == "-") None
     else Some(s)
   }
 
   val s3UpdateInterval: FD =
-    global.getDuration("tasks.elastic.aws.uploadInterval")
+    raw.getDuration("tasks.elastic.aws.uploadInterval")
 
   val placementGroup: Option[String] =
-    global.getString("tasks.elastic.aws.placementGroup") match {
+    raw.getString("tasks.elastic.aws.placementGroup") match {
       case x if x == "" => None
       case x => Some(x)
     }
 
-  val jvmMaxHeapFactor = global.getDouble("tasks.elastic.aws.jvmMaxHeapFactor")
+  val logFileS3Path = {
+    val buck = raw.getString("tasks.elastic.aws.fileStoreBucket")
+    val pref = raw.getString("tasks.elastic.aws.fileStoreBucketFolderPrefix")
+
+    if (buck.isEmpty) None else Some(buck -> pref)
+  }
+
+  val terminateMaster = raw.getBoolean("tasks.elastic.aws.terminateMaster")
 
 }

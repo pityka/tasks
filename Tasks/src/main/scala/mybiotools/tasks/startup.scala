@@ -31,6 +31,7 @@ import tasks.caching._
 import tasks.queue._
 import tasks.deploy._
 import tasks.util._
+import tasks.util.eq._
 import tasks.fileservice._
 import tasks.elastic._
 import tasks.elastic.ec2._
@@ -84,7 +85,7 @@ case class TaskSystemComponents(
 }
 
 class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
-                                 config: Config) {
+                                 defaultConf: Config) {
 
   val configuration = {
     val actorProvider = hostConfig match {
@@ -111,7 +112,7 @@ akka {
     }
  }
 }
-  """ + (if (tasks.util.config.logToStandardOutput)
+  """ + (if (tasks.util.config.global.logToStandardOutput)
            """
     akka.loggers = ["akka.event.Logging$DefaultLogger"]
     """
@@ -121,7 +122,7 @@ akka {
 
     val classpathConf = ConfigFactory.load("akkaoverrides.conf")
 
-    customConf.withFallback(config).withFallback(classpathConf)
+    customConf.withFallback(defaultConf).withFallback(classpathConf)
 
   }
 
@@ -150,9 +151,7 @@ akka {
 
   def getLogger(caller: AnyRef) = getApplicationLogger(caller)(system)
 
-  val ElasticNodeAllocationEnabled = config.getBoolean("tasks.elastic.enabled")
-
-  val logFile: Option[File] = config.getString("tasks.logFile") match {
+  val logFile: Option[File] = config.global.logFile match {
     case x if x == "" => None
     case x => Some(new File(x + System.currentTimeMillis.toString + ".log"))
   }
@@ -195,29 +194,17 @@ akka {
 
   private val isLauncherOnly = hostConfig.myRole == SLAVE
 
-  val gridengine = config.getString("hosts.gridengine") match {
-    case x if x == "EC2" => EC2Grid
-    case x if x == "LSF" => LSFGrid
-    case x if x == "SGE" => SGEGrid
-    case x if x == "SSH" => SSHGrid
-    case _ => NoGrid
-  }
-
-  if (!isLauncherOnly && ElasticNodeAllocationEnabled && gridengine == SGEGrid) {
+  if (!isLauncherOnly && config.global.elasticNodeAllocationEnabled && config.global.gridEngine === SGEGrid) {
     DRMAA.testDRMAAConnection
   }
 
-  val reaperActor = gridengine match {
+  val reaperActor = config.global.gridEngine match {
     case EC2Grid =>
-      system.actorOf(
-          Props(
-              new EC2Reaper(
-                  logFile.toList,
-                  config.getString("tasks.elastic.aws.fileStoreBucket"),
-                  config.getString(
-                      "tasks.elastic.aws.fileStoreBucketFolderPrefix"),
-                  config.getBoolean("tasks.elastic.aws.terminateMaster"))),
-          name = "reaper")
+      system.actorOf(Props(
+                         new EC2Reaper(logFile.toList,
+                                       config.global.logFileS3Path,
+                                       config.global.terminateMaster)),
+                     name = "reaper")
     case LSFGrid =>
       system.actorOf(Props(new LSFReaper(RunningJobId(getNodeName))),
                      name = "reaper")
@@ -230,7 +217,7 @@ akka {
   }
 
   val remotenoderegistry =
-    if (isLauncherOnly && ElasticNodeAllocationEnabled) {
+    if (isLauncherOnly && config.global.elasticNodeAllocationEnabled) {
       val remotepath =
         s"akka.tcp://tasks@${balancerAndCacherAddress.getHostName}:${balancerAndCacherAddress.getPort}/user/noderegistry"
       val noderegistry = Await.result(
@@ -241,12 +228,9 @@ akka {
     } else None
 
   val cacheFile: Option[File] = try {
-    if (config.getBoolean("tasks.cacheEnabled") && !isLauncherOnly) {
-      gridengine match {
-        // case EC2Grid => throw new RuntimeException("LevelDB cache not implemented in EC2")
-        case _ => Some(new File(config.getString("tasks.cacheFile")))
-      }
-    } else None
+    if (config.global.cacheEnabled && !isLauncherOnly)
+      Some(config.global.cacheFile)
+    else None
   } catch {
     case e: Throwable => {
       initFailed
@@ -254,66 +238,58 @@ akka {
     }
   }
 
-  if (gridengine == EC2Grid && !isLauncherOnly) {
-    // system.actorOf(Props(new S3Updater(cacheFile.toList ++ logFile.toList, config.getString("tasks.fileServiceBaseFolder"))), name = "s3updater")
+  if (config.global.gridEngine === EC2Grid && !isLauncherOnly) {
+    // system.actorOf(Props(new S3Updater(cacheFile.toList ++ logFile.toList, config.global.getString("tasks.fileServiceBaseFolder"))), name = "s3updater")
   }
-
-  val storageURI =
-    new java.net.URI(config.getString("tasks.fileService.storageURI"))
-  val s3bucket =
-    if (storageURI.getScheme != null && storageURI.getScheme == "s3") {
-      Some((storageURI.getAuthority, storageURI.getPath.drop(1)))
-    } else None
 
   val fileActor = try {
     if (!isLauncherOnly) {
 
-      val filestore = gridengine match {
-        case EC2Grid if s3bucket.isDefined => {
-          new S3Storage(s3bucket.get._1, s3bucket.get._2)
-        }
-        case _ => {
-          val folder1Path =
-            if (storageURI.getScheme == null) storageURI.getPath
-            else if (storageURI.getScheme == "file") storageURI.getPath
-            else {
-              tasksystemlog.error(
-                  s"$storageURI unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative")
-              System.exit(1)
-              throw new RuntimeException("dsf")
-            }
-          val folder1 = new File(folder1Path).getCanonicalFile
-          if (folder1.isFile) {
-            tasksystemlog.error(s"$folder1 is a file. Calling System.exit(1)")
+      val s3bucket =
+        if (config.global.storageURI.getScheme != null && config.global.storageURI.getScheme == "s3") {
+          Some(
+              (config.global.storageURI.getAuthority,
+               config.global.storageURI.getPath.drop(1)))
+        } else None
+
+      val filestore = if (s3bucket.isDefined) {
+        new S3Storage(s3bucket.get._1, s3bucket.get._2)
+      } else {
+        val folder1Path =
+          if (config.global.storageURI.getScheme == null)
+            config.global.storageURI.getPath
+          else if (config.global.storageURI.getScheme == "file")
+            config.global.storageURI.getPath
+          else {
+            tasksystemlog.error(
+                s"${config.global.storageURI} unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative")
             System.exit(1)
+            throw new RuntimeException("dsf")
           }
-          if (!folder1.isDirectory) {
-            tasksystemlog.warning(s"Folder $folder1 does not exists. mkdir ")
-            folder1.mkdirs
-          }
-          val folders2 = config
-            .getStringList("tasks.fileServiceExtendedFolders")
-            .map(x => new File(x).getCanonicalFile)
-            .toList
-            .filter(_.isDirectory)
-          val centralized =
-            config.getBoolean("tasks.fileServiceBaseFolderIsShared")
-          if (folder1.list.size != 0) {
-            tasksystemlog.warning(
-                s"fileServiceBaseFolder (${folder1.getCanonicalPath}) is not empty. This is only safe if you restart a pipeline. ")
-          }
-          new FolderFileStorage(folder1, centralized, folders2)
+        val folder1 = new File(folder1Path).getCanonicalFile
+        if (folder1.isFile) {
+          tasksystemlog.error(s"$folder1 is a file. Calling System.exit(1)")
+          System.exit(1)
         }
+        if (!folder1.isDirectory) {
+          tasksystemlog.warning(s"Folder $folder1 does not exists. mkdir ")
+          folder1.mkdirs
+        }
+        val folders2 = config.global.fileServiceExtendedFolders
+        val centralized = config.global.fileServiceBaseFolderIsShared
+        if (folder1.list.size != 0) {
+          tasksystemlog.warning(
+              s"fileServiceBaseFolder (${folder1.getCanonicalPath}) is not empty. This is only safe if you restart a pipeline. ")
+        }
+        new FolderFileStorage(folder1, centralized, folders2)
       }
 
       tasksystemlog.info("FileStore: " + filestore)
 
-      val threadpoolsize = config.getInt("tasks.fileServiceThreadPoolSize")
+      val threadpoolsize = config.global.fileServiceThreadPoolSize
 
-      val fileListPath = new File(
-          config.getString("tasks.fileServiceFileList"))
-
-      val fileList = new FileList(new DirectLevelDBWrapper(fileListPath))
+      val fileList = new FileList(
+          new DirectLevelDBWrapper(config.global.fileServiceFileListPath))
 
       val ac = system.actorOf(
           Props(new FileService(filestore, fileList, threadpoolsize))
@@ -341,9 +317,9 @@ akka {
   val cacherActor = try {
     if (!isLauncherOnly && hostConfig.cacheAddress.isEmpty) {
 
-      val cache: Cache = config.getBoolean("tasks.cacheEnabled") match {
+      val cache: Cache = config.global.cacheEnabled match {
         case true => {
-          val store = config.getString("tasks.cache.store") match {
+          val store = config.global.cacheType match {
             case "leveldb" => new LevelDBWrapper(cacheFile.get)
             case "filesystem" => new FileSystemLargeKVStore(cacheFile.get)
           }
@@ -401,42 +377,37 @@ akka {
 
   // start up noderegistry
   val noderegistry: Option[ActorRef] =
-    if (!isLauncherOnly && ElasticNodeAllocationEnabled) {
+    if (!isLauncherOnly && config.global.elasticNodeAllocationEnabled) {
       val resource = CPUMemoryAvailable(cpu = hostConfig.myCardinality,
                                         memory = hostConfig.availableMemory)
-      val ac = gridengine match {
+      val props = config.global.gridEngine match {
         case LSFGrid =>
-          system.actorOf(Props(
-                             new LSFNodeRegistry(hostConfig.myAddress,
-                                                 balancerActor,
-                                                 resource))
-                           .withDispatcher("my-pinned-dispatcher"),
-                         "noderegistry")
+          Props(
+              new LSFNodeRegistry(hostConfig.myAddress,
+                                  balancerActor,
+                                  resource))
         case SGEGrid =>
-          system.actorOf(Props(
-                             new SGENodeRegistry(hostConfig.myAddress,
-                                                 balancerActor,
-                                                 resource))
-                           .withDispatcher("my-pinned-dispatcher"),
-                         "noderegistry")
+          Props(
+              new SGENodeRegistry(hostConfig.myAddress,
+                                  balancerActor,
+                                  resource))
         case EC2Grid =>
-          system.actorOf(Props(
-                             new EC2NodeRegistry(hostConfig.myAddress,
-                                                 balancerActor,
-                                                 resource))
-                           .withDispatcher("my-pinned-dispatcher"),
-                         "noderegistry")
+          Props(
+              new EC2NodeRegistry(hostConfig.myAddress,
+                                  balancerActor,
+                                  resource))
         case SSHGrid =>
-          system.actorOf(Props(
-                             new SSHNodeRegistry(hostConfig.myAddress,
-                                                 balancerActor,
-                                                 resource))
-                           .withDispatcher("my-pinned-dispatcher"),
-                         "noderegistry")
+          Props(
+              new SSHNodeRegistry(hostConfig.myAddress,
+                                  balancerActor,
+                                  resource))
         case NoGrid =>
           throw new RuntimeException(
               "ElasticNodeAllocation and NoGrid are incompatible")
       }
+
+      val ac = system
+        .actorOf(props.withDispatcher("my-pinned-dispatcher"), "noderegistry")
 
       reaperActor ! WatchMe(ac)
 
@@ -465,8 +436,7 @@ akka {
   )
 
   private val launcherActor = if (numberOfCores > 0) {
-    val refresh: FiniteDuration = (new DurationLong(
-        config.getMilliseconds("tasks.askInterval")).millisecond)
+    val refresh = config.global.askInterval
     val ac = system.actorOf(
         Props(
             new TaskLauncher(balancerActor,
@@ -480,7 +450,7 @@ akka {
     Some(ac)
   } else None
 
-  if (isLauncherOnly && ElasticNodeAllocationEnabled && launcherActor.isDefined) {
+  if (isLauncherOnly && config.global.elasticNodeAllocationEnabled && launcherActor.isDefined) {
     val nodeName = getNodeName
 
     tasksystemlog.info(
@@ -499,7 +469,7 @@ akka {
           "heartbeatOf" + balancerActor.path.address.toString
             .replace("://", "___") + balancerActor.path.name)
 
-      gridengine match {
+      config.global.gridEngine match {
         case LSFGrid =>
           system.actorOf(
               Props(new LSFSelfShutdown(RunningJobId(nodeName), balancerActor))
@@ -571,7 +541,7 @@ akka {
     tasksystemlog.warning("JVM is shutting down - called tasksystem shutdown.")
   }
 
-  private def getNodeName: String = gridengine match {
+  private def getNodeName: String = config.global.gridEngine match {
     case LSFGrid => System.getenv("LSB_JOBID")
     case SSHGrid => {
       val pid = java.lang.management.ManagementFactory
@@ -579,7 +549,7 @@ akka {
         .getName()
         .split("@")
         .head
-      val hostname = tasks.util.config.hostName
+      val hostname = tasks.util.config.global.hostName
       hostname + ":" + pid
     }
     case SGEGrid => System.getenv("JOB_ID")

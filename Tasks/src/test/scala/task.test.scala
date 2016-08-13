@@ -37,7 +37,7 @@ import mybiotools.tasks.simpletask._
 import akka.actor.{ Actor, PoisonPill, ActorRef, Props, ActorSystem }
 import akka.actor.Actor._
 import scala.concurrent.Future
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.global.ConfigFactory
 
 object TestConf {
   val str = """my-pinned-dispatcher {

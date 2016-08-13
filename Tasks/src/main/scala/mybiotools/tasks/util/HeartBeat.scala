@@ -61,7 +61,7 @@ class HeartBeatActor(target: ActorRef)
   private var scheduledHeartBeats: Cancellable = null
 
   private var failureDetector = new DeadlineFailureDetector(
-      config.acceptableHeartbeatPause)
+      config.global.acceptableHeartbeatPause)
 
   override def preStart {
     log.debug(
@@ -71,7 +71,7 @@ class HeartBeatActor(target: ActorRef)
 
     scheduledHeartBeats = context.system.scheduler.schedule(
         initialDelay = 0 seconds,
-        interval = config.launcherActorHeartBeatInterval,
+        interval = config.global.launcherActorHeartBeatInterval,
         receiver = self,
         message = CheckHeartBeat
     )

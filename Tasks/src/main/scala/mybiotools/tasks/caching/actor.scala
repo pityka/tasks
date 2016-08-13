@@ -47,7 +47,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
 
   override def preStart = {
     log.info(
-        "Cache service starting. " + cacheMap.toString + s". config.verifySharedFileInCache: ${config.verifySharedFileInCache}. config.skipContentHashVerificationAfterCache: ${config.skipContentHashVerificationAfterCache}.")
+        "Cache service starting. " + cacheMap.toString + s". config.global.verifySharedFileInCache: ${config.global.verifySharedFileInCache}. config.global.skipContentHashVerificationAfterCache: ${config.global.skipContentHashVerificationAfterCache}.")
   }
 
   override def postStop {
@@ -77,7 +77,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
                                  originalSender,
                                  sch)
       } else {
-        if (!config.verifySharedFileInCache) {
+        if (!config.global.verifySharedFileInCache) {
           log.debug("Checking: {}. Got something (not verified).",
                     sch.description.taskID)
           sender ! AnswerFromCache(Right(res), originalSender, sch)

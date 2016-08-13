@@ -66,31 +66,32 @@ trait LSFNodeRegistryImp extends Actor with GridJobRegistry {
   def requestOneNewJobFromGridScheduler(resourceRequest: CPUMemoryRequest)
     : Try[Tuple2[PendingJobId, CPUMemoryAvailable]] = {
 
-    val jarpath = config.newNodeJarPath
+    val jarpath = config.global.newNodeJarPath
 
     // val NumberOfCoresOfNewLauncher = resourceRequest.cpu._1
     // val RequestedMemOfNewNode = resourceRequest.memory
 
     val command = scala.sys.process.Process(
-        "bsub" :: "-n" :: config.numberOfCoresOfNewLauncher.toString
-          :: "-M " + config.requestedMemOfNewNode * 1000
-            :: """-R span[ptile=%d] """.format(config.numberOfCoresPerNode)
-              :: "-R rusage[mem=%d]".format(config.requestedMemOfNewNode) ::
-                "-u" :: config.emailAddress.toString ::
-                  "-q" :: config.queueName.toString :: Nil)
+        "bsub" :: "-n" :: config.global.numberOfCoresOfNewLauncher.toString
+          :: "-M " + config.global.requestedMemOfNewNode * 1000
+            :: """-R span[ptile=%d] """.format(
+                config.global.numberOfCoresPerNode)
+              :: "-R rusage[mem=%d]".format(
+                  config.global.requestedMemOfNewNode) ::
+                "-u" :: config.global.emailAddress.toString ::
+                  "-q" :: config.global.queueName.toString :: Nil)
 
-    val command2 =
-      """java -Xmx%sM -Dhosts.RAM=%s -Dhosts.list="$LSB_HOSTS" %s -Dconfig.file=%s -Dhosts.master=%s -Dhosts.gridengine=LSF -XX:ParallelGCThreads=%s -XX:CICompilerCount=%s %s """
-        .format(
-            (config.requestedMemOfNewNode * config.jVMMaxHeapFactor).toInt,
-            config.requestedMemOfNewNode,
-            config.additionalSystemProperties.mkString(" "),
-            System.getProperty("config.file"),
-            masterAddress.getHostName + ":" + masterAddress.getPort,
-            math.max(6, config.numberOfCoresOfNewLauncher).toString,
-            math.max(6, config.numberOfCoresOfNewLauncher).toString,
-            jarpath
-        )
+    val command2 = """java -Xmx%sM -Dhosts.RAM=%s -Dhosts.list="$LSB_HOSTS" %s -Dconfig.global.file=%s -Dhosts.master=%s -Dhosts.gridengine=LSF -XX:ParallelGCThreads=%s -XX:CICompilerCount=%s %s """
+      .format(
+          (config.global.requestedMemOfNewNode * config.global.jvmMaxHeapFactor).toInt,
+          config.global.requestedMemOfNewNode,
+          config.global.additionalSystemProperties.mkString(" "),
+          System.getProperty("config.global.file"),
+          masterAddress.getHostName + ":" + masterAddress.getPort,
+          math.max(6, config.global.numberOfCoresOfNewLauncher).toString,
+          math.max(6, config.global.numberOfCoresOfNewLauncher).toString,
+          jarpath
+      )
 
     val command2is =
       new java.io.ByteArrayInputStream(command2.getBytes("UTF-8"));
@@ -109,8 +110,8 @@ trait LSFNodeRegistryImp extends Actor with GridJobRegistry {
           .toInt
           .toString
         (PendingJobId(id),
-         CPUMemoryAvailable(config.numberOfCoresOfNewLauncher,
-                            config.requestedMemOfNewNode))
+         CPUMemoryAvailable(config.global.numberOfCoresOfNewLauncher,
+                            config.global.requestedMemOfNewNode))
       } else
         throw new RuntimeException(
             "Error in bsub: " + stdout.mkString("\n") + "\n" + stderr.mkString(
@@ -189,9 +190,9 @@ object LSFMasterSlave
     case x => x
   }
 
-  val reservedCPU: Int = config.hostReservedCPU
+  val reservedCPU: Int = config.global.hostReservedCPU
 
   // TODO ask LSF
-  val availableMemory = config.hostRAM
+  val availableMemory = config.global.hostRAM
 
 }
