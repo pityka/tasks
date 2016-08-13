@@ -29,17 +29,13 @@ package mybiotools.tasks
 import org.scalatest._
 import com.typesafe.config.global.ConfigFactory
 
-case class A(x: Int) extends Result
-
-class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
-  val file = mybiotools.TempFile.createTempFile(".mapdb")
-  file.delete
+class LeveldBDCacheTestSuite extends FunSuite with BeforeAndAfterAll {
+  val file = new java.io.File(
+      mybiotools.TempFile.createTempFile(".leveldb").getAbsolutePath + ".2")
+  println(file.getAbsolutePath)
 
   val system = akka.actor
     .ActorSystem("cachetest", ConfigFactory.load("akkaoverrides.conf"))
-
-  val cache =
-    LevelDBCache(file, akka.serialization.SerializationExtension(system))
 
   test("simple") {
     val cache =
@@ -63,7 +59,8 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
 
   test("1000 elements") {
 
-    val file2 = mybiotools.TempFile.createTempFile(".mapdb")
+    val file2 = new java.io.File(
+        mybiotools.TempFile.createTempFile(".leveldb").getAbsolutePath + ".2")
 
     println(file2)
 

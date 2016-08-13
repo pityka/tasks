@@ -4,7 +4,7 @@ import org.scalatest._
 import scala.concurrent.duration._
 import akka.testkit.TestKit
 import akka.testkit.ImplicitSender
-import akka.actor.{ Actor, PoisonPill, ActorRef, Props, ActorSystem }
+import akka.actor.{Actor, PoisonPill, ActorRef, Props, ActorSystem}
 import com.typesafe.config.global.ConfigFactory
 
 import java.io._
@@ -22,7 +22,17 @@ object Conf {
 akka.loglevel = "DEBUG" """
 }
 
-class TransferSpec extends TestKit(ActorSystem("testsystem", ConfigFactory.parseString(Conf.str).withFallback(ConfigFactory.load("akkaoverrides.conf")))) with ImplicitSender with FunSpecLike with Matchers with BeforeAndAfterAll { self: Suite =>
+class TransferSpec
+    extends TestKit(
+        ActorSystem("testsystem",
+                    ConfigFactory
+                      .parseString(Conf.str)
+                      .withFallback(ConfigFactory.load("akkaoverrides.conf"))))
+    with ImplicitSender
+    with FunSpecLike
+    with Matchers
+    with BeforeAndAfterAll {
+  self: Suite =>
 
   override def afterAll {
     Thread.sleep(1500)
@@ -41,12 +51,15 @@ class TransferSpec extends TestKit(ActorSystem("testsystem", ConfigFactory.parse
       val writeablechannel = new java.io.FileOutputStream(output).getChannel
       val readablechannel = new java.io.FileInputStream(input).getChannel
 
-      val transferin = system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
-      val transferout = system.actorOf(Props(new TransferOut(readablechannel, transferin, chunksize)))
+      val transferin =
+        system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
+      val transferout = system.actorOf(
+          Props(new TransferOut(readablechannel, transferin, chunksize)))
 
       expectMsg(1000 millis, FileSaved)
 
-      mybiotools.readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
+      mybiotools.readBinaryFile(output.getCanonicalPath).deep should equal(
+          data.deep)
 
     }
 
@@ -60,12 +73,15 @@ class TransferSpec extends TestKit(ActorSystem("testsystem", ConfigFactory.parse
       val writeablechannel = new java.io.FileOutputStream(output).getChannel
       val readablechannel = new java.io.FileInputStream(input).getChannel
 
-      val transferin = system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
-      val transferout = system.actorOf(Props(new TransferOut(readablechannel, transferin, chunksize)))
+      val transferin =
+        system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
+      val transferout = system.actorOf(
+          Props(new TransferOut(readablechannel, transferin, chunksize)))
 
       expectMsg(100 millis, FileSaved)
 
-      mybiotools.readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
+      mybiotools.readBinaryFile(output.getCanonicalPath).deep should equal(
+          data.deep)
 
     }
 
@@ -79,12 +95,15 @@ class TransferSpec extends TestKit(ActorSystem("testsystem", ConfigFactory.parse
       val writeablechannel = new java.io.FileOutputStream(output).getChannel
       val readablechannel = new java.io.FileInputStream(input).getChannel
 
-      val transferin = system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
-      val transferout = system.actorOf(Props(new TransferOut(readablechannel, transferin, chunksize)))
+      val transferin =
+        system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
+      val transferout = system.actorOf(
+          Props(new TransferOut(readablechannel, transferin, chunksize)))
 
       expectMsg(100 millis, FileSaved)
 
-      mybiotools.readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
+      mybiotools.readBinaryFile(output.getCanonicalPath).deep should equal(
+          data.deep)
 
     }
 
@@ -98,12 +117,15 @@ class TransferSpec extends TestKit(ActorSystem("testsystem", ConfigFactory.parse
       val writeablechannel = new java.io.FileOutputStream(output).getChannel
       val readablechannel = new java.io.FileInputStream(input).getChannel
 
-      val transferin = system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
-      val transferout = system.actorOf(Props(new TransferOut(readablechannel, transferin, chunksize)))
+      val transferin =
+        system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
+      val transferout = system.actorOf(
+          Props(new TransferOut(readablechannel, transferin, chunksize)))
 
       expectMsg(100 millis, FileSaved)
 
-      mybiotools.readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
+      mybiotools.readBinaryFile(output.getCanonicalPath).deep should equal(
+          data.deep)
 
     }
 
@@ -117,12 +139,15 @@ class TransferSpec extends TestKit(ActorSystem("testsystem", ConfigFactory.parse
       val writeablechannel = new java.io.FileOutputStream(output).getChannel
       val readablechannel = new java.io.FileInputStream(input).getChannel
 
-      val transferin = system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
-      val transferout = system.actorOf(Props(new TransferOut(readablechannel, transferin, chunksize)))
+      val transferin =
+        system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
+      val transferout = system.actorOf(
+          Props(new TransferOut(readablechannel, transferin, chunksize)))
 
       expectMsg(100 millis, FileSaved)
 
-      mybiotools.readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
+      mybiotools.readBinaryFile(output.getCanonicalPath).deep should equal(
+          data.deep)
 
     }
 
@@ -137,13 +162,18 @@ class TransferSpec extends TestKit(ActorSystem("testsystem", ConfigFactory.parse
       val writeablechannel = pipe.sink
       val readablechannel = new java.io.FileInputStream(input).getChannel
 
-      val transferin = system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
-      val transferout = system.actorOf(Props(new TransferOut(readablechannel, transferin, chunksize)))
+      val transferin =
+        system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
+      val transferout = system.actorOf(
+          Props(new TransferOut(readablechannel, transferin, chunksize)))
 
       expectMsg(100 millis, FileSaved)
       writeablechannel.close
 
-      mybiotools.readBinaryStream(java.nio.channels.Channels.newInputStream(pipe.source)).deep should equal(data.deep)
+      mybiotools
+        .readBinaryStream(
+            java.nio.channels.Channels.newInputStream(pipe.source))
+        .deep should equal(data.deep)
 
     }
   }

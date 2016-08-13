@@ -1,28 +1,28 @@
 /*
-* The MIT License
-*
-* Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
-* Group Fellay
-* Copyright (c) 2016 Istvan Bartha
-*
-* Permission is hereby granted, free of charge, to any person obtaining
-* a copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the Software
-* is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in all
-* copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-* SOFTWARE.
-*/
+ * The MIT License
+ *
+ * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
+ * Group Fellay
+ * Copyright (c) 2016 Istvan Bartha
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the Software
+ * is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 package mybiotools.tasks
 import org.scalatest._
@@ -34,7 +34,7 @@ import scala.concurrent.duration._
 import scala.io.Source
 import mybiotools.tasks._
 import mybiotools.tasks.simpletask._
-import akka.actor.{ Actor, PoisonPill, ActorRef, Props, ActorSystem }
+import akka.actor.{Actor, PoisonPill, ActorRef, Props, ActorSystem}
 import akka.actor.Actor._
 import scala.concurrent.Future
 import com.typesafe.config.global.ConfigFactory
@@ -49,7 +49,15 @@ akka.loglevel = "ERROR"
 akka.event-handlers = ["akka.testkit.TestEventListener"] """
 }
 
-class TaskTestSuite extends TestKit(ActorSystem("testsystem", ConfigFactory.parseString(TestConf.str).withFallback(ConfigFactory.load("akkaoverrides.conf")))) with ImplicitSender with FunSuiteLike with BeforeAndAfterAll {
+class TaskTestSuite
+    extends TestKit(
+        ActorSystem("testsystem",
+                    ConfigFactory
+                      .parseString(TestConf.str)
+                      .withFallback(ConfigFactory.load("akkaoverrides.conf"))))
+    with ImplicitSender
+    with FunSuiteLike
+    with BeforeAndAfterAll {
   // remote.start("localhost", 3985) //Start the server
   // remote.register("cache-service", )
 
@@ -57,19 +65,49 @@ class TaskTestSuite extends TestKit(ActorSystem("testsystem", ConfigFactory.pars
 
   val tmpfile = mybiotools.TempFile.createTempFile(".cache")
 
-  val folder = new FolderFileStorage(new java.io.File(getClass.getResource("/").getPath), true)
+  val folder = new FolderFileStorage(
+      new java.io.File(getClass.getResource("/").getPath),
+      true)
   val folder2 = new java.io.File(getClass.getResource("/whatever").getPath)
   folder2.mkdir
-  val filelist = new kvstore.FileList(new kvstore.DirectLevelDBWrapper(folder2))
+  val filelist =
+    new kvstore.FileList(new kvstore.DirectLevelDBWrapper(folder2))
 
-  val fileActor = system.actorOf(Props(new FileService(folder, filelist)).withDispatcher("my-pinned-dispatcher"), "queue")
+  val fileActor = system.actorOf(Props(new FileService(folder, filelist))
+                                   .withDispatcher("my-pinned-dispatcher"),
+                                 "queue")
 
-  val cacher = system.actorOf(Props(new TaskResultCache(LevelDBCache(tmpfile, akka.serialization.SerializationExtension(system)), FileServiceActor(fileActor))).withDispatcher("my-pinned-dispatcher"), "cache")
+  val cacher = system.actorOf(
+      Props(
+          new TaskResultCache(
+              LevelDBCache(tmpfile,
+                           akka.serialization.SerializationExtension(system)),
+              FileServiceActor(fileActor)))
+        .withDispatcher("my-pinned-dispatcher"),
+      "cache")
 
-  val balancer = system.actorOf(Props[TaskQueue].withDispatcher("my-pinned-dispatcher"), "fileservice")
-  val nlc = system.actorOf(Props[NodeLocalCache].withDispatcher("my-pinned-dispatcher"), name = "nodeLocalCache")
-  val starter1 = system.actorOf(Props(new TaskLauncher(balancer, nlc, CPUMemoryAvailable(1, 100000), 1 milliseconds)).withDispatcher("my-pinned-dispatcher"), "launcher1")
-  val starter2 = system.actorOf(Props(new TaskLauncher(balancer, nlc, CPUMemoryAvailable(1, 100000), 1 milliseconds)).withDispatcher("my-pinned-dispatcher"), "launcher2")
+  val balancer = system.actorOf(
+      Props[TaskQueue].withDispatcher("my-pinned-dispatcher"),
+      "fileservice")
+  val nlc = system.actorOf(
+      Props[NodeLocalCache].withDispatcher("my-pinned-dispatcher"),
+      name = "nodeLocalCache")
+  val starter1 = system.actorOf(
+      Props(
+          new TaskLauncher(balancer,
+                           nlc,
+                           CPUMemoryAvailable(1, 100000),
+                           1 milliseconds))
+        .withDispatcher("my-pinned-dispatcher"),
+      "launcher1")
+  val starter2 = system.actorOf(
+      Props(
+          new TaskLauncher(balancer,
+                           nlc,
+                           CPUMemoryAvailable(1, 100000),
+                           1 milliseconds))
+        .withDispatcher("my-pinned-dispatcher"),
+      "launcher2")
 
   implicit val starter = QueueActor(balancer)
 
@@ -126,7 +164,8 @@ class TaskTestSuite extends TestKit(ActorSystem("testsystem", ConfigFactory.pars
     val n = 500
     val st1 = system.actorOf(Props(new SimpleTask(16, 6345)))
     val st2 = system.actorOf(Props(new SimpleTask(0, 63451)))
-    val childs = (1 to n) map (x => system.actorOf(Props(new SimpleTask(0, x))))
+    val childs = (1 to n) map (x =>
+            system.actorOf(Props(new SimpleTask(0, x))))
 
     st1 ! AddTarget(st2, SimpleTask.testUpdater)
 
@@ -148,8 +187,16 @@ class TaskTestSuite extends TestKit(ActorSystem("testsystem", ConfigFactory.pars
 
   }
 
-  test("3 parallel task (50ms each) should finish on 3 TaskLaunchers in 150ms.") {
-    val starter3 = system.actorOf(Props(new TaskLauncher(balancer, nlc, CPUMemoryAvailable(1, 100000), 1 milliseconds)).withDispatcher("my-pinned-dispatcher"), "launcher3")
+  test(
+      "3 parallel task (50ms each) should finish on 3 TaskLaunchers in 150ms.") {
+    val starter3 =
+      system.actorOf(Props(
+                         new TaskLauncher(balancer,
+                                          nlc,
+                                          CPUMemoryAvailable(1, 100000),
+                                          1 milliseconds))
+                       .withDispatcher("my-pinned-dispatcher"),
+                     "launcher3")
 
     // This is to "warm up" the new launcher. dont' exactly know why, but the first task is slow.
     val st12 = system.actorOf(Props(new SimpleTask(12)))
@@ -181,7 +228,8 @@ class TaskTestSuite extends TestKit(ActorSystem("testsystem", ConfigFactory.pars
 
     starter3 ! PoisonPill
 
-    expectResult(9)(result.map(_.asInstanceOf[IntResult].value).foldLeft[Int](0)(_ + _))
+    expectResult(9)(
+        result.map(_.asInstanceOf[IntResult].value).foldLeft[Int](0)(_ + _))
   }
 
   test("3 parallel task (50ms each) finish on 2 TaskLaunchers in 200ms.") {
@@ -208,13 +256,15 @@ class TaskTestSuite extends TestKit(ActorSystem("testsystem", ConfigFactory.pars
     expectMsg(5 millis, false)
 
     st2 ! WhatAreYourChildren(self, SimpleTask.testUpdater)
-    expectMsg(5 millis, ChildrenMessage(Set(st1), self, SimpleTask.testUpdater))
+    expectMsg(5 millis,
+              ChildrenMessage(Set(st1), self, SimpleTask.testUpdater))
 
     val st3 = system.actorOf(Props(new SimpleTask(1, 9234)))
     st3 ! AddTarget(st3, SimpleTask.testUpdater)
     expectMsg(5 millis, false)
     st3 ! WhatAreYourChildren(self, SimpleTask.testUpdater)
-    expectMsg(5 millis, ChildrenMessage(Set[ActorRef](), self, SimpleTask.testUpdater))
+    expectMsg(5 millis,
+              ChildrenMessage(Set[ActorRef](), self, SimpleTask.testUpdater))
 
   }
 
@@ -236,7 +286,9 @@ class TaskTestSuite extends TestKit(ActorSystem("testsystem", ConfigFactory.pars
     val st1 = system.actorOf(Props(new SimpleTask(42)))
     st1 ! GetBackResult
     expectMsgPF(3000 millis) {
-      case akka.actor.Status.Failure(cause) if cause.getMessage == "failtest" => true
+      case akka.actor.Status.Failure(cause)
+          if cause.getMessage == "failtest" =>
+        true
     }
 
     try {
@@ -244,7 +296,8 @@ class TaskTestSuite extends TestKit(ActorSystem("testsystem", ConfigFactory.pars
         throw new RuntimeException("ASDF")
       }
     } catch {
-      case x: RuntimeException if x.getMessage == "ASDF" => expectResult(true)(true)
+      case x: RuntimeException if x.getMessage == "ASDF" =>
+        expectResult(true)(true)
     }
   }
 
