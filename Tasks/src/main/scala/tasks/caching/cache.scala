@@ -33,6 +33,7 @@ import scala.collection.immutable.ListMap
 
 import kvstore._
 import tasks.queue._
+import tasks._
 
 abstract class Cache {
 

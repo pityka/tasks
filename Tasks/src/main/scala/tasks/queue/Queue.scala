@@ -47,6 +47,7 @@ import tasks.shared.monitor._
 import tasks.fileservice._
 import tasks.caching._
 import tasks.util._
+import tasks._
 
 class TaskQueue extends Actor with akka.actor.ActorLogging {
 

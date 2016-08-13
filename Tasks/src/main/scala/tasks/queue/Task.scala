@@ -42,12 +42,6 @@ import tasks.shared._
 import tasks._
 import tasks.caching._
 
-// This is the output of a task
-trait Result extends Serializable {
-  def verifyAfterCache(implicit service: FileServiceActor,
-                       context: ActorRefFactory): Boolean = true
-}
-
 abstract class ResultWithSharedFiles(sf: SharedFile*)
     extends Result
     with Product {

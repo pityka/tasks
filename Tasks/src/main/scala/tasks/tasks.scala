@@ -28,6 +28,15 @@ package tasks
 
 import tasks.queue._
 import tasks.shared._
+import tasks.fileservice._
+
+import akka.actor._
+
+// This is the output of a task
+trait Result extends Serializable {
+  def verifyAfterCache(implicit service: FileServiceActor,
+                       context: ActorRefFactory): Boolean = true
+}
 
 class TaskDefinition[A <: Prerequisitive[A], B <: Result](
     val computation: CompFun[A, B],

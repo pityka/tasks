@@ -24,7 +24,7 @@
  * SOFTWARE.
  */
 
-package mybiotools.tasks
+package tasks._
 
 import org.scalatest._
 import com.typesafe.config.global.ConfigFactory

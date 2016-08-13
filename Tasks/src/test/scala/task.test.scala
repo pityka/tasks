@@ -24,7 +24,7 @@
  * SOFTWARE.
  */
 
-package mybiotools.tasks
+package tasks
 import org.scalatest._
 import akka.testkit.TestKit
 import akka.testkit.ImplicitSender
@@ -32,8 +32,6 @@ import akka.testkit.EventFilter
 import scala.concurrent.duration._
 
 import scala.io.Source
-import mybiotools.tasks._
-import mybiotools.tasks.simpletask._
 import akka.actor.{Actor, PoisonPill, ActorRef, Props, ActorSystem}
 import akka.actor.Actor._
 import scala.concurrent.Future

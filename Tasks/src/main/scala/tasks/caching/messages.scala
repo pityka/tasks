@@ -31,6 +31,7 @@ import tasks.util.eq._
 import tasks.queue._
 import tasks.fileservice._
 import akka.actor.ActorRef
+import tasks._
 
 trait Messages {
 

@@ -26,6 +26,7 @@
 package tasks.caching
 
 import tasks.queue._
+import tasks._
 
 trait TaskSerializer {
   protected val serialization: akka.serialization.Serialization

@@ -42,6 +42,7 @@ import tasks.shared._
 import tasks.fileservice._
 import tasks.caching._
 import tasks.elastic._
+import tasks._
 
 @SerialVersionUID(1L)
 case class ScheduleWithProxy(sch: ScheduleTask, ac: List[ActorRef])
