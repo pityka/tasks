@@ -21,8 +21,8 @@ object Deployment {
 
     val tar = "tar xf package"
 
-    val javacommand = s"""
-    nohup bin/entrypoint -J-Xmx${(memory.toDouble * config.global.jvmMaxHeapFactor).toInt}M -Dhosts.gridengine=$gridEngine ${config.global.additionalJavaCommandline}  -Dhosts.master=${masterAddress.getHostName + ":" + masterAddress.getPort} -Dtasks.elastic.enabled=true 1> stdout 2>stderr &
+    val javacommand =
+      s"""nohup bin/entrypoint -J-Xmx${(memory.toDouble * config.global.jvmMaxHeapFactor).toInt}M -Dhosts.gridengine=$gridEngine ${config.global.additionalJavaCommandline}  -Dhosts.master=${masterAddress.getHostName + ":" + masterAddress.getPort} -Dtasks.elastic.enabled=true 1> stdout 2>stderr &
     """
 
     "#!/usr/bin/env bash\n" + download + "&&" + tar + "&&" + javacommand

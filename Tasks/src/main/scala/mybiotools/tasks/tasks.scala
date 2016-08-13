@@ -50,14 +50,8 @@ case class UpdatePrerequisitive[A <: Prerequisitive[A], B <: Result](
 }
 
 sealed trait GridEngine
-case object LSFGrid extends GridEngine {
-  override def toString = "LSF"
-}
 case object EC2Grid extends GridEngine {
   override def toString = "EC2"
-}
-case object SGEGrid extends GridEngine {
-  override def toString = "SGE"
 }
 case object NoGrid extends GridEngine {
   override def toString = "NOENGINE"

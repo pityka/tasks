@@ -87,8 +87,6 @@ object SSHSettings {
 
 }
 
-object SSHHelpers {}
-
 object SSHOperations {
   import ch.ethz.ssh2.{Connection, KnownHosts, ServerHostKeyVerifier, Session}
 

@@ -33,8 +33,7 @@ import java.io.File
 
 class TasksConfig(val raw: Config)
     extends TaskAllocationConstants
-    with EC2Settings
-    with LSFConfig {
+    with EC2Settings {
 
   val asString = raw.root.render
 

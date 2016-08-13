@@ -50,8 +50,6 @@ import tasks.util._
 import tasks.deploy._
 import tasks.shared._
 import tasks.elastic.ec2._
-import tasks.elastic.drmaa._
-import tasks.elastic.lsf._
 import tasks.elastic.ssh._
 
 package object tasks {
@@ -224,8 +222,6 @@ package object tasks {
     if (config.global.disableRemoting) LocalConfigurationFromConfig
     else
       config.global.gridEngine match {
-        case x if x == "LSF" => LSFMasterSlave
-        case x if x == "SGE" => SGEMasterSlave
         case x if x == "EC2" => EC2MasterSlave
         case x if x == "NOENGINE" => MasterSlaveFromConfig
         case _ => MasterSlaveFromConfig

@@ -43,8 +43,6 @@ trait TaskAllocationConstants {
 
   val gridEngine = raw.getString("hosts.gridengine") match {
     case x if x == "EC2" => EC2Grid
-    case x if x == "LSF" => LSFGrid
-    case x if x == "SGE" => SGEGrid
     case x if x == "SSH" => SSHGrid
     case _ => NoGrid
   }

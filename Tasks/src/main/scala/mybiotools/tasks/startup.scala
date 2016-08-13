@@ -35,8 +35,6 @@ import tasks.util.eq._
 import tasks.fileservice._
 import tasks.elastic._
 import tasks.elastic.ec2._
-import tasks.elastic.drmaa._
-import tasks.elastic.lsf._
 import tasks.elastic.ssh._
 import tasks.shared._
 import tasks.shared.monitor._
@@ -194,22 +192,12 @@ akka {
 
   private val isLauncherOnly = hostConfig.myRole == SLAVE
 
-  if (!isLauncherOnly && config.global.elasticNodeAllocationEnabled && config.global.gridEngine === SGEGrid) {
-    DRMAA.testDRMAAConnection
-  }
-
   val reaperActor = config.global.gridEngine match {
     case EC2Grid =>
       system.actorOf(Props(
                          new EC2Reaper(logFile.toList,
                                        config.global.logFileS3Path,
                                        config.global.terminateMaster)),
-                     name = "reaper")
-    case LSFGrid =>
-      system.actorOf(Props(new LSFReaper(RunningJobId(getNodeName))),
-                     name = "reaper")
-    case SGEGrid =>
-      system.actorOf(Props(new SGEReaper(RunningJobId(getNodeName))),
                      name = "reaper")
     case _ =>
       system
@@ -381,16 +369,6 @@ akka {
       val resource = CPUMemoryAvailable(cpu = hostConfig.myCardinality,
                                         memory = hostConfig.availableMemory)
       val props = config.global.gridEngine match {
-        case LSFGrid =>
-          Props(
-              new LSFNodeRegistry(hostConfig.myAddress,
-                                  balancerActor,
-                                  resource))
-        case SGEGrid =>
-          Props(
-              new SGENodeRegistry(hostConfig.myAddress,
-                                  balancerActor,
-                                  resource))
         case EC2Grid =>
           Props(
               new EC2NodeRegistry(hostConfig.myAddress,
@@ -470,14 +448,6 @@ akka {
             .replace("://", "___") + balancerActor.path.name)
 
       config.global.gridEngine match {
-        case LSFGrid =>
-          system.actorOf(
-              Props(new LSFSelfShutdown(RunningJobId(nodeName), balancerActor))
-                .withDispatcher("my-pinned-dispatcher"))
-        case SGEGrid =>
-          system.actorOf(
-              Props(new SGESelfShutdown(RunningJobId(nodeName), balancerActor))
-                .withDispatcher("my-pinned-dispatcher"))
         case EC2Grid =>
           system.actorOf(
               Props(new EC2SelfShutdown(RunningJobId(nodeName), balancerActor))
@@ -542,7 +512,6 @@ akka {
   }
 
   private def getNodeName: String = config.global.gridEngine match {
-    case LSFGrid => System.getenv("LSB_JOBID")
     case SSHGrid => {
       val pid = java.lang.management.ManagementFactory
         .getRuntimeMXBean()
@@ -552,7 +521,6 @@ akka {
       val hostname = tasks.util.config.global.hostName
       hostname + ":" + pid
     }
-    case SGEGrid => System.getenv("JOB_ID")
     case EC2Grid => EC2Operations.readMetadata("instance-id").head
     case NoGrid =>
       throw new RuntimeException(
