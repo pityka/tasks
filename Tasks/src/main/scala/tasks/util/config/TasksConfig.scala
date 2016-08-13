@@ -30,10 +30,9 @@ import com.typesafe.config.{Config, ConfigFactory}
 import scala.collection.JavaConversions._
 import scala.concurrent.duration._
 import java.io.File
+import tasks._
 
-class TasksConfig(val raw: Config)
-    extends TaskAllocationConstants
-    with EC2Settings {
+class TasksConfig(val raw: Config) {
 
   val asString = raw.root.render
 
@@ -105,5 +104,93 @@ class TasksConfig(val raw: Config)
       raw.getString("tasks.fileservice.fileList"))
 
   val logFile = raw.getString("tasks.logFile")
+
+  val sshHosts = raw.getObject("tasks.elastic.ssh.hosts")
+
+  val elasticNodeAllocationEnabled = raw.getBoolean("tasks.elastic.enabled")
+
+  lazy val tarball =
+    if (raw.hasPath("tasks.elastic.tarball"))
+      Some(new java.net.URL(raw.getString("tasks.elastic.tarball")))
+    else None
+
+  val gridEngine = raw.getString("hosts.gridengine") match {
+    case x if x == "EC2" => EC2Grid
+    case x if x == "SSH" => SSHGrid
+    case _ => NoGrid
+  }
+
+  val idleNodeTimeout: FD = raw.getDuration("tasks.elastic.idleNodeTimeout")
+
+  val maxNodes = raw.getInt("tasks.elastic.maxNodes")
+
+  val maxPendingNodes = raw.getInt("tasks.elastic.maxPending")
+
+  val newNodeJarPath =
+    raw.getString("tasks.elastic.mainClassWithClassPathOrJar")
+
+  val queueCheckInterval: FD =
+    raw.getDuration("tasks.elastic.queueCheckInterval")
+
+  val queueCheckInitialDelay: FD =
+    raw.getDuration("tasks.elastic.queueCheckInitialDelay")
+
+  val nodeKillerMonitorInterval: FD =
+    raw.getDuration("tasks.elastic.nodeKillerMonitorInterval")
+
+  val jvmMaxHeapFactor = raw.getDouble("tasks.elastic.jvmMaxHeapFactor")
+
+  val logQueueStatus = raw.getBoolean("tasks.elastic.logQueueStatus")
+
+  val additionalSystemProperties: List[String] = raw
+    .getStringList("tasks.elastic.additionalSystemProperties")
+    .toArray
+    .map(_.asInstanceOf[String])
+    .toList
+
+  val endpoint: String = raw.getString("tasks.elastic.aws.endpoint")
+
+  val spotPrice: Double = raw.getDouble("tasks.elastic.aws.spotPrice")
+
+  val amiID: String = raw.getString("tasks.elastic.aws.ami")
+
+  val instanceType = raw.getString("tasks.elastic.aws.instanceType")
+
+  val securityGroup: String = raw.getString("tasks.elastic.aws.securityGroup")
+
+  val keyName = raw.getString("tasks.elastic.aws.keyName")
+
+  val extraFilesFromS3: List[String] =
+    raw.getStringList("tasks.elastic.aws.extraFilesFromS3").toList
+
+  val extraStartupscript: String =
+    raw.getString("tasks.elastic.aws.extraStartupScript")
+
+  val additionalJavaCommandline =
+    raw.getString("tasks.elastic.aws.extraJavaCommandline")
+
+  val iamRole = {
+    val s = raw.getString("tasks.elastic.aws.iamRole")
+    if (s == "" || s == "-") None
+    else Some(s)
+  }
+
+  val s3UpdateInterval: FD =
+    raw.getDuration("tasks.elastic.aws.uploadInterval")
+
+  val placementGroup: Option[String] =
+    raw.getString("tasks.elastic.aws.placementGroup") match {
+      case x if x == "" => None
+      case x => Some(x)
+    }
+
+  val logFileS3Path = {
+    val buck = raw.getString("tasks.elastic.aws.fileStoreBucket")
+    val pref = raw.getString("tasks.elastic.aws.fileStoreBucketFolderPrefix")
+
+    if (buck.isEmpty) None else Some(buck -> pref)
+  }
+
+  val terminateMaster = raw.getBoolean("tasks.elastic.aws.terminateMaster")
 
 }

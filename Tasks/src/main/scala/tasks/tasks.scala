@@ -32,6 +32,15 @@ import tasks.fileservice._
 
 import akka.actor._
 
+object LauncherActor {
+  def block[T](request: CPUMemoryRequest)(k: => T)(implicit l: LauncherActor) = {
+    l.actor ! BlockOn(request)
+    val x = k
+    l.actor ! BlockOff(request)
+    k
+  }
+}
+
 // This is the output of a task
 trait Result extends Serializable {
   def verifyAfterCache(implicit service: FileServiceActor,

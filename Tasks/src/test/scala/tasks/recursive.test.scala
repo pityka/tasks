@@ -24,7 +24,8 @@
  * SOFTWARE.
  */
 
-package mybiotools.tasks
+package tasks
+
 import org.scalatest._
 import akka.testkit.TestKit
 import akka.testkit.ImplicitSender
@@ -32,15 +33,21 @@ import akka.testkit.EventFilter
 import scala.concurrent.duration._
 
 import scala.io.Source
-import mybiotools.tasks._
-import mybiotools.tasks.simpletask._
+import tasks._
+import tasks.simpletask._
 import akka.actor.{Actor, PoisonPill, ActorRef, Props, ActorSystem}
 import akka.actor.Actor._
 import scala.concurrent._
 import duration._
 import Duration._
-import com.typesafe.config.global.ConfigFactory
+import com.typesafe.config.ConfigFactory
 import scala.concurrent.ExecutionContext.Implicits.global
+
+import tasks.queue._
+import tasks.caching._
+import tasks.fileservice._
+import tasks.util._
+import tasks.deploy._
 
 object Fib {
 
@@ -99,10 +106,10 @@ tasks.disableRemoting = true
 
 """
 
-  val system = customTaskSystem(new LocalConfiguration(4, 1000),
-                                ConfigFactory.parseString(string))
+  implicit val system: TaskSystem = customTaskSystem(
+      new LocalConfiguration(4, 1000),
+      ConfigFactory.parseString(string))
   import Fib._
-  import system._
 
   test("long") {
     val n = 16

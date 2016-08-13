@@ -1,17 +1,21 @@
-package mybiotools.tasks.util
+package tasks.util
 
 import org.scalatest._
 import scala.concurrent.duration._
 import akka.testkit.TestKit
 import akka.testkit.ImplicitSender
 import akka.actor.{Actor, PoisonPill, ActorRef, Props, ActorSystem}
-import com.typesafe.config.global.ConfigFactory
+import com.typesafe.config.ConfigFactory
 
 import java.io._
-import mybiotools._
 
 import org.scalatest.FunSpec
 import org.scalatest.Matchers
+
+import tasks.queue._
+import tasks.caching._
+import tasks.fileservice._
+import tasks.util._
 
 object Conf {
   val str = """my-pinned-dispatcher {
@@ -45,7 +49,7 @@ class TransferSpec
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
       val chunksize = 1
       val input = TempFile.createTempFile(".in")
-      mybiotools.writeBinaryToFile(input.getCanonicalPath, data)
+      writeBinaryToFile(input.getCanonicalPath, data)
       val output = TempFile.createTempFile(".out")
 
       val writeablechannel = new java.io.FileOutputStream(output).getChannel
@@ -58,8 +62,7 @@ class TransferSpec
 
       expectMsg(1000 millis, FileSaved)
 
-      mybiotools.readBinaryFile(output.getCanonicalPath).deep should equal(
-          data.deep)
+      readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
 
     }
 
@@ -67,7 +70,7 @@ class TransferSpec
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
       val chunksize = 5
       val input = TempFile.createTempFile(".in")
-      mybiotools.writeBinaryToFile(input.getCanonicalPath, data)
+      writeBinaryToFile(input.getCanonicalPath, data)
       val output = TempFile.createTempFile(".out")
 
       val writeablechannel = new java.io.FileOutputStream(output).getChannel
@@ -80,8 +83,7 @@ class TransferSpec
 
       expectMsg(100 millis, FileSaved)
 
-      mybiotools.readBinaryFile(output.getCanonicalPath).deep should equal(
-          data.deep)
+      readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
 
     }
 
@@ -89,7 +91,7 @@ class TransferSpec
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
       val chunksize = 16
       val input = TempFile.createTempFile(".in")
-      mybiotools.writeBinaryToFile(input.getCanonicalPath, data)
+      writeBinaryToFile(input.getCanonicalPath, data)
       val output = TempFile.createTempFile(".out")
 
       val writeablechannel = new java.io.FileOutputStream(output).getChannel
@@ -102,8 +104,7 @@ class TransferSpec
 
       expectMsg(100 millis, FileSaved)
 
-      mybiotools.readBinaryFile(output.getCanonicalPath).deep should equal(
-          data.deep)
+      readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
 
     }
 
@@ -111,7 +112,7 @@ class TransferSpec
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
       val chunksize = 50
       val input = TempFile.createTempFile(".in")
-      mybiotools.writeBinaryToFile(input.getCanonicalPath, data)
+      writeBinaryToFile(input.getCanonicalPath, data)
       val output = TempFile.createTempFile(".out")
 
       val writeablechannel = new java.io.FileOutputStream(output).getChannel
@@ -124,8 +125,7 @@ class TransferSpec
 
       expectMsg(100 millis, FileSaved)
 
-      mybiotools.readBinaryFile(output.getCanonicalPath).deep should equal(
-          data.deep)
+      readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
 
     }
 
@@ -133,7 +133,7 @@ class TransferSpec
       val data = Array[Byte]()
       val chunksize = 16
       val input = TempFile.createTempFile(".in")
-      mybiotools.writeBinaryToFile(input.getCanonicalPath, data)
+      writeBinaryToFile(input.getCanonicalPath, data)
       val output = TempFile.createTempFile(".out")
 
       val writeablechannel = new java.io.FileOutputStream(output).getChannel
@@ -146,8 +146,7 @@ class TransferSpec
 
       expectMsg(100 millis, FileSaved)
 
-      mybiotools.readBinaryFile(output.getCanonicalPath).deep should equal(
-          data.deep)
+      readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
 
     }
 
@@ -155,7 +154,7 @@ class TransferSpec
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
       val chunksize = 5
       val input = TempFile.createTempFile(".in")
-      mybiotools.writeBinaryToFile(input.getCanonicalPath, data)
+      writeBinaryToFile(input.getCanonicalPath, data)
 
       val pipe = java.nio.channels.Pipe.open
 
@@ -170,10 +169,8 @@ class TransferSpec
       expectMsg(100 millis, FileSaved)
       writeablechannel.close
 
-      mybiotools
-        .readBinaryStream(
-            java.nio.channels.Channels.newInputStream(pipe.source))
-        .deep should equal(data.deep)
+      readBinaryStream(java.nio.channels.Channels.newInputStream(pipe.source)).deep should equal(
+          data.deep)
 
     }
   }

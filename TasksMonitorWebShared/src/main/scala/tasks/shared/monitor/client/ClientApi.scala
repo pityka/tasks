@@ -23,11 +23,11 @@
 // * SOFTWARE.
 // */
 //
-// package mybiotools.tasks.monitor.client
+// package tasks.monitor.client
 //
 // import scala.concurrent.Future
-// import mybiotools.tasks._
-// import mybiotools.tasks.monitor._
+// import tasks._
+// import tasks.monitor._
 //
 // trait Api {
 //   def list(): Future[Seq[Int]]

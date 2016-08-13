@@ -134,6 +134,30 @@ package object util {
     }
   }
 
+  /** Reads file contents into a bytearray. */
+  def readBinaryFile(fileName: String): Array[Byte] = {
+    useResource(new BufferedInputStream(new FileInputStream(fileName))) { f =>
+      readBinaryStream(f)
+    }
+  }
+
+  /** Reads file contents into a bytearray. */
+  def readBinaryFile(f: File): Array[Byte] = readBinaryFile(f.getAbsolutePath)
+
+  /** Reads file contents into a bytearray. */
+  def readBinaryStream(f: java.io.InputStream): Array[Byte] = {
+    def read(x: List[Byte]): List[Byte] = {
+      val raw = f.read
+      val ch: Byte = raw.toByte
+      if (raw != -1) {
+        read(ch :: x)
+      } else {
+        x
+      }
+    }
+    read(Nil).reverse.toArray
+  }
+
   /** Opens a buffered [[java.io.BufferedOutputStream]] on the file. Closes it after the block is executed. */
   def openFileOutputStream[T](fileName: File, append: Boolean = false)(
       func: BufferedOutputStream => T) =

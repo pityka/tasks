@@ -24,15 +24,24 @@
  * SOFTWARE.
  */
 
-package mybiotools.tasks.kvstore
+package tasks.kvstore
 
 import org.scalatest._
-import mybiotools.tasks.util._
+import tasks.util._
 
 import java.io._
 
 import org.scalatest.FunSpec
 import org.scalatest.Matchers
+
+import tasks.queue._
+import tasks.caching._
+import tasks.caching.kvstore._
+import tasks.fileservice._
+import tasks.util._
+import tasks.shared._
+import tasks.simpletask._
+import tasks._
 
 class LevelDBWrapperSpec extends KeyValueStoreSpec {
   def makeKVStore(f: File) = new LevelDBWrapper(f)
@@ -48,7 +57,7 @@ trait KeyValueStoreSpec extends FunSpec with Matchers {
 
   describe(this.toString) {
     it("simple") {
-      val tmp = mybiotools.TempFile.createTempFile(".leveldb")
+      val tmp = TempFile.createTempFile(".leveldb")
       tmp.delete
       val lw = makeKVStore(tmp)
       lw.put(Array(0, 1, 3), Array(0, 1, 3))
@@ -56,7 +65,7 @@ trait KeyValueStoreSpec extends FunSpec with Matchers {
       lw.close
     }
     it("simple 2") {
-      val tmp = mybiotools.TempFile.createTempFile(".leveldb")
+      val tmp = TempFile.createTempFile(".leveldb")
       tmp.delete
       val lw = makeKVStore(tmp)
       lw.put(Array(0, 1, 3), Array(0, 1, 3))
@@ -75,7 +84,7 @@ trait KeyValueStoreSpec extends FunSpec with Matchers {
       lw.close
     }
     it("overwrite") {
-      val tmp = mybiotools.TempFile.createTempFile(".leveldb")
+      val tmp = TempFile.createTempFile(".leveldb")
       tmp.delete
       val lw = makeKVStore(tmp)
       lw.put(Array(0, 1, 3), Array(0, 1, 3))
@@ -85,7 +94,7 @@ trait KeyValueStoreSpec extends FunSpec with Matchers {
       lw.close
     }
     it("big") {
-      val tmp = mybiotools.TempFile.createTempFile(".leveldb")
+      val tmp = TempFile.createTempFile(".leveldb")
       try {
         tmp.delete
         val tenmeg = Array.fill[Byte](1E7.toInt)(0)

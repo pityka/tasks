@@ -24,15 +24,20 @@
  * SOFTWARE.
  */
 
-package mybiotools.tasks
+package tasks
 
 import org.scalatest._
 
-import mybiotools.tasks._
+import tasks._
 
 import org.scalatest.FunSpec
 import org.scalatest.Matchers
 import scala.concurrent.ExecutionContext.Implicits.global
+
+import tasks.queue._
+import tasks.caching._
+import tasks.fileservice._
+import tasks.util._
 
 object Tests {
 

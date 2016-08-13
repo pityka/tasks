@@ -24,15 +24,20 @@
  * SOFTWARE.
  */
 
-package tasks._
+package tasks
 
 import org.scalatest._
-import com.typesafe.config.global.ConfigFactory
+import com.typesafe.config.ConfigFactory
+
+import tasks.queue._
+import tasks.caching._
+import tasks.fileservice._
+import tasks.util._
 
 case class A(x: Int) extends Result
 
 class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
-  val file = mybiotools.TempFile.createTempFile(".mapdb")
+  val file = TempFile.createTempFile(".mapdb")
   file.delete
 
   val system = akka.actor
@@ -45,25 +50,25 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
     val cache =
       LevelDBCache(file, akka.serialization.SerializationExtension(system))
     val td = TaskDescription(
-        mybiotools.tasks.simpletask.SimpleTask.runTask.getClass.getName,
-        mybiotools.tasks.simpletask.SimpleTask.MyResultSet(Some(1), Some(0))
+        tasks.simpletask.SimpleTask.runTask.getClass.getName,
+        tasks.simpletask.SimpleTask.MyResultSet(Some(1), Some(0))
     )
     cache.set(
         td,
-        mybiotools.tasks.simpletask.IntResult(1)
+        tasks.simpletask.IntResult(1)
     )
     cache.shutDown
     val cache2 =
       LevelDBCache(file, akka.serialization.SerializationExtension(system))
 
     val read = cache2.get(td)
-    expectResult(Some(mybiotools.tasks.simpletask.IntResult(1)))(read)
+    expectResult(Some(tasks.simpletask.IntResult(1)))(read)
 
   }
 
   test("1000 elements") {
 
-    val file2 = mybiotools.TempFile.createTempFile(".mapdb")
+    val file2 = TempFile.createTempFile(".mapdb")
 
     println(file2)
 
@@ -71,12 +76,12 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
       LevelDBCache(file2, akka.serialization.SerializationExtension(system))
     for (i <- 1 to 1000) {
       val td = TaskDescription(
-          mybiotools.tasks.simpletask.SimpleTask.runTask.getClass.getName,
-          mybiotools.tasks.simpletask.SimpleTask.MyResultSet(Some(i), Some(0))
+          tasks.simpletask.SimpleTask.runTask.getClass.getName,
+          tasks.simpletask.SimpleTask.MyResultSet(Some(i), Some(0))
       )
       cache.set(
           td,
-          mybiotools.tasks.simpletask.IntResult(i)
+          tasks.simpletask.IntResult(i)
       )
     }
     cache.shutDown
@@ -86,11 +91,11 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
 
     for (i <- 1 to 1000) {
       val td = TaskDescription(
-          mybiotools.tasks.simpletask.SimpleTask.runTask.getClass.getName,
-          mybiotools.tasks.simpletask.SimpleTask.MyResultSet(Some(i), Some(0))
+          tasks.simpletask.SimpleTask.runTask.getClass.getName,
+          tasks.simpletask.SimpleTask.MyResultSet(Some(i), Some(0))
       )
       val r = cache2.get(td)
-      expectResult(Some((mybiotools.tasks.simpletask.IntResult(i))))(r)
+      expectResult(Some((tasks.simpletask.IntResult(i))))(r)
     }
 
   }

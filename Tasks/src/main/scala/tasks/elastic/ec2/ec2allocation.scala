@@ -75,6 +75,9 @@ import java.io.{File, InputStream}
 
 object EC2Helpers {
 
+  val instanceType =
+    EC2Helpers.instanceTypes.find(_._1 == config.global.instanceType).get
+
   val instanceTypes = List(
       "m3.medium" -> CPUMemoryAvailable(1, 3750),
       "c3.large" -> CPUMemoryAvailable(2, 3750),
@@ -188,7 +191,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 
   private def requestSpotInstance(size: CPUMemoryRequest) = {
     // size is ignored, instance specification is set in configuration
-    val selectedInstanceType = config.global.instanceType
+    val selectedInstanceType = EC2Helpers.instanceType
 
     // Initializes a Spot Instance Request
     val requestRequest = new RequestSpotInstancesRequest();

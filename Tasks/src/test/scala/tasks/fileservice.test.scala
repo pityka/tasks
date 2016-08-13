@@ -24,21 +24,28 @@
  * SOFTWARE.
  */
 
-package mybiotools.tasks
+package tasks
 
 import org.scalatest._
 import scala.concurrent.duration._
 import akka.testkit.TestKit
 import akka.testkit.ImplicitSender
 import akka.actor.{Actor, PoisonPill, ActorRef, Props, ActorSystem}
-import com.typesafe.config.global.ConfigFactory
+import com.typesafe.config.ConfigFactory
 
 import java.io._
-import mybiotools._
-import mybiotools.tasks.kvstore._
+import tasks.kvstore._
 
 import org.scalatest.FunSpec
 import org.scalatest.Matchers
+
+import tasks.queue._
+import tasks.caching._
+import tasks.caching.kvstore._
+import tasks.fileservice._
+import tasks.util._
+import tasks.shared._
+import tasks.simpletask._
 
 object Conf {
   val str = """my-pinned-dispatcher {
@@ -73,7 +80,7 @@ class FileServiceSpec
     it("add new file") {
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
       val input = TempFile.createTempFile(".in")
-      mybiotools.writeBinaryToFile(input.getCanonicalPath, data)
+      writeBinaryToFile(input.getCanonicalPath, data)
 
       val folder =
         new File(new java.io.File(getClass.getResource("/").getPath), "test1")
@@ -90,15 +97,14 @@ class FileServiceSpec
       implicit val serviceimpl = FileServiceActor(service)
       val t = SharedFile(input, "proba")
 
-      mybiotools
-        .readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath)
-        .deep should equal(data.deep)
+      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
+          data.deep)
     }
 
     it("add new file and ask for it") {
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
       val input = TempFile.createTempFile(".in")
-      mybiotools.writeBinaryToFile(input.getCanonicalPath, data)
+      writeBinaryToFile(input.getCanonicalPath, data)
 
       val folder =
         new File(new java.io.File(getClass.getResource("/").getPath), "test2")
@@ -115,20 +121,18 @@ class FileServiceSpec
       implicit val serviceimpl = FileServiceActor(service)
       val t: SharedFile = SharedFile(input, "proba")
 
-      mybiotools
-        .readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath)
-        .deep should equal(data.deep)
+      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
+          data.deep)
 
       val path = SharedFileHelper.getPathToFile(t)
-      mybiotools.readBinaryFile(path.getCanonicalPath).deep should equal(
-          data.deep)
+      readBinaryFile(path.getCanonicalPath).deep should equal(data.deep)
 
     }
 
     it("add new file and ask for streaming") {
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
       val input = TempFile.createTempFile(".in")
-      mybiotools.writeBinaryToFile(input.getCanonicalPath, data)
+      writeBinaryToFile(input.getCanonicalPath, data)
 
       val folder =
         new File(new java.io.File(getClass.getResource("/").getPath), "test2")
@@ -143,12 +147,11 @@ class FileServiceSpec
       implicit val serviceimpl = FileServiceActor(service)
       val t: SharedFile = SharedFile(input, "proba")
 
-      mybiotools
-        .readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath)
-        .deep should equal(data.deep)
+      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
+          data.deep)
 
       SharedFileHelper.openStreamToFile(t) { inputstream =>
-        mybiotools.readBinaryStream(inputstream).deep should equal(data.deep)
+        readBinaryStream(inputstream).deep should equal(data.deep)
       }
 
     }
@@ -163,7 +166,7 @@ class FileServiceSpec
         new File(new java.io.File(getClass.getResource("/").getPath), "test3f")
       folder2.mkdir
       val input = new java.io.File(folder, "proba")
-      mybiotools.writeBinaryToFile(input.getCanonicalPath, data)
+      writeBinaryToFile(input.getCanonicalPath, data)
       val service = system.actorOf(
           Props(new FileService(
                   new FolderFileStorage(folder, false),
@@ -175,8 +178,7 @@ class FileServiceSpec
           com.google.common.hash.Hashing.crc32c.hashBytes(data).asInt)
 
       val path = SharedFileHelper.getPathToFile(t)
-      mybiotools.readBinaryFile(path.getCanonicalPath).deep should equal(
-          data.deep)
+      readBinaryFile(path.getCanonicalPath).deep should equal(data.deep)
 
       t.isAccessible should be(true)
 
@@ -195,7 +197,7 @@ class FileServiceSpec
         new File(new java.io.File(getClass.getResource("/").getPath), "test9f")
       folder2.mkdir
       val input = new java.io.File(folder, "proba")
-      mybiotools.writeBinaryToFile(input.getCanonicalPath, data)
+      writeBinaryToFile(input.getCanonicalPath, data)
       val service = system.actorOf(
           Props(
               new FileService(new FolderFileStorage(folder, true),
@@ -209,8 +211,7 @@ class FileServiceSpec
           com.google.common.hash.Hashing.crc32c.hashBytes(data).asInt)
 
       val path = SharedFileHelper.getPathToFile(t)
-      mybiotools.readBinaryFile(path.getCanonicalPath).deep should equal(
-          data.deep)
+      readBinaryFile(path.getCanonicalPath).deep should equal(data.deep)
 
     }
   }

@@ -35,7 +35,16 @@ import scala.io.Source
 import akka.actor.{Actor, PoisonPill, ActorRef, Props, ActorSystem}
 import akka.actor.Actor._
 import scala.concurrent.Future
-import com.typesafe.config.global.ConfigFactory
+import com.typesafe.config.ConfigFactory
+
+import tasks.queue._
+import tasks.caching._
+import tasks.caching.kvstore._
+import tasks.fileservice._
+import tasks.util._
+import tasks.shared._
+import tasks.simpletask._
+import tasks.deploy._
 
 object TestConf {
   val str = """my-pinned-dispatcher {
@@ -61,15 +70,14 @@ class TaskTestSuite
 
   implicit val prefix = FileServicePrefix(Vector())
 
-  val tmpfile = mybiotools.TempFile.createTempFile(".cache")
+  val tmpfile = TempFile.createTempFile(".cache")
 
   val folder = new FolderFileStorage(
       new java.io.File(getClass.getResource("/").getPath),
       true)
   val folder2 = new java.io.File(getClass.getResource("/whatever").getPath)
   folder2.mkdir
-  val filelist =
-    new kvstore.FileList(new kvstore.DirectLevelDBWrapper(folder2))
+  val filelist = new FileList(new DirectLevelDBWrapper(folder2))
 
   val fileActor = system.actorOf(Props(new FileService(folder, filelist))
                                    .withDispatcher("my-pinned-dispatcher"),
@@ -242,28 +250,6 @@ class TaskTestSuite
     receiveN(3, 200 millis)
 
     // expectResult(9)(receiveN(3, 100 millis).map(_.asInstanceOf[IntResult].value).foldLeft[Int](0)(_ + _))
-  }
-
-  test("Cycle in dependency graph") {
-    val st1 = system.actorOf(Props(new SimpleTask(1, 123111)))
-    val st2 = system.actorOf(Props(new SimpleTask(0, 1233333)))
-    st2 ! AddTarget(st1, SimpleTask.testUpdater)
-    expectMsg(5 millis, true)
-
-    st1 ! AddTarget(st2, SimpleTask.testUpdater)
-    expectMsg(5 millis, false)
-
-    st2 ! WhatAreYourChildren(self, SimpleTask.testUpdater)
-    expectMsg(5 millis,
-              ChildrenMessage(Set(st1), self, SimpleTask.testUpdater))
-
-    val st3 = system.actorOf(Props(new SimpleTask(1, 9234)))
-    st3 ! AddTarget(st3, SimpleTask.testUpdater)
-    expectMsg(5 millis, false)
-    st3 ! WhatAreYourChildren(self, SimpleTask.testUpdater)
-    expectMsg(5 millis,
-              ChildrenMessage(Set[ActorRef](), self, SimpleTask.testUpdater))
-
   }
 
   test("Already done task should be served from cache.") {

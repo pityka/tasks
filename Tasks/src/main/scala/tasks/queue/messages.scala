@@ -111,4 +111,10 @@ trait Messages {
   @SerialVersionUID(1L)
   private[tasks] case object GetAvailableSlots
 
+  @SerialVersionUID(1L)
+  case class BlockOn(request: CPUMemoryRequest) extends Serializable
+
+  @SerialVersionUID(1L)
+  case class BlockOff(request: CPUMemoryRequest) extends Serializable
+
 }
