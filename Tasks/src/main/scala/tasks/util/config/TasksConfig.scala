@@ -110,11 +110,6 @@ class TasksConfig(val raw: Config) {
 
   val elasticNodeAllocationEnabled = raw.getBoolean("tasks.elastic.enabled")
 
-  lazy val tarball =
-    if (raw.hasPath("tasks.elastic.tarball"))
-      Some(new java.net.URL(raw.getString("tasks.elastic.tarball")))
-    else None
-
   val gridEngine = raw.getString("hosts.gridengine") match {
     case x if x == "EC2" => EC2Grid
     case x if x == "SSH" => SSHGrid
@@ -142,6 +137,10 @@ class TasksConfig(val raw: Config) {
   val jvmMaxHeapFactor = raw.getDouble("tasks.elastic.jvmMaxHeapFactor")
 
   val logQueueStatus = raw.getBoolean("tasks.elastic.logQueueStatus")
+
+  val runscript = raw.getString("tasks.elastic.runscript")
+
+  val assembledPackage = raw.getString("tasks.elastic.bin")
 
   val additionalSystemProperties: List[String] = raw
     .getStringList("tasks.elastic.additionalSystemProperties")

@@ -40,21 +40,24 @@ import tasks.elastic.ssh._
 import tasks.shared._
 import tasks.shared.monitor._
 
-import akka.actor.{Actor, ActorRef, PoisonPill, ActorSystem, Props, ActorRefFactory}
-import tasks._
-import java.io.File
-import akka.actor.Actor._
+import akka.actor._
+import akka.util.Timeout
+import akka.io.IO
+import akka.pattern.ask
+
+import spray.can.Http
 
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.InetAddress
-import scala.concurrent.duration._
-import scala.concurrent._
-import akka.pattern.ask
+import java.io.File
+
 import com.typesafe.config.{ConfigFactory, Config}
 import scala.concurrent.Await
 import collection.JavaConversions._
-import akka.util.Timeout
+
+import scala.concurrent.duration._
+import scala.concurrent._
 
 case class TaskSystemComponents(
     val queue: QueueActor,
@@ -387,6 +390,21 @@ akka {
       reaperActor ! WatchMe(ac)
 
       Some(ac)
+    } else None
+
+  val packageServer: Option[ActorRef] =
+    if (!isLauncherOnly && config.global.elasticNodeAllocationEnabled) {
+
+      val service = system.actorOf(
+          Props(
+              new PackageServerActor(
+                  new File(config.global.assembledPackage))),
+          "deliver-service")
+
+      IO(Http) ! Http.Bind(service, "0.0.0.0", port = host.getPort + 1)
+
+      Some(service)
+
     } else None
 
   val queueActor = QueueActor(balancerActor)

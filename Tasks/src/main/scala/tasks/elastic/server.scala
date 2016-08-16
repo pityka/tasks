@@ -1,7 +1,8 @@
 /*
  * The MIT License
  *
- * Copyright (c) 2016 Istvan Bartha
+ * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
+ * Group Fellay
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the "Software"),
@@ -21,46 +22,30 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package tasks.elastic
 
-import tasks._
-import tasks.util._
-import tasks.util.eq._
+import java.io.File
+import org.parboiled.common.FileUtils
+import scala.concurrent.duration._
+import akka.actor._
+import akka.pattern.ask
+import spray.routing.{HttpService, RequestContext}
+import spray.routing.directives.CachingDirectives
+import spray.httpx.marshalling.Marshaller
+import spray.httpx.encoding.Gzip
+import spray.util._
+import spray.http._
+import MediaTypes._
+import CachingDirectives._
 
-import java.net._
+class PackageServerActor(pack: File) extends Actor with HttpService {
 
-object Deployment {
+  def actorRefFactory = context
 
-  def script(
-      memory: Int,
-      gridEngine: GridEngine,
-      masterAddress: InetSocketAddress,
-      download: URL,
-      runScript: String
-  ): String = {
-    val downloadScript = s"curl $download > package"
+  def receive = runRoute(route)
 
-    val edited = runScript
-      .replaceAllLiterally(
-          "{RAM}",
-          (memory.toDouble * config.global.jvmMaxHeapFactor).toInt.toString)
-      .replaceAllLiterally(
-          "{EXTRA}",
-          config.global.additionalJavaCommandline + " -Dtasks.elastic.enabled=true ")
-      .replaceAllLiterally(
-          "{MASTER}",
-          masterAddress.getHostName + ":" + masterAddress.getPort)
-      .replaceAllLiterally("{GRID}", gridEngine.toString)
-      .replaceAllLiterally("{PACKAGE}", "package")
-
-    s"""
-$downloadScript ;
-cat << EOF > run.sh && nohup bash run.sh 1> stdout 2>stderr &
-$edited
-EOF
-
-"""
-    //download + ";" + "nohup bash -c $(printf $q "") 1> stdout 2>stderr &"
-
+  val route = get {
+    getFromFile(pack)
   }
 }

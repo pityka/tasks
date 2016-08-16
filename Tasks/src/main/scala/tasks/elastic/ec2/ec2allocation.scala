@@ -236,7 +236,11 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
           memory = selectedInstanceType._2.memory,
           gridEngine = tasks.EC2Grid,
           masterAddress = masterAddress,
-          packageFile = config.global.tarball.get
+          download = new java.net.URL("http",
+                                      masterAddress.getHostName,
+                                      masterAddress.getPort + 1,
+                                      "/"),
+          runScript = config.global.runscript
       )
 
     launchSpecification.setUserData(gzipBase64(userdata))

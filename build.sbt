@@ -27,7 +27,9 @@ lazy val Tasks = project.in(file("Tasks"))
       "org.iq80.leveldb" % "leveldb" % "0.9",
       "ch.ethz.ganymed" % "ganymed-ssh2" % "261",
       "us.levk" % "drmaa-common" % "1.0",
-      "org.scalatest" %% "scalatest" % "2.1.5" % "test"
+      "org.scalatest" %% "scalatest" % "2.1.5" % "test",
+      "io.spray" %% "spray-routing" % "1.3.3",
+      "io.spray" %% "spray-can" % "1.3.3"
 
     )
   )
