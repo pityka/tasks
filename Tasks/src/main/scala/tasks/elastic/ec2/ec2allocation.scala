@@ -3,7 +3,8 @@
  *
  * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
  * Group Fellay
- * Copyright (c) 2016 Istvan Bartha
+ * Modified work, Copyright (c) 2016 Istvan Bartha
+
 
  *
  * Permission is hereby granted, free of charge, to any person obtaining
