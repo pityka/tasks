@@ -119,10 +119,15 @@ package object tasks {
         .getString("akka.remote.netty.tcp.hostname") + ":" + s.system.settings.config
         .getString("akka.remote.netty.tcp.port")
 
-  def withTaskSystem[T](f: TaskSystemComponents => T): T = {
-    val ts = defaultTaskSystem
+  def withTaskSystem[T](f: TaskSystemComponents => T): Option[T] =
+    withTaskSystem(ConfigFactory.load)(f)
+
+  def withTaskSystem[T](c: Config)(f: TaskSystemComponents => T): Option[T] = {
+    val ts = defaultTaskSystem(c, None)
     val r = try {
-      f(ts.components)
+      if (ts.hostConfig.myRole == MASTER)
+        Some(f(ts.components))
+      else None
     } finally {
       ts.shutdown
     }
@@ -130,15 +135,15 @@ package object tasks {
     r
   }
 
-  def defaultTaskSystem: TaskSystem =
+  private def defaultTaskSystem: TaskSystem =
     defaultTaskSystem(ConfigFactory.load(), None)
 
-  def defaultTaskSystem(string: String): TaskSystem =
+  private def defaultTaskSystem(string: String): TaskSystem =
     defaultTaskSystem(ConfigFactory.load(),
                       Some(ConfigFactory.parseString(string)))
 
-  def defaultTaskSystem(defaultConf: Config,
-                        extraConf: Option[Config]): TaskSystem = {
+  private def defaultTaskSystem(defaultConf: Config,
+                                extraConf: Option[Config]): TaskSystem = {
     val akkaconf = ConfigFactory.parseResources("akkaoverrides.conf")
 
     val conf =
@@ -155,6 +160,7 @@ package object tasks {
           .withFallback(ConfigFactory.load)
     new TaskSystem(MasterSlaveGridEngineChosenFromConfig, conf)
   }
+
   def customTaskSystem(hostConfig: MasterSlaveConfiguration,
                        extraConf: Config): TaskSystem = {
     val akkaconf = ConfigFactory.parseResources("akkaoverrides.conf")

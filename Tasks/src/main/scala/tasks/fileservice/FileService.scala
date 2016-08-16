@@ -478,13 +478,12 @@ trait FileStorage extends Serializable {
 }
 
 class FileService(storage: FileStorage,
-                  fileList: kvstore.FileList,
                   threadpoolsize: Int = 8,
                   isLocal: File => Boolean = _.canRead)
     extends Actor
     with akka.actor.ActorLogging {
 
-  val fjp = concurrent.newJavaForkJoinPoolWithNamePrefix(
+  val fjp = tasks.util.concurrent.newJavaForkJoinPoolWithNamePrefix(
       "fileservice-recordtonames",
       threadpoolsize)
   val ec = ExecutionContext.fromExecutorService(fjp)
@@ -500,7 +499,8 @@ class FileService(storage: FileStorage,
     log.info("FileService will start.")
   }
 
-  // private val knownPaths = collection.mutable.AnyRefMap[SharedFile, List[File]]()
+  private val knownPaths =
+    collection.mutable.AnyRefMap[SharedFile, List[File]]()
 
   // transferinactor -> (name,channel,fileinbase,filesender)
   private val transferinactors = collection.mutable
@@ -525,11 +525,11 @@ class FileService(storage: FileStorage,
   }
 
   private def recordToNames(file: File, sf: SharedFile): Unit = {
-    if (!fileList.get(sf).isEmpty) {
-      val oldlist = fileList.get(sf)
-      fileList.set(sf, (file.getCanonicalFile :: oldlist).distinct)
+    if (knownPaths.contains(sf)) {
+      val oldlist = knownPaths(sf)
+      knownPaths.update(sf, (file.getCanonicalFile :: oldlist).distinct)
     } else {
-      fileList.set(sf, List(file))
+      knownPaths.update(sf, List(file))
     }
 
   }
@@ -665,8 +665,8 @@ class FileService(storage: FileStorage,
     }
     case GetPaths(sf) =>
       try {
-        fileList.get(sf) match {
-          case l if !l.isEmpty => {
+        knownPaths.get(sf) match {
+          case Some(l) => {
             if (storage.centralized) {
               sender ! KnownPathsWithStorage(l, storage)
             } else {
@@ -674,7 +674,7 @@ class FileService(storage: FileStorage,
             }
 
           }
-          case Nil => {
+          case None => {
             if (storage.contains(sf)) {
               if (storage.centralized) {
                 sender ! TryToDownload(storage)
@@ -698,7 +698,7 @@ class FileService(storage: FileStorage,
       }
     case TransferFileToUser(transferinActor, sf) =>
       try {
-        val file = fileList.get(sf).find(isLocal) match {
+        val file = knownPaths(sf).find(isLocal) match {
           case Some(x) => x
           case None => storage.exportFile(sf).get
         }
@@ -723,5 +723,4 @@ class FileService(storage: FileStorage,
     case IsAccessible(sf) => sender ! storage.contains(sf)
     case GetURL(sf) => sender ! storage.url(sf)
   }
-
 }

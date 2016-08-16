@@ -57,7 +57,7 @@ trait KeyValueStoreSpec extends FunSpec with Matchers {
 
   describe(this.toString) {
     it("simple") {
-      val tmp = TempFile.createTempFile(".leveldb")
+      val tmp = TempFile.createTempFile(".1leveldb")
       tmp.delete
       val lw = makeKVStore(tmp)
       lw.put(Array(0, 1, 3), Array(0, 1, 3))
@@ -65,7 +65,7 @@ trait KeyValueStoreSpec extends FunSpec with Matchers {
       lw.close
     }
     it("simple 2") {
-      val tmp = TempFile.createTempFile(".leveldb")
+      val tmp = TempFile.createTempFile(".2leveldb")
       tmp.delete
       val lw = makeKVStore(tmp)
       lw.put(Array(0, 1, 3), Array(0, 1, 3))
@@ -84,7 +84,7 @@ trait KeyValueStoreSpec extends FunSpec with Matchers {
       lw.close
     }
     it("overwrite") {
-      val tmp = TempFile.createTempFile(".leveldb")
+      val tmp = TempFile.createTempFile(".3leveldb")
       tmp.delete
       val lw = makeKVStore(tmp)
       lw.put(Array(0, 1, 3), Array(0, 1, 3))
@@ -94,13 +94,13 @@ trait KeyValueStoreSpec extends FunSpec with Matchers {
       lw.close
     }
     it("big") {
-      val tmp = TempFile.createTempFile(".leveldb")
+      val tmp = TempFile.createTempFile(".4leveldb")
       try {
         tmp.delete
-        val tenmeg = Array.fill[Byte](1E7.toInt)(0)
+        val data = Array.fill[Byte](1E6.toInt)(0)
         val lw = makeKVStore(tmp)
         0 until 100 foreach { i =>
-          lw.put(java.nio.ByteBuffer.allocate(4).putInt(i).array, tenmeg)
+          lw.put(java.nio.ByteBuffer.allocate(4).putInt(i).array, data)
         }
         lw.close
         val lw2 = makeKVStore(tmp)
@@ -109,10 +109,10 @@ trait KeyValueStoreSpec extends FunSpec with Matchers {
               lw2
                 .get(java.nio.ByteBuffer.allocate(4).putInt(i).array)
                 .get
-                .deep == (tenmeg.deep))
+                .deep == (data.deep))
         }
         100 until 200 foreach { i =>
-          lw2.put(java.nio.ByteBuffer.allocate(4).putInt(i).array, tenmeg)
+          lw2.put(java.nio.ByteBuffer.allocate(4).putInt(i).array, data)
         }
         lw2.close
         val lw3 = makeKVStore(tmp)
@@ -121,7 +121,7 @@ trait KeyValueStoreSpec extends FunSpec with Matchers {
               lw3
                 .get(java.nio.ByteBuffer.allocate(4).putInt(i).array)
                 .get
-                .deep == (tenmeg.deep))
+                .deep == (data.deep))
         }
         lw3.close
       } finally {

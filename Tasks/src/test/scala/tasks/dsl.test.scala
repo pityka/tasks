@@ -39,6 +39,8 @@ import tasks.caching._
 import tasks.fileservice._
 import tasks.util._
 
+import com.typesafe.config.ConfigFactory
+
 object Tests {
 
   case class IntWrapper(i: Int) extends Result
@@ -55,8 +57,12 @@ object Tests {
       implicit computationEnvironment =>
         IntWrapper(c + 1)
   }
-
-  val (r1, r2) = withTaskSystem { implicit ts =>
+  val tmp = TempFile.createTempFile(".2leveldb")
+  tmp.delete
+  val Some((r1, r2)) = withTaskSystem(
+      ConfigFactory.parseString(
+          s"tasks.cache.file=${tmp.getAbsolutePath}"
+      )) { implicit ts =>
     def t1(i: Option[Int]) = increment(STP1[Int](i))(CPUMemoryRequest(1, 500))
 
     (

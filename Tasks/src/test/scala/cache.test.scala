@@ -37,16 +37,14 @@ import tasks.util._
 case class A(x: Int) extends Result
 
 class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
-  val file = TempFile.createTempFile(".mapdb")
-  file.delete
 
   val system = akka.actor
     .ActorSystem("cachetest", ConfigFactory.load("akkaoverrides.conf"))
 
-  val cache =
-    LevelDBCache(file, akka.serialization.SerializationExtension(system))
-
   test("simple") {
+    val file = TempFile.createTempFile(".mapdb")
+    file.delete
+
     val cache =
       LevelDBCache(file, akka.serialization.SerializationExtension(system))
     val td = TaskDescription(
@@ -58,6 +56,7 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
         tasks.simpletask.IntResult(1)
     )
     cache.shutDown
+
     val cache2 =
       LevelDBCache(file, akka.serialization.SerializationExtension(system))
 
@@ -69,6 +68,7 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
   test("1000 elements") {
 
     val file2 = TempFile.createTempFile(".mapdb")
+    file2.delete
 
     println(file2)
 

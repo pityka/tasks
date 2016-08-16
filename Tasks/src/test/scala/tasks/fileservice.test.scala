@@ -89,10 +89,8 @@ class FileServiceSpec
         new File(new java.io.File(getClass.getResource("/").getPath), "test1f")
       folder2.mkdir
       val service = system.actorOf(
-          Props(
-              new FileService(
-                  new FolderFileStorage(folder, false),
-                  new FileList(new DirectLevelDBWrapper(folder2))
+          Props(new FileService(
+                  new FolderFileStorage(folder, false)
               )))
       implicit val serviceimpl = FileServiceActor(service)
       val t = SharedFile(input, "proba")
@@ -113,10 +111,8 @@ class FileServiceSpec
         new File(new java.io.File(getClass.getResource("/").getPath), "test2f")
       folder2.mkdir
       val service = system.actorOf(
-          Props(
-              new FileService(
-                  new FolderFileStorage(folder, false),
-                  new FileList(new DirectLevelDBWrapper(folder2))
+          Props(new FileService(
+                  new FolderFileStorage(folder, false)
               )))
       implicit val serviceimpl = FileServiceActor(service)
       val t: SharedFile = SharedFile(input, "proba")
@@ -141,9 +137,7 @@ class FileServiceSpec
         new File(new java.io.File(getClass.getResource("/").getPath), "test4f")
       folder2.mkdir
       val service = system.actorOf(
-          Props(new FileService(
-                  new FolderFileStorage(folder, false),
-                  new FileList(new DirectLevelDBWrapper(folder2)))))
+          Props(new FileService(new FolderFileStorage(folder, false))))
       implicit val serviceimpl = FileServiceActor(service)
       val t: SharedFile = SharedFile(input, "proba")
 
@@ -168,9 +162,7 @@ class FileServiceSpec
       val input = new java.io.File(folder, "proba")
       writeBinaryToFile(input.getCanonicalPath, data)
       val service = system.actorOf(
-          Props(new FileService(
-                  new FolderFileStorage(folder, false),
-                  new FileList(new DirectLevelDBWrapper(folder2)))))
+          Props(new FileService(new FolderFileStorage(folder, false))))
       implicit val serviceimpl = FileServiceActor(service)
       val t: SharedFile = SharedFileHelper.createForTesting(
           "proba",
@@ -199,11 +191,9 @@ class FileServiceSpec
       val input = new java.io.File(folder, "proba")
       writeBinaryToFile(input.getCanonicalPath, data)
       val service = system.actorOf(
-          Props(
-              new FileService(new FolderFileStorage(folder, true),
-                              new FileList(new DirectLevelDBWrapper(folder2)),
-                              8,
-                              (_: File) => false)))
+          Props(new FileService(new FolderFileStorage(folder, true),
+                                8,
+                                (_: File) => false)))
       implicit val serviceimpl = FileServiceActor(service)
       val t: SharedFile = SharedFileHelper.createForTesting(
           "proba",

@@ -71,17 +71,15 @@ class TaskTestSuite
   implicit val prefix = FileServicePrefix(Vector())
 
   val tmpfile = TempFile.createTempFile(".cache")
+  tmpfile.delete
 
   val folder = new FolderFileStorage(
       new java.io.File(getClass.getResource("/").getPath),
       true)
-  val folder2 = new java.io.File(getClass.getResource("/whatever").getPath)
-  folder2.mkdir
-  val filelist = new FileList(new DirectLevelDBWrapper(folder2))
 
-  val fileActor = system.actorOf(Props(new FileService(folder, filelist))
-                                   .withDispatcher("my-pinned-dispatcher"),
-                                 "queue")
+  val fileActor = system.actorOf(
+      Props(new FileService(folder)).withDispatcher("my-pinned-dispatcher"),
+      "queue")
 
   val cacher = system.actorOf(
       Props(
@@ -136,14 +134,17 @@ class TaskTestSuite
   test("Simple test") {
 
     val st1 = system.actorOf(Props(new SimpleTask(1, 123)))
+
     val st2 = system.actorOf(Props(new SimpleTask(0)))
 
     st2 ! GetBackResult
     expectNoMsg(6000 millis)
     info("Task computation should not start before dependency is done.")
+    st1 ! GetBackResult
 
     st1 ! AddTarget(st2, SimpleTask.testUpdater)
-    expectResult(Set(IntResult(1), true))(receiveN(2, 600 millis).toSet)
+    expectResult(Seq(IntResult(1), IntResult(1)))(
+        receiveN(2, 600 millis).toSeq)
     info("target added + end result received")
 
     st2 ! GetBackResult
@@ -159,7 +160,6 @@ class TaskTestSuite
 
     st1 ! AddTarget(st2, SimpleTask.testUpdater)
     st2 ! AddTarget(st3, SimpleTask.testUpdater)
-    expectResult(List(true, true))(receiveN(2, 50 millis).toList)
 
     st3 ! GetBackResult
     expectMsg(600 millis, IntResult(15))
@@ -177,10 +177,6 @@ class TaskTestSuite
 
     childs.foreach { x =>
       st2 ! AddTarget(x, SimpleTask.testUpdater)
-    }
-
-    receiveN(n + 1, 500 millis).toList.foreach { result =>
-      expectResult(true)(result)
     }
 
     childs.foreach { x =>

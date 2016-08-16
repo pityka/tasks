@@ -276,13 +276,9 @@ akka {
 
       val threadpoolsize = config.global.fileServiceThreadPoolSize
 
-      val fileList = new FileList(
-          new DirectLevelDBWrapper(config.global.fileServiceFileListPath))
-
-      val ac = system.actorOf(
-          Props(new FileService(filestore, fileList, threadpoolsize))
-            .withDispatcher("my-pinned-dispatcher"),
-          "fileservice")
+      val ac = system.actorOf(Props(new FileService(filestore, threadpoolsize))
+                                .withDispatcher("my-pinned-dispatcher"),
+                              "fileservice")
       reaperActor ! WatchMe(ac)
       ac
     } else {

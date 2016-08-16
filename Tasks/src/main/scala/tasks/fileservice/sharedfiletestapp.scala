@@ -33,9 +33,8 @@ import tasks.deploy._
 import tasks.util._
 
 object SharedFileTestApp extends App {
-  val ts = defaultTaskSystem
-  import ts._
-  if (ts.hostConfig.myRole == MASTER) {} else {
+
+  withTaskSystem { implicit ts =>
     0 to 10 foreach { i =>
       val tmp = TempFile.createTempFile("random.txt")
       writeToFile(tmp, scala.util.Random.nextInt.toString)
@@ -55,7 +54,7 @@ object SharedFileTestApp extends App {
     tasks.util.config.load.getString("importfiles").split(",").map { f =>
       SharedFile(new File(f), name = new File(f).getName)
     }
-    ts.shutdown
+
   }
   // t
 }
