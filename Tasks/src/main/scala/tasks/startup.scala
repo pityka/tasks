@@ -196,20 +196,19 @@ akka {
 
   private val isLauncherOnly = hostConfig.myRole == SLAVE
 
-  val reaperActor = config.global.gridEngine match {
-    case EC2Grid =>
+  val reaperActor = elastic.elasticSupport match {
+    case Some(EC2Grid) =>
       system.actorOf(Props(
                          new EC2Reaper(logFile.toList,
                                        config.global.logFileS3Path,
                                        config.global.terminateMaster)),
                      name = "reaper")
     case _ =>
-      system
-        .actorOf(Props[ProductionReaper], name = "reaper") // this also works for SSHgrid
+      system.actorOf(Props[ProductionReaper], name = "reaper")
   }
 
   val remotenoderegistry =
-    if (isLauncherOnly && config.global.elasticNodeAllocationEnabled) {
+    if (isLauncherOnly && elastic.elasticSupport.isDefined) {
       val remotepath =
         s"akka.tcp://tasks@${balancerAndCacherAddress.getHostName}:${balancerAndCacherAddress.getPort}/user/noderegistry"
       val noderegistry = Await.result(
@@ -228,10 +227,6 @@ akka {
       initFailed
       throw e
     }
-  }
-
-  if (config.global.gridEngine === EC2Grid && !isLauncherOnly) {
-    // system.actorOf(Props(new S3Updater(cacheFile.toList ++ logFile.toList, config.global.getString("tasks.fileServiceBaseFolder"))), name = "s3updater")
   }
 
   val fileActor = try {
@@ -363,26 +358,18 @@ akka {
     }
   }
 
+  val elasticSupportFactory = elastic.elasticSupport.map(
+      es =>
+        es(master = hostConfig.master,
+           balancerActor = balancerActor,
+           resource = CPUMemoryAvailable(cpu = hostConfig.myCardinality,
+                                         memory = hostConfig.availableMemory)))
+
   // start up noderegistry
   val noderegistry: Option[ActorRef] =
-    if (!isLauncherOnly && config.global.elasticNodeAllocationEnabled) {
-      val resource = CPUMemoryAvailable(cpu = hostConfig.myCardinality,
-                                        memory = hostConfig.availableMemory)
-      val props = config.global.gridEngine match {
-        case EC2Grid =>
-          Props(
-              new EC2NodeRegistry(hostConfig.myAddress,
-                                  balancerActor,
-                                  resource))
-        case SSHGrid =>
-          Props(
-              new SSHNodeRegistry(hostConfig.myAddress,
-                                  balancerActor,
-                                  resource))
-        case NoGrid =>
-          throw new RuntimeException(
-              "ElasticNodeAllocation and NoGrid are incompatible")
-      }
+    if (!isLauncherOnly && elasticSupportFactory.isDefined) {
+
+      val props = Props(elasticSupportFactory.get.createRegistry)
 
       val ac = system
         .actorOf(props.withDispatcher("my-pinned-dispatcher"), "noderegistry")
@@ -393,7 +380,7 @@ akka {
     } else None
 
   val packageServer: Option[ActorRef] =
-    if (!isLauncherOnly && config.global.elasticNodeAllocationEnabled) {
+    if (!isLauncherOnly && elasticSupportFactory.isDefined) {
 
       val service = system.actorOf(
           Props(
@@ -443,43 +430,29 @@ akka {
     Some(ac)
   } else None
 
-  if (isLauncherOnly && config.global.elasticNodeAllocationEnabled && launcherActor.isDefined) {
+  if (isLauncherOnly && elasticSupportFactory.isDefined && launcherActor.isDefined) {
     val nodeName = getNodeName
 
     tasksystemlog.info(
-        "This is worker node. ElasticNodeAllocation is enabled. Node name: " + nodeName)
-    if (nodeName != null) {
-      // ActorInEnvelope
-      val acenv = launcherActor.get
+        "This is a worker node. ElasticNodeAllocation is enabled. Node name: " + nodeName)
 
-      val resource = CPUMemoryAvailable(hostConfig.myCardinality,
-                                        hostConfig.availableMemory)
-      remotenoderegistry.get ! NodeComingUp(
-          Node(RunningJobId(nodeName), resource, acenv))
+    remotenoderegistry.get ! NodeComingUp(
+        Node(RunningJobId(nodeName),
+             CPUMemoryAvailable(hostConfig.myCardinality,
+                                hostConfig.availableMemory),
+             launcherActor.get))
 
-      val balancerHeartbeat = system.actorOf(
-          Props(new HeartBeatActor(balancerActor)).withDispatcher("heartbeat"),
-          "heartbeatOf" + balancerActor.path.address.toString
-            .replace("://", "___") + balancerActor.path.name)
+    val balancerHeartbeat = system.actorOf(
+        Props(new HeartBeatActor(balancerActor)).withDispatcher("heartbeat"),
+        "heartbeatOf" + balancerActor.path.address.toString
+          .replace("://", "___") + balancerActor.path.name)
 
-      config.global.gridEngine match {
-        case EC2Grid =>
-          system.actorOf(
-              Props(new EC2SelfShutdown(RunningJobId(nodeName), balancerActor))
-                .withDispatcher("my-pinned-dispatcher"))
-        case SSHGrid =>
-          system.actorOf(
-              Props(new SSHSelfShutdown(RunningJobId(nodeName), balancerActor))
-                .withDispatcher("my-pinned-dispatcher"))
-        case NoGrid =>
-          throw new RuntimeException(
-              "ElasticNodeAllocation and NoGrid are incompatible")
+    system.actorOf(
+        Props(elasticSupportFactory.get.createSelfShutdown)
+          .withDispatcher("my-pinned-dispatcher"))
 
-      }
-
-    } else {
-      tasksystemlog.warning("Nodename/jobname is not defined.")
-    }
+  } else {
+    tasksystemlog.warning("Nodename/jobname is not defined.")
   }
 
   private def initFailed {
@@ -526,20 +499,6 @@ akka {
     tasksystemlog.warning("JVM is shutting down - called tasksystem shutdown.")
   }
 
-  private def getNodeName: String = config.global.gridEngine match {
-    case SSHGrid => {
-      val pid = java.lang.management.ManagementFactory
-        .getRuntimeMXBean()
-        .getName()
-        .split("@")
-        .head
-      val hostname = tasks.util.config.global.hostName
-      hostname + ":" + pid
-    }
-    case EC2Grid => EC2Operations.readMetadata("instance-id").head
-    case NoGrid =>
-      throw new RuntimeException(
-          "ElasticNodeAllocation and NoGrid are incompatible")
-  }
+  private def getNodeName: String = elasticSupportFactory.get.getNodeName
 
 }

@@ -464,3 +464,17 @@ trait ShutdownReaper extends Reaper {
     shutdownRunningNode(id)
   }
 }
+
+trait ElasticSupport[Registry <: NodeCreatorImpl, SS <: SelfShutdown] {
+
+  trait Inner {
+    def createRegistry: Registry
+    def createSelfShutdown: SS
+    def getNodeName: String
+  }
+
+  def apply(master: InetSocketAddress,
+            balancerActor: ActorRef,
+            resource: CPUMemoryAvailable): Inner
+
+}

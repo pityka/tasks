@@ -68,16 +68,16 @@ case class UpdatePrerequisitive[A <: Prerequisitive[A], B <: Result](
   def isDefinedAt(x: (A, B)) = pf.isDefinedAt(x)
 }
 
-sealed trait GridEngine
-case object EC2Grid extends GridEngine {
-  override def toString = "EC2"
-}
-case object NoGrid extends GridEngine {
-  override def toString = "NOENGINE"
-}
-case object SSHGrid extends GridEngine {
-  override def toString = "SSH"
-}
+// sealed trait GridEngine
+// case object EC2Grid extends GridEngine {
+//   override def toString = "EC2"
+// }
+// case object NoGrid extends GridEngine {
+//   override def toString = "NOENGINE"
+// }
+// case object SSHGrid extends GridEngine {
+//   override def toString = "SSH"
+// }
 
 case class STP1[A1](a1: Option[A1]) extends SimplePrerequisitive[STP1[A1]]
 case class STP2[A1, A2](a1: Option[A1], a2: Option[A2])

@@ -155,7 +155,7 @@ trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
         case (name, (host, _)) =>
           val script = Deployment.script(
               memory = requestSize.memory,
-              gridEngine = tasks.SSHGrid,
+              gridEngine = SSHGrid,
               masterAddress = masterAddress,
               download = new java.net.URL("http",
                                           masterAddress.getHostName,
@@ -222,4 +222,27 @@ class SSHSelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
     System.exit(0)
   }
+}
+
+object SSHGrid extends ElasticSupport[SSHNodeRegistry, SSHSelfShutdown] {
+
+  def apply(master: InetSocketAddress,
+            balancerActor: ActorRef,
+            resource: CPUMemoryAvailable) = new Inner {
+    def getNodeName = {
+      val pid = java.lang.management.ManagementFactory
+        .getRuntimeMXBean()
+        .getName()
+        .split("@")
+        .head
+      val hostname = tasks.util.config.global.hostName
+      hostname + ":" + pid
+    }
+    def createRegistry = new SSHNodeRegistry(master, balancerActor, resource)
+    def createSelfShutdown =
+      new SSHSelfShutdown(RunningJobId(getNodeName), balancerActor)
+  }
+
+  override def toString = "SSH"
+
 }

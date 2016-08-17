@@ -33,7 +33,7 @@ object Deployment {
 
   def script(
       memory: Int,
-      gridEngine: GridEngine,
+      gridEngine: ElasticSupport[_, _],
       masterAddress: InetSocketAddress,
       download: URL,
       runScript: String
@@ -46,7 +46,7 @@ object Deployment {
           (memory.toDouble * config.global.jvmMaxHeapFactor).toInt.toString)
       .replaceAllLiterally(
           "{EXTRA}",
-          config.global.additionalJavaCommandline + " -Dtasks.elastic.enabled=true ")
+          config.global.additionalJavaCommandline)
       .replaceAllLiterally(
           "{MASTER}",
           masterAddress.getHostName + ":" + masterAddress.getPort)

@@ -171,7 +171,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 
     val userdata = "#!/usr/bin/env bash\n" + Deployment.script(
           memory = selectedInstanceType._2.memory,
-          gridEngine = tasks.EC2Grid,
+          gridEngine = EC2Grid,
           masterAddress = masterAddress,
           download = new java.net.URL("http",
                                       masterAddress.getHostName,
@@ -299,4 +299,19 @@ class EC2Reaper(filesToSave: List[File],
     }
     context.system.shutdown
   }
+}
+
+object EC2Grid extends ElasticSupport[EC2NodeRegistry, EC2SelfShutdown] {
+
+  def apply(master: InetSocketAddress,
+            balancerActor: ActorRef,
+            resource: CPUMemoryAvailable) = new Inner {
+    def getNodeName = EC2Operations.readMetadata("instance-id").head
+    def createRegistry = new EC2NodeRegistry(master, balancerActor, resource)
+    def createSelfShutdown =
+      new EC2SelfShutdown(RunningJobId(getNodeName), balancerActor)
+  }
+
+  override def toString = "EC2"
+
 }
