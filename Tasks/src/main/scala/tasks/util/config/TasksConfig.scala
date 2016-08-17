@@ -154,7 +154,7 @@ class TasksConfig(val raw: Config) {
 
   val amiID: String = raw.getString("tasks.elastic.aws.ami")
 
-  val instanceType = raw.getString("tasks.elastic.aws.instanceType")
+  val slaveInstanceType = raw.getString("tasks.elastic.aws.instanceType")
 
   val securityGroup: String = raw.getString("tasks.elastic.aws.securityGroup")
 

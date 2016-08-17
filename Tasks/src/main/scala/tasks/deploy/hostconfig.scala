@@ -140,3 +140,23 @@ class ManualMasterSlaveConfiguration(
   override lazy val myRole = role
   override lazy val master = masterAddress
 }
+
+trait EC2HostConfiguration extends HostConfiguration {
+
+  private val myPort = chooseNetworkPort
+
+  private val myhostname = EC2Operations.readMetadata("local-hostname").head
+
+  lazy val myAddress = new InetSocketAddress(myhostname, myPort)
+
+  private lazy val instancetype = EC2Operations.currentInstanceType
+
+  lazy val availableMemory = instancetype._2.memory
+
+  lazy val myCardinality = instancetype._2.cpu
+
+}
+
+object EC2MasterSlave
+    extends MasterSlaveConfiguration
+    with EC2HostConfiguration

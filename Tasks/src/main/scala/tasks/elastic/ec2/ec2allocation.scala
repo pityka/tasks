@@ -45,7 +45,6 @@ import tasks.fileservice._
 
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2Client;
-
 import com.amazonaws.services.ec2.model.CancelSpotInstanceRequestsRequest;
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
 import com.amazonaws.services.ec2.model.DescribeSpotInstanceRequestsRequest;
@@ -73,68 +72,6 @@ import java.net.URL
 
 import collection.JavaConversions._
 import java.io.{File, InputStream}
-
-object EC2Helpers {
-
-  val instanceType =
-    EC2Helpers.instanceTypes.find(_._1 == config.global.instanceType).get
-
-  val instanceTypes = List(
-      "m3.medium" -> CPUMemoryAvailable(1, 3750),
-      "c3.large" -> CPUMemoryAvailable(2, 3750),
-      "m3.xlarge" -> CPUMemoryAvailable(4, 7500),
-      "c3.xlarge" -> CPUMemoryAvailable(4, 7500),
-      "r3.large" -> CPUMemoryAvailable(2, 15000),
-      "m3.2xlarge" -> CPUMemoryAvailable(8, 15000),
-      "c3.2xlarge" -> CPUMemoryAvailable(8, 15000),
-      "r3.xlarge" -> CPUMemoryAvailable(4, 30000),
-      "c3.4xlarge" -> CPUMemoryAvailable(16, 30000),
-      "r3.2xlarge" -> CPUMemoryAvailable(8, 60000),
-      "c3.8xlarge" -> CPUMemoryAvailable(32, 60000),
-      "r3.4xlarge" -> CPUMemoryAvailable(16, 120000),
-      "r3.8xlarge" -> CPUMemoryAvailable(32, 240000)
-  )
-
-}
-
-object EC2Operations {
-
-  def terminateInstance(ec2: AmazonEC2Client, instanceId: String): Unit = {
-    retry(5) {
-      val terminateRequest = new TerminateInstancesRequest(List(instanceId));
-      ec2.terminateInstances(terminateRequest);
-    }
-  }
-
-  def s3contains(bucketName: String, name: String): Boolean = {
-    val s3Client = new AmazonS3Client()
-
-    Try(s3Client.getObjectMetadata(bucketName, name)) match {
-      case Success(_) => true
-      case _ => false
-    }
-  }
-
-  def downloadFile(bucketName: String, name: String): File = {
-    retry(5) {
-      val s3Client = new AmazonS3Client()
-      val tm = new TransferManager(s3Client);
-      val file = TempFile.createFileInTempFolderIfPossibleWithName(name)
-      val download = tm.download(bucketName, name, file)
-      download.waitForCompletion
-      file
-    }.get
-  }
-
-  def readMetadata(key: String): List[String] = {
-    val source =
-      scala.io.Source.fromURL("http://169.254.169.254/latest/meta-data/" + key)
-    val list = source.getLines.toList
-    source.close
-    list
-  }
-
-}
 
 trait EC2Shutdown extends ShutdownNode {
 
@@ -192,7 +129,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 
   private def requestSpotInstance(size: CPUMemoryRequest) = {
     // size is ignored, instance specification is set in configuration
-    val selectedInstanceType = EC2Helpers.instanceType
+    val selectedInstanceType = EC2Operations.slaveInstanceType
 
     // Initializes a Spot Instance Request
     val requestRequest = new RequestSpotInstancesRequest();
@@ -309,28 +246,6 @@ class EC2NodeRegistry(
   val ec2 = new AmazonEC2Client()
   ec2.setEndpoint(config.global.endpoint)
 }
-
-trait EC2HostConfiguration extends HostConfiguration {
-
-  private val myPort = chooseNetworkPort
-
-  private val myhostname = EC2Operations.readMetadata("local-hostname").head
-
-  lazy val myAddress = new InetSocketAddress(myhostname, myPort)
-
-  private lazy val instancetype = EC2Helpers.instanceTypes
-    .find(_._1 == EC2Operations.readMetadata("instance-type").head)
-    .get
-
-  lazy val availableMemory = instancetype._2.memory
-
-  lazy val myCardinality = instancetype._2.cpu
-
-}
-
-object EC2MasterSlave
-    extends MasterSlaveConfiguration
-    with EC2HostConfiguration
 
 class EC2SelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
     extends SelfShutdown
