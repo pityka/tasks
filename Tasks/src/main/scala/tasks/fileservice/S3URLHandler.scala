@@ -29,5 +29,10 @@ class S3Handler extends URLStreamHandler {
 
       def connect = ()
 
+      override def getHeaderField(s: String): String = s match {
+        case "ETag" => s3Client.getObjectMetadata(bucket, key).getETag
+        case _ => null
+      }
+
     }
 }
