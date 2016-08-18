@@ -44,9 +44,7 @@ object Deployment {
       .replaceAllLiterally(
           "{RAM}",
           (memory.toDouble * config.global.jvmMaxHeapFactor).toInt.toString)
-      .replaceAllLiterally(
-          "{EXTRA}",
-          config.global.additionalJavaCommandline)
+      .replaceAllLiterally("{EXTRA}", config.global.additionalJavaCommandline)
       .replaceAllLiterally(
           "{MASTER}",
           masterAddress.getHostName + ":" + masterAddress.getPort)

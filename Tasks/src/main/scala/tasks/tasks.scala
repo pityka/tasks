@@ -33,6 +33,33 @@ import tasks.fileservice._
 
 import akka.actor._
 
+abstract class ResultWithSharedFiles(sf: SharedFile*)
+    extends Result
+    with Product {
+  def files = sf
+  override def verifyAfterCache(implicit service: FileServiceActor,
+                                context: ActorRefFactory) =
+    files.forall(_.isAccessible) && productIterator
+      .filter(_.isInstanceOf[ResultWithSharedFiles])
+      .forall(_.asInstanceOf[ResultWithSharedFiles].verifyAfterCache)
+}
+
+// This is the prerequisitives of a task
+trait Prerequisitive[+A] extends Serializable {
+  def ready: Boolean
+  def persistent: Prerequisitive[A] = this
+}
+
+trait SimplePrerequisitive[+A] extends Prerequisitive[A] with Product { self =>
+
+  def ready = productIterator.forall {
+    case x: Option[_] => x.isDefined
+    case _ =>
+      throw new RuntimeException(
+          "SimplePrerequisitive should be a product of Options")
+  }
+}
+
 object LauncherActor {
   def block[T](request: CPUMemoryRequest)(k: => T)(implicit l: LauncherActor) = {
     l.actor ! BlockOn(request)

@@ -55,6 +55,10 @@ import tasks.elastic.ssh._
 
 package object tasks {
 
+  val SharedFile = tasks.fileservice.SharedFile
+
+  type SharedFile = tasks.fileservice.SharedFile
+
   type CPUMemoryRequest = tasks.shared.CPUMemoryRequest
 
   def CPUMemoryRequest(cpu: (Int, Int), memory: Int) =

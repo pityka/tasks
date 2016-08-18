@@ -12,7 +12,7 @@ lazy val TasksMonitorWebShared = project.in(file("TasksMonitorWebShared"))
   )
   .settings(commonSettings:_*)
 
-lazy val Tasks = project.in(file("Tasks"))
+lazy val Tasks = project.in(file("tasks"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
@@ -34,3 +34,7 @@ lazy val Tasks = project.in(file("Tasks"))
     )
   )
   .dependsOn(TasksMonitorWebShared)
+
+  lazy val example = project.in(file("example"))
+  .settings(commonSettings:_*)
+  .dependsOn(Tasks)
