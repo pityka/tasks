@@ -46,14 +46,14 @@ import tasks.elastic._
 import tasks._
 
 @SerialVersionUID(1L)
-case class ScheduleWithProxy(sch: ScheduleTask, ac: List[ActorRef])
+case class ScheduleWithProxy[T](sch: ScheduleTask[T], ac: List[ActorRef])
     extends Serializable
 
 @SerialVersionUID(1L)
-case class TaskDescription(taskID: String, startData: Prerequisitive[_])
-    extends Ordered[TaskDescription]
+case class TaskDescription[T](taskID: String, startData: Prerequisitive[T])
+    extends Ordered[TaskDescription[T]]
     with Serializable {
-  def compare(that: TaskDescription) = this.hashCode - that.hashCode
+  def compare(that: TaskDescription[T]) = this.hashCode - that.hashCode
 
   override val hashCode = 41 + (41 * (taskID.hashCode + 41 * startData.hashCode))
 
@@ -62,8 +62,8 @@ case class TaskDescription(taskID: String, startData: Prerequisitive[_])
 }
 
 @SerialVersionUID(1L)
-case class ScheduleTask(
-    description: TaskDescription,
+case class ScheduleTask[T](
+    description: TaskDescription[T],
     taskImplementation: String,
     resource: CPUMemoryRequest,
     balancerActor: ActorRef,
@@ -94,11 +94,10 @@ class TaskLauncher(
 
   private var denyWorkBeforeShutdown = false
 
-  private[this] var startedTasks: List[(ActorRef,
-                                        ScheduleTask,
-                                        CPUMemoryAllocated)] = Nil
+  private[this] var startedTasks: List[
+      (ActorRef, ScheduleTask[_], CPUMemoryAllocated)] = Nil
 
-  private def launch(sch: ScheduleTask, proxies: List[ActorRef]) = {
+  private def launch[T](sch: ScheduleTask[T], proxies: List[ActorRef]) = {
 
     log.debug("Launch method")
 
@@ -172,7 +171,7 @@ class TaskLauncher(
       .find(_._1 == taskActor)
       .getOrElse(throw new RuntimeException(
               "Wrong message received. No such taskActor."))
-    val sch: ScheduleTask = elem._2
+    val sch = elem._2
 
     sch.cacheActor.!(SaveResult(sch, receivedResult))(sender = taskActor)
 

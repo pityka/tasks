@@ -38,9 +38,9 @@ import tasks._
 
 abstract class Cache {
 
-  def get(x: TaskDescription): Option[Result]
+  def get[T](x: TaskDescription[T]): Option[Result]
 
-  def set(x: TaskDescription, r: Result): Unit
+  def set[T](x: TaskDescription[T], r: Result): Unit
 
   def shutDown: Unit
 
@@ -64,12 +64,12 @@ class KVCache(
 
   def shutDown = kvstore.close
 
-  def get(x: TaskDescription) =
+  def get[T](x: TaskDescription[T]) =
     kvstore.get(serializeTaskDescription(x)).flatMap { r =>
       scala.util.Try(deserializeResult(r)).toOption
     }
 
-  def set(x: TaskDescription, r: Result) = {
+  def set[T](x: TaskDescription[T], r: Result) = {
     try {
       val k: Array[Byte] = serializeTaskDescription(x)
       val v: Array[Byte] = serializeResult(r)
@@ -86,37 +86,27 @@ class KVCache(
 
 class DisabledCache extends Cache {
 
-  def get(x: TaskDescription) = None
+  def get[T](x: TaskDescription[T]) = None
 
-  def remove(x: TaskDescription) = ()
+  def remove[T](x: TaskDescription[T]) = ()
 
-  def set(x: TaskDescription, r: Result) = ()
+  def set[T](x: TaskDescription[T], r: Result) = ()
 
   def shutDown = {}
 
 }
 
 class FakeCacheForTest extends Cache {
-  private[this] var cacheMap: scala.collection.mutable.ListMap[TaskDescription,
-                                                               Result] =
-    scala.collection.mutable.ListMap[TaskDescription, Result]()
+  private[this] var cacheMap: scala.collection.mutable.ListMap[
+      TaskDescription[_],
+      Result] = scala.collection.mutable.ListMap[TaskDescription[_], Result]()
 
-  def get(x: TaskDescription) = cacheMap.get(x)
+  def get[T](x: TaskDescription[T]) = cacheMap.get(x)
 
-  def remove(x: TaskDescription) = cacheMap.remove(x)
+  def remove[T](x: TaskDescription[T]) = cacheMap.remove(x)
 
-  def set(x: TaskDescription, r: Result) = cacheMap.getOrElseUpdate(x, r)
+  def set[T](x: TaskDescription[T], r: Result) = cacheMap.getOrElseUpdate(x, r)
 
   def shutDown = {}
 
 }
-
-// sealed class LevelDBCache(file: File, protected val serialization: akka.serialization.Serialization) extends KVCache {
-//   val kvstore = new LevelDBWrapper(file)
-//   override def toString = s"LevelDBCache($file)"
-// }
-
-// sealed class FileSystemCache(file: File, protected val serialization: akka.serialization.Serialization) extends KVCache {
-//   val kvstore = new FileSystemLargeKVStore(file)
-//   override def toString = s"FileSystemCache($file)"
-// }

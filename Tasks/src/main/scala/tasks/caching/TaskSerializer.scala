@@ -31,22 +31,25 @@ import tasks._
 trait TaskSerializer {
   protected val serialization: akka.serialization.Serialization
 
-  private lazy val taskDescriptionSerializer =
-    serialization.serializerFor(classOf[TaskDescription])
+  // private lazy val taskDescriptionSerializer =
+  // serialization.serializerFor(classOf[TaskDescription])
 
   private lazy val resultSerializer =
     serialization.serializerFor(classOf[Result])
 
-  protected def serializeTaskDescription(
-      original: TaskDescription): Array[Byte] = {
-    taskDescriptionSerializer.toBinary(original)
-  }
+  protected def serializeTaskDescription[T](
+      original: TaskDescription[T]): Array[Byte] = ???
+  // taskDescriptionSerializer.toBinary(original)
+  // }
 
-  protected def deserializeTaskDescription(ab: Array[Byte]): TaskDescription = {
-    taskDescriptionSerializer
-      .fromBinary(ab, manifest = Some(classOf[TaskDescription]))
-      .asInstanceOf[TaskDescription]
-  }
+  protected def deserializeTaskDescription[T](
+      ab: Array[Byte]): TaskDescription[T] = ???
+
+  //   {
+  //   taskDescriptionSerializer
+  //     .fromBinary(ab, manifest = Some(classOf[TaskDescription]))
+  //     .asInstanceOf[TaskDescription]
+  // }
 
   protected def serializeResult(original: Result): Array[Byte] = {
     resultSerializer.toBinary(original)
