@@ -167,6 +167,7 @@ akka {
   tasksystemlog.info("CPU: " + hostConfig.myCardinality.toString)
   tasksystemlog.info("RAM: " + hostConfig.availableMemory.toString)
   tasksystemlog.info("Role: " + hostConfig.myRole.toString)
+  tasksystemlog.info("Elastic: " + tasks.elastic.elasticSupport)
 
   if (hostConfig.myCardinality > Runtime.getRuntime().availableProcessors()) {
     tasksystemlog.warning(
@@ -387,6 +388,8 @@ akka {
               new PackageServerActor(
                   new File(config.global.assembledPackage))),
           "deliver-service")
+
+      implicit val actorsystem = system
 
       IO(Http) ! Http.Bind(service, "0.0.0.0", port = host.getPort + 1)
 

@@ -129,15 +129,14 @@ package object tasks {
 
   def withTaskSystem[T](c: Config)(f: TaskSystemComponents => T): Option[T] = {
     val ts = defaultTaskSystem(c, None)
-    val r = try {
-      if (ts.hostConfig.myRole == MASTER)
+    if (ts.hostConfig.myRole == MASTER) {
+      try {
         Some(f(ts.components))
-      else None
-    } finally {
-      ts.shutdown
-    }
+      } finally {
+        ts.shutdown
+      }
+    } else None
 
-    r
   }
 
   private def defaultTaskSystem: TaskSystem =

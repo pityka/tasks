@@ -311,27 +311,43 @@ trait NodeCreatorImpl
           .sortBy(_._2.cpu)
           .lastOption}/${m.queued.sortBy(_._2.memory).lastOption}")
       }
-      startNewNode(
-          needNewNode(
-              m,
-              allRegisteredNodes.toSeq.map(_._2) ++ Seq(unmanagedResource),
-              pendingNodes.toSeq.map(_._2)))
+      try {
+        startNewNode(
+            needNewNode(
+                m,
+                allRegisteredNodes.toSeq.map(_._2) ++ Seq(unmanagedResource),
+                pendingNodes.toSeq.map(_._2)))
+      } catch {
+        case e: Exception => log.error(e, "Error during requesting node")
+      }
     }
 
     case NodeComingUp(node) => {
       log.debug("NodeComingUp: " + node)
-      registerNode(node)
+      try {
+        registerNode(node)
+      } catch {
+        case e: Exception => log.error(e, "unexpected exception")
+      }
     }
 
     case NodeIsDown(node) => {
       log.debug("NodeIsDown: " + node)
-      deregisterNode(node)
+      try {
+        deregisterNode(node)
+      } catch {
+        case e: Exception => log.error(e, "unexpected exception")
+      }
     }
 
     case InitFailed(pending) => {
       log.error("Node init failed: " + pending)
-      initfailed(pending)
-      shutdownPendingNode(pending)
+      try {
+        initfailed(pending)
+        shutdownPendingNode(pending)
+      } catch {
+        case e: Exception => log.error(e, "unexpected exception")
+      }
     }
     case GetNodeRegistryStat =>
       sender ! NodeRegistryStat(allRegisteredNodes, pendingNodes)

@@ -164,7 +164,7 @@ class TaskLauncher(
 
     startedTasks.foreach(x => x._1 ! PoisonPill)
     log.info(
-        "TaskLauncher stopped, sent PoisonPill to ${startedTasks.size} running tasks.")
+        s"TaskLauncher stopped, sent PoisonPill to ${startedTasks.size} running tasks.")
   }
 
   private def taskFinished(taskActor: ActorRef, receivedResult: Result) {

@@ -166,7 +166,7 @@ trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
           // Try(
           SSHOperations.openSession(host) { session =>
             val command =
-              "source .bash_profile; " + script + "; echo $!"
+              "source .bash_profile; " + script + "echo $!;exit;"
 
             session.execCommand(command)
 

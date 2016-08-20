@@ -40,14 +40,26 @@ import scala.util._
 
 package object util {
 
+  private def available(port: Int): Boolean = {
+    var s: java.net.Socket = null
+    try {
+      s = new java.net.Socket("localhost", port);
+
+      false
+    } catch {
+      case e: Exception => true
+    } finally {
+      if (s != null) {
+
+        s.close
+
+      }
+    }
+  }
+
   def chooseNetworkPort: Int =
     Try(config.global.hostPort).flatMap { p =>
-      Try {
-        // try it
-        val s = new java.net.ServerSocket(p);
-        s.close
-        p
-      }
+      if (available(p)) Success(p) else Failure(new RuntimeException)
     }.getOrElse {
 
       val s = new java.net.ServerSocket(0);

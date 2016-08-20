@@ -12,7 +12,7 @@ lazy val TasksMonitorWebShared = project.in(file("TasksMonitorWebShared"))
   )
   .settings(commonSettings:_*)
 
-lazy val Tasks = project.in(file("tasks"))
+lazy val tasks = project.in(file("tasks"))
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
@@ -37,4 +37,9 @@ lazy val Tasks = project.in(file("tasks"))
 
   lazy val example = project.in(file("example"))
   .settings(commonSettings:_*)
-  .dependsOn(Tasks)
+  .dependsOn(tasks)
+  .enablePlugins(JavaAppPackaging)
+  .settings(
+      executableScriptName := "entrypoint",
+      topLevelDirectory := None
+  )

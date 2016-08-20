@@ -25,4 +25,4 @@
 
 package tasks
 
-package object queue extends tasks.queue.Messages
+package object queue

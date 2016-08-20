@@ -31,72 +31,68 @@ import akka.actor._
 import java.io.File
 import java.net.URL
 
-trait Messages {
+sealed trait FileServiceMessage
 
-  sealed trait FileServiceMessage
+@SerialVersionUID(1L)
+case class GetListOfFilesInStorage(regexp: String) extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case class GetListOfFilesInStorage(regexp: String) extends FileServiceMessage
+@SerialVersionUID(1L)
+case class NewFile(f: File, p: ProposedManagedFilePath)
+    extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case class NewFile(f: File, p: ProposedManagedFilePath)
-      extends FileServiceMessage
+@SerialVersionUID(1L)
+case class GetPaths(p: SharedFile) extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case class GetPaths(p: SharedFile) extends FileServiceMessage
+@SerialVersionUID(1L)
+case class KnownPaths(paths: List[File]) extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case class KnownPaths(paths: List[File]) extends FileServiceMessage
+@SerialVersionUID(1L)
+case class KnownPathsWithStorage(paths: List[File], storage: FileStorage)
+    extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case class KnownPathsWithStorage(paths: List[File], storage: FileStorage)
-      extends FileServiceMessage
+@SerialVersionUID(1L)
+case class TransferToMe(actor: ActorRef) extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case class TransferToMe(actor: ActorRef) extends FileServiceMessage
+@SerialVersionUID(1L)
+case class TransferFileToUser(actor: ActorRef, sf: SharedFile)
 
-  @SerialVersionUID(1L)
-  case class TransferFileToUser(actor: ActorRef, sf: SharedFile)
+@SerialVersionUID(1L)
+case class NewPath(p: SharedFile, path: File) extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case class NewPath(p: SharedFile, path: File) extends FileServiceMessage
+@SerialVersionUID(1L)
+case object WaitingForSharedFile extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case object WaitingForSharedFile extends FileServiceMessage
+@SerialVersionUID(1L)
+case object WaitingForPath extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case object WaitingForPath extends FileServiceMessage
+@SerialVersionUID(1L)
+case class FileNotFound(e: Throwable) extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case class FileNotFound(e: Throwable) extends FileServiceMessage
+@SerialVersionUID(1L)
+case class TryToDownload(storage: FileStorage) extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case class TryToDownload(storage: FileStorage) extends FileServiceMessage
+@SerialVersionUID(1L)
+case class TryToUpload(storage: FileStorage) extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case class TryToUpload(storage: FileStorage) extends FileServiceMessage
+@SerialVersionUID(1L)
+case class Uploaded(length: Long, hash: Int, file: File, p: ManagedFilePath)
+    extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case class Uploaded(length: Long, hash: Int, file: File, p: ManagedFilePath)
-      extends FileServiceMessage
+@SerialVersionUID(1L)
+case class CouldNotUpload(p: ProposedManagedFilePath)
+    extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case class CouldNotUpload(p: ProposedManagedFilePath)
-      extends FileServiceMessage
+@SerialVersionUID(1L)
+case class IsInStorageAnswer(value: Boolean) extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case class IsInStorageAnswer(value: Boolean) extends FileServiceMessage
+@SerialVersionUID(1L)
+case class ErrorWhileAccessingStore(e: Throwable) extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case class ErrorWhileAccessingStore(e: Throwable) extends FileServiceMessage
+@SerialVersionUID(1L)
+case class NewRemote(url: URL) extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case class NewRemote(url: URL) extends FileServiceMessage
+@SerialVersionUID(1L)
+case class IsAccessible(sf: SharedFile) extends FileServiceMessage
 
-  @SerialVersionUID(1L)
-  case class IsAccessible(sf: SharedFile) extends FileServiceMessage
-
-  @SerialVersionUID(1L)
-  case class GetURL(sf: SharedFile) extends FileServiceMessage
-
-}
+@SerialVersionUID(1L)
+case class GetURL(sf: SharedFile) extends FileServiceMessage

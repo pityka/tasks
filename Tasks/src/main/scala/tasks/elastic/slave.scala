@@ -53,12 +53,12 @@ object Deployment {
 
     s"""
 $downloadScript ;
-cat << EOF > run.sh && nohup bash run.sh 1> stdout 2>stderr &
+cat << 'EOF' | nohup bash 1> stdout 2>stderr &
 $edited
 EOF
 
+
 """
-    //download + ";" + "nohup bash -c $(printf $q "") 1> stdout 2>stderr &"
 
   }
 }

@@ -32,90 +32,86 @@ import akka.actor._
 import tasks._
 import tasks.shared._
 
-trait Messages {
+@SerialVersionUID(1L)
+case class LookUp(s: String)
 
-  @SerialVersionUID(1L)
-  case class LookUp(s: String)
+@SerialVersionUID(1L)
+case class Save(s: String, v: Any)
 
-  @SerialVersionUID(1L)
-  case class Save(s: String, v: Any)
+@SerialVersionUID(1L)
+private[tasks] case object ATaskWasForwarded
 
-  @SerialVersionUID(1L)
-  private[tasks] case object ATaskWasForwarded
+@SerialVersionUID(1L)
+private[tasks] case class QueueInfo(q: Map[ScheduleTask, List[ActorRef]])
 
-  @SerialVersionUID(1L)
-  private[tasks] case class QueueInfo(q: Map[ScheduleTask, List[ActorRef]])
+@SerialVersionUID(1L)
+private[tasks] case object GetQueueInformation
 
-  @SerialVersionUID(1L)
-  private[tasks] case object GetQueueInformation
+@SerialVersionUID(1L)
+private[tasks] case class QueryTask(sch: ScheduleTask, ac: ActorRef)
+    extends Serializable
 
-  @SerialVersionUID(1L)
-  private[tasks] case class QueryTask(sch: ScheduleTask, ac: ActorRef)
-      extends Serializable
+@SerialVersionUID(1L)
+private[tasks] case class TaskDone(sch: ScheduleTask, result: Result)
+    extends Serializable
 
-  @SerialVersionUID(1L)
-  private[tasks] case class TaskDone(sch: ScheduleTask, result: Result)
-      extends Serializable
+@SerialVersionUID(1L)
+private[tasks] case class TaskFailedMessageToQueue(sch: ScheduleTask,
+                                                   cause: Throwable)
+    extends Serializable
 
-  @SerialVersionUID(1L)
-  private[tasks] case class TaskFailedMessageToQueue(sch: ScheduleTask,
-                                                     cause: Throwable)
-      extends Serializable
+@SerialVersionUID(1L)
+private[tasks] case class TaskFailedMessageToProxy(sch: ScheduleTask,
+                                                   cause: Throwable)
+    extends Serializable
 
-  @SerialVersionUID(1L)
-  private[tasks] case class TaskFailedMessageToProxy(sch: ScheduleTask,
-                                                     cause: Throwable)
-      extends Serializable
+@SerialVersionUID(1L)
+private[tasks] case class AskForWork(resources: CPUMemoryAvailable)
+    extends Serializable
 
-  @SerialVersionUID(1L)
-  private[tasks] case class AskForWork(resources: CPUMemoryAvailable)
-      extends Serializable
+@SerialVersionUID(1L)
+case object HowLoadedAreYou extends Serializable
 
-  @SerialVersionUID(1L)
-  case object HowLoadedAreYou extends Serializable
+case class AddTarget[A <: Prerequisitive[A], B <: Result](
+    target: ActorRef,
+    updater: UpdatePrerequisitive[A, B])
 
-  case class AddTarget[A <: Prerequisitive[A], B <: Result](
-      target: ActorRef,
-      updater: UpdatePrerequisitive[A, B])
+case class SaveUpdater[A <: Prerequisitive[A], B <: Result](
+    updater: UpdatePrerequisitive[A, B])
 
-  case class SaveUpdater[A <: Prerequisitive[A], B <: Result](
-      updater: UpdatePrerequisitive[A, B])
+case object UpdaterSaved
 
-  case object UpdaterSaved
+case object GetBackResult
 
-  case object GetBackResult
+private[tasks] case class InternalMessageFromTask(actor: ActorRef,
+                                                  result: Result)
+    extends Serializable
 
-  private[tasks] case class InternalMessageFromTask(actor: ActorRef,
-                                                    result: Result)
-      extends Serializable
+private[tasks] case class InternalMessageTaskFailed(actor: ActorRef,
+                                                    cause: Throwable)
+    extends Serializable
 
-  private[tasks] case class InternalMessageTaskFailed(actor: ActorRef,
-                                                      cause: Throwable)
-      extends Serializable
+private[tasks] case class FailureMessageFromProxyToProxy(cause: Throwable)
 
-  private[tasks] case class FailureMessageFromProxyToProxy(cause: Throwable)
+case class MessageFromTask(result: Result) extends Serializable
 
-  case class MessageFromTask(result: Result) extends Serializable
+case object SaveDone
 
-  case object SaveDone
+@SerialVersionUID(1L)
+private[tasks] case class Ack(allocated: CPUMemoryAllocated)
 
-  @SerialVersionUID(1L)
-  private[tasks] case class Ack(allocated: CPUMemoryAllocated)
+@SerialVersionUID(1L)
+private[tasks] case class RegisterForNotification(actor: ActorRef)
+    extends Serializable
 
-  @SerialVersionUID(1L)
-  private[tasks] case class RegisterForNotification(actor: ActorRef)
-      extends Serializable
+@SerialVersionUID(1L)
+private[tasks] case object GetMaximumSlots
 
-  @SerialVersionUID(1L)
-  private[tasks] case object GetMaximumSlots
+@SerialVersionUID(1L)
+private[tasks] case object GetAvailableSlots
 
-  @SerialVersionUID(1L)
-  private[tasks] case object GetAvailableSlots
+@SerialVersionUID(1L)
+case class BlockOn(request: CPUMemoryRequest) extends Serializable
 
-  @SerialVersionUID(1L)
-  case class BlockOn(request: CPUMemoryRequest) extends Serializable
-
-  @SerialVersionUID(1L)
-  case class BlockOff(request: CPUMemoryRequest) extends Serializable
-
-}
+@SerialVersionUID(1L)
+case class BlockOff(request: CPUMemoryRequest) extends Serializable

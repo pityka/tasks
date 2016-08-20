@@ -27,4 +27,4 @@
 
 package tasks
 
-package object caching extends tasks.caching.Messages
+package object caching

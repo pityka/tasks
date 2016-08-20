@@ -75,7 +75,7 @@ trait SHNodeRegistryImp extends Actor with GridJobRegistry {
     )
 
     val (stdout, stderr, code) = execGetStreamsAndCode(
-        Process(Seq("bash", "-c", script + "; echo $!")))
+        Process(Seq("bash", "-c", script + "echo $!;exit;")))
 
     val pid = stdout.mkString("").trim.toInt
 

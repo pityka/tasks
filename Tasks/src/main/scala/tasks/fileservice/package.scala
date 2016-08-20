@@ -25,4 +25,4 @@
 
 package tasks
 
-package object fileservice extends tasks.fileservice.Messages
+package object fileservice

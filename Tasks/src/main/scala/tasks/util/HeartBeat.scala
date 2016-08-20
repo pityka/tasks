@@ -44,10 +44,10 @@ import tasks.util._
 import tasks.queue._
 
 @SerialVersionUID(1L)
-private[tasks] case object Ping
+private[tasks] case object Ping extends Serializable
 
 @SerialVersionUID(1L)
-private[tasks] case object Pong
+private[tasks] case object Pong extends Serializable
 
 @SerialVersionUID(1L)
 private[tasks] case class HeartBeatStopped(ac: ActorRef) extends Serializable

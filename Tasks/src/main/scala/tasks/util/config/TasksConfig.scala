@@ -108,7 +108,7 @@ class TasksConfig(val raw: Config) {
 
   val sshHosts = raw.getObject("tasks.elastic.ssh.hosts")
 
-  val gridEngine = raw.getString("hosts.elastic.engine")
+  val gridEngine = raw.getString("tasks.elastic.engine")
 
   val idleNodeTimeout: FD = raw.getDuration("tasks.elastic.idleNodeTimeout")
 
@@ -154,14 +154,8 @@ class TasksConfig(val raw: Config) {
 
   val keyName = raw.getString("tasks.elastic.aws.keyName")
 
-  val extraFilesFromS3: List[String] =
-    raw.getStringList("tasks.elastic.aws.extraFilesFromS3").toList
-
-  val extraStartupscript: String =
-    raw.getString("tasks.elastic.aws.extraStartupScript")
-
   val additionalJavaCommandline =
-    raw.getString("tasks.elastic.aws.extraJavaCommandline")
+    raw.getString("tasks.elastic.javaCommandline")
 
   val iamRole = {
     val s = raw.getString("tasks.elastic.aws.iamRole")
