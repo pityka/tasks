@@ -29,8 +29,8 @@ lazy val tasks = project.in(file("tasks"))
       "us.levk" % "drmaa-common" % "1.0",
       "org.scalatest" %% "scalatest" % "2.1.5" % "test",
       "io.spray" %% "spray-routing" % "1.3.3",
-      "io.spray" %% "spray-can" % "1.3.3"
-
+      "io.spray" %% "spray-can" % "1.3.3",
+      "com.lihaoyi" %% "upickle" % "0.4.1"
     )
   )
   .dependsOn(TasksMonitorWebShared)

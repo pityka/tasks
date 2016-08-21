@@ -45,6 +45,8 @@ import tasks.caching._
 import tasks.elastic._
 import tasks._
 
+import upickle.default._
+
 @SerialVersionUID(1L)
 case class ScheduleWithProxy[T](sch: ScheduleTask[T], ac: List[ActorRef])
     extends Serializable
@@ -69,7 +71,8 @@ case class ScheduleTask[T](
     balancerActor: ActorRef,
     fileServiceActor: ActorRef,
     fileServicePrefix: FileServicePrefix,
-    cacheActor: ActorRef
+    cacheActor: ActorRef,
+    writer: Writer[T]
 ) extends Serializable {
 
   def startData = description.startData

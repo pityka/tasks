@@ -46,6 +46,9 @@ import java.net.URL
 
 import tasks.util.eq._
 
+import upickle.default._
+import upickle.Js
+
 sealed trait FilePath {
   def name: String
 }
@@ -100,6 +103,21 @@ class SharedFile private[tasks] (
 }
 
 object SharedFile {
+
+  implicit val fpWriter = Writer[FilePath] {
+    case ManagedFilePath(pathElements) =>
+      Js.Obj("type" -> Js.Str("managed"),
+             "path" -> Js.Str(pathElements.mkString("/")))
+    case RemoteFilePath(url) =>
+      Js.Obj("type" -> Js.Str("remote"), "path" -> Js.Str(url.toString))
+  }
+
+  implicit val sfWriter = Writer[SharedFile] {
+    case t =>
+      Js.Obj("path" -> writeJs(t.path),
+             "byteSize" -> Js.Str(t.byteSize.toString),
+             "hash" -> Js.Str(t.hash.toString))
+  }
 
   // def openOutputStream[R](name: String)(f: OutputStream => R)(implicit service: FileServiceActor, context: ActorRefFactory): (R, SharedFile)
 

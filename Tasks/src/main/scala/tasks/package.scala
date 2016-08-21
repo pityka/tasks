@@ -53,6 +53,8 @@ import tasks.shared._
 import tasks.elastic.ec2._
 import tasks.elastic.ssh._
 
+import upickle.default._
+
 package object tasks {
 
   val SharedFile = tasks.fileservice.SharedFile
@@ -179,11 +181,12 @@ package object tasks {
   type CompFun[A <: Prerequisitive[A], B <: Result] =
     A => ComputationEnvironment => B
 
-  def TaskDefinition[A <: Prerequisitive[A], B <: Result](
+  def TaskDefinition[A <: Prerequisitive[A]: Writer, B <: Result](
       computation: CompFun[A, B]) = new TaskDefinition(computation)
 
-  def NamedTaskDefinition[A <: Prerequisitive[A], B <: Result](taskID: String)(
-      computation: CompFun[A, B]) = new TaskDefinition(computation, taskID)
+  def NamedTaskDefinition[A <: Prerequisitive[A]: Writer, B <: Result](
+      taskID: String)(computation: CompFun[A, B]) =
+    new TaskDefinition(computation, taskID)
 
   def identity[A <: Prerequisitive[A]]: UpdatePrerequisitive[A, Result] =
     UpdatePrerequisitive[A, Result] {
@@ -199,7 +202,8 @@ package object tasks {
       resource: CPUMemoryRequest = CPUMemoryRequest(cpu = 1, memory = 500),
       f: CompFun[B, A],
       taskID: String
-  )(implicit components: TaskSystemComponents): ProxyTaskActorRef[B, A] = {
+  )(implicit components: TaskSystemComponents,
+    writer1: Writer[B]): ProxyTaskActorRef[B, A] = {
     implicit val queue = components.queue
     implicit val fileService = components.fs
     implicit val cache = components.cache
@@ -219,6 +223,7 @@ package object tasks {
                   type MyResult = A
                   def emptyResultSet = prerequisitives
                   override def resourceConsumed = resource
+                  val writer: Writer[B] = writer1
 
                   val runTaskClass = f.getClass
                   val taskID = taskID1

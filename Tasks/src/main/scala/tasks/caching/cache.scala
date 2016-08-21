@@ -36,11 +36,13 @@ import kvstore._
 import tasks.queue._
 import tasks._
 
+import upickle.default._
+
 abstract class Cache {
 
-  def get[T](x: TaskDescription[T]): Option[Result]
+  def get[T: Writer](x: TaskDescription[T]): Option[Result]
 
-  def set[T](x: TaskDescription[T], r: Result): Unit
+  def set[T: Writer](x: TaskDescription[T], r: Result): Unit
 
   def shutDown: Unit
 
@@ -64,12 +66,12 @@ class KVCache(
 
   def shutDown = kvstore.close
 
-  def get[T](x: TaskDescription[T]) =
+  def get[T: Writer](x: TaskDescription[T]) =
     kvstore.get(serializeTaskDescription(x)).flatMap { r =>
       scala.util.Try(deserializeResult(r)).toOption
     }
 
-  def set[T](x: TaskDescription[T], r: Result) = {
+  def set[T: Writer](x: TaskDescription[T], r: Result) = {
     try {
       val k: Array[Byte] = serializeTaskDescription(x)
       val v: Array[Byte] = serializeResult(r)
@@ -86,11 +88,11 @@ class KVCache(
 
 class DisabledCache extends Cache {
 
-  def get[T](x: TaskDescription[T]) = None
+  def get[T: Writer](x: TaskDescription[T]) = None
 
   def remove[T](x: TaskDescription[T]) = ()
 
-  def set[T](x: TaskDescription[T], r: Result) = ()
+  def set[T: Writer](x: TaskDescription[T], r: Result) = ()
 
   def shutDown = {}
 
@@ -101,11 +103,12 @@ class FakeCacheForTest extends Cache {
       TaskDescription[_],
       Result] = scala.collection.mutable.ListMap[TaskDescription[_], Result]()
 
-  def get[T](x: TaskDescription[T]) = cacheMap.get(x)
+  def get[T: Writer](x: TaskDescription[T]) = cacheMap.get(x)
 
   def remove[T](x: TaskDescription[T]) = cacheMap.remove(x)
 
-  def set[T](x: TaskDescription[T], r: Result) = cacheMap.getOrElseUpdate(x, r)
+  def set[T: Writer](x: TaskDescription[T], r: Result) =
+    cacheMap.getOrElseUpdate(x, r)
 
   def shutDown = {}
 

@@ -28,28 +28,20 @@ package tasks.caching
 import tasks.queue._
 import tasks._
 
+import upickle.default._
+
 trait TaskSerializer {
   protected val serialization: akka.serialization.Serialization
-
-  // private lazy val taskDescriptionSerializer =
-  // serialization.serializerFor(classOf[TaskDescription])
 
   private lazy val resultSerializer =
     serialization.serializerFor(classOf[Result])
 
-  protected def serializeTaskDescription[T](
-      original: TaskDescription[T]): Array[Byte] = ???
-  // taskDescriptionSerializer.toBinary(original)
-  // }
+  protected def serializeTaskDescription[T: Writer](
+      original: TaskDescription[T]): Array[Byte] = {
+    val t: T = original.startData.self
 
-  protected def deserializeTaskDescription[T](
-      ab: Array[Byte]): TaskDescription[T] = ???
-
-  //   {
-  //   taskDescriptionSerializer
-  //     .fromBinary(ab, manifest = Some(classOf[TaskDescription]))
-  //     .asInstanceOf[TaskDescription]
-  // }
+    (original.taskID + ":" + write(t)).getBytes("UTF8")
+  }
 
   protected def serializeResult(original: Result): Array[Byte] = {
     resultSerializer.toBinary(original)

@@ -43,6 +43,8 @@ import tasks.shared._
 import tasks._
 import tasks.caching._
 
+import upickle.default._
+
 case class ComputationEnvironment(
     val resourceAllocated: CPUMemoryAllocated,
     implicit val components: TaskSystemComponents,
@@ -230,6 +232,8 @@ abstract class ProxyTask(
 
   def emptyResultSet: MyPrerequisitive
 
+  val writer: Writer[MyPrerequisitive]
+
   private[this] var _updatePrerequisitives =
     List[UpdatePrerequisitive[MyPrerequisitive, Result]]()
 
@@ -267,7 +271,8 @@ abstract class ProxyTask(
           starter,
           fileServiceActor,
           fileServicePrefix,
-          cacheActor
+          cacheActor,
+          writer
       )
 
       log.debug("proxy submitting ScheduleTask object to queue.")

@@ -40,6 +40,8 @@ import tasks.util.eq._
 import tasks.queue._
 import tasks.fileservice._
 
+import upickle.default._
+
 class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
     extends Actor
     with akka.actor.ActorLogging {
@@ -60,7 +62,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
     case SaveResult(sch, result) => {
       log.debug("SavingResult")
       try {
-        cacheMap.set(sch.description.persistent, result)
+        cacheMap.set(sch.description.persistent, result)(sch.writer)
       } catch {
         case x: java.io.NotSerializableException =>
           log.error("can't serialize: " + result.toString)
@@ -70,7 +72,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
     }
     case CheckResult(sch, originalSender) => {
 
-      val res = cacheMap.get(sch.description.persistent)
+      val res = cacheMap.get(sch.description.persistent)(sch.writer)
 
       if (res.isEmpty) {
         log.debug("Checking: {}. Not found in cache.", sch.description.taskID)

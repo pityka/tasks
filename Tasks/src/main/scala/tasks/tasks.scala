@@ -32,6 +32,7 @@ import tasks.shared._
 import tasks.fileservice._
 
 import akka.actor._
+import upickle.default._
 
 abstract class ResultWithSharedFiles(sf: SharedFile*)
     extends Result
@@ -45,12 +46,14 @@ abstract class ResultWithSharedFiles(sf: SharedFile*)
 }
 
 // This is the prerequisitives of a task
-trait Prerequisitive[+A] extends Serializable {
+trait Prerequisitive[+A] extends Serializable { self: A =>
   def ready: Boolean
   def persistent: Prerequisitive[A] = this
+  def self: A = this
 }
 
-trait SimplePrerequisitive[+A] extends Prerequisitive[A] with Product { self =>
+trait SimplePrerequisitive[+A] extends Prerequisitive[A] with Product {
+  self: A =>
 
   def ready = productIterator.forall {
     case x: Option[_] => x.isDefined
@@ -75,7 +78,7 @@ trait Result extends Serializable {
                        context: ActorRefFactory): Boolean = true
 }
 
-class TaskDefinition[A <: Prerequisitive[A], B <: Result](
+class TaskDefinition[A <: Prerequisitive[A]: Writer, B <: Result](
     val computation: CompFun[A, B],
     val taskID: String) {
 

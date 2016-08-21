@@ -38,6 +38,8 @@ import tasks.queue._
 import tasks.caching._
 import tasks.fileservice._
 
+import upickle.default._
+
 case class IntResult(val value: Int) extends Result
 
 object SimpleTask {
@@ -84,6 +86,8 @@ class SimpleTask(
   val runTaskClass = SimpleTask.runTask.getClass
 
   val taskID = runTaskClass.getName
+
+  val writer = implicitly[Writer[MyPrerequisitive]]
 
   def emptyResultSet =
     if (counter > 0) MyResultSet(Some(counter), Some(id))
