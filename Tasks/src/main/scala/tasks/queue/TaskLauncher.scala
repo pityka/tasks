@@ -45,38 +45,28 @@ import tasks.caching._
 import tasks.elastic._
 import tasks._
 
-import upickle.default._
+import upickle.Js
 
 @SerialVersionUID(1L)
-case class ScheduleWithProxy[T](sch: ScheduleTask[T], ac: List[ActorRef])
+case class ScheduleWithProxy(sch: ScheduleTask, ac: List[ActorRef])
     extends Serializable
 
 @SerialVersionUID(1L)
-case class TaskDescription[T](taskID: String, startData: Prerequisitive[T])
-    extends Ordered[TaskDescription[T]]
-    with Serializable {
-  def compare(that: TaskDescription[T]) = this.hashCode - that.hashCode
-
-  override val hashCode = 41 + (41 * (taskID.hashCode + 41 * startData.hashCode))
-
-  def persistent = this.copy(startData = startData.persistent)
-
-}
+case class TaskDescription(taskID: String,
+                           startData: Js.Value,
+                           persistent: Option[Js.Value])
+    extends Serializable
 
 @SerialVersionUID(1L)
-case class ScheduleTask[T](
-    description: TaskDescription[T],
+case class ScheduleTask(
+    description: TaskDescription,
     taskImplementation: String,
     resource: CPUMemoryRequest,
     balancerActor: ActorRef,
     fileServiceActor: ActorRef,
     fileServicePrefix: FileServicePrefix,
-    cacheActor: ActorRef,
-    writer: Writer[T]
-) extends Serializable {
-
-  def startData = description.startData
-}
+    cacheActor: ActorRef
+) extends Serializable
 
 class TaskLauncher(
     taskQueue: ActorRef,
@@ -97,10 +87,11 @@ class TaskLauncher(
 
   private var denyWorkBeforeShutdown = false
 
-  private[this] var startedTasks: List[
-      (ActorRef, ScheduleTask[_], CPUMemoryAllocated)] = Nil
+  private[this] var startedTasks: List[(ActorRef,
+                                        ScheduleTask,
+                                        CPUMemoryAllocated)] = Nil
 
-  private def launch[T](sch: ScheduleTask[T], proxies: List[ActorRef]) = {
+  private def launch(sch: ScheduleTask, proxies: List[ActorRef]) = {
 
     log.debug("Launch method")
 
@@ -109,7 +100,7 @@ class TaskLauncher(
 
     val actor = context.actorOf(
         Props(
-            classOf[Task[_, _]],
+            classOf[Task[_]],
             Class
               .forName(sch.taskImplementation)
               .asInstanceOf[java.lang.Class[_]]
@@ -133,7 +124,7 @@ class TaskLauncher(
     startedTasks = (actor, sch, allocatedResource) :: startedTasks
 
     log.debug("Sending startdata to actor.")
-    actor ! sch.startData
+    actor ! sch.description.startData
     log.debug("startdata sent.")
     allocatedResource
   }
@@ -176,7 +167,8 @@ class TaskLauncher(
               "Wrong message received. No such taskActor."))
     val sch = elem._2
 
-    sch.cacheActor.!(SaveResult(sch, receivedResult))(sender = taskActor)
+    sch.cacheActor.!(SaveResult(sch.description, receivedResult))(
+        sender = taskActor)
 
     taskQueue ! TaskDone(sch, receivedResult)
 

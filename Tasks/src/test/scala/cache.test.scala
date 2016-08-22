@@ -35,6 +35,8 @@ import tasks.caching._
 import tasks.fileservice._
 import tasks.util._
 
+import upickle.default._
+
 case class A(x: Int) extends Result
 
 class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
@@ -50,7 +52,8 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
       LevelDBCache(file, akka.serialization.SerializationExtension(system))
     val td = TaskDescription(
         tasks.simpletask.SimpleTask.runTask.getClass.getName,
-        tasks.simpletask.SimpleTask.MyResultSet(Some(1), Some(0))
+        writeJs(tasks.simpletask.SimpleTask.MyResultSet(Some(1), Some(0))),
+        None
     )
     cache.set(
         td,
@@ -78,7 +81,8 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
     for (i <- 1 to 1000) {
       val td = TaskDescription(
           tasks.simpletask.SimpleTask.runTask.getClass.getName,
-          tasks.simpletask.SimpleTask.MyResultSet(Some(i), Some(0))
+          writeJs(tasks.simpletask.SimpleTask.MyResultSet(Some(i), Some(0))),
+          None
       )
       cache.set(
           td,
@@ -93,7 +97,8 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
     for (i <- 1 to 1000) {
       val td = TaskDescription(
           tasks.simpletask.SimpleTask.runTask.getClass.getName,
-          tasks.simpletask.SimpleTask.MyResultSet(Some(i), Some(0))
+          writeJs(tasks.simpletask.SimpleTask.MyResultSet(Some(i), Some(0))),
+          None
       )
       val r = cache2.get(td)
       expectResult(Some((tasks.simpletask.IntResult(i))))(r)

@@ -59,10 +59,10 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
   }
 
   def receive = {
-    case SaveResult(sch, result) => {
+    case SaveResult(description, result) => {
       log.debug("SavingResult")
       try {
-        cacheMap.set(sch.description.persistent, result)(sch.writer)
+        cacheMap.set(description, result)
       } catch {
         case x: java.io.NotSerializableException =>
           log.error("can't serialize: " + result.toString)
@@ -72,7 +72,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
     }
     case CheckResult(sch, originalSender) => {
 
-      val res = cacheMap.get(sch.description.persistent)(sch.writer)
+      val res = cacheMap.get(sch.description)
 
       if (res.isEmpty) {
         log.debug("Checking: {}. Not found in cache.", sch.description.taskID)

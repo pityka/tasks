@@ -67,7 +67,7 @@ object Fib {
   case class FibOut(n: Int) extends Result
 
   val fibtask: TaskDefinition[FibInput, FibOut] =
-    TaskDefinition[FibInput, FibOut] {
+    TaskDefinition[FibInput, FibOut]("fib") {
 
       case FibInput(Some(n), Some(tag)) =>
         implicit ce =>

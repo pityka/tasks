@@ -107,9 +107,18 @@ object SharedFile {
   implicit val fpWriter = Writer[FilePath] {
     case ManagedFilePath(pathElements) =>
       Js.Obj("type" -> Js.Str("managed"),
-             "path" -> Js.Str(pathElements.mkString("/")))
+             "path" -> Js.Arr(pathElements.map(x => Js.Str(x)): _*))
     case RemoteFilePath(url) =>
       Js.Obj("type" -> Js.Str("remote"), "path" -> Js.Str(url.toString))
+  }
+
+  implicit val fpReader = Reader[FilePath] {
+    case Js.Obj(p @ _ *) =>
+      val map = p.toMap
+      map("type").str match {
+        case "managed" => ManagedFilePath(map("path").arr.toVector.map(_.str))
+        case "remote" => RemoteFilePath(new URL(map("path").str))
+      }
   }
 
   implicit val sfWriter = Writer[SharedFile] {
@@ -117,6 +126,14 @@ object SharedFile {
       Js.Obj("path" -> writeJs(t.path),
              "byteSize" -> Js.Str(t.byteSize.toString),
              "hash" -> Js.Str(t.hash.toString))
+  }
+
+  implicit val sfReader = Reader[SharedFile] {
+    case Js.Obj(p @ _ *) =>
+      val map = p.toMap
+      new SharedFile(fpReader.read(map("path")),
+                     map("byteSize").str.toLong,
+                     map("hash").str.toInt)
   }
 
   // def openOutputStream[R](name: String)(f: OutputStream => R)(implicit service: FileServiceActor, context: ActorRefFactory): (R, SharedFile)

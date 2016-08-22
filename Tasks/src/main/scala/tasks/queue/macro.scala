@@ -1,8 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
- * Group Fellay
+ * Copyright (c) 2016 Istvan Bartha
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the "Software"),
@@ -23,30 +22,40 @@
  * SOFTWARE.
  */
 
-package tasks.caching
+package tasks.queue
 
-import tasks.queue._
 import tasks._
-
+import upickle.default._
 import upickle.Js
 
-trait TaskSerializer {
-  protected val serialization: akka.serialization.Serialization
+object Macros {
+  import scala.reflect.macros.Context
+  import scala.language.experimental.macros
 
-  private lazy val resultSerializer =
-    serialization.serializerFor(classOf[Result])
+  def taskDefinitionImpl[A: cxt.WeakTypeTag, C: cxt.WeakTypeTag](cxt: Context)(
+      taskID: cxt.Expr[String]
+  )(
+      comp: cxt.Expr[A => ComputationEnvironment => C]
+  ) = {
+    import cxt.universe._
+    val a = weakTypeOf[A]
+    val c = weakTypeOf[C]
+    val h = taskID.tree match {
+      case Literal(Constant(s: String)) => TypeName(s)
+      case _ => cxt.abort(cxt.enclosingPosition, "Not a string literal")
+    }
+    val t =
+      tq"Function1[upickle.Js.Value,Function1[tasks.queue.ComputationEnvironment,$c]]"
+    val r = q"""
+    class $h extends $t {
+      val r = implicitly[upickle.default.Reader[$a]]
+      val c = $comp
+      def apply(j:upickle.Js.Value)  = c(r.read(j))
 
-  def serializeTaskDescription(original: TaskDescription): Array[Byte] = {
-    val x = original.persistent.getOrElse(original.startData)
-
-    (original.taskID + "\n" + upickle.json.write(x)).getBytes("UTF8")
+    }
+    new TaskDefinition[$a,$c](new $h,$taskID)
+    """
+    r
   }
 
-  protected def serializeResult(original: Result): Array[Byte] = {
-    resultSerializer.toBinary(original)
-  }
-
-  protected def deserializeResult(ab: Array[Byte]): Result = {
-    resultSerializer.fromBinary(ab, manifest = None).asInstanceOf[Result]
-  }
 }

@@ -51,7 +51,7 @@ object PiTasks {
                  outside = Some(i.outside + old.outside.getOrElse(0)))
     }
 
-  val batchCalc = TaskDefinition[BatchInput, BatchResult] {
+  val batchCalc = TaskDefinition[BatchInput, BatchResult]("batch") {
     case BatchInput(Some(size), Some(id)) =>
       implicit ctx =>
         log.info("This is worker " + id)
@@ -66,7 +66,7 @@ object PiTasks {
         BatchResult(in, out)
   }
 
-  val piCalc = TaskDefinition[PiInput, PiResult] {
+  val piCalc = TaskDefinition[PiInput, PiResult]("reduce") {
     case PiInput(Some(in), Some(out)) =>
       implicit ctx =>
         PiResult(in.toDouble / (in + out) * 4d)

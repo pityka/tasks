@@ -12,6 +12,11 @@ lazy val TasksMonitorWebShared = project.in(file("TasksMonitorWebShared"))
   )
   .settings(commonSettings:_*)
 
+  // lazy val base = project.in(file("base"))
+  //   .settings(commonSettings:_*)
+  //
+  //   // .dependsOn(TasksMonitorWebShared)
+
 lazy val tasks = project.in(file("tasks"))
   .settings(commonSettings:_*)
   .settings(
@@ -30,7 +35,8 @@ lazy val tasks = project.in(file("tasks"))
       "org.scalatest" %% "scalatest" % "2.1.5" % "test",
       "io.spray" %% "spray-routing" % "1.3.3",
       "io.spray" %% "spray-can" % "1.3.3",
-      "com.lihaoyi" %% "upickle" % "0.4.1"
+      "com.lihaoyi" %% "upickle" % "0.4.1",
+      "org.scala-lang" % "scala-reflect" % scalaVersion.value
     )
   )
   .dependsOn(TasksMonitorWebShared)

@@ -24,5 +24,49 @@
  */
 
 package tasks
+import tasks._
 
-package object queue
+import upickle.default._
+import upickle.Js
+import akka.actor._
+
+package object queue {
+
+  type CompFun2[B <: Result] = Js.Value => ComputationEnvironment => B
+
+  def newTask[A <: Result, B <: Prerequisitive[B]](
+      prerequisitives: B,
+      resource: CPUMemoryRequest = CPUMemoryRequest(cpu = 1, memory = 500),
+      f: CompFun2[A],
+      taskID: String
+  )(implicit components: TaskSystemComponents,
+    writer1: Writer[B]): ProxyTaskActorRef[B, A] = {
+    implicit val queue = components.queue
+    implicit val fileService = components.fs
+    implicit val cache = components.cache
+    implicit val context = components.actorsystem
+    implicit val prefix = components.filePrefix
+
+    val taskID1 = taskID
+
+    ProxyTaskActorRef[B, A](
+        context.actorOf(
+            Props(
+                new ProxyTask(queue.actor,
+                              fileService.actor,
+                              prefix,
+                              cache.actor) {
+                  type MyPrerequisitive = B
+                  type MyResult = A
+                  def emptyResultSet = prerequisitives
+                  override def resourceConsumed = resource
+                  val writer: Writer[B] = writer1
+
+                  val runTaskClass = f.getClass
+                  val taskID = taskID1
+                }
+            ).withDispatcher("proxytask-dispatcher")
+        )
+    )
+  }
+}

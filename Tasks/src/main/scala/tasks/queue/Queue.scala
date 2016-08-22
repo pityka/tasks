@@ -54,15 +54,15 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
 
   // ActorRef here is the proxy of the task
   private val queuedTasks =
-    collection.mutable.Map[ScheduleTask[_], List[ActorRef]]()
+    collection.mutable.Map[ScheduleTask, List[ActorRef]]()
 
   // Map(task -> (launcher,allocated,list of proxies))
   private val routedMessages = scala.collection.mutable
-    .Map[ScheduleTask[_], (ActorRef, CPUMemoryAllocated, List[ActorRef])]()
+    .Map[ScheduleTask, (ActorRef, CPUMemoryAllocated, List[ActorRef])]()
 
   private val knownLaunchers = scala.collection.mutable.HashSet[ActorRef]()
 
-  private def enQueue[T](sch: ScheduleTask[T], ac: List[ActorRef]) {
+  private def enQueue(sch: ScheduleTask, ac: List[ActorRef]) {
     if (!routedMessages.contains(sch)) {
       queuedTasks.get(sch) match {
         case None => queuedTasks.update(sch, ac)
@@ -74,12 +74,12 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
   // This is true, while waiting for response from the tasklauncher
   private var negotiation = false
 
-  private def removeFromRoutedMessages[T](sch: ScheduleTask[T]) {
+  private def removeFromRoutedMessages(sch: ScheduleTask) {
     // Remove from the list of sent (running) messages
     routedMessages.remove(sch)
   }
 
-  private def taskDone[T](sch: ScheduleTask[T], r: Result) {
+  private def taskDone(sch: ScheduleTask, r: Result) {
     // Remove from the list of sent (running) messages
     routedMessages.get(sch).foreach {
       case (_, _, proxies) =>
@@ -93,7 +93,7 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
     queuedTasks.remove(sch)
   }
 
-  private def taskFailed[T](sch: ScheduleTask[T], cause: Throwable) {
+  private def taskFailed(sch: ScheduleTask, cause: Throwable) {
     // Remove from the list of sent (running) messages
     routedMessages.get(sch).foreach {
       case (launcher, allocation, proxies) =>
@@ -118,7 +118,7 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
     // put back the jobs into the queue
     val msgs =
       routedMessages.toSeq.filter(_._2._1 === crashedLauncher).map(_._1)
-    msgs.foreach { (sch: ScheduleTask[_]) =>
+    msgs.foreach { (sch: ScheduleTask) =>
       val proxies = routedMessages(sch)._3
       routedMessages.remove(sch)
       enQueue(sch, proxies)
@@ -138,7 +138,7 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
   }
 
   def receive = {
-    case m: ScheduleTask[_] => {
+    case m: ScheduleTask => {
       log.debug("Received ScheduleTask.")
       if ((queuedTasks.contains(m) && (!queuedTasks(m).has(sender)))) {
         enQueue(m, sender :: Nil)

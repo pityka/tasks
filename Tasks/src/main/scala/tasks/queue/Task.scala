@@ -43,6 +43,7 @@ import tasks.shared._
 import tasks._
 import tasks.caching._
 
+import upickle.Js
 import upickle.default._
 
 case class ComputationEnvironment(
@@ -98,8 +99,8 @@ private[tasks] object ProxyTask {
 
 }
 
-private class Task[P <: Prerequisitive[P], Q <: Result](
-    runTask: CompFun[P, Q],
+private class Task[Q <: Result](
+    runTask: CompFun2[Q],
     launcherActor: ActorRef,
     balancerActor: ActorRef,
     fileServiceActor: ActorRef,
@@ -122,7 +123,7 @@ private class Task[P <: Prerequisitive[P], Q <: Result](
   private[this] val mainActor = this.self
   private var resultG: Result = null
 
-  private def startTask(msg: P) {
+  private def startTask(msg: Js.Value) {
 
     Future {
       try {
@@ -188,9 +189,9 @@ private class Task[P <: Prerequisitive[P], Q <: Result](
   }
 
   def receive = {
-    case msg: Prerequisitive[_] =>
+    case msg: Js.Value =>
       log.debug("StartTask, from taskactor")
-      startTask(msg.asInstanceOf[P])
+      startTask(msg)
 
     case RegisterForNotification(ac) =>
       log.debug("Received: " + ac.toString)
@@ -222,7 +223,7 @@ abstract class ProxyTask(
       .apply((incomings, r))
   }
 
-  val runTaskClass: java.lang.Class[_ <: CompFun[MyPrerequisitive, MyResult]]
+  val runTaskClass: java.lang.Class[_ <: CompFun2[MyResult]]
 
   val taskID: String
 
@@ -265,14 +266,15 @@ abstract class ProxyTask(
     if (result.isEmpty) {
 
       val s = ScheduleTask(
-          TaskDescription(taskID, incomings),
+          TaskDescription(taskID,
+                          writer.write(incomings),
+                          incomings.persistent.map(x => writer.write(x.self))),
           runTaskClass.getName,
           resourceConsumed,
           starter,
           fileServiceActor,
           fileServicePrefix,
-          cacheActor,
-          writer
+          cacheActor
       )
 
       log.debug("proxy submitting ScheduleTask object to queue.")

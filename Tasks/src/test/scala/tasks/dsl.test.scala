@@ -46,14 +46,12 @@ object Tests {
 
   case class IntWrapper(i: Int) extends Result
 
-  // case class Counter(count: Option[Int]) extends SimplePrerequisitive[Counter]
-
   implicit val updateCounter: UpdatePrerequisitive[STP1[Int], IntWrapper] =
     UpdatePrerequisitive {
       case (old, i: IntWrapper) => old.copy(a1 = Some(i.i))
     }
 
-  val increment = TaskDefinition[STP1[Int], IntWrapper] {
+  val increment = TaskDefinition[STP1[Int], IntWrapper]("increment") {
     case STP1(Some(c)) =>
       implicit computationEnvironment =>
         IntWrapper(c + 1)

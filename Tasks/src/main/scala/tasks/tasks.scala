@@ -33,6 +33,7 @@ import tasks.fileservice._
 
 import akka.actor._
 import upickle.default._
+import upickle.Js
 
 abstract class ResultWithSharedFiles(sf: SharedFile*)
     extends Result
@@ -48,7 +49,7 @@ abstract class ResultWithSharedFiles(sf: SharedFile*)
 // This is the prerequisitives of a task
 trait Prerequisitive[+A] extends Serializable { self: A =>
   def ready: Boolean
-  def persistent: Prerequisitive[A] = this
+  def persistent: Option[Prerequisitive[A]] = None
   def self: A = this
 }
 
@@ -79,15 +80,12 @@ trait Result extends Serializable {
 }
 
 class TaskDefinition[A <: Prerequisitive[A]: Writer, B <: Result](
-    val computation: CompFun[A, B],
-    val taskID: String) {
-
-  def this(computation: CompFun[A, B]) =
-    this(computation, computation.getClass.getName)
+    val computation: CompFun2[B],
+    val taskID: String)(implicit r: Reader[A]) {
 
   def apply(a: A)(resource: CPUMemoryRequest)(
       implicit components: TaskSystemComponents): ProxyTaskActorRef[A, B] =
-    newTask[B, A](a, resource, computation, taskID)
+    tasks.queue.newTask[B, A](a, resource, computation, taskID)
 
 }
 
@@ -97,17 +95,6 @@ case class UpdatePrerequisitive[A <: Prerequisitive[A], B <: Result](
   def apply(v1: (A, B)) = pf.apply(v1)
   def isDefinedAt(x: (A, B)) = pf.isDefinedAt(x)
 }
-
-// sealed trait GridEngine
-// case object EC2Grid extends GridEngine {
-//   override def toString = "EC2"
-// }
-// case object NoGrid extends GridEngine {
-//   override def toString = "NOENGINE"
-// }
-// case object SSHGrid extends GridEngine {
-//   override def toString = "SSH"
-// }
 
 case class STP1[A1](a1: Option[A1]) extends SimplePrerequisitive[STP1[A1]]
 case class STP2[A1, A2](a1: Option[A1], a2: Option[A2])

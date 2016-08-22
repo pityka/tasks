@@ -38,12 +38,11 @@ import tasks._
 case class CacheActor(actor: ActorRef) extends Serializable
 
 @SerialVersionUID(1L)
-private[tasks] case class SaveResult[T](sch: ScheduleTask[T], r: Result)
+private[tasks] case class SaveResult(sch: TaskDescription, r: Result)
     extends Serializable
 
 @SerialVersionUID(1L)
-private[tasks] case class CheckResult[T](sch: ScheduleTask[T],
-                                         sender: ActorRef)
+private[tasks] case class CheckResult(sch: ScheduleTask, sender: ActorRef)
     extends Serializable
 
 @SerialVersionUID(1L)
@@ -51,8 +50,8 @@ private[tasks] case class TaskNotFoundInCache(v: Boolean = true)
     extends Serializable
 
 @SerialVersionUID(1L)
-private[tasks] case class AnswerFromCache[T](
+private[tasks] case class AnswerFromCache(
     message: Either[TaskNotFoundInCache, Option[Result]],
     sender: ActorRef,
-    sch: ScheduleTask[T])
+    sch: ScheduleTask)
     extends Serializable

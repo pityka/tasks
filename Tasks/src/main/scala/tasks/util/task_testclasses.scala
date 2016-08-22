@@ -52,7 +52,8 @@ object SimpleTask {
       MyResultSet(Some(old.num.getOrElse(0) + s.value), old.id)
   }
 
-  val runTask: CompFun[MyResultSet, IntResult] = { rs => implicit env =>
+  val runTask: CompFun2[IntResult] = { js => implicit env =>
+    val rs = implicitly[Reader[MyResultSet]].read(js)
     // Logger.debug( "task implementation started" + rs.num.toString)
     val x = NodeLocalCache.getItemBlocking("asdfsdaf") {
       "value"

@@ -54,6 +54,9 @@ import tasks.elastic.ec2._
 import tasks.elastic.ssh._
 
 import upickle.default._
+import upickle.Js
+
+import scala.language.experimental.macros
 
 package object tasks {
 
@@ -181,12 +184,9 @@ package object tasks {
   type CompFun[A <: Prerequisitive[A], B <: Result] =
     A => ComputationEnvironment => B
 
-  def TaskDefinition[A <: Prerequisitive[A]: Writer, B <: Result](
-      computation: CompFun[A, B]) = new TaskDefinition(computation)
-
-  def NamedTaskDefinition[A <: Prerequisitive[A]: Writer, B <: Result](
-      taskID: String)(computation: CompFun[A, B]) =
-    new TaskDefinition(computation, taskID)
+  def TaskDefinition[A <: Prerequisitive[A], C <: Result](taskID: String)(
+      comp: CompFun[A, C]): TaskDefinition[A, C] = macro Macros
+    .taskDefinitionImpl[A, C]
 
   def identity[A <: Prerequisitive[A]]: UpdatePrerequisitive[A, Result] =
     UpdatePrerequisitive[A, Result] {
@@ -196,42 +196,6 @@ package object tasks {
   implicit def tupleConverter[A1](t: (A1)): STP1[A1] = STP1(Some(t))
   implicit def tupleConverter[A1, A2](t: (A1, A2)): STP2[A1, A2] =
     STP2(Some(t._1), Some(t._2))
-
-  def newTask[A <: Result, B <: Prerequisitive[B]](
-      prerequisitives: B,
-      resource: CPUMemoryRequest = CPUMemoryRequest(cpu = 1, memory = 500),
-      f: CompFun[B, A],
-      taskID: String
-  )(implicit components: TaskSystemComponents,
-    writer1: Writer[B]): ProxyTaskActorRef[B, A] = {
-    implicit val queue = components.queue
-    implicit val fileService = components.fs
-    implicit val cache = components.cache
-    implicit val context = components.actorsystem
-    implicit val prefix = components.filePrefix
-
-    val taskID1 = taskID
-
-    ProxyTaskActorRef[B, A](
-        context.actorOf(
-            Props(
-                new ProxyTask(queue.actor,
-                              fileService.actor,
-                              prefix,
-                              cache.actor) {
-                  type MyPrerequisitive = B
-                  type MyResult = A
-                  def emptyResultSet = prerequisitives
-                  override def resourceConsumed = resource
-                  val writer: Writer[B] = writer1
-
-                  val runTaskClass = f.getClass
-                  val taskID = taskID1
-                }
-            ).withDispatcher("proxytask-dispatcher")
-        )
-    )
-  }
 
   def MasterSlaveGridEngineChosenFromConfig: MasterSlaveConfiguration = {
     if (config.global.disableRemoting) LocalConfigurationFromConfig

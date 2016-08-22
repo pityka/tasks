@@ -42,27 +42,27 @@ case class Save(s: String, v: Any)
 private[tasks] case object ATaskWasForwarded
 
 @SerialVersionUID(1L)
-private[tasks] case class QueueInfo(q: Map[ScheduleTask[_], List[ActorRef]])
+private[tasks] case class QueueInfo(q: Map[ScheduleTask, List[ActorRef]])
 
 @SerialVersionUID(1L)
 private[tasks] case object GetQueueInformation
 
 @SerialVersionUID(1L)
-private[tasks] case class QueryTask[T](sch: ScheduleTask[T], ac: ActorRef)
+private[tasks] case class QueryTask(sch: ScheduleTask, ac: ActorRef)
     extends Serializable
 
 @SerialVersionUID(1L)
-private[tasks] case class TaskDone[T](sch: ScheduleTask[T], result: Result)
+private[tasks] case class TaskDone(sch: ScheduleTask, result: Result)
     extends Serializable
 
 @SerialVersionUID(1L)
-private[tasks] case class TaskFailedMessageToQueue[T](sch: ScheduleTask[T],
-                                                      cause: Throwable)
+private[tasks] case class TaskFailedMessageToQueue(sch: ScheduleTask,
+                                                   cause: Throwable)
     extends Serializable
 
 @SerialVersionUID(1L)
-private[tasks] case class TaskFailedMessageToProxy[T](sch: ScheduleTask[T],
-                                                      cause: Throwable)
+private[tasks] case class TaskFailedMessageToProxy(sch: ScheduleTask,
+                                                   cause: Throwable)
     extends Serializable
 
 @SerialVersionUID(1L)
