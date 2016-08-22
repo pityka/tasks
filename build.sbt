@@ -12,11 +12,6 @@ lazy val TasksMonitorWebShared = project.in(file("TasksMonitorWebShared"))
   )
   .settings(commonSettings:_*)
 
-  // lazy val base = project.in(file("base"))
-  //   .settings(commonSettings:_*)
-  //
-  //   // .dependsOn(TasksMonitorWebShared)
-
 lazy val tasks = project.in(file("tasks"))
   .settings(commonSettings:_*)
   .settings(
@@ -41,11 +36,11 @@ lazy val tasks = project.in(file("tasks"))
   )
   .dependsOn(TasksMonitorWebShared)
 
-  lazy val example = project.in(file("example"))
-  .settings(commonSettings:_*)
-  .dependsOn(tasks)
-  .enablePlugins(JavaAppPackaging)
-  .settings(
-      executableScriptName := "entrypoint",
-      topLevelDirectory := None
-  )
+lazy val example = project.in(file("example"))
+.settings(commonSettings:_*)
+.dependsOn(tasks)
+.enablePlugins(JavaAppPackaging)
+.settings(
+    executableScriptName := "entrypoint",
+    topLevelDirectory := None
+)
