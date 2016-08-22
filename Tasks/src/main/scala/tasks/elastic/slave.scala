@@ -43,7 +43,9 @@ object Deployment {
     val edited = runScript
       .replaceAllLiterally(
           "{RAM}",
-          (memory.toDouble * config.global.jvmMaxHeapFactor).toInt.toString)
+          math
+            .max(1, (memory.toDouble * config.global.jvmMaxHeapFactor).toInt)
+            .toString)
       .replaceAllLiterally("{EXTRA}", config.global.additionalJavaCommandline)
       .replaceAllLiterally(
           "{MASTER}",

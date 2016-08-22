@@ -73,9 +73,56 @@ object PiTasks {
   }
 }
 
+object Fib {
+
+  import scala.concurrent.ExecutionContext.Implicits.global
+
+  def serial(n: Int): Int = n match {
+    case 0 => 0
+    case 1 => 1
+    case x => serial(n - 1) + serial(n - 2)
+  }
+
+  case class FibInput(n: Option[Int], tag: Option[List[Boolean]])
+      extends SimplePrerequisitive[FibInput]
+  object FibInput {
+    def apply(n: Int): FibInput = FibInput(Some(n), tag = Some(Nil))
+  }
+
+  case class FibOut(n: Int) extends Result
+
+  val fibtask: TaskDefinition[FibInput, FibOut] =
+    TaskDefinition[FibInput, FibOut]("fib") {
+
+      case FibInput(Some(n), Some(tag)) =>
+        implicit ce =>
+          n match {
+            case 0 => FibOut(0)
+            case 1 => FibOut(1)
+            case n => {
+              val f1 = fibtask(FibInput(Some(n - 1), Some(false :: tag)))(
+                  CPUMemoryRequest(1, 1)).?
+              val f2 = fibtask(FibInput(Some(n - 2), Some(true :: tag)))(
+                  CPUMemoryRequest(1, 1)).?
+              val f3 = for {
+                r1 <- f1
+                r2 <- f2
+              } yield FibOut(r1.n + r2.n)
+              tasks.LauncherActor.block(CPUMemoryRequest(1, 100)) {
+                Await.result(f3, atMost = 500 seconds)
+              }
+            }
+
+          }
+
+    }
+
+}
+
 object PiApp extends App {
 
   import PiTasks._
+  import Fib._
 
   withTaskSystem { implicit ts =>
     val numTasks = 100
@@ -99,6 +146,8 @@ object PiApp extends App {
               CPUMemoryRequest(1, 50)).?
         }
 
+    val fibResult = fibtask(FibInput(16))(CPUMemoryRequest(1, 50)).?
+
     // val piTask = piCalc(PiInput(None, None))(CPUMemoryRequest(1, 50))
     //
     // 1 to numTasks foreach { i =>
@@ -108,6 +157,7 @@ object PiApp extends App {
     // }
 
     println(Await.result(pi, atMost = 10 minutes))
+    println(Await.result(fibResult, atMost = 10 minutes))
 
   }
 

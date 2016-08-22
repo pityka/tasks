@@ -52,6 +52,8 @@ import tasks.deploy._
 
 object Fib {
 
+  import scala.concurrent.ExecutionContext.Implicits.global
+
   def serial(n: Int): Int = n match {
     case 0 => 0
     case 1 => 1
@@ -83,7 +85,7 @@ object Fib {
                 r1 <- f1
                 r2 <- f2
               } yield FibOut(r1.n + r2.n)
-              LauncherActor.block(CPUMemoryRequest(1, 100)) {
+              tasks.LauncherActor.block(CPUMemoryRequest(1, 100)) {
                 Await.result(f3, atMost = 500 seconds)
               }
             }
