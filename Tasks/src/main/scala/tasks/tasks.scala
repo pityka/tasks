@@ -39,11 +39,7 @@ abstract class ResultWithSharedFiles(sf: SharedFile*)
     extends Result
     with Product {
   def files = sf
-  override def verifyAfterCache(implicit service: FileServiceActor,
-                                context: ActorRefFactory) =
-    files.forall(_.isAccessible) && productIterator
-      .filter(_.isInstanceOf[ResultWithSharedFiles])
-      .forall(_.asInstanceOf[ResultWithSharedFiles].verifyAfterCache)
+
 }
 
 // This is the prerequisitives of a task
@@ -73,15 +69,11 @@ object LauncherActor {
   }
 }
 
-// This is the output of a task
-trait Result extends Serializable {
-  def verifyAfterCache(implicit service: FileServiceActor,
-                       context: ActorRefFactory): Boolean = true
-}
+trait Result
 
-class TaskDefinition[A <: Prerequisitive[A]: Writer, B <: Result](
-    val computation: CompFun2[B],
-    val taskID: String)(implicit r: Reader[A]) {
+class TaskDefinition[A <: Prerequisitive[A]: Writer, B <: Result: Reader](
+    val computation: CompFun2,
+    val taskID: String) {
 
   def apply(a: A)(resource: CPUMemoryRequest)(
       implicit components: TaskSystemComponents): ProxyTaskActorRef[A, B] =

@@ -32,6 +32,8 @@ import akka.actor._
 import tasks._
 import tasks.shared._
 
+import upickle.Js
+
 @SerialVersionUID(1L)
 case class LookUp(s: String)
 
@@ -52,7 +54,7 @@ private[tasks] case class QueryTask(sch: ScheduleTask, ac: ActorRef)
     extends Serializable
 
 @SerialVersionUID(1L)
-private[tasks] case class TaskDone(sch: ScheduleTask, result: Result)
+private[tasks] case class TaskDone(sch: ScheduleTask, result: UntypedResult)
     extends Serializable
 
 @SerialVersionUID(1L)
@@ -84,7 +86,7 @@ case object UpdaterSaved
 case object GetBackResult
 
 private[tasks] case class InternalMessageFromTask(actor: ActorRef,
-                                                  result: Result)
+                                                  result: UntypedResult)
     extends Serializable
 
 private[tasks] case class InternalMessageTaskFailed(actor: ActorRef,
@@ -93,7 +95,7 @@ private[tasks] case class InternalMessageTaskFailed(actor: ActorRef,
 
 private[tasks] case class FailureMessageFromProxyToProxy(cause: Throwable)
 
-case class MessageFromTask(result: Result) extends Serializable
+case class MessageFromTask(result: UntypedResult) extends Serializable
 
 case object SaveDone
 

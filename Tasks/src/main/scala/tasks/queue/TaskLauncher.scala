@@ -100,7 +100,7 @@ class TaskLauncher(
 
     val actor = context.actorOf(
         Props(
-            classOf[Task[_]],
+            classOf[Task],
             Class
               .forName(sch.taskImplementation)
               .asInstanceOf[java.lang.Class[_]]
@@ -160,7 +160,8 @@ class TaskLauncher(
         s"TaskLauncher stopped, sent PoisonPill to ${startedTasks.size} running tasks.")
   }
 
-  private def taskFinished(taskActor: ActorRef, receivedResult: Result) {
+  private def taskFinished(taskActor: ActorRef,
+                           receivedResult: UntypedResult) {
     val elem = startedTasks
       .find(_._1 == taskActor)
       .getOrElse(throw new RuntimeException(

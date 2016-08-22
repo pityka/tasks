@@ -45,12 +45,13 @@ object Macros {
       case _ => cxt.abort(cxt.enclosingPosition, "Not a string literal")
     }
     val t =
-      tq"Function1[upickle.Js.Value,Function1[tasks.queue.ComputationEnvironment,$c]]"
+      tq"Function1[upickle.Js.Value,Function1[tasks.queue.ComputationEnvironment,tasks.queue.UntypedResult]]"
     val r = q"""
     class $h extends $t {
       val r = implicitly[upickle.default.Reader[$a]]
+      val w = implicitly[upickle.default.Writer[$c]]
       val c = $comp
-      def apply(j:upickle.Js.Value)  = c(r.read(j))
+      def apply(j:upickle.Js.Value) = c(r.read(j)) andThen (x => tasks.queue.UntypedResult.make(x)(w))
 
     }
     new TaskDefinition[$a,$c](new $h,$taskID)

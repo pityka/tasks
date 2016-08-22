@@ -50,6 +50,8 @@ import tasks.caching._
 import tasks.util._
 import tasks._
 
+import upickle.Js
+
 class TaskQueue extends Actor with akka.actor.ActorLogging {
 
   // ActorRef here is the proxy of the task
@@ -79,7 +81,7 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
     routedMessages.remove(sch)
   }
 
-  private def taskDone(sch: ScheduleTask, r: Result) {
+  private def taskDone(sch: ScheduleTask, r: UntypedResult) {
     // Remove from the list of sent (running) messages
     routedMessages.get(sch).foreach {
       case (_, _, proxies) =>
@@ -165,7 +167,7 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
       message match {
         case Right(Some(r)) => {
           log.debug("Replying with a Result found in cache.")
-          ch ! (MessageFromTask(r.asInstanceOf[Result]))
+          ch ! (MessageFromTask(r))
         }
         case Right(None) => {
           log.debug("Task is not found in cache. Enqueue. ")

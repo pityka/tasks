@@ -85,7 +85,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
                     sch.description.taskID)
           sender ! AnswerFromCache(Right(res), originalSender, sch)
         } else {
-          val verified = Try(res.get.verifyAfterCache)
+          val verified = Try(res.get.files.forall(_.isAccessible))
           verified match {
             case Success(x) if x === false => {
               log.warning(

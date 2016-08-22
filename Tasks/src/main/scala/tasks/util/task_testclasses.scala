@@ -52,7 +52,7 @@ object SimpleTask {
       MyResultSet(Some(old.num.getOrElse(0) + s.value), old.id)
   }
 
-  val runTask: CompFun2[IntResult] = { js => implicit env =>
+  val runTask: CompFun2 = { js => implicit env =>
     val rs = implicitly[Reader[MyResultSet]].read(js)
     // Logger.debug( "task implementation started" + rs.num.toString)
     val x = NodeLocalCache.getItemBlocking("asdfsdaf") {
@@ -64,7 +64,7 @@ object SimpleTask {
 
     // Logger.debug( "task implementation ended")
     // Logger.debug( rs.num.get)
-    new IntResult(rs.num.get)
+    UntypedResult(Set(), writeJs(new IntResult(rs.num.get)))
 
   }
 
@@ -89,6 +89,8 @@ class SimpleTask(
   val taskID = runTaskClass.getName
 
   val writer = implicitly[Writer[MyPrerequisitive]]
+
+  val reader = implicitly[Reader[MyResult]]
 
   def emptyResultSet =
     if (counter > 0) MyResultSet(Some(counter), Some(id))

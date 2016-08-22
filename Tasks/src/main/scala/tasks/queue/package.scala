@@ -32,15 +32,16 @@ import akka.actor._
 
 package object queue {
 
-  type CompFun2[B <: Result] = Js.Value => ComputationEnvironment => B
+  type CompFun2 = Js.Value => ComputationEnvironment => UntypedResult
 
   def newTask[A <: Result, B <: Prerequisitive[B]](
       prerequisitives: B,
       resource: CPUMemoryRequest = CPUMemoryRequest(cpu = 1, memory = 500),
-      f: CompFun2[A],
+      f: CompFun2,
       taskID: String
   )(implicit components: TaskSystemComponents,
-    writer1: Writer[B]): ProxyTaskActorRef[B, A] = {
+    writer1: Writer[B],
+    reader2: Reader[A]): ProxyTaskActorRef[B, A] = {
     implicit val queue = components.queue
     implicit val fileService = components.fs
     implicit val cache = components.cache
@@ -61,6 +62,7 @@ package object queue {
                   def emptyResultSet = prerequisitives
                   override def resourceConsumed = resource
                   val writer: Writer[B] = writer1
+                  val reader: Reader[A] = reader2
 
                   val runTaskClass = f.getClass
                   val taskID = taskID1

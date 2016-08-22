@@ -40,9 +40,9 @@ import upickle.Js
 
 abstract class Cache {
 
-  def get(x: TaskDescription): Option[Result]
+  def get(x: TaskDescription): Option[UntypedResult]
 
-  def set(x: TaskDescription, r: Result): Unit
+  def set(x: TaskDescription, r: UntypedResult): Unit
 
   def shutDown: Unit
 
@@ -71,7 +71,7 @@ class KVCache(
       scala.util.Try(deserializeResult(r)).toOption
     }
 
-  def set(x: TaskDescription, r: Result) = {
+  def set(x: TaskDescription, r: UntypedResult) = {
     try {
       val k: Array[Byte] = serializeTaskDescription(x)
       val v: Array[Byte] = serializeResult(r)
@@ -90,7 +90,7 @@ class DisabledCache extends Cache {
 
   def get(x: TaskDescription) = None
 
-  def set(x: TaskDescription, r: Result) = ()
+  def set(x: TaskDescription, r: UntypedResult) = ()
 
   def shutDown = {}
 
@@ -98,12 +98,13 @@ class DisabledCache extends Cache {
 
 class FakeCacheForTest extends Cache {
 
-  var cacheMap: scala.collection.mutable.ListMap[TaskDescription, Result] =
-    scala.collection.mutable.ListMap[TaskDescription, Result]()
+  var cacheMap: scala.collection.mutable.ListMap[TaskDescription,
+                                                 UntypedResult] =
+    scala.collection.mutable.ListMap[TaskDescription, UntypedResult]()
 
   def get(x: TaskDescription) = cacheMap.get(x)
 
-  def set(x: TaskDescription, r: Result) =
+  def set(x: TaskDescription, r: UntypedResult) =
     cacheMap.getOrElseUpdate(x, r)
 
   def shutDown = {}

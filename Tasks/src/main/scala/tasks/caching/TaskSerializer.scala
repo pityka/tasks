@@ -26,27 +26,29 @@
 package tasks.caching
 
 import tasks.queue._
-import tasks._
+import tasks.fileservice._
+import tasks.fileservice.SharedFile._
 
 import upickle.Js
+import upickle.default._
 
 trait TaskSerializer {
-  protected val serialization: akka.serialization.Serialization
-
-  private lazy val resultSerializer =
-    serialization.serializerFor(classOf[Result])
-
   def serializeTaskDescription(original: TaskDescription): Array[Byte] = {
     val x = original.persistent.getOrElse(original.startData)
 
     (original.taskID + "\n" + upickle.json.write(x)).getBytes("UTF8")
   }
 
-  protected def serializeResult(original: Result): Array[Byte] = {
-    resultSerializer.toBinary(original)
+  def serializeResult(original: UntypedResult): Array[Byte] = {
+    val js = Js.Obj(
+        "files" -> implicitly[Writer[Set[SharedFile]]].write(original.files),
+        "data" -> original.data)
+    upickle.json.write(js).getBytes("UTF8")
   }
 
-  protected def deserializeResult(ab: Array[Byte]): Result = {
-    resultSerializer.fromBinary(ab, manifest = None).asInstanceOf[Result]
+  def deserializeResult(ab: Array[Byte]): UntypedResult = {
+    val m = upickle.json.read(new String(ab)).obj
+    val files = implicitly[Reader[Set[SharedFile]]].read(m("files"))
+    UntypedResult(files, m("data"))
   }
 }

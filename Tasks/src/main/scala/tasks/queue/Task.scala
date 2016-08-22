@@ -46,6 +46,24 @@ import tasks.caching._
 import upickle.Js
 import upickle.default._
 
+case class UntypedResult(files: Set[SharedFile], data: Js.Value)
+
+object UntypedResult {
+
+  def fs(r: Result): Set[SharedFile] = r match {
+    case x: ResultWithSharedFiles =>
+      x.files.toSet ++ x.productIterator
+        .filter(_.isInstanceOf[Result])
+        .flatMap(x => fs(x.asInstanceOf[Result]))
+        .toSet
+    case _ => Set()
+  }
+
+  def make[A <: Result: Writer](r: A): UntypedResult =
+    UntypedResult(fs(r), writeJs(r))
+
+}
+
 case class ComputationEnvironment(
     val resourceAllocated: CPUMemoryAllocated,
     implicit val components: TaskSystemComponents,
@@ -99,8 +117,8 @@ private[tasks] object ProxyTask {
 
 }
 
-private class Task[Q <: Result](
-    runTask: CompFun2[Q],
+private class Task(
+    runTask: CompFun2,
     launcherActor: ActorRef,
     balancerActor: ActorRef,
     fileServiceActor: ActorRef,
@@ -121,7 +139,7 @@ private class Task[Q <: Result](
 
   private[this] var notificationRegister: List[ActorRef] = List[ActorRef]()
   private[this] val mainActor = this.self
-  private var resultG: Result = null
+  private var resultG: UntypedResult = null
 
   private def startTask(msg: Js.Value) {
 
@@ -223,7 +241,7 @@ abstract class ProxyTask(
       .apply((incomings, r))
   }
 
-  val runTaskClass: java.lang.Class[_ <: CompFun2[MyResult]]
+  val runTaskClass: java.lang.Class[_ <: CompFun2]
 
   val taskID: String
 
@@ -234,6 +252,8 @@ abstract class ProxyTask(
   def emptyResultSet: MyPrerequisitive
 
   val writer: Writer[MyPrerequisitive]
+
+  val reader: Reader[MyResult]
 
   private[this] var _updatePrerequisitives =
     List[UpdatePrerequisitive[MyPrerequisitive, Result]]()
@@ -317,7 +337,8 @@ abstract class ProxyTask(
       handleIncomingResult(msg)
       if (incomings.ready && !taskIsQueued) startTask
 
-    case MessageFromTask(incomingResult) =>
+    case MessageFromTask(incomingResultJs) =>
+      val incomingResult: MyResult = reader.read(incomingResultJs.data)
       log.debug("Message received from: " + sender.toString + ", ")
       if (result.isEmpty) {
         result = Some(incomingResult)
