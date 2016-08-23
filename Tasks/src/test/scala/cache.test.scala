@@ -57,15 +57,15 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
     )
     cache.set(
         td,
-        tasks.simpletask.IntResult(1)
+        UntypedResult(Set(), writeJs(tasks.simpletask.IntResult(1)))
     )
     cache.shutDown
 
     val cache2 =
       LevelDBCache(file, akka.serialization.SerializationExtension(system))
 
-    val read = cache2.get(td)
-    expectResult(Some(tasks.simpletask.IntResult(1)))(read)
+    val read = readJs[tasks.simpletask.IntResult](cache2.get(td).get.data)
+    expectResult((tasks.simpletask.IntResult(1)))(read)
 
   }
 
@@ -86,7 +86,7 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
       )
       cache.set(
           td,
-          tasks.simpletask.IntResult(i)
+          UntypedResult(Set(), writeJs(tasks.simpletask.IntResult(i)))
       )
     }
     cache.shutDown
@@ -100,8 +100,8 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
           writeJs(tasks.simpletask.SimpleTask.MyResultSet(Some(i), Some(0))),
           None
       )
-      val r = cache2.get(td)
-      expectResult(Some((tasks.simpletask.IntResult(i))))(r)
+      val r = readJs[tasks.simpletask.IntResult](cache2.get(td).get.data)
+      expectResult(((tasks.simpletask.IntResult(i))))(r)
     }
 
   }

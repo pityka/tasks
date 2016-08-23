@@ -45,6 +45,7 @@ import scala.util._
 import java.net.URL
 
 import tasks.util.eq._
+import tasks.queue._
 
 import upickle.default._
 import upickle.Js
@@ -85,7 +86,9 @@ class SharedFile private[tasks] (
 
   override def toString = s"SharedFile($path)"
 
-  def file(implicit service: FileServiceActor, context: ActorRefFactory) =
+  def file(implicit service: FileServiceActor,
+           nlc: NodeLocalCacheActor,
+           context: ActorRefFactory) =
     SharedFileHelper.getPathToFile(this)
 
   def openStream[R](f: InputStream => R)(implicit service: FileServiceActor,

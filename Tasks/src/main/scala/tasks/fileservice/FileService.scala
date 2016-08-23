@@ -46,6 +46,7 @@ import java.net.URL
 import tasks.util._
 import tasks.util.eq._
 import tasks.caching._
+import tasks.queue._
 
 @SerialVersionUID(1L)
 case class FileServiceActor(actor: ActorRef)
@@ -109,21 +110,25 @@ object SharedFileHelper {
       context: ActorRefFactory): R = useResource(getStreamToFile(sf))(fun)
 
   def getPathToFile(path: SharedFile)(implicit service: FileServiceActor,
-                                      context: ActorRefFactory): File = {
+                                      context: ActorRefFactory,
+                                      nlc: NodeLocalCacheActor): File = {
 
-    val serviceactor = service.actor
-    implicit val timout = akka.util.Timeout(1441 minutes)
-    val ac = context.actorOf(
-        Props(new FileUser(path, serviceactor, isLocal))
-          .withDispatcher("fileuser-dispatcher"))
+    NodeLocalCache.getItemBlocking("fs::" + path) {
+      val serviceactor = service.actor
+      implicit val timout = akka.util.Timeout(1441 minutes)
+      val ac = context.actorOf(
+          Props(new FileUser(path, serviceactor, isLocal))
+            .withDispatcher("fileuser-dispatcher"))
 
-    val f = Await.result((ac ? WaitingForPath).asInstanceOf[Future[Try[File]]],
-                         atMost = 1440 minutes)
-    ac ! PoisonPill
-    f match {
-      case Success(r) => r
-      case Failure(e) =>
-        throw new RuntimeException("getPathToFile failed. " + path, e)
+      val f =
+        Await.result((ac ? WaitingForPath).asInstanceOf[Future[Try[File]]],
+                     atMost = 1440 minutes)
+      ac ! PoisonPill
+      f match {
+        case Success(r) => r
+        case Failure(e) =>
+          throw new RuntimeException("getPathToFile failed. " + path, e)
+      }
     }
   }
 
