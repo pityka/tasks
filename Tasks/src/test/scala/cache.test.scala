@@ -37,7 +37,7 @@ import tasks.util._
 
 import upickle.default._
 
-case class A(x: Int) extends Result
+case class A(x: Int)
 
 class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
 

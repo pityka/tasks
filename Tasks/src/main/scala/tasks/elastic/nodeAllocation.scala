@@ -490,7 +490,7 @@ trait ElasticSupport[Registry <: NodeCreatorImpl, SS <: SelfShutdown] {
   }
 
   def apply(master: InetSocketAddress,
-            balancerActor: ActorRef,
+            queueActor: ActorRef,
             resource: CPUMemoryAvailable): Inner
 
 }

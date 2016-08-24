@@ -34,7 +34,7 @@ import scala.concurrent._
 import scala.concurrent.duration._
 
 object PiTasks {
-  case class BatchResult(inside: Int, outside: Int) extends Result
+  case class BatchResult(inside: Int, outside: Int)
 
   case class BatchInput(batchSize: Option[SharedFile], batchId: Option[Int])
       extends SimplePrerequisitive[BatchInput]
@@ -42,14 +42,7 @@ object PiTasks {
   case class PiInput(inside: Option[Int], outside: Option[Int])
       extends SimplePrerequisitive[PiInput]
 
-  case class PiResult(pi: Double) extends Result
-
-  implicit val update: UpdatePrerequisitive[PiInput, BatchResult] =
-    UpdatePrerequisitive {
-      case (old, i: BatchResult) =>
-        old.copy(inside = Some(i.inside + old.inside.getOrElse(0)),
-                 outside = Some(i.outside + old.outside.getOrElse(0)))
-    }
+  case class PiResult(pi: Double)
 
   val batchCalc = TaskDefinition[BatchInput, BatchResult]("batch") {
     case BatchInput(Some(size), Some(id)) =>
@@ -77,19 +70,13 @@ object Fib {
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
-  def serial(n: Int): Int = n match {
-    case 0 => 0
-    case 1 => 1
-    case x => serial(n - 1) + serial(n - 2)
-  }
-
   case class FibInput(n: Option[Int], tag: Option[List[Boolean]])
       extends SimplePrerequisitive[FibInput]
   object FibInput {
     def apply(n: Int): FibInput = FibInput(Some(n), tag = Some(Nil))
   }
 
-  case class FibOut(n: Int) extends Result
+  case class FibOut(n: Int)
 
   val fibtask: TaskDefinition[FibInput, FibOut] =
     TaskDefinition[FibInput, FibOut]("fib") {
@@ -126,10 +113,11 @@ object PiApp extends App {
 
   withTaskSystem { implicit ts =>
     val numTasks = 100
+
     val taskSize: SharedFile = {
       val tmp = java.io.File.createTempFile("size", ".txt")
       val writer = new java.io.FileWriter(tmp)
-      writer.write("10000")
+      writer.write("1000")
       writer.close
       SharedFile(tmp, name = "taskSize.txt")
     }
@@ -147,14 +135,6 @@ object PiApp extends App {
         }
 
     val fibResult = fibtask(FibInput(16))(CPUMemoryRequest(1, 50)).?
-
-    // val piTask = piCalc(PiInput(None, None))(CPUMemoryRequest(1, 50))
-    //
-    // 1 to numTasks foreach { i =>
-    //   val batch =
-    //     batchCalc(BatchInput(Some(taskSize)))(CPUMemoryRequest(1, 50))
-    //   batch ~> piTask
-    // }
 
     println(Await.result(pi, atMost = 10 minutes))
     println(Await.result(fibResult, atMost = 10 minutes))

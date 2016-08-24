@@ -50,16 +50,13 @@ case class UntypedResult(files: Set[SharedFile], data: Js.Value)
 
 object UntypedResult {
 
-  def fs(r: Result): Set[SharedFile] = r match {
+  def fs(r: Any): Set[SharedFile] = r match {
     case x: ResultWithSharedFiles =>
-      x.files.toSet ++ x.productIterator
-        .filter(_.isInstanceOf[Result])
-        .flatMap(x => fs(x.asInstanceOf[Result]))
-        .toSet
+      x.files.toSet ++ x.productIterator.flatMap(x => fs(x)).toSet
     case _ => Set()
   }
 
-  def make[A <: Result: Writer](r: A): UntypedResult =
+  def make[A: Writer](r: A): UntypedResult =
     UntypedResult(fs(r), writeJs(r))
 
 }
@@ -93,21 +90,21 @@ private[tasks] object ProxyTask {
   def getBackResultFuture(actor: ActorRef,
                           timeoutp: FiniteDuration =
                             config.global.proxyTaskGetBackResult)(
-      implicit ec: ExecutionContext): Future[Result] = {
+      implicit ec: ExecutionContext): Future[Any] = {
 
     implicit val timout = Timeout(timeoutp)
-    (actor ? (GetBackResult)).asInstanceOf[Future[Result]]
+    (actor ? (GetBackResult))
 
   }
 
   def getBackResult(actor: ActorRef,
                     timeoutp: FiniteDuration =
                       config.global.proxyTaskGetBackResult)(
-      implicit ec: ExecutionContext): Result =
+      implicit ec: ExecutionContext): Any =
     scala.concurrent.Await
       .result(getBackResultFuture(actor, timeoutp), timeoutp)
 
-  def addTarget[B <: Prerequisitive[B], A <: Result](
+  def addTarget[B <: Prerequisitive[B], A](
       parent: ActorRef,
       child: ActorRef,
       updater: UpdatePrerequisitive[B, A]) {
@@ -229,14 +226,14 @@ abstract class ProxyTask(
 
   protected type MyPrerequisitive <: Prerequisitive[MyPrerequisitive]
 
-  protected type MyResult <: Result
+  protected type MyResult
 
   protected def resourceConsumed =
     tasks.CPUMemoryRequest(cpu = 1, memory = 500)
 
-  def handleIncomingResult(r: Result) {
+  def handleIncomingResult(r: Any) {
     incomings = _updatePrerequisitives
-      .foldLeft(identity[MyPrerequisitive])((b, a) =>
+      .foldLeft(identity[MyPrerequisitive, Any])((b, a) =>
             UpdatePrerequisitive(a orElse b))
       .apply((incomings, r))
   }
@@ -256,11 +253,11 @@ abstract class ProxyTask(
   val reader: Reader[MyResult]
 
   private[this] var _updatePrerequisitives =
-    List[UpdatePrerequisitive[MyPrerequisitive, Result]]()
+    List[UpdatePrerequisitive[MyPrerequisitive, Any]]()
 
   protected var incomings: MyPrerequisitive = emptyResultSet
 
-  private[this] var result: Option[Result] = None
+  private[this] var result: Option[Any] = None
 
   private var taskIsQueued = false
 
@@ -324,18 +321,13 @@ abstract class ProxyTask(
     case x: SaveUpdater[_, _] =>
       _updatePrerequisitives = x.updater.asInstanceOf[UpdatePrerequisitive[
                 MyPrerequisitive,
-                Result]] :: _updatePrerequisitives
+                Any]] :: _updatePrerequisitives
       sender ! UpdaterSaved
 
     case UpdaterSaved =>
       log.debug("target added")
       _targets = _targets + sender
       result.foreach(r => sender ! r)
-
-    case msg: Result =>
-      log.debug("Message received, handling in handleIncomingResult. ")
-      handleIncomingResult(msg)
-      if (incomings.ready && !taskIsQueued) startTask
 
     case MessageFromTask(incomingResultJs) =>
       val incomingResult: MyResult = reader.read(incomingResultJs.data)
@@ -364,9 +356,10 @@ abstract class ProxyTask(
       notifyListenersOnFailure(cause)
       self ! PoisonPill
     }
-    case msg =>
-      log.error(
-          "Unhandled message " + msg.toString.take(100) + sender.toString)
+    case msg: Any =>
+      log.debug("Message received, handling in handleIncomingResult. ")
+      handleIncomingResult(msg)
+      if (incomings.ready && !taskIsQueued) startTask
   }
 
 }

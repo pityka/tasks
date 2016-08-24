@@ -41,10 +41,10 @@ case class QueueActor(actor: ActorRef) extends Serializable
 @SerialVersionUID(1L)
 case class LauncherActor(actor: ActorRef) extends Serializable
 
-case class ProxyTaskActorRef[B <: Prerequisitive[B], T <: Result](
+case class ProxyTaskActorRef[B <: Prerequisitive[B], T](
     private val actor: ActorRef) {
 
-  def ~>[C <: Prerequisitive[C], A <: Result](child: ProxyTaskActorRef[C, A])(
+  def ~>[C <: Prerequisitive[C], A](child: ProxyTaskActorRef[C, A])(
       implicit updater: UpdatePrerequisitive[C, T])
     : ProxyTaskActorRef[C, A] = {
     ProxyTask.addTarget(actor, child.actor, updater)
@@ -57,7 +57,7 @@ case class ProxyTaskActorRef[B <: Prerequisitive[B], T <: Result](
   def ?!(implicit ec: ExecutionContext) =
     ProxyTask.getBackResult(actor).asInstanceOf[T]
 
-  def <~[A <: Result](result: A)(
-      implicit updater: UpdatePrerequisitive[B, A]): Unit = actor ! result
+  def <~[A](result: A)(implicit updater: UpdatePrerequisitive[B, A]): Unit =
+    actor ! result
 
 }

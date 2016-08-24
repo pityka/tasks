@@ -40,7 +40,7 @@ import tasks.fileservice._
 
 import upickle.default._
 
-case class IntResult(val value: Int) extends Result
+case class IntResult(val value: Int)
 
 object SimpleTask {
 

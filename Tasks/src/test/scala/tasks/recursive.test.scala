@@ -66,7 +66,7 @@ object Fib {
     def apply(n: Int): FibInput = FibInput(Some(n), tag = Some(Nil))
   }
 
-  case class FibOut(n: Int) extends Result
+  case class FibOut(n: Int)
 
   val fibtask: TaskDefinition[FibInput, FibOut] =
     TaskDefinition[FibInput, FibOut]("fib") {

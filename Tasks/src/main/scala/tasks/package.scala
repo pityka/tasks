@@ -181,15 +181,14 @@ package object tasks {
     new TaskSystem(hostConfig, conf)
   }
 
-  type CompFun[A <: Prerequisitive[A], B <: Result] =
-    A => ComputationEnvironment => B
+  type CompFun[A <: Prerequisitive[A], B] = A => ComputationEnvironment => B
 
-  def TaskDefinition[A <: Prerequisitive[A], C <: Result](taskID: String)(
+  def TaskDefinition[A <: Prerequisitive[A], C](taskID: String)(
       comp: CompFun[A, C]): TaskDefinition[A, C] = macro Macros
     .taskDefinitionImpl[A, C]
 
-  def identity[A <: Prerequisitive[A]]: UpdatePrerequisitive[A, Result] =
-    UpdatePrerequisitive[A, Result] {
+  def identity[A <: Prerequisitive[A], B]: UpdatePrerequisitive[A, B] =
+    UpdatePrerequisitive[A, B] {
       case (x, _) => x
     }
 

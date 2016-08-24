@@ -34,7 +34,7 @@ package object queue {
 
   type CompFun2 = Js.Value => ComputationEnvironment => UntypedResult
 
-  def newTask[A <: Result, B <: Prerequisitive[B]](
+  def newTask[A, B <: Prerequisitive[B]](
       prerequisitives: B,
       resource: CPUMemoryRequest = CPUMemoryRequest(cpu = 1, memory = 500),
       f: CompFun2,

@@ -181,7 +181,7 @@ akka {
   def printQueueToLog {
     implicit val timeout = akka.util.Timeout(10 seconds)
     import system.dispatcher
-    (balancerActor ? GetQueueInformation).onSuccess {
+    (queueActor ? GetQueueInformation).onSuccess {
       case queue: QueueInfo => tasksystemlog.info("Queue content: " + queue)
     }
 
@@ -193,7 +193,7 @@ akka {
 
   private val host: InetSocketAddress = hostConfig.myAddress
 
-  private lazy val balancerAndCacherAddress = hostConfig.master
+  private lazy val masterAddress = hostConfig.master
 
   private val isLauncherOnly = hostConfig.myRole == SLAVE
 
@@ -211,7 +211,7 @@ akka {
   val remotenoderegistry =
     if (isLauncherOnly && elastic.elasticSupport.isDefined) {
       val remotepath =
-        s"akka.tcp://tasks@${balancerAndCacherAddress.getHostName}:${balancerAndCacherAddress.getPort}/user/noderegistry"
+        s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/noderegistry"
       val noderegistry = Await.result(
           system.actorSelection(remotepath).resolveOne(600 seconds),
           atMost = 600 seconds)
@@ -283,7 +283,7 @@ akka {
       ac
     } else {
       val actorpath =
-        s"akka.tcp://tasks@${balancerAndCacherAddress.getHostName}:${balancerAndCacherAddress.getPort}/user/fileservice"
+        s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/fileservice"
       val globalFileService = Await.result(
           system.actorSelection(actorpath).resolveOne(600 seconds),
           atMost = 600 seconds)
@@ -320,7 +320,7 @@ akka {
     } else {
       if (hostConfig.cacheAddress.isEmpty) {
         val actorpath =
-          s"akka.tcp://tasks@${balancerAndCacherAddress.getHostName}:${balancerAndCacherAddress.getPort}/user/cache"
+          s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/cache"
         Await.result(system.actorSelection(actorpath).resolveOne(600 seconds),
                      atMost = 600 seconds)
       } else {
@@ -337,7 +337,7 @@ akka {
     }
   }
 
-  val balancerActor = try {
+  val queueActor = try {
     if (!isLauncherOnly) {
       val ac =
         system.actorOf(Props[TaskQueue].withDispatcher("taskqueue"), "queue")
@@ -345,7 +345,7 @@ akka {
       ac
     } else {
       val actorpath =
-        s"akka.tcp://tasks@${balancerAndCacherAddress.getHostName}:${balancerAndCacherAddress.getPort}/user/queue"
+        s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/queue"
       val ac = Await.result(
           system.actorSelection(actorpath).resolveOne(600 seconds),
           atMost = 600 seconds)
@@ -362,7 +362,7 @@ akka {
   val elasticSupportFactory = elastic.elasticSupport.map(
       es =>
         es(master = hostConfig.master,
-           balancerActor = balancerActor,
+           queueActor = queueActor,
            resource = CPUMemoryAvailable(cpu = hostConfig.myCardinality,
                                          memory = hostConfig.availableMemory)))
 
@@ -397,8 +397,6 @@ akka {
 
     } else None
 
-  val queueActor = QueueActor(balancerActor)
-
   val fileServiceActor = FileServiceActor(fileActor)
 
   val nodeLocalCacheActor = system.actorOf(
@@ -410,7 +408,7 @@ akka {
   val nodeLocalCache = NodeLocalCacheActor(nodeLocalCacheActor)
 
   implicit val components = TaskSystemComponents(
-      queue = queueActor,
+      queue = QueueActor(queueActor),
       fs = fileServiceActor,
       actorsystem = system,
       cache = CacheActor(cacherActor),
@@ -422,7 +420,7 @@ akka {
     val refresh = config.global.askInterval
     val ac = system.actorOf(
         Props(
-            new TaskLauncher(balancerActor,
+            new TaskLauncher(queueActor,
                              nodeLocalCacheActor,
                              CPUMemoryAvailable(cpu = numberOfCores,
                                                 memory = availableMemory),
@@ -446,9 +444,9 @@ akka {
              launcherActor.get))
 
     val balancerHeartbeat = system.actorOf(
-        Props(new HeartBeatActor(balancerActor)).withDispatcher("heartbeat"),
-        "heartbeatOf" + balancerActor.path.address.toString
-          .replace("://", "___") + balancerActor.path.name)
+        Props(new HeartBeatActor(queueActor)).withDispatcher("heartbeat"),
+        "heartbeatOf" + queueActor.path.address.toString
+          .replace("://", "___") + queueActor.path.name)
 
     system.actorOf(
         Props(elasticSupportFactory.get.createSelfShutdown)
@@ -476,7 +474,7 @@ akka {
         val latch = new java.util.concurrent.CountDownLatch(1)
         reaperActor ! Latch(latch)
 
-        balancerActor ! PoisonPill
+        queueActor ! PoisonPill
         cacherActor ! PoisonPill
         fileActor ! PoisonPill
         system.actorSelection("/user/fileservice_*") ! PoisonPill

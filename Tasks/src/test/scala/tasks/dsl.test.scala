@@ -44,8 +44,7 @@ import com.typesafe.config.ConfigFactory
 
 object Tests {
 
-  case class IntWrapper(i: Int) extends Result
-
+  case class IntWrapper(i: Int)
   implicit val updateCounter: UpdatePrerequisitive[STP1[Int], IntWrapper] =
     UpdatePrerequisitive {
       case (old, i: IntWrapper) => old.copy(a1 = Some(i.i))

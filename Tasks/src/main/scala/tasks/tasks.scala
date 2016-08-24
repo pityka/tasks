@@ -35,9 +35,7 @@ import akka.actor._
 import upickle.default._
 import upickle.Js
 
-abstract class ResultWithSharedFiles(sf: SharedFile*)
-    extends Result
-    with Product {
+abstract class ResultWithSharedFiles(sf: SharedFile*) extends Product {
   def files = sf
 
 }
@@ -69,9 +67,7 @@ object LauncherActor {
   }
 }
 
-trait Result
-
-class TaskDefinition[A <: Prerequisitive[A]: Writer, B <: Result: Reader](
+class TaskDefinition[A <: Prerequisitive[A]: Writer, B: Reader](
     val computation: CompFun2,
     val taskID: String) {
 
@@ -81,7 +77,7 @@ class TaskDefinition[A <: Prerequisitive[A]: Writer, B <: Result: Reader](
 
 }
 
-case class UpdatePrerequisitive[A <: Prerequisitive[A], B <: Result](
+case class UpdatePrerequisitive[A <: Prerequisitive[A], B](
     pf: PartialFunction[(A, B), A])
     extends PartialFunction[(A, B), A] {
   def apply(v1: (A, B)) = pf.apply(v1)
