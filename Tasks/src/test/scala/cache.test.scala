@@ -52,19 +52,21 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
       LevelDBCache(file, akka.serialization.SerializationExtension(system))
     val td = TaskDescription(
         tasks.simpletask.SimpleTask.runTask.getClass.getName,
-        writeJs(tasks.simpletask.SimpleTask.MyResultSet(Some(1), Some(0))),
+        JsonString(
+            write(tasks.simpletask.SimpleTask.MyResultSet(Some(1), Some(0)))),
         None
     )
     cache.set(
         td,
-        UntypedResult(Set(), writeJs(tasks.simpletask.IntResult(1)))
+        UntypedResult(Set(), JsonString(write(tasks.simpletask.IntResult(1))))
     )
     cache.shutDown
 
     val cache2 =
       LevelDBCache(file, akka.serialization.SerializationExtension(system))
 
-    val read = readJs[tasks.simpletask.IntResult](cache2.get(td).get.data)
+    val read = upickle.default
+      .read[tasks.simpletask.IntResult](cache2.get(td).get.data.value)
     expectResult((tasks.simpletask.IntResult(1)))(read)
 
   }
@@ -81,12 +83,15 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
     for (i <- 1 to 1000) {
       val td = TaskDescription(
           tasks.simpletask.SimpleTask.runTask.getClass.getName,
-          writeJs(tasks.simpletask.SimpleTask.MyResultSet(Some(i), Some(0))),
+          JsonString(
+              write(
+                  tasks.simpletask.SimpleTask.MyResultSet(Some(i), Some(0)))),
           None
       )
       cache.set(
           td,
-          UntypedResult(Set(), writeJs(tasks.simpletask.IntResult(i)))
+          UntypedResult(Set(),
+                        JsonString(write(tasks.simpletask.IntResult(i))))
       )
     }
     cache.shutDown
@@ -97,10 +102,12 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
     for (i <- 1 to 1000) {
       val td = TaskDescription(
           tasks.simpletask.SimpleTask.runTask.getClass.getName,
-          writeJs(tasks.simpletask.SimpleTask.MyResultSet(Some(i), Some(0))),
+          JsonString(
+              write(
+                  tasks.simpletask.SimpleTask.MyResultSet(Some(i), Some(0)))),
           None
       )
-      val r = readJs[tasks.simpletask.IntResult](cache2.get(td).get.data)
+      val r = read[tasks.simpletask.IntResult](cache2.get(td).get.data.value)
       expectResult(((tasks.simpletask.IntResult(i))))(r)
     }
 

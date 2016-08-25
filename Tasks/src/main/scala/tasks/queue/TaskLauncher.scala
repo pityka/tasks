@@ -52,9 +52,12 @@ case class ScheduleWithProxy(sch: ScheduleTask, ac: List[ActorRef])
     extends Serializable
 
 @SerialVersionUID(1L)
+case class JsonString(value: String) extends Serializable
+
+@SerialVersionUID(1L)
 case class TaskDescription(taskID: String,
-                           startData: Js.Value,
-                           persistent: Option[Js.Value])
+                           startData: JsonString,
+                           persistent: Option[JsonString])
     extends Serializable
 
 @SerialVersionUID(1L)

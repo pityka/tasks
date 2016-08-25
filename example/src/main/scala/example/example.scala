@@ -95,7 +95,7 @@ object Fib {
                 r1 <- f1
                 r2 <- f2
               } yield FibOut(r1.n + r2.n)
-              tasks.LauncherActor.block(CPUMemoryRequest(1, 100)) {
+              tasks.LauncherActor.block(CPUMemoryRequest(1, 1000)) {
                 Await.result(f3, atMost = 500 seconds)
               }
             }
@@ -122,19 +122,18 @@ object PiApp extends App {
       SharedFile(tmp, name = "taskSize.txt")
     }
 
-    val pi: Future[PiResult] =
-      Future
-        .sequence(1 to numTasks map { i =>
-          batchCalc(BatchInput(Some(taskSize), Some(i)))(
-              CPUMemoryRequest(1, 50)).?
-        })
-        .flatMap { batches =>
-          piCalc(PiInput(Some(batches.map(_.inside).sum),
-                         Some(batches.map(_.outside).sum)))(
-              CPUMemoryRequest(1, 50)).?
-        }
+    val pi: Future[PiResult] = Future
+      .sequence(1 to numTasks map { i =>
+        batchCalc(BatchInput(Some(taskSize), Some(i)))(
+            CPUMemoryRequest(1, 1000)).?
+      })
+      .flatMap { batches =>
+        piCalc(PiInput(Some(batches.map(_.inside).sum),
+                       Some(batches.map(_.outside).sum)))(
+            CPUMemoryRequest(1, 1000)).?
+      }
 
-    val fibResult = fibtask(FibInput(16))(CPUMemoryRequest(1, 50)).?
+    val fibResult = fibtask(FibInput(16))(CPUMemoryRequest(1, 1000)).?
 
     println(Await.result(pi, atMost = 10 minutes))
     println(Await.result(fibResult, atMost = 10 minutes))

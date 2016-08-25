@@ -34,21 +34,21 @@ import upickle.default._
 
 trait TaskSerializer {
   def serializeTaskDescription(original: TaskDescription): Array[Byte] = {
-    val x = original.persistent.getOrElse(original.startData)
+    val x = original.persistent.getOrElse(original.startData).value
 
-    (original.taskID + "\n" + upickle.json.write(x)).getBytes("UTF8")
+    (original.taskID + "\n" + x).getBytes("UTF8")
   }
 
   def serializeResult(original: UntypedResult): Array[Byte] = {
     val js = Js.Obj(
         "files" -> implicitly[Writer[Set[SharedFile]]].write(original.files),
-        "data" -> original.data)
+        "data" -> Js.Str(original.data.value))
     upickle.json.write(js).getBytes("UTF8")
   }
 
   def deserializeResult(ab: Array[Byte]): UntypedResult = {
     val m = upickle.json.read(new String(ab)).obj
     val files = implicitly[Reader[Set[SharedFile]]].read(m("files"))
-    UntypedResult(files, m("data"))
+    UntypedResult(files, JsonString(m("data").str))
   }
 }

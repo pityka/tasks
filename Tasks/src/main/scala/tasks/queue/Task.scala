@@ -46,7 +46,7 @@ import tasks.caching._
 import upickle.Js
 import upickle.default._
 
-case class UntypedResult(files: Set[SharedFile], data: Js.Value)
+case class UntypedResult(files: Set[SharedFile], data: JsonString)
 
 object UntypedResult {
 
@@ -57,7 +57,7 @@ object UntypedResult {
   }
 
   def make[A: Writer](r: A): UntypedResult =
-    UntypedResult(fs(r), writeJs(r))
+    UntypedResult(fs(r), JsonString(write(r)))
 
 }
 
@@ -204,9 +204,9 @@ private class Task(
   }
 
   def receive = {
-    case msg: Js.Value =>
+    case JsonString(msg) =>
       log.debug("StartTask, from taskactor")
-      startTask(msg)
+      startTask(upickle.json.read(msg))
 
     case RegisterForNotification(ac) =>
       log.debug("Received: " + ac.toString)
@@ -283,9 +283,11 @@ abstract class ProxyTask(
     if (result.isEmpty) {
 
       val s = ScheduleTask(
-          TaskDescription(taskID,
-                          writer.write(incomings),
-                          incomings.persistent.map(x => writer.write(x.self))),
+          TaskDescription(
+              taskID,
+              JsonString(upickle.json.write(writer.write(incomings))),
+              incomings.persistent.map(x =>
+                    JsonString(upickle.json.write(writer.write(x.self))))),
           runTaskClass.getName,
           resourceConsumed,
           starter,
@@ -330,7 +332,8 @@ abstract class ProxyTask(
       result.foreach(r => sender ! r)
 
     case MessageFromTask(incomingResultJs) =>
-      val incomingResult: MyResult = reader.read(incomingResultJs.data)
+      val incomingResult: MyResult =
+        reader.read(upickle.json.read(incomingResultJs.data.value))
       log.debug("Message received from: " + sender.toString + ", ")
       if (result.isEmpty) {
         result = Some(incomingResult)

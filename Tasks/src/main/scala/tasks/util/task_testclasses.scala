@@ -64,7 +64,7 @@ object SimpleTask {
 
     // Logger.debug( "task implementation ended")
     // Logger.debug( rs.num.get)
-    UntypedResult(Set(), writeJs(new IntResult(rs.num.get)))
+    UntypedResult(Set(), JsonString(write(new IntResult(rs.num.get))))
 
   }
 
