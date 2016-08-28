@@ -31,6 +31,8 @@ import tasks._
 import akka.actor._
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
+import tasks.util._
 
 @SerialVersionUID(1L)
 case class NodeLocalCacheActor(actor: ActorRef) extends Serializable
@@ -52,10 +54,12 @@ case class ProxyTaskActorRef[B <: Prerequisitive[B], T](
   }
 
   def ?(implicit ec: ExecutionContext) =
-    ProxyTask.getBackResultFuture(actor).asInstanceOf[Future[T]]
+    ProxyTask
+      .getBackResultFuture(actor, config.global.proxyTaskGetBackResult)
+      .asInstanceOf[Future[T]]
 
-  def ?!(implicit ec: ExecutionContext) =
-    ProxyTask.getBackResult(actor).asInstanceOf[T]
+  def ?(timeoutp: FiniteDuration)(implicit ec: ExecutionContext) =
+    ProxyTask.getBackResultFuture(actor, timeoutp).asInstanceOf[Future[T]]
 
   def <~[A](result: A)(implicit updater: UpdatePrerequisitive[B, A]): Unit =
     actor ! result

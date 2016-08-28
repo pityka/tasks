@@ -34,6 +34,7 @@ import akka.pattern.ask
 import scala.concurrent.duration._
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
+import scala.util._
 
 import java.io.File
 
@@ -65,7 +66,9 @@ case class ComputationEnvironment(
     val resourceAllocated: CPUMemoryAllocated,
     implicit val components: TaskSystemComponents,
     implicit val log: akka.event.LoggingAdapter,
-    implicit val launcher: LauncherActor
+    implicit val launcher: LauncherActor,
+    implicit val executionContext: ExecutionContext,
+    val taskActor: ActorRef
 ) extends Serializable {
 
   implicit def fs: FileServiceActor = components.fs
@@ -97,13 +100,6 @@ private[tasks] object ProxyTask {
 
   }
 
-  def getBackResult(actor: ActorRef,
-                    timeoutp: FiniteDuration =
-                      config.global.proxyTaskGetBackResult)(
-      implicit ec: ExecutionContext): Any =
-    scala.concurrent.Await
-      .result(getBackResultFuture(actor, timeoutp), timeoutp)
-
   def addTarget[B <: Prerequisitive[B], A](
       parent: ActorRef,
       child: ActorRef,
@@ -131,81 +127,88 @@ private class Task(
   }
 
   override def postStop {
-    log.debug("Task stopped.")
+    fjp.shutdown
+    log.debug("Task stopped, {}", startdat)
+
   }
 
-  private[this] var notificationRegister: List[ActorRef] = List[ActorRef]()
-  private[this] val mainActor = this.self
-  private var resultG: UntypedResult = null
+  var notificationRegister: List[ActorRef] = List[ActorRef]()
+  val mainActor = this.self
 
-  private def startTask(msg: Js.Value) {
+  val fjp = tasks.util.concurrent
+    .newJavaForkJoinPoolWithNamePrefix("tasks-ec", resourceAllocated.cpu)
+  val executionContext =
+    scala.concurrent.ExecutionContext.fromExecutorService(fjp)
 
-    Future {
-      try {
-        log.debug("Starttask from the executing dispatcher (future).")
+  var startdat: Option[String] = None
 
-        val ce = ComputationEnvironment(
-            resourceAllocated,
-            TaskSystemComponents(
-                QueueActor(balancerActor),
-                FileServiceActor(fileServiceActor),
-                context.system,
-                CacheActor(globalCacheActor),
-                NodeLocalCacheActor(nodeLocalCache),
-                fileServicePrefix
-            ),
-            getApplicationLogger(runTask)(context.system),
-            LauncherActor(launcherActor)
-        )
+  def startTask(msg: Js.Value): Unit =
+    try {
+      log.debug("Starttask from the executing dispatcher (future).")
 
-        log.debug("CE" + ce)
-        log.debug("start data " + msg)
+      val ce = ComputationEnvironment(
+          resourceAllocated,
+          TaskSystemComponents(
+              QueueActor(balancerActor),
+              FileServiceActor(fileServiceActor),
+              context.system,
+              CacheActor(globalCacheActor),
+              NodeLocalCacheActor(nodeLocalCache),
+              fileServicePrefix
+          ),
+          log,
+          LauncherActor(launcherActor),
+          executionContext,
+          self
+      )
 
-        val result = runTask(msg)(ce)
+      log.debug("CE {}", ce)
+      log.debug("start data {}", msg)
 
-        resultG = result
+      val f = Future(runTask(msg)(ce))(executionContext)
+        .flatMap(x => x)(executionContext)
 
-        log.debug(
-            "Task job ended. sending to launcher. from the executing dispatcher (future).")
+      f.onComplete {
+        case Success(result) =>
+          log.debug("Task success. Notifications: {}",
+                    notificationRegister.toString)
+          notificationRegister.foreach(_ ! MessageFromTask(result))
+          launcherActor ! InternalMessageFromTask(mainActor, result)
+          self ! PoisonPill
 
-        log.debug(
-            "Sending results over to proxies, etc: " + notificationRegister.toString)
+        case Failure(x) =>
+          x.printStackTrace()
+          log.error(
+              x,
+              "Exception caught in the executing dispatcher of a task. " + x.getMessage)
+          launcherActor ! InternalMessageTaskFailed(mainActor, x)
+          self ! PoisonPill
 
-        notificationRegister.foreach(_ ! MessageFromTask(resultG))
+      }(executionContext)
 
-        launcherActor ! InternalMessageFromTask(mainActor, result)
-
-        log.debug(
-            "Task ended. Result sent to launcherActor. Taking PoisonPill")
-
+    } catch {
+      case x: Exception => {
+        x.printStackTrace()
+        log.error(
+            x,
+            "Exception caught in the executing dispatcher of a task. " + x.getMessage)
+        launcherActor ! InternalMessageTaskFailed(mainActor, x)
         self ! PoisonPill
-
-      } catch {
-        case x: Exception => {
-          val y = x.getStackTrace
-          x.printStackTrace()
-          log.error(
-              x,
-              "Exception caught in the executing dispatcher of a task. " + x.getMessage)
-          launcherActor ! InternalMessageTaskFailed(mainActor, x)
-          self ! PoisonPill
-        }
-        case x: AssertionError => {
-          val y = x.getStackTrace
-          x.printStackTrace()
-          log.error(
-              x,
-              "Exception caught in the executing dispatcher of a task. " + x.getMessage)
-          launcherActor ! InternalMessageTaskFailed(mainActor, x)
-          self ! PoisonPill
-        }
       }
-    }(context.dispatcher)
-  }
+      case x: AssertionError => {
+        x.printStackTrace()
+        log.error(
+            x,
+            "Exception caught in the executing dispatcher of a task. " + x.getMessage)
+        launcherActor ! InternalMessageTaskFailed(mainActor, x)
+        self ! PoisonPill
+      }
+    }
 
   def receive = {
     case JsonString(msg) =>
       log.debug("StartTask, from taskactor")
+      startdat = Some(msg)
       startTask(upickle.json.read(msg))
 
     case RegisterForNotification(ac) =>
@@ -262,8 +265,7 @@ abstract class ProxyTask(
   private var taskIsQueued = false
 
   private def distributeResult {
-    log.debug(
-        "Distributing result to targets: " + _targets.toString + ", " + _channels.toString)
+    log.debug("Distributing result to targets: {}, {}", _targets, _channels)
     result.foreach(r =>
           _targets.foreach { t =>
         t ! r
@@ -310,7 +312,7 @@ abstract class ProxyTask(
   }
 
   override def postStop() = {
-    log.debug("ProxyTask stopped.")
+    log.debug("ProxyTask stopped. {} {} {}", taskID, incomings, self)
   }
 
   def receive = {
@@ -334,7 +336,11 @@ abstract class ProxyTask(
     case MessageFromTask(incomingResultJs) =>
       val incomingResult: MyResult =
         reader.read(upickle.json.read(incomingResultJs.data.value))
-      log.debug("Message received from: " + sender.toString + ", ")
+      log.debug("MessageFromTask received from: {}, {}, {},{}",
+                sender,
+                incomingResultJs,
+                result,
+                incomingResult)
       if (result.isEmpty) {
         result = Some(incomingResult)
         distributeResult
@@ -347,8 +353,10 @@ abstract class ProxyTask(
       distributeResult
 
     case ATaskWasForwarded =>
-      log.debug("The loadbalancer received the message and queued it.")
-      taskIsQueued = true
+      if (!taskIsQueued) {
+        log.debug("The loadbalancer received the message and queued it.")
+        taskIsQueued = true
+      }
 
     case TaskFailedMessageToProxy(sch, cause) =>
       log.error(cause, "Execution failed. ")

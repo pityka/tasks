@@ -98,8 +98,8 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
     val numberOfAkkaRemotingThreads = if (hostConfig.myRole == MASTER) 6 else 2
 
     val configSource = s"""
-task-worker-blocker-dispatcher.fork-join-executor.parallelism-max = ${hostConfig.myCardinality}
-task-worker-blocker-dispatcher.fork-join-executor.parallelism-min = ${hostConfig.myCardinality}
+task-worker-dispatcher.fork-join-executor.parallelism-max = ${hostConfig.myCardinality}
+task-worker-dispatcher.fork-join-executor.parallelism-min = ${hostConfig.myCardinality}
 akka {
   actor {
     provider = "${actorProvider}"

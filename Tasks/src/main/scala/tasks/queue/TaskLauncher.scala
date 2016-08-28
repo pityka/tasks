@@ -82,19 +82,19 @@ class TaskLauncher(
   @SerialVersionUID(1L)
   private case object CheckQueue
 
-  private[this] val maxResources: CPUMemoryAvailable = slots
-  private[this] var availableResources: CPUMemoryAvailable = maxResources
+  val maxResources: CPUMemoryAvailable = slots
+  var availableResources: CPUMemoryAvailable = maxResources
 
-  private def idle = maxResources == availableResources
-  private var idleState: Long = 0L
+  def idle = maxResources == availableResources
+  var idleState: Long = 0L
 
-  private var denyWorkBeforeShutdown = false
+  var denyWorkBeforeShutdown = false
 
-  private[this] var startedTasks: List[(ActorRef,
-                                        ScheduleTask,
-                                        CPUMemoryAllocated)] = Nil
+  var startedTasks: List[(ActorRef, ScheduleTask, CPUMemoryAllocated)] = Nil
 
-  private def launch(sch: ScheduleTask, proxies: List[ActorRef]) = {
+  var freed = Set[ActorRef]()
+
+  def launch(sch: ScheduleTask, proxies: List[ActorRef]) = {
 
     log.debug("Launch method")
 
@@ -116,7 +116,7 @@ class TaskLauncher(
             nodeLocalCache,
             allocatedResource,
             sch.fileServicePrefix.append(sch.description.taskID)
-        ).withDispatcher("task-worker-blocker-dispatcher")
+        ).withDispatcher("task-worker-dispatcher")
     )
     log.debug("Actor constructed")
     // log.debug( "Actor started")
@@ -132,14 +132,14 @@ class TaskLauncher(
     allocatedResource
   }
 
-  private def askForWork {
+  def askForWork {
     if (!availableResources.empty && !denyWorkBeforeShutdown) {
       // log.debug("send askForWork" + availableResources)
       taskQueue ! AskForWork(availableResources)
     }
   }
 
-  private var scheduler: Cancellable = null
+  var scheduler: Cancellable = null
 
   override def preStart {
     log.debug("TaskLauncher starting")
@@ -163,8 +163,7 @@ class TaskLauncher(
         s"TaskLauncher stopped, sent PoisonPill to ${startedTasks.size} running tasks.")
   }
 
-  private def taskFinished(taskActor: ActorRef,
-                           receivedResult: UntypedResult) {
+  def taskFinished(taskActor: ActorRef, receivedResult: UntypedResult) {
     val elem = startedTasks
       .find(_._1 == taskActor)
       .getOrElse(throw new RuntimeException(
@@ -177,10 +176,14 @@ class TaskLauncher(
     taskQueue ! TaskDone(sch, receivedResult)
 
     startedTasks = startedTasks.filterNot(_ == elem)
-    availableResources = availableResources.addBack(elem._3)
+    if (!freed.contains(taskActor)) {
+      availableResources = availableResources.addBack(elem._3)
+    } else {
+      freed -= taskActor
+    }
   }
 
-  private def taskFailed(taskActor: ActorRef, cause: Throwable) {
+  def taskFailed(taskActor: ActorRef, cause: Throwable) {
 
     val elem = startedTasks
       .find(_._1 == taskActor)
@@ -190,7 +193,11 @@ class TaskLauncher(
 
     startedTasks = startedTasks.filterNot(_ == elem)
 
-    availableResources = availableResources.addBack(elem._3)
+    if (!freed.contains(taskActor)) {
+      availableResources = availableResources.addBack(elem._3)
+    } else {
+      freed -= taskActor
+    }
 
     taskQueue ! TaskFailedMessageToQueue(sch, cause)
 
@@ -205,7 +212,7 @@ class TaskLauncher(
           idleState += 1
         }
         val allocated = launch(sch, acs)
-        sender ! Ack(allocated)
+        sender ! Ack(allocated, sch)
         askForWork
       }
 
@@ -233,14 +240,16 @@ class TaskLauncher(
         sender ! Working
       }
 
-    case BlockOn(request) => {
-      availableResources = availableResources.addBack(
-          CPUMemoryAllocated(request.cpu._1, request.memory))
-    }
-    case BlockOff(request) => {
-      availableResources = availableResources.substract(
-          CPUMemoryAllocated(request.cpu._1, request.memory))
-    }
+    case Release =>
+      val taskActor = sender
+      val allocated = startedTasks.find(_._1 == taskActor).map(_._3)
+      if (allocated.isEmpty) log.error("Can't find actor ")
+      else {
+        availableResources = availableResources.addBack(
+            CPUMemoryAllocated(allocated.get.cpu, allocated.get.memory))
+        freed = freed + taskActor
+      }
+      askForWork
 
     case x => log.debug("unhandled" + x)
 

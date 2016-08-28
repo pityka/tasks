@@ -24,7 +24,7 @@ case class BatchResult(result:Int)
 
 
 val batchCalc =
-  TaskDefinition[BatchInput, BatchResult]("batch") {
+  Task[BatchInput, BatchResult]("batch") {
 
   case BatchInput(Some(file), Some(id)) =>
     implicit ctx =>
@@ -63,6 +63,13 @@ withTaskSystem { implicit ts =>
 ```
 
 See `example` project for a complete example.
+
+# Concepts
+
+## Transformation graph
+
+The whole analysis workflow is represented as a graph in which each vertex is a transformation,
+edges represent dependencies. Data is immutable.
 
 ## Licence
 

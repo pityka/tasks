@@ -29,7 +29,6 @@ package example
 
 import tasks._
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
 import scala.concurrent.duration._
 
@@ -44,10 +43,9 @@ object PiTasks {
 
   case class PiResult(pi: Double)
 
-  val batchCalc = TaskDefinition[BatchInput, BatchResult]("batch") {
+  val batchCalc = Task[BatchInput, BatchResult]("batch") {
     case BatchInput(Some(size), Some(id)) =>
       implicit ctx =>
-        log.info("This is worker " + id)
         val sizeInt = scala.io.Source.fromFile(size.file).mkString.toInt
         val (in, out) = (0 until sizeInt).foldLeft((0, 0)) {
           case ((countIn, countOut), _) =>
@@ -59,7 +57,7 @@ object PiTasks {
         BatchResult(in, out)
   }
 
-  val piCalc = TaskDefinition[PiInput, PiResult]("reduce") {
+  val piCalc = Task[PiInput, PiResult]("reduce") {
     case PiInput(Some(in), Some(out)) =>
       implicit ctx =>
         PiResult(in.toDouble / (in + out) * 4d)
@@ -68,36 +66,46 @@ object PiTasks {
 
 object Fib {
 
-  import scala.concurrent.ExecutionContext.Implicits.global
-
-  case class FibInput(n: Option[Int], tag: Option[List[Boolean]])
-      extends SimplePrerequisitive[FibInput]
+  case class FibInput(n: Option[Int]) extends SimplePrerequisitive[FibInput]
   object FibInput {
-    def apply(n: Int): FibInput = FibInput(Some(n), tag = Some(Nil))
+    def apply(n: Int): FibInput = FibInput(Some(n))
   }
 
   case class FibOut(n: Int)
 
-  val fibtask: TaskDefinition[FibInput, FibOut] =
-    TaskDefinition[FibInput, FibOut]("fib") {
+  case class FibReduce(f1: Option[FibOut], f2: Option[FibOut])
+      extends SimplePrerequisitive[FibReduce]
 
-      case FibInput(Some(n), Some(tag)) =>
+  val reduce = Task[FibReduce, FibOut]("fibreduce") {
+    case FibReduce(Some(f1), Some(f2)) =>
+      implicit ce =>
+        FibOut(f1.n + f2.n)
+  }
+
+  val fibtask: TaskDefinition[FibInput, FibOut] =
+    AsyncTask[FibInput, FibOut]("fib") {
+
+      case FibInput(Some(n)) =>
         implicit ce =>
           n match {
-            case 0 => FibOut(0)
-            case 1 => FibOut(1)
+            case 0 => Future.successful(FibOut(0))
+            case 1 => Future.successful(FibOut(1))
             case n => {
-              val f1 = fibtask(FibInput(Some(n - 1), Some(false :: tag)))(
-                  CPUMemoryRequest(1, 1)).?
-              val f2 = fibtask(FibInput(Some(n - 2), Some(true :: tag)))(
-                  CPUMemoryRequest(1, 1)).?
-              val f3 = for {
+              val f1 = fibtask(FibInput(Some(n - 1)))(CPUMemoryRequest(1, 1)).?
+              val f2 = fibtask(FibInput(Some(n - 2)))(CPUMemoryRequest(1, 1)).?
+
+              val f3: Future[FibOut] = for {
                 r1 <- f1
                 r2 <- f2
-              } yield FibOut(r1.n + r2.n)
-              tasks.LauncherActor.block(CPUMemoryRequest(1, 1000)) {
-                Await.result(f3, atMost = 500 seconds)
-              }
+                r3 <- reduce(FibReduce(Some(r1), Some(r2)))(
+                         CPUMemoryRequest(1, 1)).?
+
+              } yield r3
+
+              releaseResources
+
+              f3
+
             }
 
           }
@@ -110,6 +118,8 @@ object PiApp extends App {
 
   import PiTasks._
   import Fib._
+
+  import scala.concurrent.ExecutionContext.Implicits.global
 
   withTaskSystem { implicit ts =>
     val numTasks = 100

@@ -29,10 +29,11 @@ import tasks._
 import upickle.default._
 import upickle.Js
 import akka.actor._
+import scala.concurrent._
 
 package object queue {
 
-  type CompFun2 = Js.Value => ComputationEnvironment => UntypedResult
+  type CompFun2 = Js.Value => ComputationEnvironment => Future[UntypedResult]
 
   def newTask[A, B <: Prerequisitive[B]](
       prerequisitives: B,

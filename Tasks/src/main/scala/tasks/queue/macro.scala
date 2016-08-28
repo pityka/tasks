@@ -27,10 +27,40 @@ package tasks.queue
 import tasks._
 import upickle.default._
 import upickle.Js
+import scala.concurrent.Future
 
 object Macros {
   import scala.reflect.macros.Context
   import scala.language.experimental.macros
+
+  def asyncTaskDefinitionImpl[A: cxt.WeakTypeTag, C: cxt.WeakTypeTag](
+      cxt: Context)(
+      taskID: cxt.Expr[String]
+  )(
+      comp: cxt.Expr[A => ComputationEnvironment => Future[C]]
+  ) = {
+    import cxt.universe._
+    val a = weakTypeOf[A]
+    val c = weakTypeOf[C]
+    val h = taskID.tree match {
+      case Literal(Constant(s: String)) => TypeName(s)
+      case _ => cxt.abort(cxt.enclosingPosition, "Not a string literal")
+    }
+    val t =
+      tq"Function1[upickle.Js.Value,Function1[tasks.queue.ComputationEnvironment,scala.concurrent.Future[tasks.queue.UntypedResult]]]"
+    val r = q"""
+    class $h extends $t {
+      val r = implicitly[upickle.default.Reader[$a]]
+      val w = implicitly[upickle.default.Writer[$c]]
+      val c = $comp
+      def apply(j:upickle.Js.Value) =
+          (ce:tasks.queue.ComputationEnvironment) => (c(r.read(j))(ce)).map(x => tasks.queue.UntypedResult.make(x)(w))(ce.executionContext)
+
+    }
+    new TaskDefinition[$a,$c](new $h,$taskID)
+    """
+    r
+  }
 
   def taskDefinitionImpl[A: cxt.WeakTypeTag, C: cxt.WeakTypeTag](cxt: Context)(
       taskID: cxt.Expr[String]
@@ -45,13 +75,15 @@ object Macros {
       case _ => cxt.abort(cxt.enclosingPosition, "Not a string literal")
     }
     val t =
-      tq"Function1[upickle.Js.Value,Function1[tasks.queue.ComputationEnvironment,tasks.queue.UntypedResult]]"
+      tq"Function1[upickle.Js.Value,Function1[tasks.queue.ComputationEnvironment,scala.concurrent.Future[tasks.queue.UntypedResult]]]"
     val r = q"""
     class $h extends $t {
       val r = implicitly[upickle.default.Reader[$a]]
       val w = implicitly[upickle.default.Writer[$c]]
       val c = $comp
-      def apply(j:upickle.Js.Value) = c(r.read(j)) andThen (x => tasks.queue.UntypedResult.make(x)(w))
+      def apply(j:upickle.Js.Value) =
+          ((ce:tasks.queue.ComputationEnvironment) => scala.concurrent.Future(tasks.queue.UntypedResult.make(c(r.read(j))(ce))(w))(ce.executionContext))
+
 
     }
     new TaskDefinition[$a,$c](new $h,$taskID)

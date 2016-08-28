@@ -99,8 +99,10 @@ case class MessageFromTask(result: UntypedResult) extends Serializable
 
 case object SaveDone
 
+private[tasks] case object NegotiationTimeout
+
 @SerialVersionUID(1L)
-private[tasks] case class Ack(allocated: CPUMemoryAllocated)
+private[tasks] case class Ack(allocated: CPUMemoryAllocated, sch: ScheduleTask)
 
 @SerialVersionUID(1L)
 private[tasks] case class RegisterForNotification(actor: ActorRef)
@@ -113,7 +115,4 @@ private[tasks] case object GetMaximumSlots
 private[tasks] case object GetAvailableSlots
 
 @SerialVersionUID(1L)
-case class BlockOn(request: CPUMemoryRequest) extends Serializable
-
-@SerialVersionUID(1L)
-case class BlockOff(request: CPUMemoryRequest) extends Serializable
+case object Release extends Serializable

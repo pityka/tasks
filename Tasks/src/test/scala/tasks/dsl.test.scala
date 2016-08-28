@@ -34,6 +34,8 @@ import tasks._
 import org.scalatest.FunSpec
 import org.scalatest.Matchers
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent._
+import scala.concurrent.duration._
 
 import tasks.queue._
 import tasks.caching._
@@ -44,13 +46,15 @@ import com.typesafe.config.ConfigFactory
 
 object Tests {
 
+  def await[T](f: Future[T]) = Await.result(f, atMost = Duration.Inf)
+
   case class IntWrapper(i: Int)
   implicit val updateCounter: UpdatePrerequisitive[STP1[Int], IntWrapper] =
     UpdatePrerequisitive {
       case (old, i: IntWrapper) => old.copy(a1 = Some(i.i))
     }
 
-  val increment = TaskDefinition[STP1[Int], IntWrapper]("increment") {
+  val increment = Task[STP1[Int], IntWrapper]("increment") {
     case STP1(Some(c)) =>
       implicit computationEnvironment =>
         IntWrapper(c + 1)
@@ -64,8 +68,8 @@ object Tests {
     def t1(i: Option[Int]) = increment(STP1[Int](i))(CPUMemoryRequest(1, 500))
 
     (
-        increment(0)(CPUMemoryRequest(1, 500)).?!.i,
-        (t1(Some(0)) ~> t1(None) ~> t1(None) ~> t1(None)).?!.i
+        await(increment(0)(CPUMemoryRequest(1, 500)).?).i,
+        await((t1(Some(0)) ~> t1(None) ~> t1(None) ~> t1(None)) ?).i
     )
 
   }

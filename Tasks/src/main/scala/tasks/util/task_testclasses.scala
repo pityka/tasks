@@ -53,18 +53,21 @@ object SimpleTask {
   }
 
   val runTask: CompFun2 = { js => implicit env =>
-    val rs = implicitly[Reader[MyResultSet]].read(js)
-    // Logger.debug( "task implementation started" + rs.num.toString)
-    val x = NodeLocalCache.getItemBlocking("asdfsdaf") {
-      "value"
-    }
-    Thread.sleep(50)
+    Future {
+      val rs = implicitly[Reader[MyResultSet]].read(js)
+      // Logger.debug( "task implementation started" + rs.num.toString)
+      val x = NodeLocalCache.getItemBlocking("asdfsdaf") {
+        "value"
+      }
+      Thread.sleep(50)
 
-    if (rs.num.get == 42) throw new RuntimeException("failtest")
+      if (rs.num.get == 42) throw new RuntimeException("failtest")
 
-    // Logger.debug( "task implementation ended")
-    // Logger.debug( rs.num.get)
-    UntypedResult(Set(), JsonString(write(new IntResult(rs.num.get))))
+      // Logger.debug( "task implementation ended")
+      // Logger.debug( rs.num.get)
+
+      UntypedResult(Set(), JsonString(write(new IntResult(rs.num.get))))
+    }(scala.concurrent.ExecutionContext.Implicits.global)
 
   }
 

@@ -45,7 +45,6 @@ import java.net.InetAddress
 
 import scala.concurrent.duration._
 import scala.concurrent._
-import scala.concurrent.Await
 import scala.collection.JavaConversions._
 
 sealed trait Role

@@ -32,26 +32,14 @@ object TempFile {
   private def createTempDir(baseName: String): File = {
     val baseDir = new File(System.getProperty("java.io.tmpdir"));
 
-    val max = 5
+    val tempDir = new File(baseDir, baseName);
+    val t = if (tempDir.mkdir()) {
+      Some(tempDir)
+    } else None
 
-    var counter = 0
-    var b = false
-    var t: Option[File] = None
-    while (!b && counter < max) {
-      val tempDir = new File(baseDir, baseName + counter);
-      if (tempDir.mkdir()) {
-        b = true
-        t = Some(tempDir)
-      }
-      counter += 1
-    }
+    t.foreach(_.deleteOnExit)
 
-    if (t.isDefined) {
-      val x = t.get
-      x.deleteOnExit
-      x
-    } else
-      throw new RuntimeException("Failed to create temp folder")
+    t.get
 
   }
 
@@ -60,7 +48,7 @@ object TempFile {
     f.format(new java.util.Date)
   }
 
-  val prefix = "bio" + id
+  val prefix = "tasks" + id
 
   lazy val folder = synchronized {
     createTempDir(prefix)

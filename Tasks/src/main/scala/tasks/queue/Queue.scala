@@ -31,7 +31,6 @@ import akka.actor.{Actor, PoisonPill, ActorRef, Cancellable, Props}
 import akka.remote.DeadlineFailureDetector
 import akka.remote.FailureDetector.Clock
 import akka.remote.DisassociatedEvent
-import akka.pattern.ask
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -70,11 +69,11 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
         case None => queuedTasks.update(sch, ac)
         case Some(acs) => queuedTasks.update(sch, (ac ::: acs).distinct)
       }
-    }
+    } else addProxyToRoutedMessages(sch, ac)
   }
 
-  // This is true, while waiting for response from the tasklauncher
-  private var negotiation = false
+  // This is defined, while waiting for response from the tasklauncher
+  private var negotiation: Option[ActorRef] = None
 
   private def removeFromRoutedMessages(sch: ScheduleTask) {
     // Remove from the list of sent (running) messages
@@ -92,7 +91,10 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
     // If present in the queue, remove from the queue
     // val msgs2 = queue.filter(x => x._1 == sch)
     // msgs2.foreach(x => queue.dequeueAll(_ == x))
-    queuedTasks.remove(sch)
+    if (queuedTasks.contains(sch)) {
+      log.error("Should not be queued. {}", queuedTasks(sch))
+    }
+    // queuedTasks.remove(sch)
   }
 
   private def taskFailed(sch: ScheduleTask, cause: Throwable) {
@@ -139,6 +141,13 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
     log.info("TaskQueue stopped.")
   }
 
+  def addProxyToRoutedMessages(m: ScheduleTask,
+                               newproxies: List[ActorRef]): Unit = {
+    val (launcher, allocation, proxies) = routedMessages(m)
+    routedMessages
+      .update(m, (launcher, allocation, (newproxies ::: proxies).distinct))
+  }
+
   def receive = {
     case m: ScheduleTask => {
       log.debug("Received ScheduleTask.")
@@ -151,11 +160,10 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
                        !proxies.isEmpty && !proxies.contains(sender)
                    }
                    .getOrElse(false)) {
-        log.warning(
-            "Scheduletask received multiple times from different proxies. Not queuing this one, but delivering result if ready. {}",
+        log.debug(
+            "Scheduletask received multiple times from different proxies. Not queueing this one, but delivering result if ready. {}",
             m)
-        val (launcher, allocation, proxies) = routedMessages(m)
-        routedMessages.update(m, (launcher, allocation, sender :: proxies))
+        addProxyToRoutedMessages(m, sender :: Nil)
       } else {
         val ch = sender
         m.cacheActor ! CheckResult(m, ch)
@@ -182,8 +190,12 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
 
       }
     }
-    case AskForWork(resource) => {
-      if (!negotiation) {
+    case NegotiationTimeout =>
+      log.debug("TaskLauncher did not Ack'd back on sending task. Requeueing.")
+      negotiation = None
+
+    case AskForWork(resource) =>
+      if (negotiation.isEmpty) {
         log.debug(
             "AskForWork. Sender: {}. Resource: {}. Negotition state: {}. Queue state: {}",
             sender,
@@ -194,20 +206,11 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
               .toSeq)
 
         val launcher = sender
-        val dequeued = queuedTasks.find {
+
+        queuedTasks.find {
           case (k, v) => resource.canFulfillRequest(k.resource)
-        }
-        dequeued.foreach {
-          case (k, v) =>
-            queuedTasks.remove(k)
-        }
-
-        if (dequeued.isEmpty) {
-          // log.debug(s"Nothing to dequeue. Available resource of launcher: $resource . Queue: $queuedTasks")
-        }
-
-        dequeued.foreach { task =>
-          negotiation = true
+        }.foreach { task =>
+          negotiation = Some(launcher)
           log.debug("Dequeued. Sending task to " + launcher)
           log.debug(negotiation.toString)
 
@@ -221,52 +224,37 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
               .subscribe(self, classOf[HeartBeatStopped])
           }
 
-          try {
+          val resp = launcher ! ScheduleWithProxy(task._1, task._2)
 
-            // val resp = (launcher.?(ScheduleWithProxy(task._1, new ActorInEnvelope(task._2)))(timeout = 30 seconds))
-            val resp = (launcher.?(ScheduleWithProxy(task._1, task._2))(
-                timeout = 30 seconds))
+          context.system.scheduler.scheduleOnce(
+              30 seconds,
+              self,
+              NegotiationTimeout)(context.dispatcher)
 
-            import context.dispatcher
-
-            resp onFailure {
-              case error => {
-                log.debug(
-                    "TaskLauncher did not Ack'd back on sending task. Requeueing.")
-                negotiation = false
-                queuedTasks.update(task._1, task._2)
-              }
-            }
-
-            resp onSuccess {
-              case Ack(allocated) => {
-                log.debug("ScheduleTask sent to launcher.")
-                log.debug("Queue size: " + queuedTasks.size)
-                negotiation = false
-                routedMessages += (task._1 -> (launcher, allocated, task._2))
-              }
-            }
-          } catch {
-            case x: java.nio.channels.ClosedChannelException => {
-              log.debug(
-                  "TaskLauncher did not Ack'd back on sending task. Requeueing.")
-              queuedTasks.update(task._1, task._2)
-            }
-            case e: Throwable => {
-              negotiation = false
-              log.error(e.getMessage)
-              throw e
-            }
-          }
         }
       } else {
         log.debug("AskForWork received but currently in negotiation state.")
       }
+
+    case Ack(allocated, task)
+        if negotiation.map(_ === sender).getOrElse(false) => {
+      negotiation = None
+
+      if (routedMessages.contains(task)) {
+        log.error(
+            "Routed messages already contains task. This is unexpected and can lead to lost messages.")
+      }
+
+      val proxies = queuedTasks(task)
+      queuedTasks.remove(task)
+
+      routedMessages += (task -> (sender, allocated, proxies))
     }
-    case TaskDone(sch, result) => {
+
+    case TaskDone(sch, result) =>
       log.debug("TaskDone {} {}", sch, result)
       taskDone(sch, result)
-    }
+
     case TaskFailedMessageToQueue(sch, cause) => taskFailed(sch, cause)
     case m: HeartBeatStopped => {
       log.info("HeartBeatStopped: " + m)

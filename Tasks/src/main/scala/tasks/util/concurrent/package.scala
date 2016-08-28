@@ -26,13 +26,17 @@
 package tasks.util
 
 import java.util.concurrent.{ForkJoinPool, ForkJoinWorkerThread}
+import scala.concurrent.duration._
+import scala.concurrent._
 
 package object concurrent {
 
-  def newExecutionContext(prefix: String, parallelism: Int) = {
-    val fp = newJavaForkJoinPoolWithNamePrefix(prefix, parallelism)
-    scala.concurrent.ExecutionContext.fromExecutorService(fp)
-  }
+  // def newExecutionContext(prefix: String, parallelism: Int) = {
+  //   val fp = newJavaForkJoinPoolWithNamePrefix(prefix, parallelism)
+  //   scala.concurrent.ExecutionContext.fromExecutorService(fp)
+  // }
+
+  def await[T](f: Future[T]) = Await.result(f, atMost = Duration.Inf)
 
   def newJavaForkJoinPoolWithNamePrefix(prefix: String, parallelism: Int) = {
 

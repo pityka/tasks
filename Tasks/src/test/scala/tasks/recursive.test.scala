@@ -35,6 +35,7 @@ import scala.concurrent.duration._
 
 import scala.io.Source
 import tasks._
+import tasks.util.concurrent.await
 import tasks.simpletask._
 import akka.actor.{Actor, PoisonPill, ActorRef, Props, ActorSystem}
 import akka.actor.Actor._
@@ -69,25 +70,23 @@ object Fib {
   case class FibOut(n: Int)
 
   val fibtask: TaskDefinition[FibInput, FibOut] =
-    TaskDefinition[FibInput, FibOut]("fib") {
+    AsyncTask[FibInput, FibOut]("fib") {
 
       case FibInput(Some(n), Some(tag)) =>
         implicit ce =>
           n match {
-            case 0 => FibOut(0)
-            case 1 => FibOut(1)
+            case 0 => Future.successful(FibOut(0))
+            case 1 => Future.successful(FibOut(1))
             case n => {
               val f1 = fibtask(FibInput(Some(n - 1), Some(false :: tag)))(
                   CPUMemoryRequest(1, 1)).?
               val f2 = fibtask(FibInput(Some(n - 2), Some(true :: tag)))(
                   CPUMemoryRequest(1, 1)).?
-              val f3 = for {
+              releaseResources
+              for {
                 r1 <- f1
                 r2 <- f2
               } yield FibOut(r1.n + r2.n)
-              tasks.LauncherActor.block(CPUMemoryRequest(1, 100)) {
-                Await.result(f3, atMost = 500 seconds)
-              }
             }
 
           }
@@ -116,7 +115,7 @@ tasks.disableRemoting = true
 
   test("long") {
     val n = 16
-    val r = fibtask(FibInput(n))(CPUMemoryRequest(1, 1)).?!.n
+    val r = await(fibtask(FibInput(n))(CPUMemoryRequest(1, 1)).?).n
     expectResult(r)(serial(n))
   }
 

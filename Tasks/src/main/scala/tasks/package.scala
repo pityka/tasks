@@ -33,6 +33,7 @@ import java.util.concurrent.TimeUnit.{MILLISECONDS, NANOSECONDS, SECONDS}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.ExecutionContext
 
 import scala.collection.JavaConversions._
 import scala.util.Try
@@ -81,6 +82,13 @@ package object tasks {
   implicit def fs(implicit component: TaskSystemComponents): FileServiceActor =
     component.fs
 
+  implicit def executionContext(
+      implicit env: ComputationEnvironment): ExecutionContext =
+    env.executionContext
+
+  def releaseResources(implicit comp: ComputationEnvironment) =
+    comp.launcher.actor.!(Release)(comp.taskActor)
+
   implicit def ts(
       implicit component: ComputationEnvironment): TaskSystemComponents =
     component.components
@@ -111,15 +119,15 @@ package object tasks {
 
   implicit def cacheActor(
       implicit component: TaskSystemComponents): CacheActor = component.cache
-
-  def ls(pattern: String)(
-      implicit component: TaskSystemComponents): List[SharedFile] = {
-    implicit val timout = akka.util.Timeout(1441 minutes)
-    Await
-      .result(fs.actor ? GetListOfFilesInStorage(pattern),
-              atMost = scala.concurrent.duration.Duration.Inf)
-      .asInstanceOf[List[SharedFile]]
-  }
+  //
+  // def ls(pattern: String)(
+  //     implicit component: TaskSystemComponents): List[SharedFile] = {
+  //   implicit val timout = akka.util.Timeout(1441 minutes)
+  //   Await
+  //     .result(fs.actor ? GetListOfFilesInStorage(pattern),
+  //             atMost = scala.concurrent.duration.Duration.Inf)
+  //     .asInstanceOf[List[SharedFile]]
+  // }
 
   def remoteCacheAddress(implicit t: QueueActor, s: ActorContext): String =
     if (t.actor.path.address.host.isDefined && t.actor.path.address.port.isDefined)
@@ -183,7 +191,11 @@ package object tasks {
 
   type CompFun[A <: Prerequisitive[A], B] = A => ComputationEnvironment => B
 
-  def TaskDefinition[A <: Prerequisitive[A], C](taskID: String)(
+  def AsyncTask[A <: Prerequisitive[A], C](taskID: String)(
+      comp: CompFun[A, Future[C]]): TaskDefinition[A, C] = macro Macros
+    .asyncTaskDefinitionImpl[A, C]
+
+  def Task[A <: Prerequisitive[A], C](taskID: String)(
       comp: CompFun[A, C]): TaskDefinition[A, C] = macro Macros
     .taskDefinitionImpl[A, C]
 

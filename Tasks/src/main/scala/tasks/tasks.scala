@@ -58,15 +58,6 @@ trait SimplePrerequisitive[+A] extends Prerequisitive[A] with Product {
   }
 }
 
-object LauncherActor {
-  def block[T](request: CPUMemoryRequest)(k: => T)(implicit l: LauncherActor) = {
-    l.actor ! BlockOn(request)
-    val x = k
-    l.actor ! BlockOff(request)
-    k
-  }
-}
-
 class TaskDefinition[A <: Prerequisitive[A]: Writer, B: Reader](
     val computation: CompFun2,
     val taskID: String) {
