@@ -102,7 +102,7 @@ case object SaveDone
 private[tasks] case object NegotiationTimeout
 
 @SerialVersionUID(1L)
-private[tasks] case class Ack(allocated: CPUMemoryAllocated, sch: ScheduleTask)
+private[tasks] case class Ack(allocated: CPUMemoryAllocated)
 
 @SerialVersionUID(1L)
 private[tasks] case class RegisterForNotification(actor: ActorRef)

@@ -212,7 +212,7 @@ class TaskLauncher(
           idleState += 1
         }
         val allocated = launch(sch, acs)
-        sender ! Ack(allocated, sch)
+        sender ! Ack(allocated)
         askForWork
       }
 

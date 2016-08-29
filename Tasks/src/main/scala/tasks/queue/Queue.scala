@@ -61,6 +61,10 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
   private val routedMessages = scala.collection.mutable
     .Map[ScheduleTask, (ActorRef, CPUMemoryAllocated, List[ActorRef])]()
 
+  // This is non empty while waiting for response from the tasklauncher
+  // during that, no other tasks are started
+  private var negotiation: Option[(ActorRef, ScheduleTask)] = None
+
   private val knownLaunchers = scala.collection.mutable.HashSet[ActorRef]()
 
   private def enQueue(sch: ScheduleTask, ac: List[ActorRef]) {
@@ -72,29 +76,22 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
     } else addProxyToRoutedMessages(sch, ac)
   }
 
-  // This is defined, while waiting for response from the tasklauncher
-  private var negotiation: Option[ActorRef] = None
-
   private def removeFromRoutedMessages(sch: ScheduleTask) {
     // Remove from the list of sent (running) messages
     routedMessages.remove(sch)
   }
 
   private def taskDone(sch: ScheduleTask, r: UntypedResult) {
-    // Remove from the list of sent (running) messages
+    // Remove from the list of sent (running) messages and notify proxies
     routedMessages.get(sch).foreach {
       case (_, _, proxies) =>
         proxies.foreach(_ ! MessageFromTask(r))
     }
     removeFromRoutedMessages(sch)
 
-    // If present in the queue, remove from the queue
-    // val msgs2 = queue.filter(x => x._1 == sch)
-    // msgs2.foreach(x => queue.dequeueAll(_ == x))
     if (queuedTasks.contains(sch)) {
       log.error("Should not be queued. {}", queuedTasks(sch))
     }
-    // queuedTasks.remove(sch)
   }
 
   private def taskFailed(sch: ScheduleTask, cause: Throwable) {
@@ -210,7 +207,7 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
         queuedTasks.find {
           case (k, v) => resource.canFulfillRequest(k.resource)
         }.foreach { task =>
-          negotiation = Some(launcher)
+          negotiation = Some(launcher -> task._1)
           log.debug("Dequeued. Sending task to " + launcher)
           log.debug(negotiation.toString)
 
@@ -236,8 +233,9 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
         log.debug("AskForWork received but currently in negotiation state.")
       }
 
-    case Ack(allocated, task)
-        if negotiation.map(_ === sender).getOrElse(false) => {
+    case Ack(allocated)
+        if negotiation.map(_._1 === sender).getOrElse(false) => {
+      val task = negotiation.get._2
       negotiation = None
 
       if (routedMessages.contains(task)) {
