@@ -1,8 +1,6 @@
 /*
  * The MIT License
  *
- * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
- * Group Fellay
  * Modified work, Copyright (c) 2016 Istvan Bartha
 
  *
@@ -32,6 +30,15 @@ import tasks._
 import scala.concurrent._
 import scala.concurrent.duration._
 
+/** Definitions of subtasks for calculating Pi
+  *
+  * We define two tasks:
+  *   - `batchCalc` throws points to a square and count those within the unit circle
+  *   - `piCalc` calculates Pi based on the number of points inside/outside
+  *
+  * Both of these need case classes to hold inputs and results.
+  * Inputs need to extend the [[tasks.Prerequisitive]] trait.
+  */
 object PiTasks {
   case class BatchResult(inside: Int, outside: Int)
 
@@ -43,10 +50,28 @@ object PiTasks {
 
   case class PiResult(pi: Double)
 
+  /** Task definition
+    *
+    * Specifies input output types and name of task.
+    * The tasks's body is an Input => tasks.ComputationEnvironment => Output function
+    */
   val batchCalc = Task[BatchInput, BatchResult]("batch") {
-    case BatchInput(Some(size), Some(id)) =>
+
+    /* Input of task, does not need to be a pattern match */
+    case BatchInput(Some(sizeFile: SharedFile), Some(id: Int)) =>
+      /** Implicit context
+        *
+        * - Provides available resources allocated to the task
+        * - ExecutionContext
+        * - Implicit references to the TaskSystem (for spawning new subtasks)
+        * - Logger
+        */
       implicit ctx =>
-        val sizeInt = scala.io.Source.fromFile(size.file).mkString.toInt
+        /* SharedFile#file downloads the file to the local tmp folder */
+        val localFile: java.io.File = sizeFile.file
+
+        // Body of the task
+        val sizeInt = scala.io.Source.fromFile(localFile).mkString.toInt
         val (in, out) = (0 until sizeInt).foldLeft((0, 0)) {
           case ((countIn, countOut), _) =>
             val x = scala.util.Random.nextDouble
@@ -54,6 +79,8 @@ object PiTasks {
             val inside = math.sqrt(x * x + y * y) <= 1.0
             if (inside) (countIn + 1, countOut) else (countIn, countOut + 1)
         }
+
+        /* Return value */
         BatchResult(in, out)
   }
 
@@ -64,37 +91,53 @@ object PiTasks {
   }
 }
 
+/** Recursive algorithm of the n-th Fibonacci number
+  *
+  * Demonstrates how to recursively spawn new tasks from a task
+  *
+  * Defines two tasks:
+  *   - `reduce` calculates (n-1)+(n-2)
+  *   - `fibtask` spawns the necessary tasks
+  */
 object Fib {
 
   case class FibInput(n: Option[Int]) extends SimplePrerequisitive[FibInput]
-  object FibInput {
-    def apply(n: Int): FibInput = FibInput(Some(n))
-  }
 
-  case class FibOut(n: Int)
-
-  case class FibReduce(f1: Option[FibOut], f2: Option[FibOut])
+  case class FibReduce(f1: Option[Int], f2: Option[Int])
       extends SimplePrerequisitive[FibReduce]
 
-  val reduce = Task[FibReduce, FibOut]("fibreduce") {
+  val reduce = Task[FibReduce, Int]("fibreduce") {
     case FibReduce(Some(f1), Some(f2)) =>
       implicit ce =>
-        FibOut(f1.n + f2.n)
+        f1 + f2
   }
 
-  val fibtask: TaskDefinition[FibInput, FibOut] =
-    AsyncTask[FibInput, FibOut]("fib") {
+  /** Recursive Fibonacci
+    *
+    * Spawns new subtasks, which return in a future,
+    * thus this is an asynchronous task as well.
+    *
+    * The implicit context provides an ExecutionContext in which the Futures
+    * and the body of the task is running.
+    */
+  val fibtask: TaskDefinition[FibInput, Int] =
+    AsyncTask[FibInput, Int]("fib") {
 
       case FibInput(Some(n)) =>
-        implicit ce =>
+        implicit cxt =>
           n match {
-            case 0 => Future.successful(FibOut(0))
-            case 1 => Future.successful(FibOut(1))
+            case 0 => Future.successful(0)
+            case 1 => Future.successful(1)
             case n => {
+
+              /**
+                * Spawns new subtask with input and requested resources
+                * The `?` method returns a Future with the result of the task
+                */
               val f1 = fibtask(FibInput(Some(n - 1)))(CPUMemoryRequest(1, 1)).?
               val f2 = fibtask(FibInput(Some(n - 2)))(CPUMemoryRequest(1, 1)).?
 
-              val f3: Future[FibOut] = for {
+              val f3: Future[Int] = for {
                 r1 <- f1
                 r2 <- f2
                 r3 <- reduce(FibReduce(Some(r1), Some(r2)))(
@@ -102,6 +145,9 @@ object Fib {
 
               } yield r3
 
+              /**
+                * Releases resources in the scheduler, allowing for the
+                * scheduling of the f1 and f2 tasks. */
               releaseResources
 
               f3
@@ -121,6 +167,7 @@ object PiApp extends App {
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
+  /* Opens and closes a TaskSystem with default configuration */
   withTaskSystem { implicit ts =>
     val numTasks = 100
 
@@ -129,22 +176,33 @@ object PiApp extends App {
       val writer = new java.io.FileWriter(tmp)
       writer.write("1000")
       writer.close
+
+      /** Lifts a plain file into a SharedFile
+        *
+        * This copies the file to the configured 'file pool'
+        * (e.g. S3 or a folder on the master node)
+        */
       SharedFile(tmp, name = "taskSize.txt")
     }
 
+    /* Start tasks for Pi */
     val pi: Future[PiResult] = Future
-      .sequence(1 to numTasks map { i =>
-        batchCalc(BatchInput(Some(taskSize), Some(i)))(
-            CPUMemoryRequest(1, 1000)).?
-      })
+      .sequence(
+          1 to numTasks map { i =>
+            batchCalc(BatchInput(Some(taskSize), Some(i)))(
+                CPUMemoryRequest(1, 1000)).?
+          }
+      )
       .flatMap { batches =>
         piCalc(PiInput(Some(batches.map(_.inside).sum),
                        Some(batches.map(_.outside).sum)))(
             CPUMemoryRequest(1, 1000)).?
       }
 
-    val fibResult = fibtask(FibInput(16))(CPUMemoryRequest(1, 1000)).?
+    /* Start tasks for Fibonacci, subtasks are started by this task. */
+    val fibResult = fibtask(FibInput(Some(16)))(CPUMemoryRequest(1, 1000)).?
 
+    /* Block and wait for the futures */
     println(Await.result(pi, atMost = 10 minutes))
     println(Await.result(fibResult, atMost = 10 minutes))
 
