@@ -103,9 +103,18 @@ Nodes are automatically started and stopped based on the state of the queue.
 The library provides autoscaling on Amazon EC2, or on a preconfigured set of nodes via SSH.
 Platform LSF is also available (open an issue if needed).
 
+## Configuration
+
+This library uses the Typesafe config library (https://github.com/typesafehub/config).
+See the `tasks/src/main/resources/reference.conf` file for available configuration keys.
+
 ## Serialization
 
 Serialization of user data is handled by uPickle in compile time.
+
+## Persistence
+
+Persistence is implemented with simple a filesystem base key-value store, or LevelDB.
 
 ## Distribution of application code
 

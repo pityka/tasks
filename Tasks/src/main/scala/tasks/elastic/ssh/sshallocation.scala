@@ -51,8 +51,7 @@ object SSHSettings {
                   username: String,
                   memory: Int,
                   cpu: Int,
-                  extraArgs: String,
-                  mainClassWithClassPathOrJar: String)
+                  extraArgs: String)
   object Host {
     def fromConfig(config: Config) = {
       val hostname = config.getString("hostname")
@@ -61,8 +60,7 @@ object SSHSettings {
       val memory = config.getInt("memory")
       val cpu = config.getInt("cpu")
       val extraArgs = Try(config.getString("extraArgs")).toOption.getOrElse("")
-      val jarPath = config.getString("mainClassWithClassPathOrJar")
-      Host(hostname, keyFile, username, memory, cpu, extraArgs, jarPath)
+      Host(hostname, keyFile, username, memory, cpu, extraArgs)
     }
   }
 

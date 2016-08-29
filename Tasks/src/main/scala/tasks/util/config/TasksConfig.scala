@@ -101,9 +101,6 @@ class TasksConfig(val raw: Config) {
   val fileServiceThreadPoolSize =
     raw.getInt("tasks.fileservice.threadPoolSize")
 
-  val fileServiceFileListPath = new File(
-      raw.getString("tasks.fileservice.fileList"))
-
   val logFile = raw.getString("tasks.logFile")
 
   val sshHosts = raw.getObject("tasks.elastic.ssh.hosts")
@@ -115,9 +112,6 @@ class TasksConfig(val raw: Config) {
   val maxNodes = raw.getInt("tasks.elastic.maxNodes")
 
   val maxPendingNodes = raw.getInt("tasks.elastic.maxPending")
-
-  val newNodeJarPath =
-    raw.getString("tasks.elastic.mainClassWithClassPathOrJar")
 
   val queueCheckInterval: FD =
     raw.getDuration("tasks.elastic.queueCheckInterval")
@@ -135,12 +129,6 @@ class TasksConfig(val raw: Config) {
   val runscript = raw.getString("tasks.elastic.runscript")
 
   val assembledPackage = raw.getString("tasks.elastic.bin")
-
-  val additionalSystemProperties: List[String] = raw
-    .getStringList("tasks.elastic.additionalSystemProperties")
-    .toArray
-    .map(_.asInstanceOf[String])
-    .toList
 
   val endpoint: String = raw.getString("tasks.elastic.aws.endpoint")
 
@@ -162,9 +150,6 @@ class TasksConfig(val raw: Config) {
     if (s == "" || s == "-") None
     else Some(s)
   }
-
-  val s3UpdateInterval: FD =
-    raw.getDuration("tasks.elastic.aws.uploadInterval")
 
   val placementGroup: Option[String] =
     raw.getString("tasks.elastic.aws.placementGroup") match {
