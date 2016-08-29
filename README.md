@@ -7,7 +7,7 @@ while maintaining data dependencies (files or objects ) between individual subta
 Results of individual subtasks are cached between runs. Upon restart only those subtasks are executed
 whose output is not yet computed, or whose input has changed.
 
-Automatic up and downscaling of the cluster on EC2, LSF or via ssh.
+Automatic up and downscaling of the cluster on EC2 or via ssh.
 
 ## Example
 
