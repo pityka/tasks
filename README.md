@@ -64,20 +64,68 @@ withTaskSystem { implicit ts =>
 
 See `example` project for a complete example.
 
-# Concepts
+# Details
 
-## Transformation graph
+## Workflow graph
 
-The whole analysis workflow is represented as a graph in which each vertex is a transformation,
-edges represent dependencies. Data is immutable.
+The whole analysis workflow is represented as a graph in which each vertex is a transformation and
+edges represent data dependencies. All data is immutable. These transformation tasks are put in a queue and scheduled for execution.
 
-## Licence
+## External caching / memoization
+
+The results of each transformation step is persisted to disk, thus checkpointing the state of the workflow and preventing repeating steps if the process is restarted.
+This also provides a memoization effect during each run:
+if the same transformation occurs multiple times in the graph, then it is computed only once.
+
+## Distributed execution
+
+Any number of worker nodes can join to a master node to take up jobs.
+Worker nodes pull work from the master by presenting their available capacity.
+
+## Resource allocations
+
+The framework manages resource allocations in terms of CPU and memory.
+These are not enforced, but serve as a hint to allow for efficient allocation of jobs among
+available (possibly diverse) machines.
+
+## Unified file handles
+
+Tasks may have file dependencies, these files are transparently copied or streamed to the executing machine. Remote URLs are handled under the same API. Amazon S3 URL handlers are provided.
+
+All generated files are stored in the same file pool, which can be an S3 bucket, or a folder
+accessible from the master node.
+
+File transfer between the master node and worker nodes are transparent, and shortcutted in case the worker node have direct access to the file pool (e.g. S3 or a distributed filesystem).
+
+## Autoscaling of the compute cluster
+
+Nodes are automatically started and stopped based on the state of the queue.
+The library provides autoscaling on Amazon EC2, or on a preconfigured set of nodes via SSH.
+Platform LSF is also available (open an issue if needed).
+
+## Serialization
+
+Serialization of user data is handled by uPickle in compile time.
+
+## Distribution of application code
+
+The master and worker nodes need to have the same copies of compiled class files.
+
+The master node runs and HTTP server which exposes a prepackaged version of the application.
+This package file has to be accessible from the master node.
+SBT's universal plugin could be used, see the README in the example project and the build.sbt file in this project.
+
+## Security
+
+None, please use a private network.
+
+# Licence
 
 Author: Istvan Bartha
 
-This repository is a fork of https://github.com/pityka/mybiotools/tree/master/Tasks , for which the copyright holder is `ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland, Group Fellay` and was released under the MIT license.
+This repository is a fork of https://github.com/pityka/mybiotools/tree/master/Tasks , for which the copyright holder is `ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland, Group Fellay` and was released under the MIT license. (That repository holds my post-doc works in the laboratory of Professor Jacques Fellay.)
 
-Copyright of subsequent modifications belong to the individual contributors.
+Copyright of subsequent modifications belong to Istvan Bartha.
 
 ```
 The MIT License (MIT)

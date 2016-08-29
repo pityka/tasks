@@ -167,7 +167,10 @@ object PiApp extends App {
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
-  /* Opens and closes a TaskSystem with default configuration */
+  /**
+    *Opens and closes a TaskSystem with default configuration
+    * On a slave node, the block is not executed,
+    * but it starts pulling jobs from the queue  */
   withTaskSystem { implicit ts =>
     val numTasks = 100
 
