@@ -97,11 +97,11 @@ accessible from the master node.
 
 File transfer between the master node and worker nodes are transparent, and shortcutted in case the worker node have direct access to the file pool (e.g. S3 or a distributed filesystem).
 
-## Autoscaling of the compute cluster
+## Scaling of the compute cluster
 
 Nodes are automatically started and stopped based on the state of the queue.
-The library provides autoscaling on Amazon EC2, or on a preconfigured set of nodes via SSH.
-Platform LSF is also available (open an issue if needed).
+The library provides automatic scaling on Amazon EC2, or on a preconfigured set of nodes via SSH.
+LSF is also available (open an issue if needed).
 
 ## Configuration
 
