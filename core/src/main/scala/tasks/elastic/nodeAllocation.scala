@@ -117,6 +117,8 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
   private val pending =
     scala.collection.mutable.Set[Tuple2[PendingJobId, CPUMemoryAvailable]]()
 
+  private var allTime = 0
+
   private def toPend(p: PendingJobId, size: CPUMemoryAvailable) {
     pending += ((p, size))
   }
@@ -130,7 +132,8 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
 
   def requestNewNodes(types: Map[CPUMemoryRequest, Int]) = {
     if (types.values.sum > 0) {
-      if (config.global.maxNodes > (jobregistry.size + pending.size)) {
+      if (config.global.maxNodes > (jobregistry.size + pending.size) &&
+          allTime <= config.global.maxNodesCumulative) {
 
         log.info(
             "Request " + types.size + " node. One from each: " + types.keySet)
@@ -138,6 +141,7 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
         types.foreach {
           case (request, n) =>
             val jobinfo = requestOneNewJobFromGridScheduler(request)
+            allTime += 1
 
             jobinfo match {
               case Failure(e) =>

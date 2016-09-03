@@ -113,6 +113,8 @@ class TasksConfig(val raw: Config) {
 
   val maxPendingNodes = raw.getInt("tasks.elastic.maxPending")
 
+  val maxNodesCumulative = raw.getInt("tasks.elastic.maxNodesCumulative")
+
   val queueCheckInterval: FD =
     raw.getDuration("tasks.elastic.queueCheckInterval")
 

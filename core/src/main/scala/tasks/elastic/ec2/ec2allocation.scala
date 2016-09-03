@@ -107,15 +107,6 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 
   val ec2: AmazonEC2Client
 
-  override def refreshPendingList: List[PendingJobId] = {
-    val describeResult = ec2.describeSpotInstanceRequests();
-    val spotInstanceRequests = describeResult.getSpotInstanceRequests();
-    spotInstanceRequests
-      .filter(x => x.getState == "open")
-      .map(x => PendingJobId(x.getSpotInstanceRequestId))
-      .toList
-  }
-
   override def convertRunningToPending(p: RunningJobId): Option[PendingJobId] = {
     val describeResult = ec2.describeSpotInstanceRequests();
     val spotInstanceRequests = describeResult.getSpotInstanceRequests();

@@ -1,22 +1,23 @@
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.11.8",
-  name :="tasks",
   version :="0.0.1"
 ) ++ reformatOnCompileSettings
 
 
-lazy val TasksMonitorWebShared = project.in(file("TasksMonitorWebShared"))
+lazy val shared = project.in(file("shared"))
   .settings(
+    name := "tasks-shared",
     libraryDependencies ++= Seq(
       "com.lihaoyi" %% "upickle" % "0.4.1"
     )
   )
   .settings(commonSettings:_*)
 
-lazy val tasks = project.in(file("tasks"))
+lazy val core = project.in(file("core"))
   .settings(commonSettings:_*)
   .settings(
+    name := "tasks-core",
     libraryDependencies ++= Seq(
       "com.typesafe.akka" %% "akka-actor" % "2.3.15",
       "com.typesafe.akka" %% "akka-remote" % "2.3.15",
@@ -35,11 +36,11 @@ lazy val tasks = project.in(file("tasks"))
       "org.scala-lang" % "scala-reflect" % scalaVersion.value
     )
   )
-  .dependsOn(TasksMonitorWebShared)
+  .dependsOn(shared)
 
 lazy val example = project.in(file("example"))
 .settings(commonSettings:_*)
-.dependsOn(tasks)
+.dependsOn(core)
 .enablePlugins(JavaAppPackaging)
 .settings(
     executableScriptName := "entrypoint",
