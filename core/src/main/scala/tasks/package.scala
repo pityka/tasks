@@ -75,7 +75,7 @@ package object tasks {
         }
       })
 
-  registerS3Handler
+  try { registerS3Handler } catch { case e: Throwable => () }
 
   val SharedFile = tasks.fileservice.SharedFile
 
