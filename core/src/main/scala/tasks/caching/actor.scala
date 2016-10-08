@@ -75,14 +75,14 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
       val res = cacheMap.get(sch.description)
 
       if (res.isEmpty) {
-        log.debug("Checking: {}. Not found in cache.", sch.description.taskID)
+        log.debug("Checking: {}. Not found in cache.", sch.description.taskId)
         sender ! AnswerFromCache(Left(TaskNotFoundInCache(true)),
                                  originalSender,
                                  sch)
       } else {
         if (!config.global.verifySharedFileInCache) {
           log.debug("Checking: {}. Got something (not verified).",
-                    sch.description.taskID)
+                    sch.description.taskId)
           sender ! AnswerFromCache(Right(res), originalSender, sch)
         } else {
           val verified = Try(res.get.files.forall(_.isAccessible))
@@ -90,7 +90,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
             case Success(x) if x === false => {
               log.warning(
                   "Checking: {}. Got something ({}), but failed to verify after cache.",
-                  sch.description.taskID,
+                  sch.description.taskId,
                   res.get)
               sender ! AnswerFromCache(Left(TaskNotFoundInCache(true)),
                                        originalSender,
@@ -99,7 +99,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
             case Failure(e) => {
               log.warning(
                   "Checking: {}. Got something ({}), but failed to verify after cache with error:{}.",
-                  sch.description.taskID,
+                  sch.description.taskId,
                   res.get,
                   e)
               sender ! AnswerFromCache(Left(TaskNotFoundInCache(true)),
@@ -108,7 +108,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
             }
             case Success(x) if x === true => {
               log.debug("Checking: {}. Got something (verified).",
-                        sch.description.taskID)
+                        sch.description.taskId)
               sender ! AnswerFromCache(Right(res), originalSender, sch)
             }
           }

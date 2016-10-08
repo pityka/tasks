@@ -59,7 +59,23 @@ import upickle.Js
 
 import scala.language.experimental.macros
 
+// todo {
+//   4. the serialized output should be written in the filestore
+//   5. some issue with shutdown
+// }
+
 package object tasks {
+
+  def registerS3Handler =
+    java.net.URL
+      .setURLStreamHandlerFactory(new java.net.URLStreamHandlerFactory() {
+        def createURLStreamHandler(protocol: String) = protocol match {
+          case "s3" => new sun.net.www.protocol.s3.S3Handler
+          case _ => null
+        }
+      })
+
+  registerS3Handler
 
   val SharedFile = tasks.fileservice.SharedFile
 
@@ -191,11 +207,11 @@ package object tasks {
 
   type CompFun[A <: Prerequisitive[A], B] = A => ComputationEnvironment => B
 
-  def AsyncTask[A <: Prerequisitive[A], C](taskID: String)(
+  def AsyncTask[A <: Prerequisitive[A], C](taskID: String, taskVersion: Int)(
       comp: CompFun[A, Future[C]]): TaskDefinition[A, C] = macro Macros
     .asyncTaskDefinitionImpl[A, C]
 
-  def Task[A <: Prerequisitive[A], C](taskID: String)(
+  def Task[A <: Prerequisitive[A], C](taskID: String, taskVersion: Int)(
       comp: CompFun[A, C]): TaskDefinition[A, C] = macro Macros
     .taskDefinitionImpl[A, C]
 

@@ -221,7 +221,7 @@ akka {
 
   val cacheFile: Option[File] = try {
     if (config.global.cacheEnabled && !isLauncherOnly)
-      Some(config.global.cacheFile)
+      Some(new File(config.global.cachePath))
     else None
   } catch {
     case e: Throwable => {
@@ -306,6 +306,10 @@ akka {
           val store = config.global.cacheType match {
             case "leveldb" => new LevelDBWrapper(cacheFile.get)
             case "filesystem" => new FileSystemLargeKVStore(cacheFile.get)
+            case "s3" => {
+              val url = new java.net.URL(config.global.cachePath)
+              new S3LargeKVStore(url.getHost, url.getFile)
+            }
           }
           new KVCache(store, akka.serialization.SerializationExtension(system))
         }

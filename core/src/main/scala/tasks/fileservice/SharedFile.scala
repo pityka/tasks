@@ -63,7 +63,7 @@ case class ManagedFilePath(pathElements: Vector[String]) extends FilePath {
 @SerialVersionUID(1L)
 case class RemoteFilePath(url: URL) extends FilePath {
   override def toString = url.toString
-  def name = url.getFile
+  def name = url.getFile.split("/").last
 }
 
 @SerialVersionUID(1L)

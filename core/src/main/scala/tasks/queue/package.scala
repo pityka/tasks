@@ -39,7 +39,7 @@ package object queue {
       prerequisitives: B,
       resource: CPUMemoryRequest = CPUMemoryRequest(cpu = 1, memory = 500),
       f: CompFun2,
-      taskID: String
+      taskId: TaskId
   )(implicit components: TaskSystemComponents,
     writer1: Writer[B],
     reader2: Reader[A]): ProxyTaskActorRef[B, A] = {
@@ -49,7 +49,7 @@ package object queue {
     implicit val context = components.actorsystem
     implicit val prefix = components.filePrefix
 
-    val taskID1 = taskID
+    val taskId1 = taskId
 
     ProxyTaskActorRef[B, A](
         context.actorOf(
@@ -66,7 +66,7 @@ package object queue {
                   val reader: Reader[A] = reader2
 
                   val runTaskClass = f.getClass
-                  val taskID = taskID1
+                  val taskId = taskId1
                 }
             ).withDispatcher("proxytask-dispatcher")
         )

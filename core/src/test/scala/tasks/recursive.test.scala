@@ -70,7 +70,7 @@ object Fib {
   case class FibOut(n: Int)
 
   val fibtask: TaskDefinition[FibInput, FibOut] =
-    AsyncTask[FibInput, FibOut]("fib") {
+    AsyncTask[FibInput, FibOut]("fib", 1) {
 
       case FibInput(Some(n), Some(tag)) =>
         implicit ce =>
@@ -93,7 +93,7 @@ object Fib {
 
     }
 
-  println(fibtask.taskID)
+  println(fibtask.taskId)
 
 }
 

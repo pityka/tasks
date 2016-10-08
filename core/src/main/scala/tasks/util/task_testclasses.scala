@@ -89,7 +89,7 @@ class SimpleTask(
 
   val runTaskClass = SimpleTask.runTask.getClass
 
-  val taskID = runTaskClass.getName
+  val taskId = TaskId(runTaskClass.getName, 1)
 
   val writer = implicitly[Writer[MyPrerequisitive]]
 

@@ -49,7 +49,7 @@ class LeveldBDCacheTestSuite extends FunSuite with BeforeAndAfterAll {
     val cache =
       LevelDBCache(file, akka.serialization.SerializationExtension(system))
     val td = TaskDescription(
-        tasks.simpletask.SimpleTask.runTask.getClass.getName,
+        TaskId(tasks.simpletask.SimpleTask.runTask.getClass.getName, 1),
         JsonString(
             write(tasks.simpletask.SimpleTask.MyResultSet(Some(1), Some(0)))),
         None
@@ -79,7 +79,7 @@ class LeveldBDCacheTestSuite extends FunSuite with BeforeAndAfterAll {
       LevelDBCache(file2, akka.serialization.SerializationExtension(system))
     for (i <- 1 to 1000) {
       val td = TaskDescription(
-          tasks.simpletask.SimpleTask.runTask.getClass.getName,
+          TaskId(tasks.simpletask.SimpleTask.runTask.getClass.getName, 1),
           JsonString(
               write(
                   tasks.simpletask.SimpleTask.MyResultSet(Some(i), Some(0)))),
@@ -98,7 +98,7 @@ class LeveldBDCacheTestSuite extends FunSuite with BeforeAndAfterAll {
 
     for (i <- 1 to 1000) {
       val td = TaskDescription(
-          tasks.simpletask.SimpleTask.runTask.getClass.getName,
+          TaskId(tasks.simpletask.SimpleTask.runTask.getClass.getName, 1),
           JsonString(
               write(
                   tasks.simpletask.SimpleTask.MyResultSet(Some(i), Some(0)))),

@@ -54,7 +54,7 @@ object PiTasks {
     * Specifies input output types and name of task.
     * The tasks's body is an Input => tasks.ComputationEnvironment => Output function
     */
-  val batchCalc = Task[BatchInput, BatchResult]("batch") {
+  val batchCalc = Task[BatchInput, BatchResult]("batch", 1) {
 
     /* Input of task, does not need to be a pattern match */
     case BatchInput(Some(sizeFile: SharedFile), Some(id: Int)) =>
@@ -83,7 +83,7 @@ object PiTasks {
         BatchResult(in, out)
   }
 
-  val piCalc = Task[PiInput, PiResult]("reduce") {
+  val piCalc = Task[PiInput, PiResult]("reduce", 1) {
     case PiInput(Some(in), Some(out)) =>
       implicit ctx =>
         PiResult(in.toDouble / (in + out) * 4d)
@@ -105,7 +105,7 @@ object Fib {
   case class FibReduce(f1: Option[Int], f2: Option[Int])
       extends SimplePrerequisitive[FibReduce]
 
-  val reduce = Task[FibReduce, Int]("fibreduce") {
+  val reduce = Task[FibReduce, Int]("fibreduce", 1) {
     case FibReduce(Some(f1), Some(f2)) =>
       implicit ce =>
         f1 + f2
@@ -120,7 +120,7 @@ object Fib {
     * and the body of the task is running.
     */
   val fibtask: TaskDefinition[FibInput, Int] =
-    AsyncTask[FibInput, Int]("fib") {
+    AsyncTask[FibInput, Int]("fib", 1) {
 
       case FibInput(Some(n)) =>
         implicit cxt =>

@@ -49,6 +49,8 @@ import upickle.default._
 
 case class UntypedResult(files: Set[SharedFile], data: JsonString)
 
+case class TaskId(id: String, version: Int)
+
 object UntypedResult {
 
   def fs(r: Any): Set[SharedFile] = r match {
@@ -243,7 +245,7 @@ abstract class ProxyTask(
 
   val runTaskClass: java.lang.Class[_ <: CompFun2]
 
-  val taskID: String
+  val taskId: TaskId
 
   private[this] var _targets: Set[ActorRef] = Set[ActorRef]()
 
@@ -286,7 +288,7 @@ abstract class ProxyTask(
 
       val s = ScheduleTask(
           TaskDescription(
-              taskID,
+              taskId,
               JsonString(upickle.json.write(writer.write(incomings))),
               incomings.persistent.map(x =>
                     JsonString(upickle.json.write(writer.write(x.self))))),
@@ -312,7 +314,7 @@ abstract class ProxyTask(
   }
 
   override def postStop() = {
-    log.debug("ProxyTask stopped. {} {} {}", taskID, incomings, self)
+    log.debug("ProxyTask stopped. {} {} {}", taskId, incomings, self)
   }
 
   def receive = {

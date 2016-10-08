@@ -54,7 +54,7 @@ object Tests {
       case (old, i: IntWrapper) => old.copy(a1 = Some(i.i))
     }
 
-  val increment = Task[STP1[Int], IntWrapper]("increment") {
+  val increment = Task[STP1[Int], IntWrapper]("increment", 1) {
     case STP1(Some(c)) =>
       implicit computationEnvironment =>
         IntWrapper(c + 1)

@@ -100,7 +100,10 @@ class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
     metadata.getInstanceLength -> metadata.getETag.hashCode
 
   private def assembleName(path: ManagedFilePath) =
-    (if (folderPrefix != "") folderPrefix + "/" else "") + path.pathElements
+    ((if (folderPrefix != "") folderPrefix + "/" else "") +: path.pathElements)
+      .filterNot(_ == "/")
+      .map(x => if (x.startsWith("/")) x.drop(1) else x)
+      .map(x => if (x.endsWith("/")) x.dropRight(1) else x)
       .mkString("/")
 
   def importFile(f: File, path: ProposedManagedFilePath)

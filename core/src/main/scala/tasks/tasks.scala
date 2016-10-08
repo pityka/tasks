@@ -60,11 +60,11 @@ trait SimplePrerequisitive[+A] extends Prerequisitive[A] with Product {
 
 class TaskDefinition[A <: Prerequisitive[A]: Writer, B: Reader](
     val computation: CompFun2,
-    val taskID: String) {
+    val taskId: TaskId) {
 
   def apply(a: A)(resource: CPUMemoryRequest)(
       implicit components: TaskSystemComponents): ProxyTaskActorRef[A, B] =
-    tasks.queue.newTask[B, A](a, resource, computation, taskID)
+    tasks.queue.newTask[B, A](a, resource, computation, taskId)
 
 }
 

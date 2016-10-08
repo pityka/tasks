@@ -39,7 +39,7 @@ class TasksConfig(val raw: Config) {
 
   val cacheEnabled = raw.getBoolean("tasks.cache.enabled")
 
-  val cacheFile = new File(raw.getString("tasks.cache.file"))
+  val cachePath: String = raw.getString("tasks.cache.path")
 
   val cacheType = raw.getString("tasks.cache.store")
 

@@ -36,7 +36,7 @@ trait TaskSerializer {
   def serializeTaskDescription(original: TaskDescription): Array[Byte] = {
     val x = original.persistent.getOrElse(original.startData).value
 
-    (original.taskID + "\n" + x).getBytes("UTF8")
+    (original.taskId + "\n" + x).getBytes("UTF8")
   }
 
   def serializeResult(original: UntypedResult): Array[Byte] = {

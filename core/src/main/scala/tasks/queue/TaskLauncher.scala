@@ -55,7 +55,7 @@ case class ScheduleWithProxy(sch: ScheduleTask, ac: List[ActorRef])
 case class JsonString(value: String) extends Serializable
 
 @SerialVersionUID(1L)
-case class TaskDescription(taskID: String,
+case class TaskDescription(taskId: TaskId,
                            startData: JsonString,
                            persistent: Option[JsonString])
     extends Serializable
@@ -115,7 +115,7 @@ class TaskLauncher(
             sch.cacheActor,
             nodeLocalCache,
             allocatedResource,
-            sch.fileServicePrefix.append(sch.description.taskID)
+            sch.fileServicePrefix.append(sch.description.taskId.id)
         ).withDispatcher("task-worker-dispatcher")
     )
     log.debug("Actor constructed")

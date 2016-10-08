@@ -199,7 +199,7 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
             resource,
             negotiation,
             queuedTasks
-              .map(x => (x._1.description.taskID, x._1.resource))
+              .map(x => (x._1.description.taskId, x._1.resource))
               .toSeq)
 
         val launcher = sender
@@ -267,13 +267,14 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
 
     case HowLoadedAreYou => {
       // EventHandler.debug(this,queue.toString+routedMessages.toString)
-      val qs = QueueStat(queuedTasks.toList
-                           .map(_._1)
-                           .map(x => (x.description.taskID, x.resource))
-                           .toList,
-                         routedMessages.toSeq
-                           .map(x => x._1.description.taskID -> x._2._2)
-                           .toList)
+      val qs = QueueStat(
+          queuedTasks.toList
+            .map(_._1)
+            .map(x => (x.description.taskId.toString, x.resource))
+            .toList,
+          routedMessages.toSeq
+            .map(x => x._1.description.taskId.toString -> x._2._2)
+            .toList)
       context.system.eventStream.publish(qs)
       sender ! qs
     }

@@ -35,7 +35,8 @@ object Macros {
 
   def asyncTaskDefinitionImpl[A: cxt.WeakTypeTag, C: cxt.WeakTypeTag](
       cxt: Context)(
-      taskID: cxt.Expr[String]
+      taskID: cxt.Expr[String],
+      taskVersion: cxt.Expr[Int]
   )(
       comp: cxt.Expr[A => ComputationEnvironment => Future[C]]
   ) = {
@@ -46,6 +47,7 @@ object Macros {
       case Literal(Constant(s: String)) => TypeName(s)
       case _ => cxt.abort(cxt.enclosingPosition, "Not a string literal")
     }
+
     val t =
       tq"Function1[upickle.Js.Value,Function1[tasks.queue.ComputationEnvironment,scala.concurrent.Future[tasks.queue.UntypedResult]]]"
     val r = q"""
@@ -57,13 +59,14 @@ object Macros {
           (ce:tasks.queue.ComputationEnvironment) => (c(r.read(j))(ce)).map(x => tasks.queue.UntypedResult.make(x)(w))(ce.executionContext)
 
     }
-    new TaskDefinition[$a,$c](new $h,$taskID)
+    new TaskDefinition[$a,$c](new $h,tasks.queue.TaskId($taskID,$taskVersion))
     """
     r
   }
 
   def taskDefinitionImpl[A: cxt.WeakTypeTag, C: cxt.WeakTypeTag](cxt: Context)(
-      taskID: cxt.Expr[String]
+      taskID: cxt.Expr[String],
+      taskVersion: cxt.Expr[Int]
   )(
       comp: cxt.Expr[A => ComputationEnvironment => C]
   ) = {
@@ -86,7 +89,7 @@ object Macros {
 
 
     }
-    new TaskDefinition[$a,$c](new $h,$taskID)
+    new TaskDefinition[$a,$c](new $h,tasks.queue.TaskId($taskID,$taskVersion))
     """
     r
   }
