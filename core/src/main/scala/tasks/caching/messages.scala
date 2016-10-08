@@ -41,7 +41,9 @@ import akka.actor.ActorRef
 case class CacheActor(actor: ActorRef) extends Serializable
 
 @SerialVersionUID(1L)
-private[tasks] case class SaveResult(sch: TaskDescription, r: UntypedResult)
+private[tasks] case class SaveResult(sch: TaskDescription,
+                                     r: UntypedResult,
+                                     prefix: FileServicePrefix)
     extends Serializable
 
 @SerialVersionUID(1L)

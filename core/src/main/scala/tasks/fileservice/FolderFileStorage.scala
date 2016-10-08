@@ -106,8 +106,8 @@ class FolderFileStorage(val basePath: File,
 
   def contains(path: ManagedFilePath, size: Long, hash: Int): Boolean = {
     val f = assemblePath(path)
-    f.canRead && f.length === size && (tasks.util.config.global.skipContentHashVerificationAfterCache || FolderFileStorage
-          .getContentHash(f) === hash)
+    f.canRead && (size < 0 || (f.length === size && (tasks.util.config.global.skipContentHashVerificationAfterCache || FolderFileStorage
+                  .getContentHash(f) === hash)))
   }
 
   def openStream(path: ManagedFilePath): Try[InputStream] =

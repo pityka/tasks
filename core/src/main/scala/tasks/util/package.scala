@@ -131,6 +131,12 @@ package object util {
   def writeBinaryToFile(file: File, data: Array[Byte]): Unit =
     writeBinaryToFile(file.getAbsolutePath, data)
 
+  def writeBinaryToFile(data: Array[Byte]): File = {
+    val file = File.createTempFile("tmp", "tmp")
+    writeBinaryToFile(file.getAbsolutePath, data)
+    file
+  }
+
   /**
     * Returns an iterator on the InputStream's data.
     *

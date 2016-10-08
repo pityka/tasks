@@ -65,12 +65,17 @@ case class ProposedManagedFilePath(list: Vector[String]) {
 
 object SharedFileHelper {
 
-  // def getByNameUnchecked(path:FilePath)(implicit service: FileServiceActor, context: ActorRefFactory): Option[SharedFile] = {
-  //   Try(SharedFile.getPathToFile(new SharedFile(path, 0, 0), false)).toOption.map { f =>
-  //     SharedFile.create(prefix, name, f)
-  //   }
+  private[tasks] def getByNameUnchecked(name: String)(
+      implicit service: FileServiceActor,
+      context: ActorRefFactory,
+      nlc: NodeLocalCacheActor,
+      prefix: FileServicePrefix): Option[SharedFile] = {
+    Try(getPathToFile(new SharedFile(prefix.propose(name).toManaged, -1L, 0))).toOption.map {
+      f =>
+        new SharedFile(prefix.propose(name).toManaged, -1L, 0)
+    }
 
-  // }
+  }
 
   private[tasks] def createForTesting(name: String) =
     new SharedFile(ManagedFilePath(Vector(name)), 0, 0)
@@ -291,7 +296,7 @@ abstract class AbstractFileUser[R](sf: SharedFile,
       listener = Some(sender)
       log.debug("listener:" + listener)
       if (result.isDefined || fileNotFound) {
-        sender ! result.get
+        sender ! result.getOrElse(Failure(new RuntimeException("not found")))
         self ! PoisonPill
       }
     }

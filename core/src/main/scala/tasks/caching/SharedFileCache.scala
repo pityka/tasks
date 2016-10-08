@@ -31,56 +31,47 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.{ObjectOutputStream, ObjectInputStream, FileOutputStream}
 import scala.collection.immutable.ListMap
+import scala.util._
+import akka.actor.ActorRefFactory
 
-import kvstore._
 import tasks.queue._
 import tasks._
-
-import tasks.fileservice.FileServicePrefix
+import tasks.util._
+import tasks.fileservice.{FileServiceActor, FileServicePrefix, SharedFileHelper}
 
 import upickle.Js
 
-abstract class Cache {
+import com.google.common.hash.Hashing
 
-  def get(x: TaskDescription)(
-      implicit p: FileServicePrefix): Option[UntypedResult]
-
-  def set(x: TaskDescription, r: UntypedResult)(
-      implicit p: FileServicePrefix): Unit
-
-  def shutDown: Unit
-
-}
-
-object LevelDBCache {
-  def apply(
-      f: File,
-      serialization: akka.serialization.Serialization
-  ) =
-    new KVCache(new LevelDBWrapper(f), serialization)
-}
-
-class KVCache(
-    kvstore: KVStore,
-    protected val serialization: akka.serialization.Serialization
-) extends Cache
+class SharedFileCache(implicit fs: FileServiceActor,
+                      nlc: NodeLocalCacheActor,
+                      af: ActorRefFactory)
+    extends Cache
     with TaskSerializer {
 
-  override def toString = "KVCacheWith" + kvstore
+  def getHash(a: Array[Byte]): String =
+    Hashing.murmur3_128.hashBytes(a).toString
 
-  def shutDown = kvstore.close
+  override def toString = "SharedFileCache"
 
-  def get(x: TaskDescription)(implicit p: FileServicePrefix) =
-    kvstore.get(serializeTaskDescription(x)).flatMap { r =>
-      scala.util.Try(deserializeResult(r)).toOption
+  def shutDown = ()
+
+  def get(x: TaskDescription)(implicit p: FileServicePrefix) = {
+    val tdBytes = serializeTaskDescription(x)
+    val hash = getHash(tdBytes)
+    val sf: Option[SharedFile] = Try(SharedFileHelper.getByNameUnchecked(
+            "__result__" + hash)).toOption.flatten
+    sf.flatMap { sf =>
+      Try(deserializeResult(readBinaryFile(sf.file))).toOption
     }
+  }
 
   def set(x: TaskDescription, r: UntypedResult)(
       implicit p: FileServicePrefix) = {
     try {
-      val k: Array[Byte] = serializeTaskDescription(x)
-      val v: Array[Byte] = serializeResult(r)
-      kvstore.put(k, v)
+      val kh = getHash(serializeTaskDescription(x))
+      val v: File = writeBinaryToFile(serializeResult(r))
+      SharedFile(v, name = "__result__" + kh)
     } catch {
       case e: Throwable => {
         shutDown
@@ -88,32 +79,5 @@ class KVCache(
       }
     }
   }
-
-}
-
-class DisabledCache extends Cache {
-
-  def get(x: TaskDescription)(implicit p: FileServicePrefix) = None
-
-  def set(x: TaskDescription, r: UntypedResult)(
-      implicit p: FileServicePrefix) = ()
-
-  def shutDown = {}
-
-}
-
-class FakeCacheForTest extends Cache {
-
-  var cacheMap: scala.collection.mutable.ListMap[TaskDescription,
-                                                 UntypedResult] =
-    scala.collection.mutable.ListMap[TaskDescription, UntypedResult]()
-
-  def get(x: TaskDescription)(implicit p: FileServicePrefix) = cacheMap.get(x)
-
-  def set(x: TaskDescription, r: UntypedResult)(
-      implicit p: FileServicePrefix) =
-    cacheMap.getOrElseUpdate(x, r)
-
-  def shutDown = {}
 
 }

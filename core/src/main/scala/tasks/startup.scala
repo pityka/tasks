@@ -298,20 +298,36 @@ akka {
     }
   }
 
+  val fileServiceActor = FileServiceActor(fileActor)
+
+  val nodeLocalCacheActor = system.actorOf(
+      Props[NodeLocalCache].withDispatcher("my-pinned-dispatcher"),
+      name = "nodeLocalCache")
+
+  reaperActor ! WatchMe(nodeLocalCacheActor)
+
+  val nodeLocalCache = NodeLocalCacheActor(nodeLocalCacheActor)
+
   val cacherActor = try {
     if (!isLauncherOnly && hostConfig.cacheAddress.isEmpty) {
 
       val cache: Cache = config.global.cacheEnabled match {
         case true => {
-          val store = config.global.cacheType match {
-            case "leveldb" => new LevelDBWrapper(cacheFile.get)
-            case "filesystem" => new FileSystemLargeKVStore(cacheFile.get)
-            case "s3" => {
-              val url = new java.net.URL(config.global.cachePath)
-              new S3LargeKVStore(url.getHost, url.getFile)
-            }
+          config.global.cacheType match {
+            case "sharedfile" =>
+              new SharedFileCache()(fileServiceActor, nodeLocalCache, system)
+            case other =>
+              val store = other match {
+                case "leveldb" => new LevelDBWrapper(cacheFile.get)
+                case "filesystem" => new FileSystemLargeKVStore(cacheFile.get)
+                case "s3" =>
+                  val url = new java.net.URL(config.global.cachePath)
+                  new S3LargeKVStore(url.getHost, url.getFile)
+              }
+              new KVCache(store,
+                          akka.serialization.SerializationExtension(system))
           }
-          new KVCache(store, akka.serialization.SerializationExtension(system))
+
         }
         case false => new DisabledCache
       }
@@ -400,16 +416,6 @@ akka {
       Some(service)
 
     } else None
-
-  val fileServiceActor = FileServiceActor(fileActor)
-
-  val nodeLocalCacheActor = system.actorOf(
-      Props[NodeLocalCache].withDispatcher("my-pinned-dispatcher"),
-      name = "nodeLocalCache")
-
-  reaperActor ! WatchMe(nodeLocalCacheActor)
-
-  val nodeLocalCache = NodeLocalCacheActor(nodeLocalCacheActor)
 
   implicit val components = TaskSystemComponents(
       queue = QueueActor(queueActor),

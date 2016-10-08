@@ -170,7 +170,8 @@ class TaskLauncher(
               "Wrong message received. No such taskActor."))
     val sch = elem._2
 
-    sch.cacheActor.!(SaveResult(sch.description, receivedResult))(
+    sch.cacheActor.!(
+        SaveResult(sch.description, receivedResult, sch.fileServicePrefix))(
         sender = taskActor)
 
     taskQueue ! TaskDone(sch, receivedResult)

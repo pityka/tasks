@@ -42,6 +42,8 @@ class LeveldBDCacheTestSuite extends FunSuite with BeforeAndAfterAll {
       TempFile.createTempFile(".leveldb").getAbsolutePath + ".2")
   println(file.getAbsolutePath)
 
+  implicit val fsp = FileServicePrefix(Vector("/"))
+
   val system = akka.actor
     .ActorSystem("cachetest", ConfigFactory.load("akkaoverrides.conf"))
 

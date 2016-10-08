@@ -44,6 +44,8 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
   val system = akka.actor
     .ActorSystem("cachetest", ConfigFactory.load("akkaoverrides.conf"))
 
+  implicit val fsp = FileServicePrefix(Vector("/"))
+
   test("simple") {
     val file = TempFile.createTempFile(".mapdb")
     file.delete
