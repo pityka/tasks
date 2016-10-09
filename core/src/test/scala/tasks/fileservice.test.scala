@@ -29,6 +29,8 @@ package tasks
 
 import org.scalatest._
 import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent._
 import akka.testkit.TestKit
 import akka.testkit.ImplicitSender
 import akka.actor.{Actor, PoisonPill, ActorRef, Props, ActorSystem}
@@ -118,12 +120,12 @@ class FileServiceSpec
       implicit val serviceimpl = FileServiceActor(service)
       implicit val nlc =
         NodeLocalCacheActor(system.actorOf(Props[NodeLocalCache]))
-      val t: SharedFile = SharedFile(input, "proba")
+      val t: SharedFile = Await.result(SharedFile(input, "proba"), 50 seconds)
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
           data.deep)
 
-      val path = SharedFileHelper.getPathToFile(t)
+      val path = Await.result(SharedFileHelper.getPathToFile(t), 50 seconds)
       readBinaryFile(path.getCanonicalPath).deep should equal(data.deep)
 
     }
@@ -142,14 +144,14 @@ class FileServiceSpec
       val service = system.actorOf(
           Props(new FileService(new FolderFileStorage(folder, false))))
       implicit val serviceimpl = FileServiceActor(service)
-      val t: SharedFile = SharedFile(input, "proba")
+      val t: SharedFile = Await.result(SharedFile(input, "proba"), 50 seconds)
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
           data.deep)
 
-      SharedFileHelper.openStreamToFile(t) { inputstream =>
+      Await.result(SharedFileHelper.openStreamToFile(t) { inputstream =>
         readBinaryStream(inputstream).deep should equal(data.deep)
-      }
+      }, 50 seconds)
 
     }
 
@@ -175,10 +177,10 @@ class FileServiceSpec
           16,
           com.google.common.hash.Hashing.crc32c.hashBytes(data).asInt)
 
-      val path = SharedFileHelper.getPathToFile(t)
+      val path = Await.result(SharedFileHelper.getPathToFile(t), 50 seconds)
       readBinaryFile(path.getCanonicalPath).deep should equal(data.deep)
 
-      t.isAccessible should be(true)
+      Await.result(t.isAccessible, 30 seconds) should be(true)
 
     }
   }
@@ -209,7 +211,7 @@ class FileServiceSpec
           16,
           com.google.common.hash.Hashing.crc32c.hashBytes(data).asInt)
 
-      val path = SharedFileHelper.getPathToFile(t)
+      val path = Await.result(SharedFileHelper.getPathToFile(t), 30 seconds)
       readBinaryFile(path.getCanonicalPath).deep should equal(data.deep)
 
     }

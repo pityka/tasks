@@ -32,6 +32,7 @@ import java.io.File
 import tasks._
 import tasks.deploy._
 import tasks.util._
+import scala.concurrent.ExecutionContext.Implicits.global
 
 object SharedFileTestApp extends App {
 

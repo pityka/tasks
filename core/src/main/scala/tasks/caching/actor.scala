@@ -29,6 +29,7 @@ package tasks.caching
 
 import akka.actor.{Actor, PoisonPill, ActorRef}
 import akka.actor.Actor._
+import akka.pattern.pipe
 import scala.concurrent.Future
 import java.lang.Class
 import java.io.File
@@ -44,9 +45,14 @@ import upickle.default._
 
 class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
     extends Actor
-    with akka.actor.ActorLogging {
+    with akka.actor.ActorLogging
+    with akka.actor.Stash {
 
   implicit def fs: FileServiceActor = fileService
+
+  import context.dispatcher
+
+  case object SetDone
 
   override def preStart = {
     log.info(
@@ -59,63 +65,82 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
   }
 
   def receive = {
-    case SaveResult(description, result, prefix) => {
+    case SaveResult(description, result, prefix) =>
       log.debug("SavingResult")
-      try {
-        cacheMap.set(description, result)(prefix)
-      } catch {
-        case x: java.io.NotSerializableException =>
-          log.error("can't serialize: " + result.toString)
-      }
+      cacheMap
+        .set(description, result)(prefix)
+        .recover {
+          case e =>
+            SetDone
+        }
+        .map { x =>
+          SetDone
+        }
+        .pipeTo(self)
 
-      log.debug("save done")
-    }
-    case CheckResult(sch, originalSender) => {
+      context.become({
+        case SetDone =>
+          log.debug("Save done " + description.taskId)
+          unstashAll()
+          context.unbecome()
+        case _ => stash()
+      }, discardOld = false)
 
-      val res = cacheMap.get(sch.description)(sch.fileServicePrefix)
-
-      if (res.isEmpty) {
-        log.debug("Checking: {}. Not found in cache.", sch.description.taskId)
-        sender ! AnswerFromCache(Left(TaskNotFoundInCache(true)),
-                                 originalSender,
-                                 sch)
-      } else {
-        if (!config.global.verifySharedFileInCache) {
-          log.debug("Checking: {}. Got something (not verified).",
-                    sch.description.taskId)
-          sender ! AnswerFromCache(Right(res), originalSender, sch)
-        } else {
-          val verified = Try(res.get.files.forall(_.isAccessible))
-          verified match {
-            case Success(x) if x === false => {
-              log.warning(
-                  "Checking: {}. Got something ({}), but failed to verify after cache.",
-                  sch.description.taskId,
-                  res.get)
-              sender ! AnswerFromCache(Left(TaskNotFoundInCache(true)),
-                                       originalSender,
-                                       sch)
-            }
-            case Failure(e) => {
-              log.warning(
-                  "Checking: {}. Got something ({}), but failed to verify after cache with error:{}.",
-                  sch.description.taskId,
-                  res.get,
-                  e)
-              sender ! AnswerFromCache(Left(TaskNotFoundInCache(true)),
-                                       originalSender,
-                                       sch)
-            }
-            case Success(x) if x === true => {
-              log.debug("Checking: {}. Got something (verified).",
+    case CheckResult(sch, originalSender) =>
+      val savedSender = sender
+      cacheMap
+        .get(sch.description)(sch.fileServicePrefix)
+        .recover {
+          case e => None
+        }
+        .foreach { res =>
+          if (res.isEmpty) {
+            log.debug("Checking: {}. Not found in cache.",
+                      sch.description.taskId)
+            savedSender ! AnswerFromCache(Left(TaskNotFoundInCache(true)),
+                                          originalSender,
+                                          sch)
+          } else {
+            if (!config.global.verifySharedFileInCache) {
+              log.debug("Checking: {}. Got something (not verified).",
                         sch.description.taskId)
-              sender ! AnswerFromCache(Right(res), originalSender, sch)
+              savedSender ! AnswerFromCache(Right(res), originalSender, sch)
+            } else {
+              Future
+                .sequence(res.get.files.map(_.isAccessible))
+                .map(_.forall(x => x))
+                .recover {
+                  case e =>
+                    log.warning(
+                        "Checking: {}. Got something ({}), but failed to verify after cache with error:{}.",
+                        sch.description.taskId,
+                        res.get,
+                        e)
+                    false
+                }
+                .foreach { verified =>
+                  if (!verified) {
+                    log.warning(
+                        "Checking: {}. Got something ({}), but failed to verify after cache.",
+                        sch.description.taskId,
+                        res.get)
+                    savedSender ! AnswerFromCache(
+                        Left(TaskNotFoundInCache(true)),
+                        originalSender,
+                        sch)
+                  } else {
+                    log.debug("Checking: {}. Got something (verified).",
+                              sch.description.taskId)
+
+                    savedSender ! AnswerFromCache(Right(res),
+                                                  originalSender,
+                                                  sch)
+                  }
+                }
+
             }
           }
-
         }
-      }
 
-    }
   }
 }

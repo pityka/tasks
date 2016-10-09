@@ -54,7 +54,7 @@ object PiTasks {
     * Specifies input output types and name of task.
     * The tasks's body is an Input => tasks.ComputationEnvironment => Output function
     */
-  val batchCalc = Task[BatchInput, BatchResult]("batch", 1) {
+  val batchCalc = AsyncTask[BatchInput, BatchResult]("batch", 1) {
 
     /* Input of task, does not need to be a pattern match */
     case BatchInput(Some(sizeFile: SharedFile), Some(id: Int)) =>
@@ -67,20 +67,23 @@ object PiTasks {
         */
       implicit ctx =>
         /* SharedFile#file downloads the file to the local tmp folder */
-        val localFile: java.io.File = sizeFile.file
+        val localFile: Future[java.io.File] = sizeFile.file
 
-        // Body of the task
-        val sizeInt = scala.io.Source.fromFile(localFile).mkString.toInt
-        val (in, out) = (0 until sizeInt).foldLeft((0, 0)) {
-          case ((countIn, countOut), _) =>
-            val x = scala.util.Random.nextDouble
-            val y = scala.util.Random.nextDouble
-            val inside = math.sqrt(x * x + y * y) <= 1.0
-            if (inside) (countIn + 1, countOut) else (countIn, countOut + 1)
-        }
+        localFile.map { localFile =>
+          // Body of the task
+          val sizeInt = scala.io.Source.fromFile(localFile).mkString.toInt
+          val (in, out) = (0 until sizeInt).foldLeft((0, 0)) {
+            case ((countIn, countOut), _) =>
+              val x = scala.util.Random.nextDouble
+              val y = scala.util.Random.nextDouble
+              val inside = math.sqrt(x * x + y * y) <= 1.0
+              if (inside) (countIn + 1, countOut) else (countIn, countOut + 1)
+          }
 
-        /* Return value */
-        BatchResult(in, out)
+          /* Return value */
+          BatchResult(in, out)
+
+      }
   }
 
   val piCalc = Task[PiInput, PiResult]("reduce", 1) {
@@ -173,7 +176,7 @@ object PiApp extends App {
   withTaskSystem { implicit ts =>
     val numTasks = 100
 
-    val taskSize: SharedFile = {
+    val taskSize: Future[SharedFile] = {
       val tmp = java.io.File.createTempFile("size", ".txt")
       val writer = new java.io.FileWriter(tmp)
       writer.write("1000")
@@ -188,25 +191,27 @@ object PiApp extends App {
     }
 
     /* Start tasks for Pi */
-    val pi: Future[PiResult] = Future
-      .sequence(
-          1 to numTasks map { i =>
-            batchCalc(BatchInput(Some(taskSize), Some(i)))(
-                CPUMemoryRequest(1, 1000)).?
-          }
-      )
-      .flatMap { batches =>
-        piCalc(PiInput(Some(batches.map(_.inside).sum),
-                       Some(batches.map(_.outside).sum)))(
-            CPUMemoryRequest(1, 1000)).?
-      }
+    val pi: Future[PiResult] = taskSize.flatMap { taskSize =>
+      Future
+        .sequence(
+            1 to numTasks map { i =>
+              batchCalc(BatchInput(Some(taskSize), Some(i)))(
+                  CPUMemoryRequest(1, 1000)).?
+            }
+        )
+        .flatMap { batches =>
+          piCalc(PiInput(Some(batches.map(_.inside).sum),
+                         Some(batches.map(_.outside).sum)))(
+              CPUMemoryRequest(1, 1000)).?
+        }
+    }
 
     /* Start tasks for Fibonacci, subtasks are started by this task. */
-    val fibResult = fibtask(FibInput(Some(16)))(CPUMemoryRequest(1, 1000)).?
+    // val fibResult = fibtask(FibInput(Some(16)))(CPUMemoryRequest(1, 1000)).?
 
     /* Block and wait for the futures */
     println(Await.result(pi, atMost = 10 minutes))
-    println(Await.result(fibResult, atMost = 10 minutes))
+  // println(Await.result(fibResult, atMost = 10 minutes))
 
   }
 

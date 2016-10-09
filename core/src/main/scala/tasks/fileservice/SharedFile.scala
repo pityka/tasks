@@ -31,7 +31,7 @@ import akka.actor.{Actor, PoisonPill, ActorRef, Props, ActorRefFactory}
 import akka.actor.Actor._
 import akka.pattern.ask
 import akka.pattern.pipe
-import scala.concurrent.{Future, Await, ExecutionContext}
+import scala.concurrent.{Future, ExecutionContext}
 import java.lang.Class
 import java.io.{File, InputStream, FileInputStream, BufferedInputStream, OutputStream}
 import scala.concurrent.duration._
@@ -88,18 +88,22 @@ class SharedFile private[tasks] (
 
   def file(implicit service: FileServiceActor,
            nlc: NodeLocalCacheActor,
-           context: ActorRefFactory) =
+           context: ActorRefFactory,
+           ec: ExecutionContext) =
     SharedFileHelper.getPathToFile(this)
 
   def openStream[R](f: InputStream => R)(implicit service: FileServiceActor,
-                                         context: ActorRefFactory) =
+                                         context: ActorRefFactory,
+                                         ec: ExecutionContext) =
     SharedFileHelper.openStreamToFile(this)(f)
 
   def isAccessible(implicit service: FileServiceActor,
                    context: ActorRefFactory) =
     SharedFileHelper.isAccessible(this)
 
-  def url(implicit service: FileServiceActor, context: ActorRefFactory): URL =
+  def url(implicit service: FileServiceActor,
+          context: ActorRefFactory,
+          ec: ExecutionContext): Future[URL] =
     SharedFileHelper.getURL(this)
 
   def name = path.name
@@ -143,7 +147,8 @@ object SharedFile {
 
   def apply(url: URL)(implicit service: FileServiceActor,
                       context: ActorRefFactory,
-                      prefix: FileServicePrefix): SharedFile = {
+                      prefix: FileServicePrefix,
+                      ec: ExecutionContext): Future[SharedFile] = {
 
     val serviceactor = service.actor
     rethrow("Can't open URL: " + url) {
@@ -154,18 +159,17 @@ object SharedFile {
 
     implicit val timout = akka.util.Timeout(1441 minutes)
 
-    Await
-      .result((serviceactor ? NewRemote(url))
-                .asInstanceOf[Future[Try[SharedFile]]],
-              atMost = 1440 minutes)
-      .get
+    (serviceactor ? NewRemote(url))
+      .asInstanceOf[Future[Try[SharedFile]]]
+      .map(_.get)
 
   }
 
   def apply(file: File, name: String)(
       implicit service: FileServiceActor,
       context: ActorRefFactory,
-      prefix: FileServicePrefix): SharedFile = {
+      prefix: FileServicePrefix,
+      ec: ExecutionContext): Future[SharedFile] = {
 
     val serviceactor = service.actor
     if (!file.canRead) {
@@ -177,18 +181,21 @@ object SharedFile {
     val ac = context.actorOf(
         Props(new FileSender(file, prefix.propose(name), serviceactor))
           .withDispatcher("filesender-dispatcher"))
-    val f = Await
-      .result(
-          (ac ? WaitingForSharedFile).asInstanceOf[Future[Option[SharedFile]]],
-          atMost = 1440 minutes)
-      .get
-    ac ! PoisonPill
+    val f = (ac ? WaitingForSharedFile)
+      .asInstanceOf[Future[Option[SharedFile]]]
+      .map(_.get)
+
+    f onComplete {
+      case _ => ac ! PoisonPill
+    }
+
     f
   }
 
   def apply(file: File)(implicit service: FileServiceActor,
                         context: ActorRefFactory,
-                        prefix: FileServicePrefix): SharedFile =
+                        prefix: FileServicePrefix,
+                        ec: ExecutionContext): Future[SharedFile] =
     apply(file,
           if (tasks.util.config.global.includeFullPathInDefaultSharedName)
             file.getAbsolutePath.replace(File.separator, "_")

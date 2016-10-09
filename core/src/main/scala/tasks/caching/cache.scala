@@ -31,6 +31,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.{ObjectOutputStream, ObjectInputStream, FileOutputStream}
 import scala.collection.immutable.ListMap
+import scala.concurrent._
 
 import kvstore._
 import tasks.queue._
@@ -43,10 +44,10 @@ import upickle.Js
 abstract class Cache {
 
   def get(x: TaskDescription)(
-      implicit p: FileServicePrefix): Option[UntypedResult]
+      implicit p: FileServicePrefix): Future[Option[UntypedResult]]
 
   def set(x: TaskDescription, r: UntypedResult)(
-      implicit p: FileServicePrefix): Unit
+      implicit p: FileServicePrefix): Future[Unit]
 
   def shutDown: Unit
 
@@ -71,9 +72,9 @@ class KVCache(
   def shutDown = kvstore.close
 
   def get(x: TaskDescription)(implicit p: FileServicePrefix) =
-    kvstore.get(serializeTaskDescription(x)).flatMap { r =>
+    Future.successful(kvstore.get(serializeTaskDescription(x)).flatMap { r =>
       scala.util.Try(deserializeResult(r)).toOption
-    }
+    })
 
   def set(x: TaskDescription, r: UntypedResult)(
       implicit p: FileServicePrefix) = {
@@ -81,6 +82,7 @@ class KVCache(
       val k: Array[Byte] = serializeTaskDescription(x)
       val v: Array[Byte] = serializeResult(r)
       kvstore.put(k, v)
+      Future.successful(())
     } catch {
       case e: Throwable => {
         shutDown
@@ -93,10 +95,11 @@ class KVCache(
 
 class DisabledCache extends Cache {
 
-  def get(x: TaskDescription)(implicit p: FileServicePrefix) = None
+  def get(x: TaskDescription)(implicit p: FileServicePrefix) =
+    Future.successful(None)
 
   def set(x: TaskDescription, r: UntypedResult)(
-      implicit p: FileServicePrefix) = ()
+      implicit p: FileServicePrefix) = Future.successful(())
 
   def shutDown = {}
 
@@ -108,11 +111,12 @@ class FakeCacheForTest extends Cache {
                                                  UntypedResult] =
     scala.collection.mutable.ListMap[TaskDescription, UntypedResult]()
 
-  def get(x: TaskDescription)(implicit p: FileServicePrefix) = cacheMap.get(x)
+  def get(x: TaskDescription)(implicit p: FileServicePrefix) =
+    Future.successful(cacheMap.get(x))
 
   def set(x: TaskDescription, r: UntypedResult)(
       implicit p: FileServicePrefix) =
-    cacheMap.getOrElseUpdate(x, r)
+    Future.successful(cacheMap.getOrElseUpdate(x, r))
 
   def shutDown = {}
 

@@ -69,8 +69,9 @@ object SharedFileHelper {
       implicit service: FileServiceActor,
       context: ActorRefFactory,
       nlc: NodeLocalCacheActor,
-      prefix: FileServicePrefix): Option[SharedFile] = {
-    Try(getPathToFile(new SharedFile(prefix.propose(name).toManaged, -1L, 0))).toOption.map {
+      prefix: FileServicePrefix,
+      ec: ExecutionContext): Future[SharedFile] = {
+    getPathToFile(new SharedFile(prefix.propose(name).toManaged, -1L, 0)).map {
       f =>
         new SharedFile(prefix.propose(name).toManaged, -1L, 0)
     }
@@ -91,7 +92,8 @@ object SharedFileHelper {
 
   def getStreamToFile(sf: SharedFile)(
       implicit service: FileServiceActor,
-      context: ActorRefFactory): InputStream = {
+      context: ActorRefFactory,
+      ec: ExecutionContext): Future[InputStream] = {
 
     val serviceactor = service.actor
     implicit val timout = akka.util.Timeout(1441 minutes)
@@ -99,24 +101,32 @@ object SharedFileHelper {
         Props(new FileUserStream(sf, serviceactor, isLocal))
           .withDispatcher("fileuser-dispatcher"))
 
-    val f = Await.result(
-        (ac ? WaitingForPath).asInstanceOf[Future[Try[InputStream]]],
-        atMost = 1440 minutes)
-    ac ! PoisonPill
-    f match {
-      case Success(r) => r
-      case Failure(e) =>
-        throw new RuntimeException("getStreamToFile failed. " + sf, e)
+    val f = (ac ? WaitingForPath).asInstanceOf[Future[Try[InputStream]]]
+
+    f onComplete {
+      case _ => ac ! PoisonPill
     }
+
+    f map (_ match {
+          case Success(r) => r
+          case Failure(e) =>
+            throw new RuntimeException("getStreamToFile failed. " + sf, e)
+        })
   }
 
   def openStreamToFile[R](sf: SharedFile)(fun: InputStream => R)(
       implicit service: FileServiceActor,
-      context: ActorRefFactory): R = useResource(getStreamToFile(sf))(fun)
+      context: ActorRefFactory,
+      ec: ExecutionContext): Future[R] = getStreamToFile(sf).map { is =>
+    val r = fun(is)
+    is.close
+    r
+  }
 
   def getPathToFile(path: SharedFile)(implicit service: FileServiceActor,
                                       context: ActorRefFactory,
-                                      nlc: NodeLocalCacheActor): File = {
+                                      nlc: NodeLocalCacheActor,
+                                      ec: ExecutionContext): Future[File] = {
 
     NodeLocalCache.getItemBlocking("fs::" + path) {
       val serviceactor = service.actor
@@ -125,34 +135,34 @@ object SharedFileHelper {
           Props(new FileUser(path, serviceactor, isLocal))
             .withDispatcher("fileuser-dispatcher"))
 
-      val f =
-        Await.result((ac ? WaitingForPath).asInstanceOf[Future[Try[File]]],
-                     atMost = 1440 minutes)
-      ac ! PoisonPill
-      f match {
-        case Success(r) => r
-        case Failure(e) =>
-          throw new RuntimeException("getPathToFile failed. " + path, e)
+      val f = (ac ? WaitingForPath).asInstanceOf[Future[Try[File]]]
+      f onComplete {
+        case _ => ac ! PoisonPill
       }
+
+      f map (_ match {
+            case Success(r) => r
+            case Failure(e) =>
+              throw new RuntimeException("getPathToFile failed. " + path, e)
+          })
     }
   }
 
-  def isAccessible(sf: SharedFile)(implicit service: FileServiceActor,
-                                   context: ActorRefFactory): Boolean = {
+  def isAccessible(sf: SharedFile)(
+      implicit service: FileServiceActor,
+      context: ActorRefFactory): Future[Boolean] = {
     implicit val timout = akka.util.Timeout(1441 minutes)
-    Await.result(
-        (service.actor ? IsAccessible(sf)).asInstanceOf[Future[Boolean]],
-        atMost = duration.Duration.Inf)
+
+    (service.actor ? IsAccessible(sf)).asInstanceOf[Future[Boolean]]
   }
 
   def getURL(sf: SharedFile)(implicit service: FileServiceActor,
-                             context: ActorRefFactory): URL = {
+                             context: ActorRefFactory): Future[URL] = {
     sf.path match {
-      case x: RemoteFilePath => x.url
+      case x: RemoteFilePath => Future.successful(x.url)
       case x: ManagedFilePath => {
         implicit val timout = akka.util.Timeout(1441 minutes)
-        Await.result((service.actor ? GetURL(sf)).asInstanceOf[Future[URL]],
-                     atMost = duration.Duration.Inf)
+        (service.actor ? GetURL(sf)).asInstanceOf[Future[URL]]
       }
     }
 

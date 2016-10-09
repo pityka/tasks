@@ -32,6 +32,7 @@ import java.io.FileInputStream
 import java.io.{ObjectOutputStream, ObjectInputStream, FileOutputStream}
 import scala.collection.immutable.ListMap
 import scala.util._
+import scala.concurrent._
 import akka.actor.ActorRefFactory
 
 import tasks.queue._
@@ -45,7 +46,8 @@ import com.google.common.hash.Hashing
 
 class SharedFileCache(implicit fs: FileServiceActor,
                       nlc: NodeLocalCacheActor,
-                      af: ActorRefFactory)
+                      af: ActorRefFactory,
+                      ec: ExecutionContext)
     extends Cache
     with TaskSerializer {
 
@@ -56,14 +58,23 @@ class SharedFileCache(implicit fs: FileServiceActor,
 
   def shutDown = ()
 
-  def get(x: TaskDescription)(implicit p: FileServicePrefix) = {
+  def get(x: TaskDescription)(
+      implicit p: FileServicePrefix): Future[Option[UntypedResult]] = {
     val tdBytes = serializeTaskDescription(x)
     val hash = getHash(tdBytes)
-    val sf: Option[SharedFile] = Try(SharedFileHelper.getByNameUnchecked(
-            "__result__" + hash)).toOption.flatten
-    sf.flatMap { sf =>
-      Try(deserializeResult(readBinaryFile(sf.file))).toOption
-    }
+
+    SharedFileHelper
+      .getByNameUnchecked("__result__" + hash)
+      .flatMap(_.file)
+      .map(x => Some(x))
+      .recover {
+        case e => None
+      }
+      .map { f =>
+        f.flatMap { f =>
+          Try(deserializeResult(readBinaryFile(f))).toOption
+        }
+      }
   }
 
   def set(x: TaskDescription, r: UntypedResult)(
@@ -71,7 +82,7 @@ class SharedFileCache(implicit fs: FileServiceActor,
     try {
       val kh = getHash(serializeTaskDescription(x))
       val v: File = writeBinaryToFile(serializeResult(r))
-      SharedFile(v, name = "__result__" + kh)
+      SharedFile(v, name = "__result__" + kh).map(x => ())
     } catch {
       case e: Throwable => {
         shutDown

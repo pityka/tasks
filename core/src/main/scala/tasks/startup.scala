@@ -315,7 +315,10 @@ akka {
         case true => {
           config.global.cacheType match {
             case "sharedfile" =>
-              new SharedFileCache()(fileServiceActor, nodeLocalCache, system)
+              new SharedFileCache()(fileServiceActor,
+                                    nodeLocalCache,
+                                    system,
+                                    system.dispatcher)
             case other =>
               val store = other match {
                 case "leveldb" => new LevelDBWrapper(cacheFile.get)

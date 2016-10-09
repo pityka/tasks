@@ -35,6 +35,10 @@ import tasks.caching._
 import tasks.fileservice._
 import tasks.util._
 
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent._
+import scala.concurrent.duration._
+
 import upickle.default._
 
 case class A(x: Int)
@@ -58,17 +62,26 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
             write(tasks.simpletask.SimpleTask.MyResultSet(Some(1), Some(0)))),
         None
     )
-    cache.set(
-        td,
-        UntypedResult(Set(), JsonString(write(tasks.simpletask.IntResult(1))))
-    )
+    Await.result(
+        cache.set(
+            td,
+            UntypedResult(Set(),
+                          JsonString(write(tasks.simpletask.IntResult(1))))
+        ),
+        30 seconds)
     cache.shutDown
 
     val cache2 =
       LevelDBCache(file, akka.serialization.SerializationExtension(system))
 
-    val read = upickle.default
-      .read[tasks.simpletask.IntResult](cache2.get(td).get.data.value)
+    val read =
+      Await.result(cache2
+                     .get(td)
+                     .map(x =>
+                           upickle.default.read[tasks.simpletask.IntResult](
+                               x.get.data.value)),
+                   40 seconds)
+
     expectResult((tasks.simpletask.IntResult(1)))(read)
 
   }
@@ -90,11 +103,13 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
                   tasks.simpletask.SimpleTask.MyResultSet(Some(i), Some(0)))),
           None
       )
-      cache.set(
-          td,
-          UntypedResult(Set(),
-                        JsonString(write(tasks.simpletask.IntResult(i))))
-      )
+      Await.result(
+          cache.set(
+              td,
+              UntypedResult(Set(),
+                            JsonString(write(tasks.simpletask.IntResult(i))))
+          ),
+          30 seconds)
     }
     cache.shutDown
 
@@ -109,8 +124,14 @@ class TaskCacheTestSuite extends FunSuite with BeforeAndAfterAll {
                   tasks.simpletask.SimpleTask.MyResultSet(Some(i), Some(0)))),
           None
       )
-      val r = read[tasks.simpletask.IntResult](cache2.get(td).get.data.value)
-      expectResult(((tasks.simpletask.IntResult(i))))(r)
+      val read =
+        Await.result(cache2
+                       .get(td)
+                       .map(x =>
+                             upickle.default.read[tasks.simpletask.IntResult](
+                                 x.get.data.value)),
+                     40 seconds)
+      expectResult(((tasks.simpletask.IntResult(i))))(read)
     }
 
   }
