@@ -80,9 +80,15 @@ class SharedFileCache(implicit fs: FileServiceActor,
   def set(x: TaskDescription, r: UntypedResult)(
       implicit p: FileServicePrefix) = {
     try {
-      val kh = getHash(serializeTaskDescription(x))
+      val std = serializeTaskDescription(x)
+      val kh = getHash(std)
       val v: File = writeBinaryToFile(serializeResult(r))
-      SharedFile(v, name = "__result__" + kh).map(x => ())
+      val k: File = writeBinaryToFile(std)
+      SharedFile(v, name = "__result__" + kh).flatMap { _ =>
+        SharedFile(k, name = "__result__" + kh + ".input").map { _ =>
+          ()
+        }
+      }
     } catch {
       case e: Throwable => {
         shutDown
