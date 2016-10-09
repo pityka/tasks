@@ -207,11 +207,11 @@ object PiApp extends App {
     }
 
     /* Start tasks for Fibonacci, subtasks are started by this task. */
-    // val fibResult = fibtask(FibInput(Some(16)))(CPUMemoryRequest(1, 1000)).?
+    val fibResult = fibtask(FibInput(Some(16)))(CPUMemoryRequest(1, 1000)).?
 
     /* Block and wait for the futures */
     println(Await.result(pi, atMost = 10 minutes))
-  // println(Await.result(fibResult, atMost = 10 minutes))
+    println(Await.result(fibResult, atMost = 10 minutes))
 
   }
 

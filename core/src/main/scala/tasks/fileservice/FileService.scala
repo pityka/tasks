@@ -311,7 +311,9 @@ abstract class AbstractFileUser[R](sf: SharedFile,
       }
     }
     case FileNotFound(e) => {
-      log.warning("NotFound : " + sf + ". Reason: " + e.toString)
+      if (sf.byteSize >= 0) {
+        log.warning("NotFound : " + sf + ". Reason: " + e.toString)
+      }
       fail(e)
     }
     case CannotSaveFile(e) => {
