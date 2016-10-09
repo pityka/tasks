@@ -84,8 +84,8 @@ class SharedFileCache(implicit fs: FileServiceActor,
       val kh = getHash(std)
       val v: File = writeBinaryToFile(serializeResult(r))
       val k: File = writeBinaryToFile(std)
-      SharedFile(v, name = "__result__" + kh).flatMap { _ =>
-        SharedFile(k, name = "__result__" + kh + ".input").map { _ =>
+      SharedFile(v, name = "__meta__result__" + kh).flatMap { _ =>
+        SharedFile(k, name = "__meta__input__" + kh).map { _ =>
           ()
         }
       }
