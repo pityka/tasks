@@ -64,7 +64,7 @@ class SharedFileCache(implicit fs: FileServiceActor,
     val hash = getHash(tdBytes)
 
     SharedFileHelper
-      .getByNameUnchecked("__result__" + hash)
+      .getByNameUnchecked("__meta__result__" + hash)
       .flatMap(_.file)
       .map(x => Some(x))
       .recover {
