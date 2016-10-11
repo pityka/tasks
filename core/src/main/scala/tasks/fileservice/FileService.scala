@@ -498,6 +498,8 @@ trait FileStorage extends Serializable {
 
   def list(regexp: String): List[SharedFile]
 
+  def close = ()
+
 }
 
 class FileService(storage: FileStorage,
@@ -515,6 +517,7 @@ class FileService(storage: FileStorage,
 
   override def postStop {
     fjp.shutdown
+    storage.close
     log.info("FileService stopped.")
   }
 

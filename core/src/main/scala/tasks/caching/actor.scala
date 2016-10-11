@@ -89,7 +89,8 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
     case CheckResult(sch, originalSender) =>
       val savedSender = sender
       cacheMap
-        .get(sch.description)(sch.fileServicePrefix)
+        .get(sch.description)(
+            sch.fileServicePrefix.append(sch.description.taskId.id))
         .recover {
           case e => None
         }

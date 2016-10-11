@@ -72,6 +72,8 @@ class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
     _client
   }
 
+  override def close = tm.shutdownNow
+
   private def tm = {
     if (_tm == null) {
       _tm = new TransferManager(s3Client);

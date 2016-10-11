@@ -171,7 +171,9 @@ class TaskLauncher(
     val sch = elem._2
 
     sch.cacheActor.!(
-        SaveResult(sch.description, receivedResult, sch.fileServicePrefix))(
+        SaveResult(sch.description,
+                   receivedResult,
+                   sch.fileServicePrefix.append(sch.description.taskId.id)))(
         sender = taskActor)
 
     taskQueue ! TaskDone(sch, receivedResult)
