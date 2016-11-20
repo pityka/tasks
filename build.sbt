@@ -20,9 +20,9 @@ lazy val core = project.in(file("core"))
   .settings(
     name := "tasks-core",
     libraryDependencies ++= Seq(
-      "com.typesafe.akka" %% "akka-actor" % "2.3.15",
-      "com.typesafe.akka" %% "akka-remote" % "2.3.15",
-      "com.typesafe.akka" %% "akka-testkit" % "2.3.15",
+      "com.typesafe.akka" %% "akka-actor" % "2.4.12",
+      "com.typesafe.akka" %% "akka-remote" % "2.4.12",
+      "com.typesafe.akka" %% "akka-testkit" % "2.4.12",
       "com.typesafe" % "config" % "1.3.0",
       "com.google.guava" % "guava" % "18.0",
       "com.google.code.findbugs" % "jsr305" % "1.3.9",

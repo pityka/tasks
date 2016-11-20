@@ -173,7 +173,8 @@ trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
             session.waitForCondition(ch.ethz.ssh2.ChannelCondition.STDOUT_DATA,
                                      10000)
 
-            val stdout = io.Source.fromInputStream(session.getStdout).mkString
+            val stdout =
+              scala.io.Source.fromInputStream(session.getStdout).mkString
 
             val pid = stdout.trim.toInt
 
