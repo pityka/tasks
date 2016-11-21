@@ -87,48 +87,7 @@ case class TaskSystemComponents(
 }
 
 class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
-                                 defaultConf: Config) {
-
-  val configuration = {
-    val actorProvider = hostConfig match {
-      case x: LocalConfiguration => "akka.actor.LocalActorRefProvider"
-      case _ => "akka.remote.RemoteActorRefProvider"
-    }
-
-    val numberOfAkkaRemotingThreads = if (hostConfig.myRole == MASTER) 6 else 2
-
-    val configSource = s"""
-task-worker-dispatcher.fork-join-executor.parallelism-max = ${hostConfig.myCardinality}
-task-worker-dispatcher.fork-join-executor.parallelism-min = ${hostConfig.myCardinality}
-akka {
-  actor {
-    provider = "${actorProvider}"
-  }
-  remote {
-    enabled-transports = ["akka.remote.netty.tcp"]
-    netty.tcp {
-      hostname = "${hostConfig.myAddress.getHostName}"
-      port = ${hostConfig.myAddress.getPort.toString}
-      server-socket-worker-pool.pool-size-max = ${numberOfAkkaRemotingThreads}
-      client-socket-worker-pool.pool-size-max = ${numberOfAkkaRemotingThreads}
-    }
- }
-}
-  """ + (if (tasks.util.config.global.logToStandardOutput)
-           """
-    akka.loggers = ["akka.event.Logging$DefaultLogger"]
-    """
-         else "")
-
-    val customConf = ConfigFactory.parseString(configSource)
-
-    val classpathConf = ConfigFactory.load("akkaoverrides.conf")
-
-    customConf.withFallback(defaultConf).withFallback(classpathConf)
-
-  }
-
-  val system = ActorSystem("tasks", configuration)
+                                 val system: ActorSystem) {
 
   val logger = system.actorOf(Props(new LogPublishActor(None)))
   system.eventStream.subscribe(logger, classOf[akka.event.Logging.LogEvent])

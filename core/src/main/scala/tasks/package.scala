@@ -154,10 +154,11 @@ package object tasks {
         .getString("akka.remote.netty.tcp.port")
 
   def withTaskSystem[T](f: TaskSystemComponents => T): Option[T] =
-    withTaskSystem(ConfigFactory.load)(f)
+    withTaskSystem(None)(f)
 
-  def withTaskSystem[T](c: Config)(f: TaskSystemComponents => T): Option[T] = {
-    val ts = defaultTaskSystem(c, None)
+  def withTaskSystem[T](c: Option[Config])(
+      f: TaskSystemComponents => T): Option[T] = {
+    val ts = defaultTaskSystem(c)
     if (ts.hostConfig.myRole == MASTER) {
       try {
         Some(f(ts.components))
@@ -168,31 +169,73 @@ package object tasks {
 
   }
 
-  private def defaultTaskSystem: TaskSystem =
-    defaultTaskSystem(ConfigFactory.load(), None)
+  def defaultTaskSystem: TaskSystem =
+    defaultTaskSystem(None)
 
-  private def defaultTaskSystem(string: String): TaskSystem =
-    defaultTaskSystem(ConfigFactory.load(),
-                      Some(ConfigFactory.parseString(string)))
+  def defaultTaskSystem(string: String): TaskSystem =
+    defaultTaskSystem(Some(ConfigFactory.parseString(string)))
 
-  private def defaultTaskSystem(defaultConf: Config,
-                                extraConf: Option[Config]): TaskSystem = {
-    val akkaconf = ConfigFactory.parseResources("akkaoverrides.conf")
+  def defaultTaskSystem(extraConf: Option[Config]): TaskSystem = {
 
-    val conf =
-      if (extraConf.isDefined)
+    val hostConfig = MasterSlaveGridEngineChosenFromConfig
+
+    val configuration = {
+      val actorProvider = hostConfig match {
+        case x: LocalConfiguration => "akka.actor.LocalActorRefProvider"
+        case _ => "akka.remote.RemoteActorRefProvider"
+      }
+
+      val numberOfAkkaRemotingThreads =
+        if (hostConfig.myRole == MASTER) 6 else 2
+
+      val configSource = s"""
+          task-worker-dispatcher.fork-join-executor.parallelism-max = ${hostConfig.myCardinality}
+          task-worker-dispatcher.fork-join-executor.parallelism-min = ${hostConfig.myCardinality}
+          akka {
+            actor {
+              provider = "${actorProvider}"
+            }
+            remote {
+              enabled-transports = ["akka.remote.netty.tcp"]
+              netty.tcp {
+                hostname = "${hostConfig.myAddress.getHostName}"
+                port = ${hostConfig.myAddress.getPort.toString}
+                server-socket-worker-pool.pool-size-max = ${numberOfAkkaRemotingThreads}
+                client-socket-worker-pool.pool-size-max = ${numberOfAkkaRemotingThreads}
+              }
+           }
+          }
+            """ + (if (tasks.util.config.global.logToStandardOutput)
+                     """
+              akka.loggers = ["akka.event.Logging$DefaultLogger"]
+              """
+                   else "")
+
+      val customConf = ConfigFactory.parseString(configSource)
+
+      val akkaconf = ConfigFactory.parseResources("akkaoverrides.conf")
+
+      extraConf.map { extraConf =>
         ConfigFactory.defaultOverrides
-          .withFallback(extraConf.get)
+          .withFallback(customConf)
+          .withFallback(extraConf)
           .withFallback(akkaconf)
-          .withFallback(defaultConf)
           .withFallback(ConfigFactory.load)
-      else
-        ConfigFactory.defaultOverrides
-          .withFallback(akkaconf)
-          .withFallback(defaultConf)
-          .withFallback(ConfigFactory.load)
-    new TaskSystem(MasterSlaveGridEngineChosenFromConfig, conf)
+      } getOrElse (
+          ConfigFactory.defaultOverrides
+            .withFallback(customConf)
+            .withFallback(akkaconf)
+            .withFallback(ConfigFactory.load)
+      )
+
+    }
+
+    val system = ActorSystem("tasks", configuration)
+    new TaskSystem(MasterSlaveGridEngineChosenFromConfig, system)
   }
+
+  def defaultTaskSystem(as: ActorSystem): TaskSystem =
+    new TaskSystem(MasterSlaveGridEngineChosenFromConfig, as)
 
   def customTaskSystem(hostConfig: MasterSlaveConfiguration,
                        extraConf: Config): TaskSystem = {
@@ -202,8 +245,15 @@ package object tasks {
       .withFallback(extraConf)
       .withFallback(akkaconf)
       .withFallback(ConfigFactory.defaultReference)
-    new TaskSystem(hostConfig, conf)
+
+    val system = ActorSystem("tasks", conf)
+
+    new TaskSystem(hostConfig, system)
   }
+
+  def customTaskSystem(hostConfig: MasterSlaveConfiguration,
+                       as: ActorSystem): TaskSystem =
+    new TaskSystem(hostConfig, as)
 
   type CompFun[A <: Prerequisitive[A], B] = A => ComputationEnvironment => B
 
