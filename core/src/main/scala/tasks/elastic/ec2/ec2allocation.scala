@@ -60,12 +60,6 @@ import com.amazonaws.services.ec2.model.IamInstanceProfileSpecification
 import com.amazonaws.services.ec2.model.SpotInstanceType
 import com.amazonaws.services.ec2.model.BlockDeviceMapping
 import com.amazonaws.services.ec2.model.CancelSpotInstanceRequestsRequest
-import com.amazonaws.services.s3.AmazonS3Client;
-import com.amazonaws.services.s3.model.CannedAccessControlList
-import com.amazonaws.services.s3.transfer.TransferManager
-import com.amazonaws.services.s3.model.PutObjectRequest
-import com.amazonaws.services.s3.model.StorageClass
-import com.amazonaws.services.s3.model.ObjectMetadata
 import com.amazonaws.services.ec2.model.SpotPlacement
 import com.amazonaws.AmazonServiceException
 import java.net.URL
@@ -252,44 +246,45 @@ class EC2Reaper(filesToSave: List[File],
     with EC2Shutdown {
 
   val ec2 = new AmazonEC2Client()
-  val s3Client = new AmazonS3Client();
+  // val s3Client = new AmazonS3Client();
 
-  def allSoulsReaped(): Unit = {
-    log.debug("All souls reaped. Calling system.shutdown.")
-
-    if (s3path.isDefined) {
-      import com.amazonaws.services.ec2.AmazonEC2Client
-      import com.amazonaws.auth.InstanceProfileCredentialsProvider
-
-      val tm = new TransferManager(s3Client);
-      try {
-        // Asynchronous call.
-        filesToSave.foreach { f =>
-          val putrequest =
-            new PutObjectRequest(s3path.get._1,
-                                 s3path.get._2 + "/" + f.getName,
-                                 f)
-
-          { // set server side encryption
-            val objectMetadata = new ObjectMetadata();
-            objectMetadata.setSSEAlgorithm(
-                ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
-            putrequest.setMetadata(objectMetadata);
-          }
-
-          val upload = tm.upload(putrequest);
-          upload.waitForCompletion
-        }
-      } finally {
-        tm.shutdownNow
-      }
-    }
-    if (terminateSelf) {
-      val nodename = EC2Operations.readMetadata("instance-id").head
-      EC2Operations.terminateInstance(ec2, nodename)
-    }
-    context.system.shutdown
-  }
+  def allSoulsReaped(): Unit = ()
+  //   {
+  //   log.debug("All souls reaped. Calling system.shutdown.")
+  //
+  //   if (s3path.isDefined) {
+  //     import com.amazonaws.services.ec2.AmazonEC2Client
+  //     import com.amazonaws.auth.InstanceProfileCredentialsProvider
+  //
+  //     val tm = new TransferManager(s3Client);
+  //     try {
+  //       // Asynchronous call.
+  //       filesToSave.foreach { f =>
+  //         val putrequest =
+  //           new PutObjectRequest(s3path.get._1,
+  //                                s3path.get._2 + "/" + f.getName,
+  //                                f)
+  //
+  //         { // set server side encryption
+  //           val objectMetadata = new ObjectMetadata();
+  //           objectMetadata.setSSEAlgorithm(
+  //               ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
+  //           putrequest.setMetadata(objectMetadata);
+  //         }
+  //
+  //         val upload = tm.upload(putrequest);
+  //         upload.waitForCompletion
+  //       }
+  //     } finally {
+  //       tm.shutdownNow
+  //     }
+  //   }
+  //   if (terminateSelf) {
+  //     val nodename = EC2Operations.readMetadata("instance-id").head
+  //     EC2Operations.terminateInstance(ec2, nodename)
+  //   }
+  //   context.system.shutdown
+  // }
 }
 
 object EC2Grid extends ElasticSupport[EC2NodeRegistry, EC2SelfShutdown] {

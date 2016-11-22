@@ -5,11 +5,27 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.net.URLStreamHandler;
 
-import com.amazonaws.services.s3.AmazonS3Client;
+import tasks.util.S3Helpers
+import akka.stream._
+import akka.actor._
+import com.bluelabs.s3stream._
+import com.bluelabs.akkaaws._
+import akka.stream.scaladsl._
+import scala.concurrent._
+import scala.concurrent.duration._
+
+object URLHandlerActorSystem {
+  implicit val system = ActorSystem("urlhandler")
+  implicit val mat = ActorMaterializer()
+  val s3stream = new com.bluelabs.s3stream.S3Stream(S3Helpers.credentials)
+}
 
 class S3Handler extends URLStreamHandler {
 
-  private val s3Client = new AmazonS3Client();
+  import URLHandlerActorSystem._
+  import system.dispatcher
+
+  override def finalize = system.shutdown
 
   def openConnection(url: URL): URLConnection =
     new URLConnection(url) {
@@ -18,19 +34,29 @@ class S3Handler extends URLStreamHandler {
 
       val key = url.getPath.drop(1)
 
-      override def getInputStream: InputStream = {
-        val s3object = s3Client.getObject(bucket, key)
-        s3object.getObjectContent
-      }
+      override def getInputStream: InputStream =
+        s3stream
+          .download(S3Location(bucket, key))
+          .runWith(StreamConverters.asInputStream())
 
       override def getContentLengthLong: Long = {
-        s3Client.getObjectMetadata(bucket, key).getInstanceLength
+        Await
+          .result(
+              s3stream
+                .getMetadata(S3Location(bucket, key))
+                .map(_.header[
+                        akka.http.scaladsl.model.headers.`Content-Length`].get.length),
+              atMost = 5 seconds)
       }
 
       def connect = ()
 
       override def getHeaderField(s: String): String = s match {
-        case "ETag" => s3Client.getObjectMetadata(bucket, key).getETag
+        case "ETag" =>
+          Await.result(s3stream
+                         .getMetadata(S3Location(bucket, key))
+                         .map(_.getHeader("ETag").get.value),
+                       atMost = 5 seconds)
         case _ => null
       }
 

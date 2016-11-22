@@ -42,18 +42,22 @@ import tasks.util._
 import tasks.util.eq._
 import tasks.fileservice._
 
-import com.amazonaws.services.s3.AmazonS3Client;
-import com.amazonaws.services.s3.model.CannedAccessControlList
-import com.amazonaws.services.s3.transfer.TransferManager
-import com.amazonaws.services.s3.model.PutObjectRequest
-import com.amazonaws.services.s3.model.StorageClass
-import com.amazonaws.services.s3.model.ObjectMetadata
-import com.amazonaws.services.ec2.model.SpotPlacement
 import com.amazonaws.AmazonServiceException
 import java.net.URL
 
 import collection.JavaConversions._
 import java.io.{File, InputStream}
+
+import tasks.util.S3Helpers
+import akka.stream._
+import akka.actor._
+import akka.util._
+import akka.http.scaladsl.model._
+import com.bluelabs.s3stream._
+import com.bluelabs.akkaaws._
+import akka.stream.scaladsl._
+import scala.concurrent._
+import scala.concurrent.duration._
 
 class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
 
@@ -61,31 +65,36 @@ class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
 
   def centralized = true
 
-  @transient private var _client = new AmazonS3Client();
+  @transient private var _system = ActorSystem("s3storage");
 
-  @transient private var _tm = new TransferManager(s3Client);
-
-  private def s3Client = {
-    if (_client == null) {
-      _client = new AmazonS3Client();
+  implicit def system = {
+    if (_system == null) {
+      _system = ActorSystem("s3storage");
     }
-    _client
+    _system
   }
 
-  override def close = tm.shutdownNow
+  implicit def ec = system.dispatcher
 
-  private def tm = {
-    if (_tm == null) {
-      _tm = new TransferManager(s3Client);
+  @transient private var _mat = ActorMaterializer()
+
+  implicit def mat = {
+    if (_mat == null) {
+      _mat = ActorMaterializer()
     }
-    _tm
+    _mat
   }
+
+  @transient private var s3stream = new S3Stream(S3Helpers.credentials)
+
+  override def close = _system.shutdown
 
   def contains(path: ManagedFilePath, size: Long, hash: Int): Boolean = {
     val tr = retry(5) {
       try {
-        val metadata =
-          s3Client.getObjectMetadata(bucketName, assembleName(path))
+        val metadata = Await.result(
+            s3stream.getMetadata(S3Location(bucketName, assembleName(path))),
+            atMost = 5 seconds)
         if (size < 0) true
         else {
           val (size1, hash1) = getLengthAndHash(metadata)
@@ -101,8 +110,15 @@ class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
     tr.getOrElse(false)
   }
 
-  def getLengthAndHash(metadata: ObjectMetadata): (Long, Int) =
-    metadata.getInstanceLength -> metadata.getETag.hashCode
+  def getLengthAndHash(metadata: HttpResponse): (Long, Int) =
+    metadata
+      .header[akka.http.scaladsl.model.headers.`Content-Length`]
+      .get
+      .length -> metadata
+      .header[akka.http.scaladsl.model.headers.`ETag`]
+      .get
+      .value
+      .hashCode
 
   private def assembleName(path: ManagedFilePath) =
     ((if (folderPrefix != "") folderPrefix + "/" else "") +: path.pathElements)
@@ -114,23 +130,18 @@ class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
   def importFile(f: File, path: ProposedManagedFilePath)
     : Try[(Long, Int, File, ManagedFilePath)] = {
     val managed = path.toManaged
-
+    val key = assembleName(managed)
+    val s3loc = S3Location(bucketName, key)
     retry(5) {
 
-      val putrequest =
-        new PutObjectRequest(bucketName, assembleName(managed), f)
+      val sink = s3stream.multipartUpload(s3loc, serverSideEncryption = true)
 
-      { // set server side encryption
-        val objectMetadata = new ObjectMetadata();
-        objectMetadata.setSSEAlgorithm(
-            ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
-        putrequest.setMetadata(objectMetadata);
-      }
-      val upload = tm.upload(putrequest);
-      upload.waitForCompletion
+      val future = FileIO.fromPath(f.toPath).runWith(sink)
 
       val metadata =
-        s3Client.getObjectMetadata(bucketName, assembleName(managed))
+        Await.result(future.flatMap(_ => s3stream.getMetadata(s3loc)),
+                     atMost = 24 hours)
+
       val (size1, hash1) = getLengthAndHash(metadata)
 
       if (size1 !== f.length)
@@ -142,18 +153,24 @@ class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
 
   }
 
-  def openStream(path: ManagedFilePath): Try[InputStream] = {
-    val s3object = s3Client.getObject(bucketName, assembleName(path))
-    scala.util.Success(s3object.getObjectContent)
-  }
+  def openStream(path: ManagedFilePath): Try[InputStream] =
+    Try(
+        s3stream
+          .download(S3Location(bucketName, assembleName(path)))
+          .runWith(StreamConverters.asInputStream()))
+
+  def createSource(path: ManagedFilePath): Source[ByteString, _] =
+    s3stream.download(S3Location(bucketName, assembleName(path)))
 
   def exportFile(path: ManagedFilePath): Try[File] = {
     val file = TempFile.createTempFile("")
+    val s3loc = S3Location(bucketName, assembleName(path))
     retry(5) {
-      val download = tm.download(bucketName, assembleName(path), file)
-      download.waitForCompletion
+      val f1 = s3stream.download(s3loc).runWith(FileIO.toPath(file.toPath))
 
-      val metadata = s3Client.getObjectMetadata(bucketName, assembleName(path))
+      val metadata = Await.result(f1.flatMap(_ => s3stream.getMetadata(s3loc)),
+                                  atMost = 24 hours)
+
       val (size1, hash1) = getLengthAndHash(metadata)
       if (size1 !== file.length)
         throw new RuntimeException("S3: Downloaded file length != metadata")

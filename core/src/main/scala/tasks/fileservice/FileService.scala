@@ -30,6 +30,8 @@ package tasks.fileservice
 import akka.actor._
 import akka.pattern.ask
 import akka.pattern.pipe
+import akka.stream.scaladsl._
+import akka.util._
 
 import com.google.common.hash._
 
@@ -111,6 +113,31 @@ object SharedFileHelper {
           case Success(r) => r
           case Failure(e) =>
             throw new RuntimeException("getStreamToFile failed. " + sf, e)
+        })
+  }
+
+  def source(sf: SharedFile)(
+      implicit service: FileServiceActor,
+      context: ActorRefFactory,
+      ec: ExecutionContext): Future[Source[ByteString, _]] = {
+
+    val serviceactor = service.actor
+    implicit val timout = akka.util.Timeout(1441 minutes)
+    val ac = context.actorOf(
+        Props(new FileUserSource(sf, serviceactor, isLocal))
+          .withDispatcher("fileuser-dispatcher"))
+
+    val f =
+      (ac ? WaitingForPath).asInstanceOf[Future[Try[Source[ByteString, _]]]]
+
+    f onComplete {
+      case _ => ac ! PoisonPill
+    }
+
+    f map (_ match {
+          case Success(r) => r
+          case Failure(e) =>
+            throw new RuntimeException("getSourceToFile failed. " + sf, e)
         })
   }
 
@@ -215,6 +242,53 @@ class FileUserStream(sf: SharedFile,
           s"storage.openStream, (KnownPathsWithStorage($storage)): ${stream.toString}, $sf")
       transfertome
     }
+  }
+
+  override def receive = super.receive orElse {
+    case FileSaved => {
+      writeableChannel.get.close
+    }
+  }
+}
+
+class FileUserSource(sf: SharedFile,
+                     service: ActorRef,
+                     isLocal: java.io.File => Boolean)
+    extends AbstractFileUser[Source[ByteString, _]](sf, service, isLocal) {
+
+  private var writeableChannel: Option[WritableByteChannel] = None
+
+  def transfertome {
+    log.debug("Unreadable")
+    val pipe = java.nio.channels.Pipe.open
+    writeableChannel = Some(pipe.sink)
+    val transferinActor = context.actorOf(
+        Props(new TransferIn(writeableChannel.get, self))
+          .withDispatcher("transferin"))
+
+    service ! TransferFileToUser(transferinActor, sf)
+
+    result = Some(Success(StreamConverters.fromInputStream(() =>
+                  java.nio.channels.Channels.newInputStream(pipe.source))))
+    finish
+  }
+
+  def finish {
+    if (listener.isDefined) {
+      listener.get ! result.get
+      self ! PoisonPill
+    }
+  }
+
+  def finishLocalFile(f: File) {
+    log.debug("Readable")
+    result = Some(Success(FileIO.fromPath(f.toPath)))
+    finish
+  }
+
+  def handleCentralStorage(storage: FileStorage) {
+    result = Some(Success(storage.createSource(sf)))
+    finish
   }
 
   override def receive = super.receive orElse {
@@ -428,6 +502,19 @@ trait FileStorage extends Serializable {
   def url(mp: RemoteFilePath): URL = mp.url
 
   def url(mp: ManagedFilePath): URL
+
+  def createSource(path: ManagedFilePath): Source[ByteString, _]
+
+  def createSource(path: RemoteFilePath): Source[ByteString, _] = {
+    val url1 = url(path)
+    akka.stream.scaladsl.StreamConverters.fromInputStream(() =>
+          url1.openStream)
+  }
+
+  def createSource(sf: SharedFile): Source[ByteString, _] = sf.path match {
+    case x: ManagedFilePath => createSource(x)
+    case x: RemoteFilePath => createSource(x)
+  }
 
   def contains(sf: SharedFile): Boolean = sf.path match {
     case x: ManagedFilePath => contains(x, sf.byteSize, sf.hash)

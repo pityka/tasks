@@ -282,9 +282,9 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
               val store = other match {
                 case "leveldb" => new LevelDBWrapper(cacheFile.get)
                 case "filesystem" => new FileSystemLargeKVStore(cacheFile.get)
-                case "s3" =>
-                  val url = new java.net.URL(config.global.cachePath)
-                  new S3LargeKVStore(url.getHost, url.getFile)
+                // case "s3" =>
+                //   val url = new java.net.URL(config.global.cachePath)
+                //   new S3LargeKVStore(url.getHost, url.getFile)
               }
               new KVCache(store,
                           akka.serialization.SerializationExtension(system))

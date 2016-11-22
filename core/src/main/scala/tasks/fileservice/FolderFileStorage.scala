@@ -44,6 +44,8 @@ import scala.concurrent._
 import scala.util._
 import java.net.URL
 import tasks.util.eq._
+import akka.stream.scaladsl._
+import akka.util._
 
 object FolderFileStorage {
 
@@ -109,6 +111,9 @@ class FolderFileStorage(val basePath: File,
     f.canRead && (size < 0 || (f.length === size && (tasks.util.config.global.skipContentHashVerificationAfterCache || FolderFileStorage
                   .getContentHash(f) === hash)))
   }
+
+  def createSource(path: ManagedFilePath): Source[ByteString, _] =
+    FileIO.fromPath(assemblePath(path).toPath)
 
   def openStream(path: ManagedFilePath): Try[InputStream] =
     Try(new FileInputStream(assemblePath(path)))

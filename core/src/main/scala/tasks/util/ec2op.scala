@@ -42,12 +42,7 @@ import com.amazonaws.services.ec2.model.IamInstanceProfileSpecification
 import com.amazonaws.services.ec2.model.SpotInstanceType
 import com.amazonaws.services.ec2.model.BlockDeviceMapping
 import com.amazonaws.services.ec2.model.CancelSpotInstanceRequestsRequest
-import com.amazonaws.services.s3.AmazonS3Client;
-import com.amazonaws.services.s3.model.CannedAccessControlList
-import com.amazonaws.services.s3.transfer.TransferManager
-import com.amazonaws.services.s3.model.PutObjectRequest
-import com.amazonaws.services.s3.model.StorageClass
-import com.amazonaws.services.s3.model.ObjectMetadata
+
 import com.amazonaws.services.ec2.model.SpotPlacement
 import com.amazonaws.AmazonServiceException
 import java.net.URL
@@ -87,26 +82,6 @@ object EC2Operations {
       val terminateRequest = new TerminateInstancesRequest(List(instanceId));
       ec2.terminateInstances(terminateRequest);
     }
-  }
-
-  def s3contains(bucketName: String, name: String): Boolean = {
-    val s3Client = new AmazonS3Client()
-
-    Try(s3Client.getObjectMetadata(bucketName, name)) match {
-      case Success(_) => true
-      case _ => false
-    }
-  }
-
-  def downloadFile(bucketName: String, name: String): File = {
-    retry(5) {
-      val s3Client = new AmazonS3Client()
-      val tm = new TransferManager(s3Client);
-      val file = TempFile.createFileInTempFolderIfPossibleWithName(name)
-      val download = tm.download(bucketName, name, file)
-      download.waitForCompletion
-      file
-    }.get
   }
 
   def readMetadata(key: String): List[String] = {
