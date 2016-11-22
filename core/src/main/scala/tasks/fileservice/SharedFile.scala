@@ -31,6 +31,8 @@ import akka.actor.{Actor, PoisonPill, ActorRef, Props, ActorRefFactory}
 import akka.actor.Actor._
 import akka.pattern.ask
 import akka.pattern.pipe
+import akka.stream.scaladsl._
+import akka.util._
 import scala.concurrent.{Future, ExecutionContext}
 import java.lang.Class
 import java.io.{File, InputStream, FileInputStream, BufferedInputStream, OutputStream}
@@ -91,6 +93,12 @@ class SharedFile private[tasks] (
            context: ActorRefFactory,
            ec: ExecutionContext) =
     SharedFileHelper.getPathToFile(this)
+
+  def source(implicit service: FileServiceActor,
+             nlc: NodeLocalCacheActor,
+             context: ActorRefFactory,
+             ec: ExecutionContext) =
+    SharedFileHelper.getSourceToFile(this)
 
   def openStream[R](f: InputStream => R)(implicit service: FileServiceActor,
                                          context: ActorRefFactory,
@@ -180,6 +188,30 @@ object SharedFile {
 
     val ac = context.actorOf(
         Props(new FileSender(file, prefix.propose(name), serviceactor))
+          .withDispatcher("filesender-dispatcher"))
+    val f = (ac ? WaitingForSharedFile)
+      .asInstanceOf[Future[Option[SharedFile]]]
+      .map(_.get)
+
+    f onComplete {
+      case _ => ac ! PoisonPill
+    }
+
+    f
+  }
+
+  def apply(source: Source[ByteString, _], name: String)(
+      implicit service: FileServiceActor,
+      context: ActorRefFactory,
+      prefix: FileServicePrefix,
+      ec: ExecutionContext): Future[SharedFile] = {
+
+    val serviceactor = service.actor
+
+    implicit val timout = akka.util.Timeout(1441 minutes)
+
+    val ac = context.actorOf(
+        Props(new SourceSender(source, prefix.propose(name), serviceactor))
           .withDispatcher("filesender-dispatcher"))
     val f = (ac ? WaitingForSharedFile)
       .asInstanceOf[Future[Option[SharedFile]]]

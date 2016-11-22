@@ -127,6 +127,26 @@ class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
       .map(x => if (x.endsWith("/")) x.dropRight(1) else x)
       .mkString("/")
 
+  def importSource(s: Source[ByteString, _], path: ProposedManagedFilePath)(
+      implicit am: Materializer): Try[(Long, Int, ManagedFilePath)] = Try {
+    val managed = path.toManaged
+    val key = assembleName(managed)
+    val s3loc = S3Location(bucketName, key)
+    val sink = s3stream.multipartUpload(s3loc, serverSideEncryption = true)
+    val future = s.runWith(sink)
+
+    val metadata =
+      Await.result(future.flatMap(_ => s3stream.getMetadata(s3loc)),
+                   atMost = 24 hours)
+
+    val (size1, hash1) = getLengthAndHash(metadata)
+
+    // if (size1 !== f.length)
+    //   throw new RuntimeException("S3: Uploaded file length != on disk")
+
+    (size1, hash1, managed)
+  }
+
   def importFile(f: File, path: ProposedManagedFilePath)
     : Try[(Long, Int, File, ManagedFilePath)] = {
     val managed = path.toManaged

@@ -31,6 +31,7 @@ import akka.actor.{Actor, PoisonPill, ActorRef, Props, ActorRefFactory}
 import akka.actor.Actor._
 import akka.pattern.ask
 import akka.pattern.pipe
+import akka.stream._
 import scala.concurrent.{Future, Await, ExecutionContext}
 import java.lang.Class
 import java.io.{File, InputStream, FileInputStream, BufferedInputStream}
@@ -146,6 +147,15 @@ class FolderFileStorage(val basePath: File,
     new File(
         basePath.getAbsolutePath + File.separator + path.pathElements.mkString(
             File.separator) + str)
+  }
+
+  def importSource(s: Source[ByteString, _], path: ProposedManagedFilePath)(
+      implicit mat: Materializer): Try[(Long, Int, ManagedFilePath)] = {
+    val tmp = TempFile.createTempFile("foldertmp")
+    s.runWith(FileIO.toPath(tmp.toPath))
+    val r = importFile(tmp, path)
+    tmp.delete
+    r.map(x => (x._1, x._2, x._4))
   }
 
   def importFile(file: File, proposed: ProposedManagedFilePath)

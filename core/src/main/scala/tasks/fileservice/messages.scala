@@ -41,6 +41,9 @@ case class NewFile(f: File, p: ProposedManagedFilePath)
     extends FileServiceMessage
 
 @SerialVersionUID(1L)
+case class NewSource(p: ProposedManagedFilePath) extends FileServiceMessage
+
+@SerialVersionUID(1L)
 case class GetPaths(p: SharedFile) extends FileServiceMessage
 
 @SerialVersionUID(1L)
@@ -75,7 +78,10 @@ case class TryToDownload(storage: FileStorage) extends FileServiceMessage
 case class TryToUpload(storage: FileStorage) extends FileServiceMessage
 
 @SerialVersionUID(1L)
-case class Uploaded(length: Long, hash: Int, file: File, p: ManagedFilePath)
+case class Uploaded(length: Long,
+                    hash: Int,
+                    file: Option[File],
+                    p: ManagedFilePath)
     extends FileServiceMessage
 
 @SerialVersionUID(1L)

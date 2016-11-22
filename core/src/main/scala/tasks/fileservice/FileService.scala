@@ -31,6 +31,7 @@ import akka.actor._
 import akka.pattern.ask
 import akka.pattern.pipe
 import akka.stream.scaladsl._
+import akka.stream._
 import akka.util._
 
 import com.google.common.hash._
@@ -116,7 +117,7 @@ object SharedFileHelper {
         })
   }
 
-  def source(sf: SharedFile)(
+  def getSourceToFile(sf: SharedFile)(
       implicit service: FileServiceActor,
       context: ActorRefFactory,
       ec: ExecutionContext): Future[Source[ByteString, _]] = {
@@ -453,7 +454,72 @@ class FileSender(file: File,
       val f = storage.importFile(file, proposedPath)
       if (f.isSuccess) {
         log.debug("uploaded")
-        service ! Uploaded(f.get._1, f.get._2, f.get._3, f.get._4)
+        service ! Uploaded(f.get._1, f.get._2, Some(f.get._3), f.get._4)
+      } else {
+        log.debug("could not upload. send could not upload and transfer")
+        service ! CouldNotUpload(proposedPath)
+      }
+
+    case WaitingForSharedFile =>
+      listener = Some(sender)
+      if (sharedFile.isDefined) {
+        sender ! sharedFile
+        self ! PoisonPill
+      } else if (error) {
+        sender ! None
+        self ! PoisonPill
+      }
+
+    case ErrorWhileAccessingStore(e) =>
+      error = true
+      log.error("ErrorWhileAccessingStore: " + e)
+      listener.foreach { x =>
+        x ! None
+        self ! PoisonPill
+      }
+
+  }
+
+}
+
+class SourceSender(file: Source[ByteString, _],
+                   proposedPath: ProposedManagedFilePath,
+                   service: ActorRef)
+    extends Actor
+    with akka.actor.ActorLogging {
+
+  implicit val mat = ActorMaterializer()
+
+  override def preStart {
+    service ! NewSource(proposedPath)
+  }
+
+  var sharedFile: Option[SharedFile] = None
+  var error = false
+  var listener: Option[ActorRef] = None
+
+  def receive = {
+    case t: SharedFile =>
+      sharedFile = Some(t)
+      if (listener.isDefined) {
+        listener.get ! sharedFile
+        self ! PoisonPill
+      }
+
+    case TransferToMe(transferin) =>
+      val is = file.runWith(StreamConverters.asInputStream())
+      val readablechannel = java.nio.channels.Channels.newChannel(is)
+      val chunksize = tasks.util.config.global.fileSendChunkSize
+      context.actorOf(
+          Props(new TransferOut(readablechannel, transferin, chunksize))
+            .withDispatcher("transferout"))
+
+    case TryToUpload(storage) =>
+      log.debug("trytoupload")
+      val f = storage.importSource(file, proposedPath)
+      if (f.isSuccess) {
+        log.debug("uploaded")
+        service ! Uploaded(f.get._1, f.get._2, None, f.get._3)
       } else {
         log.debug("could not upload. send could not upload and transfer")
         service ! CouldNotUpload(proposedPath)
@@ -532,6 +598,9 @@ trait FileStorage extends Serializable {
   def importFile(
       f: File,
       path: ProposedManagedFilePath): Try[(Long, Int, File, ManagedFilePath)]
+
+  def importSource(s: Source[ByteString, _], path: ProposedManagedFilePath)(
+      implicit am: Materializer): Try[(Long, Int, ManagedFilePath)]
 
   def getSizeAndHash(path: RemoteFilePath): Try[(Long, Int)] = Try {
     val connection = path.url.openConnection
@@ -710,11 +779,43 @@ class FileService(storage: FileStorage,
           sender ! ErrorWhileAccessingStore
         }
       }
+
+    case NewSource(proposedPath) =>
+      try {
+
+        if (storage.centralized) {
+          log.debug("answer trytoupload")
+          sender ! TryToUpload(storage)
+
+        } else {
+          // transfer
+          val savePath = TempFile.createFileInTempFolderIfPossibleWithName(
+              proposedPath.name)
+          val writeableChannel =
+            new java.io.FileOutputStream(savePath).getChannel
+          val transferinActor = context.actorOf(
+              Props(new TransferIn(writeableChannel, self))
+                .withDispatcher("transferin"))
+          transferinactors.update(
+              transferinActor,
+              (writeableChannel, savePath, sender, proposedPath))
+
+          sender ! TransferToMe(transferinActor)
+        }
+
+      } catch {
+        case e: Exception => {
+          log.error(e, "Error while accessing storage " + proposedPath)
+          sender ! ErrorWhileAccessingStore
+        }
+      }
     case Uploaded(length, hash, file, managedFilePath) => {
       log.debug("got uploaded. record")
 
       val sn = create(length, hash, managedFilePath)
-      sn.foreach(sf => recordToNames(file, sf))
+      if (file.isDefined) {
+        sn.foreach(sf => recordToNames(file.get, sf))
+      }
       sn.failed.foreach { e =>
         log.error(e,
                   "Error in creation of SharedFile {} {}",
