@@ -29,7 +29,7 @@ lazy val core = project.in(file("core"))
       "com.typesafe" % "config" % "1.3.0",
       "com.google.guava" % "guava" % "18.0",
       "com.google.code.findbugs" % "jsr305" % "1.3.9",
-      "io.github.pityka" %% "s3-stream-fork" % "0.0.4-fork2-SNAPSHOT",
+      "io.github.pityka" %% "s3-stream-fork" % "0.0.4-fork3-SNAPSHOT",
       "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24",
       "org.iq80.leveldb" % "leveldb" % "0.9",
       "ch.ethz.ganymed" % "ganymed-ssh2" % "261",
