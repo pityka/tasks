@@ -281,7 +281,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
             case other =>
               val store = other match {
                 case "leveldb" => new LevelDBWrapper(cacheFile.get)
-                case "filesystem" => new FileSystemLargeKVStore(cacheFile.get)
+                // case "filesystem" => new FileSystemLargeKVStore(cacheFile.get)
                 // case "s3" =>
                 //   val url = new java.net.URL(config.global.cachePath)
                 //   new S3LargeKVStore(url.getHost, url.getFile)

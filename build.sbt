@@ -27,8 +27,6 @@ lazy val core = project.in(file("core"))
       "com.typesafe.akka" %% "akka-remote" % "2.4.14",
       "com.typesafe.akka" %% "akka-testkit" % "2.4.14",
       "com.typesafe" % "config" % "1.3.0",
-      "com.google.guava" % "guava" % "18.0",
-      "com.google.code.findbugs" % "jsr305" % "1.3.9",
       "io.github.pityka" %% "s3-stream-fork" % "0.0.4-fork3-SNAPSHOT",
       "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24",
       "org.iq80.leveldb" % "leveldb" % "0.9",
@@ -36,7 +34,7 @@ lazy val core = project.in(file("core"))
       "org.scalatest" %% "scalatest" % "2.1.5" % "test",
       "io.spray" %% "spray-routing" % "1.3.3",
       "io.spray" %% "spray-can" % "1.3.3",
-      "com.lihaoyi" %% "upickle" % "0.4.1",
+      "com.lihaoyi" %% "upickle" % "0.4.3",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value
     )
   )
