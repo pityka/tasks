@@ -120,7 +120,7 @@ object SharedFileHelper {
   def getSourceToFile(sf: SharedFile)(
       implicit service: FileServiceActor,
       context: ActorRefFactory,
-      ec: ExecutionContext): Future[Source[ByteString, _]] = {
+      ec: ExecutionContext): Source[ByteString, _] = {
 
     val serviceactor = service.actor
     implicit val timout = akka.util.Timeout(1441 minutes)
@@ -135,11 +135,13 @@ object SharedFileHelper {
       case _ => ac ! PoisonPill
     }
 
-    f map (_ match {
+    val f2 = f map (_ match {
           case Success(r) => r
           case Failure(e) =>
             throw new RuntimeException("getSourceToFile failed. " + sf, e)
         })
+
+    Source.fromFuture(f2).flatMapConcat(x => x)
   }
 
   def openStreamToFile[R](sf: SharedFile)(fun: InputStream => R)(
