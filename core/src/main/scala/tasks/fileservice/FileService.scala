@@ -422,12 +422,13 @@ abstract class AbstractFileUser[R](sf: SharedFile,
 
 class FileSender(file: File,
                  proposedPath: ProposedManagedFilePath,
+                 deleteLocalFile: Boolean,
                  service: ActorRef)
     extends Actor
     with akka.actor.ActorLogging {
 
   override def preStart {
-    service ! NewFile(file, proposedPath)
+    service ! NewFile(file, proposedPath, ephemeralFile = deleteLocalFile)
   }
 
   var sharedFile: Option[SharedFile] = None
@@ -437,6 +438,9 @@ class FileSender(file: File,
   def receive = {
     case t: SharedFile =>
       sharedFile = Some(t)
+      if (deleteLocalFile) {
+        file.delete
+      }
       if (listener.isDefined) {
         listener.get ! sharedFile
         self ! PoisonPill
@@ -454,7 +458,10 @@ class FileSender(file: File,
       val f = storage.importFile(file, proposedPath)
       if (f.isSuccess) {
         log.debug("uploaded")
-        service ! Uploaded(f.get._1, f.get._2, Some(f.get._3), f.get._4)
+        service ! Uploaded(f.get._1,
+                           f.get._2,
+                           (if (!deleteLocalFile) Some(f.get._3) else None),
+                           f.get._4)
       } else {
         log.debug("could not upload. send could not upload and transfer")
         service ! CouldNotUpload(proposedPath)
@@ -623,13 +630,17 @@ trait FileStorage extends Serializable {
   def exportFile(path: ManagedFilePath): Try[File]
 
   def exportFile(path: RemoteFilePath): Try[File] = {
-    openStream(path).map { is =>
-      val tmp = TempFile.createTempFile("")
-      openFileOutputStream(tmp) { os =>
-        com.google.common.io.ByteStreams.copy(is, os)
+    val localFile = path.url.getProtocol == "file" && new File(
+          path.url.getPath).canRead
+    if (localFile) Try(new File(path.url.getPath))
+    else
+      openStream(path).map { is =>
+        val tmp = TempFile.createTempFile("")
+        openFileOutputStream(tmp) { os =>
+          com.google.common.io.ByteStreams.copy(is, os)
+        }
+        tmp
       }
-      tmp
-    }
   }
 
   def openStream(sf: SharedFile): Try[InputStream] =
@@ -685,9 +696,13 @@ class FileService(storage: FileStorage,
     collection.mutable.AnyRefMap[SharedFile, List[File]]()
 
   // transferinactor -> (name,channel,fileinbase,filesender)
-  private val transferinactors = collection.mutable
-    .Map[ActorRef,
-         (WritableByteChannel, File, ActorRef, ProposedManagedFilePath)]()
+  private val transferinactors =
+    collection.mutable.Map[ActorRef,
+                           (WritableByteChannel,
+                            File,
+                            ActorRef,
+                            ProposedManagedFilePath,
+                            Boolean)]()
 
   private def create(length: Long,
                      hash: Int,
@@ -729,7 +744,7 @@ class FileService(storage: FileStorage,
           sender ! Failure(e)
         }
       }
-    case NewFile(file, proposedPath) =>
+    case NewFile(file, proposedPath, ephemeral) =>
       try {
         if (isLocal(file)) {
 
@@ -737,7 +752,8 @@ class FileService(storage: FileStorage,
             storage.importFile(file, proposedPath).get
 
           val sn = create(length, hash, managedFilePath)
-          sn.foreach(sf => recordToNames(f, sf))
+
+          if (!ephemeral) { sn.foreach(sf => recordToNames(f, sf)) }
 
           sn.failed.foreach { e =>
             log.error(e,
@@ -765,7 +781,7 @@ class FileService(storage: FileStorage,
                   .withDispatcher("transferin"))
             transferinactors.update(
                 transferinActor,
-                (writeableChannel, savePath, sender, proposedPath))
+                (writeableChannel, savePath, sender, proposedPath, ephemeral))
 
             sender ! TransferToMe(transferinActor)
           }
@@ -798,7 +814,7 @@ class FileService(storage: FileStorage,
                 .withDispatcher("transferin"))
           transferinactors.update(
               transferinActor,
-              (writeableChannel, savePath, sender, proposedPath))
+              (writeableChannel, savePath, sender, proposedPath, true))
 
           sender ! TransferToMe(transferinActor)
         }
@@ -826,7 +842,7 @@ class FileService(storage: FileStorage,
     }
     case CannotSaveFile(e) => {
       transferinactors.get(sender).foreach {
-        case (channel, file, filesender, proposedPath) =>
+        case (channel, file, filesender, proposedPath, _) =>
           channel.close
           log.error("CannotSaveFile(" + e + ")")
           filesender ! ErrorWhileAccessingStore(e)
@@ -835,7 +851,7 @@ class FileService(storage: FileStorage,
     }
     case FileSaved => {
       transferinactors.get(sender).foreach {
-        case (channel, file, filesender, proposedPath) =>
+        case (channel, file, filesender, proposedPath, ephemeral) =>
           channel.close
           try {
             val (length, hash, f, managedFilePath) =
@@ -843,7 +859,9 @@ class FileService(storage: FileStorage,
 
             val sn = create(length, hash, managedFilePath)
 
-            sn.foreach(sf => recordToNames(file, sf))
+            if (!ephemeral) {
+              sn.foreach(sf => recordToNames(file, sf))
+            }
 
             sn.failed.foreach { e =>
               log.error(e,
@@ -872,7 +890,7 @@ class FileService(storage: FileStorage,
             .withDispatcher("transferin"))
       transferinactors.update(
           transferinActor,
-          (writeableChannel, savePath, sender, proposedPath))
+          (writeableChannel, savePath, sender, proposedPath, true))
 
       sender ! TransferToMe(transferinActor)
 

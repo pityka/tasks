@@ -177,6 +177,13 @@ object SharedFile {
       implicit service: FileServiceActor,
       context: ActorRefFactory,
       prefix: FileServicePrefix,
+      ec: ExecutionContext): Future[SharedFile] =
+    apply(file, name, false)
+
+  def apply(file: File, name: String, deleteFile: Boolean)(
+      implicit service: FileServiceActor,
+      context: ActorRefFactory,
+      prefix: FileServicePrefix,
       ec: ExecutionContext): Future[SharedFile] = {
 
     val serviceactor = service.actor
@@ -187,7 +194,11 @@ object SharedFile {
     implicit val timout = akka.util.Timeout(1441 minutes)
 
     val ac = context.actorOf(
-        Props(new FileSender(file, prefix.propose(name), serviceactor))
+        Props(
+            new FileSender(file,
+                           prefix.propose(name),
+                           deleteFile,
+                           serviceactor))
           .withDispatcher("filesender-dispatcher"))
     val f = (ac ? WaitingForSharedFile)
       .asInstanceOf[Future[Option[SharedFile]]]

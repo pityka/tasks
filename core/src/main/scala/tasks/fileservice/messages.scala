@@ -37,7 +37,7 @@ sealed trait FileServiceMessage
 case class GetListOfFilesInStorage(regexp: String) extends FileServiceMessage
 
 @SerialVersionUID(1L)
-case class NewFile(f: File, p: ProposedManagedFilePath)
+case class NewFile(f: File, p: ProposedManagedFilePath, ephemeralFile: Boolean)
     extends FileServiceMessage
 
 @SerialVersionUID(1L)
