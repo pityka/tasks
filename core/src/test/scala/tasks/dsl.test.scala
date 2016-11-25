@@ -49,28 +49,25 @@ object Tests {
   def await[T](f: Future[T]) = Await.result(f, atMost = Duration.Inf)
 
   case class IntWrapper(i: Int)
-  implicit val updateCounter: UpdatePrerequisitive[STP1[Int], IntWrapper] =
-    UpdatePrerequisitive {
-      case (old, i: IntWrapper) => old.copy(a1 = Some(i.i))
-    }
+  // implicit val updateCounter: UpdatePrerequisitive[STP1[Int], IntWrapper] =
+  //   UpdatePrerequisitive {
+  //     case (old, i: IntWrapper) => old.copy(a1 = Some(i.i))
+  //   }
 
-  val increment = Task[STP1[Int], IntWrapper]("increment", 1) {
-    case STP1(Some(c)) =>
+  val increment = Task[Int, IntWrapper]("increment", 1) {
+    case c =>
       implicit computationEnvironment =>
         IntWrapper(c + 1)
   }
   val tmp = TempFile.createTempFile(".2leveldb")
   tmp.delete
-  val Some((r1, r2)) = withTaskSystem(
-      ConfigFactory.parseString(
-          s"tasks.cache.file=${tmp.getAbsolutePath}"
-      )) { implicit ts =>
-    def t1(i: Option[Int]) = increment(STP1[Int](i))(CPUMemoryRequest(1, 500))
+  val Some(r1) = withTaskSystem(
+      Some(ConfigFactory.parseString(
+              s"tasks.cache.file=${tmp.getAbsolutePath}"
+          ))) { implicit ts =>
+    def t1(i: Int) = increment(i)(CPUMemoryRequest(1, 500))
 
-    (
-        await(increment(0)(CPUMemoryRequest(1, 500)).?).i,
-        await((t1(Some(0)) ~> t1(None) ~> t1(None) ~> t1(None)) ?).i
-    )
+    (await(increment(0)(CPUMemoryRequest(1, 500))).i)
 
   }
 
@@ -80,7 +77,6 @@ class TaskDSLTestSuite extends FunSuite with Matchers {
 
   test("chains should work") {
     Tests.r1 should equal(1)
-    Tests.r2 should equal(4)
   }
 
 }

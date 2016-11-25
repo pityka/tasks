@@ -120,6 +120,13 @@ class TaskTestSuite
 
   implicit val cache = CacheActor(cacher)
 
+  implicit val tsc = TaskSystemComponents(starter,
+                                          fileService,
+                                          system,
+                                          cache,
+                                          NodeLocalCacheActor(nlc),
+                                          prefix)
+
   override def afterAll {
     Thread.sleep(1500)
     system.shutdown
@@ -127,67 +134,9 @@ class TaskTestSuite
   }
 
   test("Trivial") {
-    val st1 = system.actorOf(Props(new SimpleTask(1, 32324)))
+    val st1 = SimpleTask.spawn(1, 32324)
     st1 ! GetBackResult
     expectMsg(3000 millis, IntResult(1))
-  }
-
-  test("Simple test") {
-
-    val st1 = system.actorOf(Props(new SimpleTask(1, 123)))
-
-    val st2 = system.actorOf(Props(new SimpleTask(0)))
-
-    st2 ! GetBackResult
-    expectNoMsg(6000 millis)
-    info("Task computation should not start before dependency is done.")
-    st1 ! GetBackResult
-
-    st1 ! AddTarget(st2, SimpleTask.testUpdater)
-    expectResult(Seq(IntResult(1), IntResult(1)))(
-        receiveN(2, 600 millis).toSeq)
-    info("target added + end result received")
-
-    st2 ! GetBackResult
-    expectMsg(10 millis, IntResult(1))
-    info("On request, end result received again, without computation.")
-
-  }
-
-  test("Chain of 3") {
-    val st1 = system.actorOf(Props(new SimpleTask(15, 645)))
-    val st2 = system.actorOf(Props(new SimpleTask(0)))
-    val st3 = system.actorOf(Props(new SimpleTask(0)))
-
-    st1 ! AddTarget(st2, SimpleTask.testUpdater)
-    st2 ! AddTarget(st3, SimpleTask.testUpdater)
-
-    st3 ! GetBackResult
-    expectMsg(600 millis, IntResult(15))
-
-  }
-
-  test("Parallel N") {
-    val n = 500
-    val st1 = system.actorOf(Props(new SimpleTask(16, 6345)))
-    val st2 = system.actorOf(Props(new SimpleTask(0, 63451)))
-    val childs = (1 to n) map (x =>
-            system.actorOf(Props(new SimpleTask(0, x))))
-
-    st1 ! AddTarget(st2, SimpleTask.testUpdater)
-
-    childs.foreach { x =>
-      st2 ! AddTarget(x, SimpleTask.testUpdater)
-    }
-
-    childs.foreach { x =>
-      x ! GetBackResult
-    }
-
-    receiveN(n, 25000 millis).toList.foreach { result =>
-      expectResult(IntResult(16))(result)
-    }
-
   }
 
   test(
@@ -202,9 +151,9 @@ class TaskTestSuite
                      "launcher3")
 
     // This is to "warm up" the new launcher. dont' exactly know why, but the first task is slow.
-    val st12 = system.actorOf(Props(new SimpleTask(12)))
-    val st13 = system.actorOf(Props(new SimpleTask(13)))
-    val st14 = system.actorOf(Props(new SimpleTask(14)))
+    val st12 = SimpleTask.spawn(12)
+    val st13 = SimpleTask.spawn(13)
+    val st14 = SimpleTask.spawn(14)
 
     st12 ! GetBackResult
     st13 ! GetBackResult
@@ -219,9 +168,9 @@ class TaskTestSuite
     // Wait for the launcher to fully load
     expectNoMsg(3000 millis)
 
-    val st1 = system.actorOf(Props(new SimpleTask(2)))
-    val st2 = system.actorOf(Props(new SimpleTask(3)))
-    val st3 = system.actorOf(Props(new SimpleTask(4)))
+    val st1 = SimpleTask.spawn(2)
+    val st2 = SimpleTask.spawn(3)
+    val st3 = SimpleTask.spawn(4)
 
     st1 ! GetBackResult
     st2 ! GetBackResult
@@ -236,9 +185,9 @@ class TaskTestSuite
   }
 
   test("3 parallel task (50ms each) finish on 2 TaskLaunchers in 200ms.") {
-    val st1 = system.actorOf(Props(new SimpleTask(2, 111)))
-    val st2 = system.actorOf(Props(new SimpleTask(3, 111)))
-    val st3 = system.actorOf(Props(new SimpleTask(4, 111)))
+    val st1 = SimpleTask.spawn(2, 111)
+    val st2 = SimpleTask.spawn(3, 111)
+    val st3 = SimpleTask.spawn(4, 111)
 
     st1 ! GetBackResult
     st2 ! GetBackResult
@@ -250,21 +199,21 @@ class TaskTestSuite
   }
 
   test("Already done task should be served from cache.") {
-    val st1 = system.actorOf(Props(new SimpleTask(23, 992)))
+    val st1 = SimpleTask.spawn(23, 992)
     st1 ! GetBackResult
     expectMsg(390 millis, IntResult(23))
 
-    val st2 = system.actorOf(Props(new SimpleTask(23, 993)))
+    val st2 = SimpleTask.spawn(23, 993)
     st2 ! GetBackResult
     expectMsg(195 millis, IntResult(23))
-    val st3 = system.actorOf(Props(new SimpleTask(23, 994)))
+    val st3 = SimpleTask.spawn(23, 994)
     st3 ! GetBackResult
     expectMsg(195 millis, IntResult(23))
 
   }
 
   test("Failed task.") {
-    val st1 = system.actorOf(Props(new SimpleTask(42)))
+    val st1 = SimpleTask.spawn(42)
     st1 ! GetBackResult
     expectMsgPF(3000 millis) {
       case akka.actor.Status.Failure(cause)
@@ -273,9 +222,9 @@ class TaskTestSuite
     }
 
     try {
-      EventFilter[RuntimeException](occurrences = 1) intercept {
-        throw new RuntimeException("ASDF")
-      }
+      val system = 1
+      EventFilter[RuntimeException](occurrences = 1) intercept (throw new RuntimeException(
+              "ASDF"))
     } catch {
       case x: RuntimeException if x.getMessage == "ASDF" =>
         expectResult(true)(true)

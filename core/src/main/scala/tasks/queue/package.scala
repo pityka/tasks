@@ -35,7 +35,7 @@ package object queue {
 
   type CompFun2 = Js.Value => ComputationEnvironment => Future[UntypedResult]
 
-  def newTask[A, B <: Prerequisitive[B]](
+  def newTask[A, B](
       prerequisitives: B,
       resource: CPUMemoryRequest = CPUMemoryRequest(cpu = 1, memory = 500),
       f: CompFun2,
@@ -54,20 +54,16 @@ package object queue {
     ProxyTaskActorRef[B, A](
         context.actorOf(
             Props(
-                new ProxyTask(queue.actor,
-                              fileService.actor,
-                              prefix,
-                              cache.actor) {
-                  type MyPrerequisitive = B
-                  type MyResult = A
-                  def emptyResultSet = prerequisitives
-                  override def resourceConsumed = resource
-                  val writer: Writer[B] = writer1
-                  val reader: Reader[A] = reader2
-
-                  val runTaskClass = f.getClass
-                  val taskId = taskId1
-                }
+                new ProxyTask[B, A](taskId1,
+                                    f.getClass,
+                                    prerequisitives,
+                                    writer1,
+                                    reader2,
+                                    resource,
+                                    queue.actor,
+                                    fileService.actor,
+                                    prefix,
+                                    cache.actor)
             ).withDispatcher("proxytask-dispatcher")
         )
     )

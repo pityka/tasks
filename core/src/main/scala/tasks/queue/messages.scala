@@ -74,14 +74,14 @@ private[tasks] case class AskForWork(resources: CPUMemoryAvailable)
 @SerialVersionUID(1L)
 case object HowLoadedAreYou extends Serializable
 
-case class AddTarget[A <: Prerequisitive[A], B](
-    target: ActorRef,
-    updater: UpdatePrerequisitive[A, B])
+// case class AddTarget[A <: Prerequisitive[A], B](
+//     target: ActorRef,
+//     updater: UpdatePrerequisitive[A, B])
 
-case class SaveUpdater[A <: Prerequisitive[A], B](
-    updater: UpdatePrerequisitive[A, B])
+// case class SaveUpdater[A <: Prerequisitive[A], B](
+//     updater: UpdatePrerequisitive[A, B])
 
-case object UpdaterSaved
+// case object UpdaterSaved
 
 case object GetBackResult
 

@@ -102,14 +102,6 @@ private[tasks] object ProxyTask {
 
   }
 
-  def addTarget[B <: Prerequisitive[B], A](
-      parent: ActorRef,
-      child: ActorRef,
-      updater: UpdatePrerequisitive[B, A]) {
-
-    val f = parent ! AddTarget(child, updater)
-  }
-
 }
 
 private class Task(
@@ -221,7 +213,13 @@ private class Task(
   }
 }
 
-abstract class ProxyTask(
+class ProxyTask[MyPrerequisitive, MyResult](
+    taskId: TaskId,
+    runTaskClass: java.lang.Class[_ <: CompFun2],
+    incomings: MyPrerequisitive,
+    writer: Writer[MyPrerequisitive],
+    reader: Reader[MyResult],
+    resourceConsumed: CPUMemoryRequest,
     starter: ActorRef,
     fileServiceActor: ActorRef,
     fileServicePrefix: FileServicePrefix,
@@ -229,69 +227,37 @@ abstract class ProxyTask(
 ) extends Actor
     with akka.actor.ActorLogging {
 
-  protected type MyPrerequisitive <: Prerequisitive[MyPrerequisitive]
-
-  protected type MyResult
-
-  protected def resourceConsumed =
-    tasks.CPUMemoryRequest(cpu = 1, memory = 500)
-
-  def handleIncomingResult(r: Any) {
-    incomings = _updatePrerequisitives
-      .foldLeft(identity[MyPrerequisitive, Any])((b, a) =>
-            UpdatePrerequisitive(a orElse b))
-      .apply((incomings, r))
-  }
-
-  val runTaskClass: java.lang.Class[_ <: CompFun2]
-
-  val taskId: TaskId
-
-  private[this] var _targets: Set[ActorRef] = Set[ActorRef]()
-
   private[this] var _channels: Set[ActorRef] = Set[ActorRef]()
-
-  def emptyResultSet: MyPrerequisitive
-
-  val writer: Writer[MyPrerequisitive]
-
-  val reader: Reader[MyResult]
-
-  private[this] var _updatePrerequisitives =
-    List[UpdatePrerequisitive[MyPrerequisitive, Any]]()
-
-  protected var incomings: MyPrerequisitive = emptyResultSet
 
   private[this] var result: Option[Any] = None
 
   private var taskIsQueued = false
 
-  private def distributeResult {
-    log.debug("Distributing result to targets: {}, {}", _targets, _channels)
-    result.foreach(r =>
-          _targets.foreach { t =>
-        t ! r
-    })
+  private def distributeResult: Unit = {
+    log.debug("Distributing result to targets: {}", _channels)
     result.foreach(r =>
           _channels.foreach { ch =>
         ch ! r
     })
   }
 
-  private def notifyListenersOnFailure(cause: Throwable) {
-    _targets.foreach(t => t ! FailureMessageFromProxyToProxy(cause))
+  private def notifyListenersOnFailure(cause: Throwable): Unit =
     _channels.foreach(t => t ! akka.actor.Status.Failure(cause))
-  }
 
   private def startTask: Unit = {
     if (result.isEmpty) {
+
+      val persisted: Option[MyPrerequisitive] = incomings match {
+        case x: HasPersistent[MyPrerequisitive] => Some(x.persistent)
+        case x => None
+      }
 
       val s = ScheduleTask(
           TaskDescription(
               taskId,
               JsonString(upickle.json.write(writer.write(incomings))),
-              incomings.persistent.map(x =>
-                    JsonString(upickle.json.write(writer.write(x.self))))),
+              persisted.map(x =>
+                    JsonString(upickle.json.write(writer.write(x))))),
           runTaskClass.getName,
           resourceConsumed,
           starter,
@@ -308,9 +274,8 @@ abstract class ProxyTask(
 
   override def preStart() = {
     log.debug("ProxyTask prestart.")
-    if (incomings.ready) {
-      startTask
-    }
+    startTask
+
   }
 
   override def postStop() = {
@@ -318,23 +283,6 @@ abstract class ProxyTask(
   }
 
   def receive = {
-    case x: AddTarget[_, _] =>
-      if (x.target == self) sender ! false
-      else {
-        x.target ! SaveUpdater(x.updater)
-      }
-
-    case x: SaveUpdater[_, _] =>
-      _updatePrerequisitives = x.updater.asInstanceOf[UpdatePrerequisitive[
-                MyPrerequisitive,
-                Any]] :: _updatePrerequisitives
-      sender ! UpdaterSaved
-
-    case UpdaterSaved =>
-      log.debug("target added")
-      _targets = _targets + sender
-      result.foreach(r => sender ! r)
-
     case MessageFromTask(incomingResultJs) =>
       val incomingResult: MyResult =
         reader.read(upickle.json.read(incomingResultJs.data.value))
@@ -364,15 +312,6 @@ abstract class ProxyTask(
       log.error(cause, "Execution failed. ")
       notifyListenersOnFailure(cause)
       self ! PoisonPill
-
-    case FailureMessageFromProxyToProxy(cause) => {
-      notifyListenersOnFailure(cause)
-      self ! PoisonPill
-    }
-    case msg: Any =>
-      log.debug("Message received, handling in handleIncomingResult. ")
-      handleIncomingResult(msg)
-      if (incomings.ready && !taskIsQueued) startTask
   }
 
 }

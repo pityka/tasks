@@ -35,46 +35,46 @@ import akka.actor._
 import upickle.default._
 import upickle.Js
 
+import scala.concurrent._
+
 abstract class ResultWithSharedFiles(sf: SharedFile*) extends Product {
   def files = sf
 
 }
 
 // This is the prerequisitives of a task
-trait Prerequisitive[+A] extends Serializable { self: A =>
-  def ready: Boolean
-  def persistent: Option[Prerequisitive[A]] = None
-  def self: A = this
+trait HasPersistent[+A] extends Serializable { self: A =>
+  def persistent: A
 }
 
-trait SimplePrerequisitive[+A] extends Prerequisitive[A] with Product {
-  self: A =>
+// trait SimplePrerequisitive[+A] extends Prerequisitive[A] with Product {
+//   self: A =>
+//
+//   def ready = productIterator.forall {
+//     case x: Option[_] => x.isDefined
+//     case _ =>
+//       throw new RuntimeException(
+//           "SimplePrerequisitive should be a product of Options")
+//   }
+// }
 
-  def ready = productIterator.forall {
-    case x: Option[_] => x.isDefined
-    case _ =>
-      throw new RuntimeException(
-          "SimplePrerequisitive should be a product of Options")
-  }
-}
-
-class TaskDefinition[A <: Prerequisitive[A]: Writer, B: Reader](
-    val computation: CompFun2,
-    val taskId: TaskId) {
+class TaskDefinition[A: Writer, B: Reader](val computation: CompFun2,
+                                           val taskId: TaskId) {
 
   def apply(a: A)(resource: CPUMemoryRequest)(
-      implicit components: TaskSystemComponents): ProxyTaskActorRef[A, B] =
-    tasks.queue.newTask[B, A](a, resource, computation, taskId)
+      implicit components: TaskSystemComponents): Future[B] =
+    tasks.queue
+      .newTask[B, A](a, resource, computation, taskId)
+      .?(components.actorsystem.dispatcher)
 
 }
 
-case class UpdatePrerequisitive[A <: Prerequisitive[A], B](
-    pf: PartialFunction[(A, B), A])
-    extends PartialFunction[(A, B), A] {
-  def apply(v1: (A, B)) = pf.apply(v1)
-  def isDefinedAt(x: (A, B)) = pf.isDefinedAt(x)
-}
+// case class UpdatePrerequisitive[A, B](pf: PartialFunction[(A, B), A])
+//     extends PartialFunction[(A, B), A] {
+//   def apply(v1: (A, B)) = pf.apply(v1)
+//   def isDefinedAt(x: (A, B)) = pf.isDefinedAt(x)
+// }
 
-case class STP1[A1](a1: Option[A1]) extends SimplePrerequisitive[STP1[A1]]
-case class STP2[A1, A2](a1: Option[A1], a2: Option[A2])
-    extends SimplePrerequisitive[STP2[A1, A2]]
+// case class STP1[A1](a1: Option[A1]) extends SimplePrerequisitive[STP1[A1]]
+// case class STP2[A1, A2](a1: Option[A1], a2: Option[A2])
+// extends SimplePrerequisitive[STP2[A1, A2]]

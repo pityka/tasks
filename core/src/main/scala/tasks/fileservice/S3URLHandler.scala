@@ -40,23 +40,19 @@ class S3Handler extends URLStreamHandler {
           .runWith(StreamConverters.asInputStream())
 
       override def getContentLengthLong: Long = {
-        Await
-          .result(
-              s3stream
-                .getMetadata(S3Location(bucket, key))
-                .map(_.header[
-                        akka.http.scaladsl.model.headers.`Content-Length`].get.length),
-              atMost = 5 seconds)
+        Await.result(s3stream
+                       .getMetadata(S3Location(bucket, key))
+                       .map(_.contentLength.get),
+                     atMost = 5 seconds)
       }
 
       def connect = ()
 
       override def getHeaderField(s: String): String = s match {
         case "ETag" =>
-          Await.result(s3stream
-                         .getMetadata(S3Location(bucket, key))
-                         .map(_.getHeader("ETag").get.value),
-                       atMost = 5 seconds)
+          Await.result(
+              s3stream.getMetadata(S3Location(bucket, key)).map(_.eTag.get),
+              atMost = 5 seconds)
         case _ => null
       }
 

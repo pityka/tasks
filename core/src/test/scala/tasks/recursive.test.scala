@@ -62,7 +62,7 @@ object Fib {
   }
 
   case class FibInput(n: Option[Int], tag: Option[List[Boolean]])
-      extends SimplePrerequisitive[FibInput]
+
   object FibInput {
     def apply(n: Int): FibInput = FibInput(Some(n), tag = Some(Nil))
   }
@@ -79,9 +79,9 @@ object Fib {
             case 1 => Future.successful(FibOut(1))
             case n => {
               val f1 = fibtask(FibInput(Some(n - 1), Some(false :: tag)))(
-                  CPUMemoryRequest(1, 1)).?
+                  CPUMemoryRequest(1, 1))
               val f2 = fibtask(FibInput(Some(n - 2), Some(true :: tag)))(
-                  CPUMemoryRequest(1, 1)).?
+                  CPUMemoryRequest(1, 1))
               releaseResources
               for {
                 r1 <- f1
@@ -115,7 +115,7 @@ tasks.disableRemoting = true
 
   test("long") {
     val n = 16
-    val r = await(fibtask(FibInput(n))(CPUMemoryRequest(1, 1)).?).n
+    val r = await(fibtask(FibInput(n))(CPUMemoryRequest(1, 1))).n
     expectResult(r)(serial(n))
   }
 

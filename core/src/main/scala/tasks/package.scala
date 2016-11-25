@@ -255,24 +255,24 @@ package object tasks {
                        as: ActorSystem): TaskSystem =
     new TaskSystem(hostConfig, as)
 
-  type CompFun[A <: Prerequisitive[A], B] = A => ComputationEnvironment => B
+  type CompFun[A, B] = A => ComputationEnvironment => B
 
-  def AsyncTask[A <: Prerequisitive[A], C](taskID: String, taskVersion: Int)(
+  def AsyncTask[A, C](taskID: String, taskVersion: Int)(
       comp: CompFun[A, Future[C]]): TaskDefinition[A, C] = macro Macros
     .asyncTaskDefinitionImpl[A, C]
 
-  def Task[A <: Prerequisitive[A], C](taskID: String, taskVersion: Int)(
+  def Task[A, C](taskID: String, taskVersion: Int)(
       comp: CompFun[A, C]): TaskDefinition[A, C] = macro Macros
     .taskDefinitionImpl[A, C]
 
-  def identity[A <: Prerequisitive[A], B]: UpdatePrerequisitive[A, B] =
-    UpdatePrerequisitive[A, B] {
-      case (x, _) => x
-    }
+  // def identity[A, B]: UpdatePrerequisitive[A, B] =
+  //   UpdatePrerequisitive[A, B] {
+  //     case (x, _) => x
+  //   }
 
-  implicit def tupleConverter[A1](t: (A1)): STP1[A1] = STP1(Some(t))
-  implicit def tupleConverter[A1, A2](t: (A1, A2)): STP2[A1, A2] =
-    STP2(Some(t._1), Some(t._2))
+  // implicit def tupleConverter[A1](t: (A1)): STP1[A1] = STP1(Some(t))
+  // implicit def tupleConverter[A1, A2](t: (A1, A2)): STP2[A1, A2] =
+  // STP2(Some(t._1), Some(t._2))
 
   def MasterSlaveGridEngineChosenFromConfig: MasterSlaveConfiguration = {
     if (config.global.disableRemoting) LocalConfigurationFromConfig

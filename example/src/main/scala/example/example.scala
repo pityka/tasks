@@ -41,11 +41,9 @@ import scala.concurrent.duration._
 object PiTasks {
   case class BatchResult(inside: Int, outside: Int)
 
-  case class BatchInput(batchSize: Option[SharedFile], batchId: Option[Int])
-      extends SimplePrerequisitive[BatchInput]
+  case class BatchInput(batchSize: SharedFile, batchId: Int)
 
-  case class PiInput(inside: Option[Int], outside: Option[Int])
-      extends SimplePrerequisitive[PiInput]
+  case class PiInput(inside: Int, outside: Int)
 
   case class PiResult(pi: Double)
 
@@ -57,7 +55,7 @@ object PiTasks {
   val batchCalc = AsyncTask[BatchInput, BatchResult]("batch", 1) {
 
     /* Input of task, does not need to be a pattern match */
-    case BatchInput(Some(sizeFile: SharedFile), Some(id: Int)) =>
+    case BatchInput(sizeFile: SharedFile, id: Int) =>
       /** Implicit context
         *
         * - Provides available resources allocated to the task
@@ -87,7 +85,7 @@ object PiTasks {
   }
 
   val piCalc = Task[PiInput, PiResult]("reduce", 1) {
-    case PiInput(Some(in), Some(out)) =>
+    case PiInput(in, out) =>
       implicit ctx =>
         PiResult(in.toDouble / (in + out) * 4d)
   }
@@ -103,13 +101,12 @@ object PiTasks {
   */
 object Fib {
 
-  case class FibInput(n: Option[Int]) extends SimplePrerequisitive[FibInput]
+  case class FibInput(n: Int)
 
-  case class FibReduce(f1: Option[Int], f2: Option[Int])
-      extends SimplePrerequisitive[FibReduce]
+  case class FibReduce(f1: Int, f2: Int)
 
   val reduce = Task[FibReduce, Int]("fibreduce", 1) {
-    case FibReduce(Some(f1), Some(f2)) =>
+    case FibReduce(f1, f2) =>
       implicit ce =>
         f1 + f2
   }
@@ -125,7 +122,7 @@ object Fib {
   val fibtask: TaskDefinition[FibInput, Int] =
     AsyncTask[FibInput, Int]("fib", 1) {
 
-      case FibInput(Some(n)) =>
+      case FibInput(n) =>
         implicit cxt =>
           n match {
             case 0 => Future.successful(0)
@@ -136,14 +133,13 @@ object Fib {
                 * Spawns new subtask with input and requested resources
                 * The `?` method returns a Future with the result of the task
                 */
-              val f1 = fibtask(FibInput(Some(n - 1)))(CPUMemoryRequest(1, 1)).?
-              val f2 = fibtask(FibInput(Some(n - 2)))(CPUMemoryRequest(1, 1)).?
+              val f1 = fibtask(FibInput(n - 1))(CPUMemoryRequest(1, 1))
+              val f2 = fibtask(FibInput(n - 2))(CPUMemoryRequest(1, 1))
 
               val f3: Future[Int] = for {
                 r1 <- f1
                 r2 <- f2
-                r3 <- reduce(FibReduce(Some(r1), Some(r2)))(
-                         CPUMemoryRequest(1, 1)).?
+                r3 <- reduce(FibReduce(r1, r2))(CPUMemoryRequest(1, 1))
 
               } yield r3
 
@@ -195,19 +191,18 @@ object PiApp extends App {
       Future
         .sequence(
             1 to numTasks map { i =>
-              batchCalc(BatchInput(Some(taskSize), Some(i)))(
-                  CPUMemoryRequest(1, 1000)).?
+              batchCalc(BatchInput(taskSize, i))(CPUMemoryRequest(1, 1000))
             }
         )
         .flatMap { batches =>
-          piCalc(PiInput(Some(batches.map(_.inside).sum),
-                         Some(batches.map(_.outside).sum)))(
-              CPUMemoryRequest(1, 1000)).?
+          piCalc(
+              PiInput(batches.map(_.inside).sum, batches.map(_.outside).sum))(
+              CPUMemoryRequest(1, 1000))
         }
     }
 
     /* Start tasks for Fibonacci, subtasks are started by this task. */
-    val fibResult = fibtask(FibInput(Some(16)))(CPUMemoryRequest(1, 1000)).?
+    val fibResult = fibtask(FibInput(16))(CPUMemoryRequest(1, 1000))
 
     /* Block and wait for the futures */
     println(Await.result(pi, atMost = 10 minutes))

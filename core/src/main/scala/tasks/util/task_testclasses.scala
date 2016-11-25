@@ -45,12 +45,6 @@ case class IntResult(val value: Int)
 object SimpleTask {
 
   case class MyResultSet(val num: Option[Int], val id: Option[Int])
-      extends SimplePrerequisitive[MyResultSet]
-
-  val testUpdater = UpdatePrerequisitive[MyResultSet, IntResult] {
-    case (old, s: IntResult) =>
-      MyResultSet(Some(old.num.getOrElse(0) + s.value), old.id)
-  }
 
   val runTask: CompFun2 = { js => implicit env =>
     Future {
@@ -71,32 +65,45 @@ object SimpleTask {
 
   }
 
-}
-
-class SimpleTask(
-    var counter: Int,
-    id: Int = 0
-)(implicit queue: QueueActor,
-  fileService: FileServiceActor,
-  prefix: FileServicePrefix,
-  cache: CacheActor)
-    extends ProxyTask(queue.actor, fileService.actor, prefix, cache.actor) {
-  import SimpleTask._
-
-  type MyPrerequisitive = SimpleTask.MyResultSet
-
-  type MyResult = IntResult
-
-  val runTaskClass = SimpleTask.runTask.getClass
-
-  val taskId = TaskId(runTaskClass.getName, 1)
-
-  val writer = implicitly[Writer[MyPrerequisitive]]
-
-  val reader = implicitly[Reader[MyResult]]
-
-  def emptyResultSet =
-    if (counter > 0) MyResultSet(Some(counter), Some(id))
-    else MyResultSet(None, Some(id)).asInstanceOf[MyResultSet]
+  def spawn(counter: Int, id: Int = 0)(
+      implicit components: TaskSystemComponents,
+      writer1: Writer[MyResultSet],
+      reader2: Reader[IntResult]) =
+    newTask[IntResult, MyResultSet](
+        prerequisitives = MyResultSet(Some(counter), Some(id)),
+        resource = CPUMemoryRequest(cpu = 1, memory = 500),
+        f = runTask,
+        taskId = TaskId(runTask.getClass.getName, 1)
+    ).actor
 
 }
+
+// class SimpleTask(
+//     var counter: Int,
+//     id: Int = 0
+// )(implicit queue: QueueActor,
+//   fileService: FileServiceActor,
+//   prefix: FileServicePrefix,
+//   cache: CacheActor)
+//     extends ProxyTask(queue.actor, fileService.actor, prefix, cache.actor) {
+//   import SimpleTask._
+//
+//   type MyPrerequisitive = SimpleTask.MyResultSet
+//
+//   type MyResult = IntResult
+//
+//   val runTaskClass = SimpleTask.runTask.getClass
+//
+//   val incomings = MyResultSet(Some(counter), Some(id))
+//
+//   val taskId = TaskId(runTaskClass.getName, 1)
+//
+//   val writer = implicitly[Writer[MyPrerequisitive]]
+//
+//   val reader = implicitly[Reader[MyResult]]
+//
+//   def emptyResultSet =
+//     if (counter > 0) MyResultSet(Some(counter), Some(id))
+//     else MyResultSet(None, Some(id)).asInstanceOf[MyResultSet]
+//
+// }

@@ -48,9 +48,9 @@ class LevelDBWrapperSpec extends KeyValueStoreSpec {
   def makeKVStore(f: File) = new LevelDBWrapper(f)
 }
 
-class FileSystemKVStoreSpec extends KeyValueStoreSpec {
-  def makeKVStore(f: File) = new FileSystemLargeKVStore(f)
-}
+// class FileSystemKVStoreSpec extends KeyValueStoreSpec {
+//   def makeKVStore(f: File) = new FileSystemLargeKVStore(f)
+// }
 
 trait KeyValueStoreSpec extends FunSpec with Matchers {
 

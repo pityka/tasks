@@ -110,15 +110,8 @@ class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
     tr.getOrElse(false)
   }
 
-  def getLengthAndHash(metadata: HttpResponse): (Long, Int) =
-    metadata
-      .header[akka.http.scaladsl.model.headers.`Content-Length`]
-      .get
-      .length -> metadata
-      .header[akka.http.scaladsl.model.headers.`ETag`]
-      .get
-      .value
-      .hashCode
+  def getLengthAndHash(metadata: ObjectMetadata): (Long, Int) =
+    metadata.contentLength.get -> metadata.eTag.get.hashCode
 
   private def assembleName(path: ManagedFilePath) =
     ((if (folderPrefix != "") folderPrefix + "/" else "") +: path.pathElements)
@@ -200,6 +193,6 @@ class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
   }
 
   def url(mp: ManagedFilePath): URL =
-    new URL("s3", bucketName, assembleName(mp))
+    new URL("s3", bucketName, "/" + assembleName(mp))
 
 }

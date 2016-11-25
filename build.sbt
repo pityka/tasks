@@ -1,7 +1,7 @@
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.11.8",
-  version :="0.0.4",
+  version :="0.0.5",
   parallelExecution in Test := false
 ) ++ reformatOnCompileSettings
 
@@ -27,7 +27,7 @@ lazy val core = project.in(file("core"))
       "com.typesafe.akka" %% "akka-remote" % "2.4.14",
       "com.typesafe.akka" %% "akka-testkit" % "2.4.14",
       "com.typesafe" % "config" % "1.3.0",
-      "io.github.pityka" %% "s3-stream-fork" % "0.0.4-fork3-SNAPSHOT",
+      "io.github.pityka" %% "s3-stream-fork" % "0.0.4-fork4-SNAPSHOT",
       "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24",
       "org.iq80.leveldb" % "leveldb" % "0.9",
       "ch.ethz.ganymed" % "ganymed-ssh2" % "261",
