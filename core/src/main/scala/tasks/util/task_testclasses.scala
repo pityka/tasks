@@ -50,18 +50,22 @@ object SimpleTask {
     Future {
       val rs = implicitly[Reader[MyResultSet]].read(js)
       // Logger.debug( "task implementation started" + rs.num.toString)
-      val x = NodeLocalCache.getItemBlocking("asdfsdaf") {
-        "value"
-      }
-      Thread.sleep(50)
+      NodeLocalCache
+        .getItem("asdfsdaf") {
+          "value"
+        }
+        .map { x =>
+          Thread.sleep(50)
 
-      if (rs.num.get == 42) throw new RuntimeException("failtest")
+          if (rs.num.get == 42) throw new RuntimeException("failtest")
 
-      // Logger.debug( "task implementation ended")
-      // Logger.debug( rs.num.get)
+          // Logger.debug( "task implementation ended")
+          // Logger.debug( rs.num.get)
 
-      UntypedResult(Set(), JsonString(write(new IntResult(rs.num.get))))
-    }(scala.concurrent.ExecutionContext.Implicits.global)
+          UntypedResult(Set(), JsonString(write(new IntResult(rs.num.get))))
+        }
+
+    }.flatMap(x => x)
 
   }
 

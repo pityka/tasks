@@ -36,18 +36,24 @@ case object YouShouldSetIt
 
 object NodeLocalCache {
 
-  def getItemBlocking[A](key: String)(orElse: => A)(
-      implicit nlc: NodeLocalCacheActor): A = {
+  def getItemAsync[A](key: String)(orElse: => Future[A])(
+      implicit nlc: NodeLocalCacheActor,
+      ec: ExecutionContext): Future[A] = getItem(key)(orElse).flatMap(x => x)
+
+  def getItem[A](key: String)(orElse: => A)(
+      implicit nlc: NodeLocalCacheActor,
+      ec: ExecutionContext): Future[A] = {
     implicit val to = akka.util.Timeout(168 hours)
-    val f = (nlc.actor ? LookUp(key))
-    val answer = concurrent.Await.result(f, Duration.Inf)
-    answer match {
-      case YouShouldSetIt => {
-        val c = orElse
-        nlc.actor ! Save(key, c)
-        c
+    (nlc.actor ? LookUp(key)).map { answer =>
+      // val answer = concurrent.Await.result(f, Duration.Inf)
+      answer match {
+        case YouShouldSetIt => {
+          val c = orElse
+          nlc.actor ! Save(key, c)
+          c
+        }
+        case x => x.asInstanceOf[A]
       }
-      case x => x.asInstanceOf[A]
     }
   }
 }

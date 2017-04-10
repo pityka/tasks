@@ -158,7 +158,7 @@ object SharedFileHelper {
                                       nlc: NodeLocalCacheActor,
                                       ec: ExecutionContext): Future[File] = {
 
-    NodeLocalCache.getItemBlocking("fs::" + path) {
+    NodeLocalCache.getItemAsync("fs::" + path) {
       val serviceactor = service.actor
       implicit val timout = akka.util.Timeout(1441 minutes)
       val ac = context.actorOf(
@@ -530,8 +530,11 @@ class SourceSender(file: Source[ByteString, _],
         log.debug("uploaded")
         service ! Uploaded(f.get._1, f.get._2, None, f.get._3)
       } else {
-        log.debug("could not upload. send could not upload and transfer")
-        service ! CouldNotUpload(proposedPath)
+        log.error("could not upload. send could not upload and transfer")
+        listener.foreach { x =>
+          x ! None
+          self ! PoisonPill
+        }
       }
 
     case WaitingForSharedFile =>
