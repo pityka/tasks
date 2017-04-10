@@ -65,26 +65,26 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
   }
 
   def receive = {
+    case PoisonPillToCacheActor => self ! PoisonPill
     case SaveResult(description, result, prefix) =>
       log.debug("SavingResult")
-      cacheMap
-        .set(description, result)(prefix)
-        .recover {
-          case e =>
-            SetDone
-        }
-        .map { x =>
-          SetDone
-        }
-        .pipeTo(self)
-
       context.become({
         case SetDone =>
-          log.debug("Save done " + description.taskId)
+          log.info("Save done " + description.taskId)
           unstashAll()
           context.unbecome()
         case _ => stash()
       }, discardOld = false)
+      cacheMap
+        .set(description, result)(prefix)
+        .map { x =>
+          SetDone
+        }
+        .recover {
+          case e =>
+            SetDone
+        }
+        .pipeTo(self)
 
     case CheckResult(sch, originalSender) =>
       val savedSender = sender

@@ -51,6 +51,9 @@ private[tasks] case class CheckResult(sch: ScheduleTask, sender: ActorRef)
     extends Serializable
 
 @SerialVersionUID(1L)
+private[tasks] case object PoisonPillToCacheActor extends Serializable
+
+@SerialVersionUID(1L)
 private[tasks] case class TaskNotFoundInCache(v: Boolean = true)
     extends Serializable
 
