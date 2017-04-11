@@ -44,7 +44,6 @@ import java.lang.Class
 import java.io.{File, InputStream, FileInputStream, BufferedInputStream}
 import java.util.concurrent.{TimeUnit, ScheduledFuture}
 import java.nio.channels.{WritableByteChannel, ReadableByteChannel}
-import java.net.URL
 
 import tasks.util._
 import tasks.util.eq._
@@ -52,7 +51,9 @@ import tasks.caching._
 import tasks.queue._
 
 @SerialVersionUID(1L)
-case class FileServiceActor(actor: ActorRef)
+case class FileServiceActor(actor: ActorRef,
+                            storage: Option[ManagedFileStorage],
+                            remote: RemoteFileStorage)
 
 @SerialVersionUID(1L)
 case class FileServicePrefix(list: Vector[String]) {
@@ -66,615 +67,7 @@ case class ProposedManagedFilePath(list: Vector[String]) {
   def toManaged = ManagedFilePath(list)
 }
 
-object SharedFileHelper {
-
-  private[tasks] def getByNameUnchecked(name: String)(
-      implicit service: FileServiceActor,
-      context: ActorRefFactory,
-      nlc: NodeLocalCacheActor,
-      prefix: FileServicePrefix,
-      ec: ExecutionContext): Future[SharedFile] = {
-    getPathToFile(new SharedFile(prefix.propose(name).toManaged, -1L, 0)).map {
-      f =>
-        new SharedFile(prefix.propose(name).toManaged, -1L, 0)
-    }
-
-  }
-
-  private[tasks] def createForTesting(name: String) =
-    new SharedFile(ManagedFilePath(Vector(name)), 0, 0)
-  private[tasks] def createForTesting(name: String, size: Long, hash: Int) =
-    new SharedFile(ManagedFilePath(Vector(name)), size, hash)
-
-  private[tasks] def create(size: Long,
-                            hash: Int,
-                            path: ManagedFilePath): SharedFile =
-    new SharedFile(path, size, hash)
-
-  private val isLocal = (f: File) => f.canRead
-
-  def getStreamToFile(sf: SharedFile)(
-      implicit service: FileServiceActor,
-      context: ActorRefFactory,
-      ec: ExecutionContext): Future[InputStream] = {
-
-    val serviceactor = service.actor
-    implicit val timout = akka.util.Timeout(1441 minutes)
-    val ac = context.actorOf(
-        Props(new FileUserStream(sf, serviceactor, isLocal))
-          .withDispatcher("fileuser-dispatcher"))
-
-    val f = (ac ? WaitingForPath).asInstanceOf[Future[Try[InputStream]]]
-
-    f onComplete {
-      case _ => ac ! PoisonPill
-    }
-
-    f map (_ match {
-          case Success(r) => r
-          case Failure(e) =>
-            throw new RuntimeException("getStreamToFile failed. " + sf, e)
-        })
-  }
-
-  def getSourceToFile(sf: SharedFile)(
-      implicit service: FileServiceActor,
-      context: ActorRefFactory,
-      ec: ExecutionContext): Source[ByteString, _] = {
-
-    val serviceactor = service.actor
-    implicit val timout = akka.util.Timeout(1441 minutes)
-    val ac = context.actorOf(
-        Props(new FileUserSource(sf, serviceactor, isLocal))
-          .withDispatcher("fileuser-dispatcher"))
-
-    val f =
-      (ac ? WaitingForPath).asInstanceOf[Future[Try[Source[ByteString, _]]]]
-
-    f onComplete {
-      case _ => ac ! PoisonPill
-    }
-
-    val f2 = f map (_ match {
-          case Success(r) => r
-          case Failure(e) =>
-            throw new RuntimeException("getSourceToFile failed. " + sf, e)
-        })
-
-    Source.fromFuture(f2).flatMapConcat(x => x)
-  }
-
-  def openStreamToFile[R](sf: SharedFile)(fun: InputStream => R)(
-      implicit service: FileServiceActor,
-      context: ActorRefFactory,
-      ec: ExecutionContext): Future[R] = getStreamToFile(sf).map { is =>
-    val r = fun(is)
-    is.close
-    r
-  }
-
-  def getPathToFile(path: SharedFile)(implicit service: FileServiceActor,
-                                      context: ActorRefFactory,
-                                      nlc: NodeLocalCacheActor,
-                                      ec: ExecutionContext): Future[File] = {
-
-    NodeLocalCache.getItemAsync("fs::" + path) {
-      val serviceactor = service.actor
-      implicit val timout = akka.util.Timeout(1441 minutes)
-      val ac = context.actorOf(
-          Props(new FileUser(path, serviceactor, isLocal))
-            .withDispatcher("fileuser-dispatcher"))
-
-      val f = (ac ? WaitingForPath).asInstanceOf[Future[Try[File]]]
-      f onComplete {
-        case _ => ac ! PoisonPill
-      }
-
-      f map (_ match {
-            case Success(r) => r
-            case Failure(e) =>
-              throw new RuntimeException("getPathToFile failed. " + path, e)
-          })
-    }
-  }
-
-  def isAccessible(sf: SharedFile)(
-      implicit service: FileServiceActor,
-      context: ActorRefFactory): Future[Boolean] = {
-    implicit val timout = akka.util.Timeout(1441 minutes)
-
-    (service.actor ? IsAccessible(sf)).asInstanceOf[Future[Boolean]]
-  }
-
-  def getURL(sf: SharedFile)(implicit service: FileServiceActor,
-                             context: ActorRefFactory): Future[URL] = {
-    sf.path match {
-      case x: RemoteFilePath => Future.successful(x.url)
-      case x: ManagedFilePath => {
-        implicit val timout = akka.util.Timeout(1441 minutes)
-        (service.actor ? GetURL(sf)).asInstanceOf[Future[URL]]
-      }
-    }
-
-  }
-
-}
-
-class FileUserStream(sf: SharedFile,
-                     service: ActorRef,
-                     isLocal: java.io.File => Boolean)
-    extends AbstractFileUser[InputStream](sf, service, isLocal) {
-
-  private var writeableChannel: Option[WritableByteChannel] = None
-
-  def transfertome {
-    log.debug("Unreadable")
-    val pipe = java.nio.channels.Pipe.open
-    writeableChannel = Some(pipe.sink)
-    val transferinActor = context.actorOf(
-        Props(new TransferIn(writeableChannel.get, self))
-          .withDispatcher("transferin"))
-
-    service ! TransferFileToUser(transferinActor, sf)
-
-    result = Some(
-        Success(java.nio.channels.Channels.newInputStream(pipe.source)))
-    finish
-  }
-
-  def finish {
-    if (listener.isDefined) {
-      listener.get ! result.get
-      self ! PoisonPill
-    }
-  }
-
-  def finishLocalFile(f: File) {
-    log.debug("Readable")
-    result = Some(Success(new BufferedInputStream(new FileInputStream(f))))
-    finish
-  }
-
-  def handleCentralStorage(storage: FileStorage) {
-    val stream = storage.openStream(sf)
-    if (stream.isSuccess) {
-      result = Some(Success(stream.get))
-      finish
-    } else {
-      log.debug(
-          s"storage.openStream, (KnownPathsWithStorage($storage)): ${stream.toString}, $sf")
-      transfertome
-    }
-  }
-
-  override def receive = super.receive orElse {
-    case FileSaved => {
-      writeableChannel.get.close
-    }
-  }
-}
-
-class FileUserSource(sf: SharedFile,
-                     service: ActorRef,
-                     isLocal: java.io.File => Boolean)
-    extends AbstractFileUser[Source[ByteString, _]](sf, service, isLocal) {
-
-  private var writeableChannel: Option[WritableByteChannel] = None
-
-  def transfertome {
-    log.debug("Unreadable")
-    val pipe = java.nio.channels.Pipe.open
-    writeableChannel = Some(pipe.sink)
-    val transferinActor = context.actorOf(
-        Props(new TransferIn(writeableChannel.get, self))
-          .withDispatcher("transferin"))
-
-    service ! TransferFileToUser(transferinActor, sf)
-
-    result = Some(Success(StreamConverters.fromInputStream(() =>
-                  java.nio.channels.Channels.newInputStream(pipe.source))))
-    finish
-  }
-
-  def finish {
-    if (listener.isDefined) {
-      listener.get ! result.get
-      self ! PoisonPill
-    }
-  }
-
-  def finishLocalFile(f: File) {
-    log.debug("Readable")
-    result = Some(Success(FileIO.fromPath(f.toPath)))
-    finish
-  }
-
-  def handleCentralStorage(storage: FileStorage) {
-    result = Some(Success(storage.createSource(sf)))
-    finish
-  }
-
-  override def receive = super.receive orElse {
-    case FileSaved => {
-      writeableChannel.get.close
-    }
-  }
-}
-
-class FileUser(sf: SharedFile,
-               service: ActorRef,
-               isLocal: java.io.File => Boolean)
-    extends AbstractFileUser[File](sf, service, isLocal) {
-
-  private var fileUnderTransfer: Option[File] = None
-  private var writeableChannel: Option[WritableByteChannel] = None
-
-  def transfertome {
-    log.debug("Unreadable")
-    val fileToSave = TempFile.createFileInTempFolderIfPossibleWithName(sf.name)
-    fileUnderTransfer = Some(fileToSave)
-    writeableChannel = Some(
-        new java.io.FileOutputStream(fileToSave).getChannel)
-    val transferinActor = context.actorOf(
-        Props(new TransferIn(writeableChannel.get, self))
-          .withDispatcher("transferin"))
-
-    service ! TransferFileToUser(transferinActor, sf)
-  }
-
-  def finishLocalFile(f: File) {
-    log.debug("Readable")
-    result = Some(Success(f))
-    if (listener.isDefined) {
-      listener.get ! result.get
-      self ! PoisonPill
-    }
-  }
-
-  def handleCentralStorage(storage: FileStorage) {
-    val f = storage.exportFile(sf)
-    if (f.isSuccess && isLocal(f.get)) {
-      service ! NewPath(sf, f.get)
-      finishLocalFile(f.get)
-    } else {
-      log.debug(
-          s"storage.export, (KnownPathsWithStorage($storage)): ${f.toString}, $sf")
-      transfertome
-    }
-  }
-
-  override def receive = super.receive orElse {
-    case FileSaved => {
-      writeableChannel.get.close
-      service ! NewPath(sf, fileUnderTransfer.get)
-      finishLocalFile(fileUnderTransfer.get)
-    }
-  }
-}
-
-abstract class AbstractFileUser[R](sf: SharedFile,
-                                   service: ActorRef,
-                                   isLocal: File => Boolean)
-    extends Actor
-    with akka.actor.ActorLogging {
-
-  var listener: Option[ActorRef] = None
-  var result: Option[Try[R]] = None
-  var fileNotFound = false
-
-  override def preStart {
-    service ! GetPaths(sf)
-  }
-
-  protected def transfertome: Unit
-  protected def finishLocalFile(file: File): Unit
-  protected def handleCentralStorage(storage: FileStorage): Unit
-
-  private def fail(e: Throwable) {
-    fileNotFound = true
-    if (listener.isDefined) {
-      listener.get ! Failure(e)
-      self ! PoisonPill
-    }
-  }
-
-  def receive = {
-    case WaitingForPath => {
-      listener = Some(sender)
-      log.debug("listener:" + listener)
-      if (result.isDefined || fileNotFound) {
-        sender ! result.getOrElse(Failure(new RuntimeException("not found")))
-        self ! PoisonPill
-      }
-    }
-    case FileNotFound(e) => {
-      if (sf.byteSize >= 0) {
-        log.warning("NotFound : " + sf + ". Reason: " + e.toString)
-      }
-      fail(e)
-    }
-    case CannotSaveFile(e) => {
-      log.error("CannotSaveFile : " + sf + " Reason: " + e)
-      fail(e)
-    }
-    case KnownPathsWithStorage(list, storage) => {
-      log.debug("KnownPathsWithStorage")
-      list.find(isLocal) match {
-        case Some(file) => finishLocalFile(file)
-        case None => {
-          handleCentralStorage(storage)
-        }
-      }
-    }
-    case KnownPaths(list) => {
-      log.debug("KnownPaths:" + list)
-      list.find(isLocal) match {
-        case Some(file) => finishLocalFile(file)
-        case None => transfertome
-      }
-    }
-    case TryToDownload(storage) => {
-      log.debug("trytodownload")
-      handleCentralStorage(storage)
-    }
-
-  }
-
-}
-
-class FileSender(file: File,
-                 proposedPath: ProposedManagedFilePath,
-                 deleteLocalFile: Boolean,
-                 service: ActorRef)
-    extends Actor
-    with akka.actor.ActorLogging {
-
-  override def preStart {
-    service ! NewFile(file, proposedPath, ephemeralFile = deleteLocalFile)
-  }
-
-  var sharedFile: Option[SharedFile] = None
-  var error = false
-  var listener: Option[ActorRef] = None
-
-  def receive = {
-    case t: SharedFile =>
-      sharedFile = Some(t)
-      if (deleteLocalFile) {
-        file.delete
-      }
-      if (listener.isDefined) {
-        listener.get ! sharedFile
-        self ! PoisonPill
-      }
-
-    case TransferToMe(transferin) =>
-      val readablechannel = new java.io.FileInputStream(file).getChannel
-      val chunksize = tasks.util.config.global.fileSendChunkSize
-      context.actorOf(
-          Props(new TransferOut(readablechannel, transferin, chunksize))
-            .withDispatcher("transferout"))
-
-    case TryToUpload(storage) =>
-      log.debug("trytoupload")
-      val f = storage.importFile(file, proposedPath)
-      if (f.isSuccess) {
-        log.debug("uploaded")
-        service ! Uploaded(f.get._1,
-                           f.get._2,
-                           (if (!deleteLocalFile) Some(f.get._3) else None),
-                           f.get._4)
-      } else {
-        log.debug("could not upload. send could not upload and transfer")
-        service ! CouldNotUpload(proposedPath)
-      }
-
-    case WaitingForSharedFile =>
-      listener = Some(sender)
-      if (sharedFile.isDefined) {
-        sender ! sharedFile
-        self ! PoisonPill
-      } else if (error) {
-        sender ! None
-        self ! PoisonPill
-      }
-
-    case ErrorWhileAccessingStore(e) =>
-      error = true
-      log.error("ErrorWhileAccessingStore: " + e)
-      listener.foreach { x =>
-        x ! None
-        self ! PoisonPill
-      }
-
-  }
-
-}
-
-class SourceSender(file: Source[ByteString, _],
-                   proposedPath: ProposedManagedFilePath,
-                   service: ActorRef)
-    extends Actor
-    with akka.actor.ActorLogging {
-
-  implicit val mat = ActorMaterializer()
-
-  override def preStart {
-    service ! NewSource(proposedPath)
-  }
-
-  var sharedFile: Option[SharedFile] = None
-  var error = false
-  var listener: Option[ActorRef] = None
-
-  def receive = {
-    case t: SharedFile =>
-      sharedFile = Some(t)
-      if (listener.isDefined) {
-        listener.get ! sharedFile
-        self ! PoisonPill
-      }
-
-    case TransferToMe(transferin) =>
-      val is = file.runWith(StreamConverters.asInputStream())
-      val readablechannel = java.nio.channels.Channels.newChannel(is)
-      val chunksize = tasks.util.config.global.fileSendChunkSize
-      context.actorOf(
-          Props(new TransferOut(readablechannel, transferin, chunksize))
-            .withDispatcher("transferout"))
-
-    case TryToUpload(storage) =>
-      log.debug("trytoupload")
-      val f = storage.importSource(file, proposedPath)
-      if (f.isSuccess) {
-        log.debug("uploaded")
-        service ! Uploaded(f.get._1, f.get._2, None, f.get._3)
-      } else {
-        log.error("could not upload. send could not upload and transfer")
-        listener.foreach { x =>
-          x ! None
-          self ! PoisonPill
-        }
-      }
-
-    case WaitingForSharedFile =>
-      listener = Some(sender)
-      if (sharedFile.isDefined) {
-        sender ! sharedFile
-        self ! PoisonPill
-      } else if (error) {
-        sender ! None
-        self ! PoisonPill
-      }
-
-    case ErrorWhileAccessingStore(e) =>
-      error = true
-      log.error("ErrorWhileAccessingStore: " + e)
-      listener.foreach { x =>
-        x ! None
-        self ! PoisonPill
-      }
-
-  }
-
-}
-
-object FileStorage {
-  def getContentHash(is: InputStream): Int = {
-    val checkedSize = 1024 * 256
-    val buffer = Array.fill[Byte](checkedSize)(0)
-    val his = new HashingInputStream(Hashing.crc32c, is)
-
-    com.google.common.io.ByteStreams.read(his, buffer, 0, buffer.size)
-    his.hash.asInt
-  }
-}
-
-trait FileStorage extends Serializable {
-
-  def url(sf: SharedFile): URL = sf.path match {
-    case x: ManagedFilePath => url(x)
-    case x: RemoteFilePath => url(x)
-  }
-
-  def url(mp: RemoteFilePath): URL = mp.url
-
-  def url(mp: ManagedFilePath): URL
-
-  def createSource(path: ManagedFilePath): Source[ByteString, _]
-
-  def createSource(path: RemoteFilePath): Source[ByteString, _] = {
-    val url1 = url(path)
-    akka.stream.scaladsl.StreamConverters.fromInputStream(() =>
-          url1.openStream)
-  }
-
-  def createSource(sf: SharedFile): Source[ByteString, _] = sf.path match {
-    case x: ManagedFilePath => createSource(x)
-    case x: RemoteFilePath => createSource(x)
-  }
-
-  def contains(sf: SharedFile): Boolean = sf.path match {
-    case x: ManagedFilePath => contains(x, sf.byteSize, sf.hash)
-    case x: RemoteFilePath => contains(x, sf.byteSize, sf.hash)
-  }
-
-  def contains(path: ManagedFilePath, size: Long, hash: Int): Boolean
-
-  def contains(path: RemoteFilePath, size: Long, hash: Int): Boolean =
-    getSizeAndHash(path).map {
-      case (size1, hash1) =>
-        size1 === size && (tasks.util.config.global.skipContentHashVerificationAfterCache || hash === hash1)
-    }.getOrElse(false)
-
-  def importFile(
-      f: File,
-      path: ProposedManagedFilePath): Try[(Long, Int, File, ManagedFilePath)]
-
-  def importSource(s: Source[ByteString, _], path: ProposedManagedFilePath)(
-      implicit am: Materializer): Try[(Long, Int, ManagedFilePath)]
-
-  def getSizeAndHash(path: RemoteFilePath): Try[(Long, Int)] = Try {
-    val connection = path.url.openConnection
-    val is = connection.getInputStream
-    val size1 = connection.getContentLength.toLong
-    val hash1 = FileStorage.getContentHash(is)
-    is.close
-    (size1.toLong, hash1)
-  }
-
-  def exportFile(sf: SharedFile): Try[File] =
-    if (contains(sf)) {
-      sf.path match {
-        case x: ManagedFilePath => exportFile(x)
-        case x: RemoteFilePath => exportFile(x)
-      }
-    } else
-      Failure(throw new RuntimeException(this + " does not contain " + sf))
-
-  def exportFile(path: ManagedFilePath): Try[File]
-
-  def exportFile(path: RemoteFilePath): Try[File] = {
-    val localFile = path.url.getProtocol == "file" && new File(
-          path.url.getPath).canRead
-    if (localFile) Try(new File(path.url.getPath))
-    else
-      openStream(path).map { is =>
-        val tmp = TempFile.createTempFile("")
-        openFileOutputStream(tmp) { os =>
-          com.google.common.io.ByteStreams.copy(is, os)
-        }
-        tmp
-      }
-  }
-
-  def openStream(sf: SharedFile): Try[InputStream] =
-    if (contains(sf)) {
-      sf.path match {
-        case x: ManagedFilePath => openStream(x)
-        case x: RemoteFilePath => openStream(x)
-      }
-    } else
-      Failure(throw new RuntimeException(this + " does not contain " + sf))
-
-  def openStream(path: ManagedFilePath): Try[InputStream]
-
-  def openStream(path: RemoteFilePath): Try[InputStream] = Try {
-    val s = path.url.openStream
-    s.read
-    s.close
-    path.url.openStream
-  }
-
-  def centralized: Boolean
-
-  def list(regexp: String): List[SharedFile]
-
-  def close = ()
-
-}
-
-class FileService(storage: FileStorage,
+class FileService(storage: ManagedFileStorage,
                   threadpoolsize: Int = 8,
                   isLocal: File => Boolean = _.canRead)
     extends Actor
@@ -698,7 +91,7 @@ class FileService(storage: FileStorage,
   }
 
   private val knownPaths =
-    collection.mutable.AnyRefMap[SharedFile, List[File]]()
+    collection.mutable.AnyRefMap[ManagedFilePath, List[File]]()
 
   // transferinactor -> (name,channel,fileinbase,filesender)
   private val transferinactors =
@@ -717,16 +110,12 @@ class FileService(storage: FileStorage,
     }(ec)
   }
 
-  private def createRemote(path: RemoteFilePath): Future[Try[SharedFile]] = {
-    Future {
-      storage.getSizeAndHash(path).map {
-        case (size, hash) =>
-          new SharedFile(path, size, hash)
-      }
-    }(ec)
-  }
+  // private def create(path: RemoteFilePath): Future[Try[SharedFile]] =
+  //   Future {
+  //     SharedFileHelper.create(path)
+  //   }(ec)
 
-  private def recordToNames(file: File, sf: SharedFile): Unit = {
+  private def recordToNames(file: File, sf: ManagedFilePath): Unit = {
     if (knownPaths.contains(sf)) {
       val oldlist = knownPaths(sf)
       knownPaths.update(sf, (file.getCanonicalFile :: oldlist).distinct)
@@ -737,18 +126,18 @@ class FileService(storage: FileStorage,
   }
 
   def receive = {
-    case NewRemote(url) =>
-      try {
-        val remotepath = RemoteFilePath(url)
-        val trySf = createRemote(remotepath)
-        trySf.failed.foreach(e => log.error(e, "Error {}", url))
-        trySf.pipeTo(sender)
-      } catch {
-        case e: Exception => {
-          log.error(e, "Error while accessing storage " + url)
-          sender ! Failure(e)
-        }
-      }
+    // case NewRemote(uri) =>
+    //   try {
+    //     val remotepath = RemoteFilePath(uri)
+    //     val trySf = create(remotepath)
+    //     trySf.failed.foreach(e => log.error(e, "Error {}", uri))
+    //     trySf.pipeTo(sender)
+    //   } catch {
+    //     case e: Exception => {
+    //       log.error(e, "Error while accessing storage " + uri)
+    //       sender ! Failure(e)
+    //     }
+    //   }
     case NewFile(file, proposedPath, ephemeral) =>
       try {
         if (isLocal(file)) {
@@ -758,7 +147,7 @@ class FileService(storage: FileStorage,
 
           val sn = create(length, hash, managedFilePath)
 
-          if (!ephemeral) { sn.foreach(sf => recordToNames(f, sf)) }
+          // if (!ephemeral) { sn.foreach(sf => recordToNames(f, sf)) }
 
           sn.failed.foreach { e =>
             log.error(e,
@@ -771,25 +160,25 @@ class FileService(storage: FileStorage,
 
         } else {
 
-          if (storage.centralized) {
-            log.debug("answer trytoupload")
-            sender ! TryToUpload(storage)
+          // if (storage.centralized) {
+          //   log.debug("answer trytoupload")
+          //   sender ! TryToUpload
+          //
+          // } else {
+          // transfer
+          val savePath = TempFile.createFileInTempFolderIfPossibleWithName(
+              proposedPath.name)
+          val writeableChannel =
+            new java.io.FileOutputStream(savePath).getChannel
+          val transferinActor = context.actorOf(
+              Props(new TransferIn(writeableChannel, self))
+                .withDispatcher("transferin"))
+          transferinactors.update(
+              transferinActor,
+              (writeableChannel, savePath, sender, proposedPath, ephemeral))
 
-          } else {
-            // transfer
-            val savePath = TempFile.createFileInTempFolderIfPossibleWithName(
-                proposedPath.name)
-            val writeableChannel =
-              new java.io.FileOutputStream(savePath).getChannel
-            val transferinActor = context.actorOf(
-                Props(new TransferIn(writeableChannel, self))
-                  .withDispatcher("transferin"))
-            transferinactors.update(
-                transferinActor,
-                (writeableChannel, savePath, sender, proposedPath, ephemeral))
-
-            sender ! TransferToMe(transferinActor)
-          }
+          sender ! TransferToMe(transferinActor)
+          // }
 
         }
       } catch {
@@ -804,25 +193,25 @@ class FileService(storage: FileStorage,
     case NewSource(proposedPath) =>
       try {
 
-        if (storage.centralized) {
-          log.debug("answer trytoupload")
-          sender ! TryToUpload(storage)
+        // if (storage.centralized) {
+        //   log.debug("answer trytoupload")
+        //   sender ! TryToUpload
+        //
+        // } else {
+        // transfer
+        val savePath =
+          TempFile.createFileInTempFolderIfPossibleWithName(proposedPath.name)
+        val writeableChannel =
+          new java.io.FileOutputStream(savePath).getChannel
+        val transferinActor = context.actorOf(
+            Props(new TransferIn(writeableChannel, self))
+              .withDispatcher("transferin"))
+        transferinactors.update(
+            transferinActor,
+            (writeableChannel, savePath, sender, proposedPath, true))
 
-        } else {
-          // transfer
-          val savePath = TempFile.createFileInTempFolderIfPossibleWithName(
-              proposedPath.name)
-          val writeableChannel =
-            new java.io.FileOutputStream(savePath).getChannel
-          val transferinActor = context.actorOf(
-              Props(new TransferIn(writeableChannel, self))
-                .withDispatcher("transferin"))
-          transferinactors.update(
-              transferinActor,
-              (writeableChannel, savePath, sender, proposedPath, true))
-
-          sender ! TransferToMe(transferinActor)
-        }
+        sender ! TransferToMe(transferinActor)
+        // }
 
       } catch {
         case e: Exception => {
@@ -830,21 +219,21 @@ class FileService(storage: FileStorage,
           sender ! ErrorWhileAccessingStore
         }
       }
-    case Uploaded(length, hash, file, managedFilePath) => {
-      log.debug("got uploaded. record")
-
-      val sn = create(length, hash, managedFilePath)
-      if (file.isDefined) {
-        sn.foreach(sf => recordToNames(file.get, sf))
-      }
-      sn.failed.foreach { e =>
-        log.error(e,
-                  "Error in creation of SharedFile {} {}",
-                  file,
-                  managedFilePath)
-      }
-      sn pipeTo sender
-    }
+    // case Uploaded(length, hash, file, managedFilePath) => {
+    //   log.debug("got uploaded. record")
+    //
+    //   val sn = create(length, hash, managedFilePath)
+    //   // if (file.isDefined) {
+    //   //   sn.foreach(sf => recordToNames(file.get, sf))
+    //   // }
+    //   sn.failed.foreach { e =>
+    //     log.error(e,
+    //               "Error in creation of SharedFile {} {}",
+    //               file,
+    //               managedFilePath)
+    //   }
+    //   sn pipeTo sender
+    // }
     case CannotSaveFile(e) => {
       transferinactors.get(sender).foreach {
         case (channel, file, filesender, proposedPath, _) =>
@@ -864,9 +253,9 @@ class FileService(storage: FileStorage,
 
             val sn = create(length, hash, managedFilePath)
 
-            if (!ephemeral) {
-              sn.foreach(sf => recordToNames(file, sf))
-            }
+            // if (!ephemeral) {
+            //   sn.foreach(sf => recordToNames(file, sf))
+            // }
 
             sn.failed.foreach { e =>
               log.error(e,
@@ -886,44 +275,46 @@ class FileService(storage: FileStorage,
       }
       transferinactors.remove(sender)
     }
-    case CouldNotUpload(proposedPath) => {
-      val savePath =
-        TempFile.createFileInTempFolderIfPossibleWithName(proposedPath.name)
-      val writeableChannel = new java.io.FileOutputStream(savePath).getChannel
-      val transferinActor = context.actorOf(
-          Props(new TransferIn(writeableChannel, self))
-            .withDispatcher("transferin"))
-      transferinactors.update(
-          transferinActor,
-          (writeableChannel, savePath, sender, proposedPath, true))
-
-      sender ! TransferToMe(transferinActor)
-
-    }
-    case GetPaths(sf) =>
+    // case CouldNotUpload(proposedPath) => {
+    //   val savePath =
+    //     TempFile.createFileInTempFolderIfPossibleWithName(proposedPath.name)
+    //   val writeableChannel = new java.io.FileOutputStream(savePath).getChannel
+    //   val transferinActor = context.actorOf(
+    //       Props(new TransferIn(writeableChannel, self))
+    //         .withDispatcher("transferin"))
+    //   transferinactors.update(
+    //       transferinActor,
+    //       (writeableChannel, savePath, sender, proposedPath, true))
+    //
+    //   sender ! TransferToMe(transferinActor)
+    //
+    // }
+    case GetPaths(managedPath, size: Long, hash: Int) =>
       try {
-        knownPaths.get(sf) match {
+        knownPaths.get(managedPath) match {
           case Some(l) => {
-            if (storage.centralized) {
-              sender ! KnownPathsWithStorage(l, storage)
-            } else {
-              sender ! KnownPaths(l)
-            }
+            // if (storage.centralized) {
+            //   sender ! KnownPathsWithStorage(l, storage)
+            // } else {
+            sender ! KnownPaths(l)
+            // }
 
           }
           case None => {
-            if (storage.contains(sf)) {
-              if (storage.centralized) {
-                sender ! TryToDownload(storage)
-              } else {
-                val f = storage.exportFile(sf).get
-                recordToNames(f, sf)
-                sender ! KnownPaths(List(f))
-              }
+            if (storage.contains(managedPath, size, hash)) {
+              // if (storage.centralized) {
+              //   sender ! TryToDownload
+              // } else {
+              storage
+                .exportFile(managedPath)
+                .map(f => KnownPaths(List(f)))
+                .pipeTo(sender)
+
+              // }
             } else {
               sender ! FileNotFound(
                   new RuntimeException(
-                      s"SharedFile not found in storage. $storage # contains($sf) returned false. " + sf))
+                      s"SharedFile not found in storage. $storage # contains($managedPath) returned false. "))
             }
           }
         }
@@ -935,15 +326,18 @@ class FileService(storage: FileStorage,
       }
     case TransferFileToUser(transferinActor, sf) =>
       try {
-        val file = knownPaths(sf).find(isLocal) match {
-          case Some(x) => x
-          case None => storage.exportFile(sf).get
+        val future = knownPaths(sf).find(isLocal) match {
+          case Some(x) => Future.successful(x)
+          case None => storage.exportFile(sf)
         }
-        val readablechannel = new java.io.FileInputStream(file).getChannel
-        val chunksize = tasks.util.config.global.fileSendChunkSize
-        context.actorOf(
-            Props(new TransferOut(readablechannel, transferinActor, chunksize))
-              .withDispatcher("transferout"))
+        future.foreach { file =>
+          val readablechannel = new java.io.FileInputStream(file).getChannel
+          val chunksize = tasks.util.config.global.fileSendChunkSize
+          context.actorOf(
+              Props(
+                  new TransferOut(readablechannel, transferinActor, chunksize))
+                .withDispatcher("transferout"))
+        }
 
       } catch {
         case e: Exception => {
@@ -951,13 +345,12 @@ class FileService(storage: FileStorage,
           sender ! FileNotFound(e)
         }
       }
-    case NewPath(sf, filePath) => {
+    // case NewPath(sf, filePath) =>
+    // recordToNames(filePath, sf)
 
-      recordToNames(filePath, sf)
-
-    }
     case GetListOfFilesInStorage(regexp) => sender ! storage.list(regexp)
-    case IsAccessible(sf) => sender ! storage.contains(sf)
-    case GetURL(sf) => sender ! storage.url(sf)
+    case IsAccessible(managedPath, size, hash) =>
+      sender ! storage.contains(managedPath, size, hash)
+    case GetUri(managedPath) => sender ! storage.uri(managedPath)
   }
 }

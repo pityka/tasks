@@ -29,7 +29,7 @@ package tasks.fileservice
 
 import akka.actor._
 import java.io.File
-import java.net.URL
+import tasks.util.Uri
 
 sealed trait FileServiceMessage
 
@@ -44,23 +44,24 @@ case class NewFile(f: File, p: ProposedManagedFilePath, ephemeralFile: Boolean)
 case class NewSource(p: ProposedManagedFilePath) extends FileServiceMessage
 
 @SerialVersionUID(1L)
-case class GetPaths(p: SharedFile) extends FileServiceMessage
+case class GetPaths(p: ManagedFilePath, size: Long, hash: Int)
+    extends FileServiceMessage
 
 @SerialVersionUID(1L)
 case class KnownPaths(paths: List[File]) extends FileServiceMessage
 
-@SerialVersionUID(1L)
-case class KnownPathsWithStorage(paths: List[File], storage: FileStorage)
-    extends FileServiceMessage
+// @SerialVersionUID(1L)
+// case class KnownPathsWithStorage(paths: List[File], storage: FileStorage)
+// extends FileServiceMessage
 
 @SerialVersionUID(1L)
 case class TransferToMe(actor: ActorRef) extends FileServiceMessage
 
 @SerialVersionUID(1L)
-case class TransferFileToUser(actor: ActorRef, sf: SharedFile)
+case class TransferFileToUser(actor: ActorRef, sf: ManagedFilePath)
 
-@SerialVersionUID(1L)
-case class NewPath(p: SharedFile, path: File) extends FileServiceMessage
+// @SerialVersionUID(1L)
+// case class NewPath(p: SharedFile, path: File) extends FileServiceMessage
 
 @SerialVersionUID(1L)
 case object WaitingForSharedFile extends FileServiceMessage
@@ -71,11 +72,11 @@ case object WaitingForPath extends FileServiceMessage
 @SerialVersionUID(1L)
 case class FileNotFound(e: Throwable) extends FileServiceMessage
 
-@SerialVersionUID(1L)
-case class TryToDownload(storage: FileStorage) extends FileServiceMessage
+// @SerialVersionUID(1L)
+// case class TryToDownload(storage: FileStorage) extends FileServiceMessage
 
-@SerialVersionUID(1L)
-case class TryToUpload(storage: FileStorage) extends FileServiceMessage
+// @SerialVersionUID(1L)
+// case class TryToUpload(storage: FileStorage) extends FileServiceMessage
 
 @SerialVersionUID(1L)
 case class Uploaded(length: Long,
@@ -95,10 +96,11 @@ case class IsInStorageAnswer(value: Boolean) extends FileServiceMessage
 case class ErrorWhileAccessingStore(e: Throwable) extends FileServiceMessage
 
 @SerialVersionUID(1L)
-case class NewRemote(url: URL) extends FileServiceMessage
+case class NewRemote(uri: Uri) extends FileServiceMessage
 
 @SerialVersionUID(1L)
-case class IsAccessible(sf: SharedFile) extends FileServiceMessage
+case class IsAccessible(sf: ManagedFilePath, size: Long, hash: Int)
+    extends FileServiceMessage
 
 @SerialVersionUID(1L)
-case class GetURL(sf: SharedFile) extends FileServiceMessage
+case class GetUri(sf: ManagedFilePath) extends FileServiceMessage

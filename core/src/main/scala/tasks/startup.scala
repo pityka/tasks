@@ -44,6 +44,7 @@ import akka.actor._
 import akka.util.Timeout
 import akka.io.IO
 import akka.pattern.ask
+import akka.stream.ActorMaterializer
 
 import spray.can.Http
 
@@ -88,6 +89,11 @@ case class TaskSystemComponents(
 
 class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
                                  val system: ActorSystem) {
+
+  implicit val as = system
+  implicit val mat = ActorMaterializer()
+  import as.dispatcher
+  implicit val sh = new StreamHelper
 
   val logger = system.actorOf(Props(new LogPublishActor(None)))
   system.eventStream.subscribe(logger, classOf[akka.event.Logging.LogEvent])
@@ -189,9 +195,11 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
     }
   }
 
-  val fileActor = try {
-    if (!isLauncherOnly) {
+  val remoteFileStorage = new RemoteFileStorage
 
+  val managedFileStorage: Option[ManagedFileStorage] =
+    if (config.global.storageURI.toString == "") None
+    else {
       val s3bucket =
         if (config.global.storageURI.getScheme != null && config.global.storageURI.getScheme == "s3") {
           Some(
@@ -199,8 +207,12 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
                config.global.storageURI.getPath.drop(1)))
         } else None
 
-      val filestore = if (s3bucket.isDefined) {
-        new S3Storage(s3bucket.get._1, s3bucket.get._2)
+      if (s3bucket.isDefined) {
+        val actorsystem = 1 // shade implicit conversion
+        implicit val s3stream =
+          new com.bluelabs.s3stream.S3Stream(tasks.util.S3Helpers.credentials)
+        import as.dispatcher
+        Some(new S3Storage(s3bucket.get._1, s3bucket.get._2))
       } else {
         val folder1Path =
           if (config.global.storageURI.getScheme == null)
@@ -228,16 +240,21 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
           tasksystemlog.warning(
               s"fileServiceBaseFolder (${folder1.getCanonicalPath}) is not empty. This is only safe if you restart a pipeline. ")
         }
-        new FolderFileStorage(folder1, centralized, folders2)
+        Some(new FolderFileStorage(folder1, centralized, folders2))
       }
+    }
 
-      tasksystemlog.info("FileStore: " + filestore)
+  tasksystemlog.info("FileStore: " + managedFileStorage)
+
+  val fileActor = try {
+    if (!isLauncherOnly) {
 
       val threadpoolsize = config.global.fileServiceThreadPoolSize
 
-      val ac = system.actorOf(Props(new FileService(filestore, threadpoolsize))
-                                .withDispatcher("my-pinned-dispatcher"),
-                              "fileservice")
+      val ac = system.actorOf(
+          Props(new FileService(managedFileStorage.get, threadpoolsize))
+            .withDispatcher("my-pinned-dispatcher"),
+          "fileservice")
       reaperActor ! WatchMe(ac)
       ac
     } else {
@@ -257,7 +274,8 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
     }
   }
 
-  val fileServiceActor = FileServiceActor(fileActor)
+  val fileServiceActor =
+    FileServiceActor(fileActor, managedFileStorage, remoteFileStorage)
 
   val nodeLocalCacheActor = system.actorOf(
       Props[NodeLocalCache].withDispatcher("my-pinned-dispatcher"),
@@ -288,7 +306,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
         case false => new DisabledCache
       }
       val ac = system.actorOf(
-          Props(new TaskResultCache(cache, FileServiceActor(fileActor)))
+          Props(new TaskResultCache(cache, fileServiceActor))
             .withDispatcher("my-pinned-dispatcher"),
           "cache")
       reaperActor ! WatchMe(ac)
@@ -365,7 +383,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
                   new File(config.global.assembledPackage))),
           "deliver-service")
 
-      implicit val actorsystem = system
+      val actorsystem = 1 //shade implicit conversion
 
       IO(Http) ! Http.Bind(service, "0.0.0.0", port = host.getPort + 1)
 

@@ -61,7 +61,7 @@ package object queue {
                                     reader2,
                                     resource,
                                     queue.actor,
-                                    fileService.actor,
+                                    fileService,
                                     prefix,
                                     cache.actor)
             ).withDispatcher("proxytask-dispatcher")

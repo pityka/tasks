@@ -66,7 +66,7 @@ case class ScheduleTask(
     taskImplementation: String,
     resource: CPUMemoryRequest,
     balancerActor: ActorRef,
-    fileServiceActor: ActorRef,
+    fileServiceActor: FileServiceActor,
     fileServicePrefix: FileServicePrefix,
     cacheActor: ActorRef
 ) extends Serializable

@@ -108,7 +108,7 @@ private class Task(
     runTask: CompFun2,
     launcherActor: ActorRef,
     balancerActor: ActorRef,
-    fileServiceActor: ActorRef,
+    fileServiceActor: FileServiceActor,
     globalCacheActor: ActorRef,
     nodeLocalCache: ActorRef,
     resourceAllocated: CPUMemoryAllocated,
@@ -144,7 +144,7 @@ private class Task(
           resourceAllocated,
           TaskSystemComponents(
               QueueActor(balancerActor),
-              FileServiceActor(fileServiceActor),
+              fileServiceActor,
               context.system,
               CacheActor(globalCacheActor),
               NodeLocalCacheActor(nodeLocalCache),
@@ -221,7 +221,7 @@ class ProxyTask[MyPrerequisitive, MyResult](
     reader: Reader[MyResult],
     resourceConsumed: CPUMemoryRequest,
     starter: ActorRef,
-    fileServiceActor: ActorRef,
+    fileServiceActor: FileServiceActor,
     fileServicePrefix: FileServicePrefix,
     cacheActor: ActorRef
 ) extends Actor

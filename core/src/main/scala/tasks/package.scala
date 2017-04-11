@@ -66,17 +66,6 @@ import scala.language.experimental.macros
 
 package object tasks {
 
-  def registerS3Handler =
-    java.net.URL
-      .setURLStreamHandlerFactory(new java.net.URLStreamHandlerFactory() {
-        def createURLStreamHandler(protocol: String) = protocol match {
-          case "s3" => new sun.net.www.protocol.s3.S3Handler
-          case _ => null
-        }
-      })
-
-  try { registerS3Handler } catch { case e: Throwable => () }
-
   val SharedFile = tasks.fileservice.SharedFile
 
   type SharedFile = tasks.fileservice.SharedFile

@@ -43,7 +43,6 @@ import scala.util._
 import com.google.common.hash._
 import scala.concurrent._
 import scala.util._
-import java.net.URL
 import tasks.util.eq._
 import akka.stream.scaladsl._
 import akka.util._
@@ -75,10 +74,40 @@ object FolderFileStorage {
   }
 }
 
-class FolderFileStorage(val basePath: File,
-                        val centralized: Boolean,
-                        val extendedPaths: List[File] = Nil)
-    extends FileStorage {
+class FolderFileStorage(
+    val basePath: File,
+    val centralized: Boolean,
+    val extendedPaths: List[File] = Nil)(implicit mat: ActorMaterializer)
+    extends ManagedFileStorage {
+  //
+  // @transient private var _system = ActorSystem("folderfilestorage");
+  //
+  // implicit def system = {
+  //   if (_system == null) {
+  //     _system = ActorSystem("s3storage");
+  //   }
+  //   _system
+  // }
+  //
+  // @transient private var _mat = ActorMaterializer()
+  //
+  // implicit def mat = {
+  //   if (_mat == null) {
+  //     _mat = ActorMaterializer()
+  //   }
+  //   _mat
+  // }
+  //
+  // @transient private var s3stream = new S3Stream(S3Helpers.credentials)
+  //
+  // @transient private var _streamHelper = new StreamHelper
+  //
+  // def streamHelper = {
+  //   if (_streamHelper == null) {
+  //     _streamHelper = StreamHelper
+  //   }
+  //   _streamHelper
+  // }
 
   if (basePath.exists && !basePath.isDirectory)
     throw new IllegalArgumentException(s"$basePath exists and not a folder")
@@ -116,11 +145,11 @@ class FolderFileStorage(val basePath: File,
   def createSource(path: ManagedFilePath): Source[ByteString, _] =
     FileIO.fromPath(assemblePath(path).toPath)
 
-  def openStream(path: ManagedFilePath): Try[InputStream] =
+  def createStream(path: ManagedFilePath): Try[InputStream] =
     Try(new FileInputStream(assemblePath(path)))
 
-  def exportFile(path: ManagedFilePath): Try[File] =
-    Success(assemblePath(path))
+  def exportFile(path: ManagedFilePath): Future[File] =
+    Future.successful(assemblePath(path))
 
   private def copyFile(source: File, destination: File): Unit = {
     val parentFolder = destination.getParentFile
@@ -202,10 +231,10 @@ class FolderFileStorage(val basePath: File,
       }
     })
 
-  def url(mp: ManagedFilePath) = {
-    val path = assemblePath(mp).toURI.toURL
-    val hostname = java.net.InetAddress.getLocalHost().getHostName()
-    new URL(path.getProtocol, hostname, path.getFile)
+  def uri(mp: ManagedFilePath) = {
+    // throw new RuntimeException("URI not supported")
+    val path = assemblePath(mp).toURI.toString
+    Uri(path)
   }
 
   def list(pattern: String): List[SharedFile] = {

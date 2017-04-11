@@ -43,7 +43,6 @@ import tasks.util.eq._
 import tasks.fileservice._
 
 import com.amazonaws.AmazonServiceException
-import java.net.URL
 
 import collection.JavaConversions._
 import java.io.{File, InputStream}
@@ -59,35 +58,48 @@ import akka.stream.scaladsl._
 import scala.concurrent._
 import scala.concurrent.duration._
 
-class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
+class S3Storage(bucketName: String, folderPrefix: String)(
+    implicit mat: ActorMaterializer,
+    s3stream: S3Stream,
+    ec: ExecutionContext)
+    extends ManagedFileStorage {
 
   def list(pattern: String): List[SharedFile] = ???
 
-  def centralized = true
-
-  @transient private var _system = ActorSystem("s3storage");
-
-  implicit def system = {
-    if (_system == null) {
-      _system = ActorSystem("s3storage");
-    }
-    _system
-  }
-
-  implicit def ec = system.dispatcher
-
-  @transient private var _mat = ActorMaterializer()
-
-  implicit def mat = {
-    if (_mat == null) {
-      _mat = ActorMaterializer()
-    }
-    _mat
-  }
-
-  @transient private var s3stream = new S3Stream(S3Helpers.credentials)
-
-  override def close = _system.shutdown
+  // def centralized = true
+  //
+  // @transient private var _system = ActorSystem("s3storage");
+  //
+  // implicit def system = {
+  //   if (_system == null) {
+  //     _system = ActorSystem("s3storage");
+  //   }
+  //   _system
+  // }
+  //
+  // implicit def ec = system.dispatcher
+  //
+  // @transient private var _mat = ActorMaterializer()
+  //
+  // implicit def mat = {
+  //   if (_mat == null) {
+  //     _mat = ActorMaterializer()
+  //   }
+  //   _mat
+  // }
+  //
+  // @transient private var s3stream = new S3Stream(S3Helpers.credentials)
+  //
+  // @transient private var _streamHelper = new StreamHelper
+  //
+  // def streamHelper = {
+  //   if (_streamHelper == null) {
+  //     _streamHelper = StreamHelper
+  //   }
+  //   _streamHelper
+  // }
+  //
+  // override def close = _system.shutdown
 
   def contains(path: ManagedFilePath, size: Long, hash: Int): Boolean = {
     val tr = retry(5) {
@@ -166,7 +178,7 @@ class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
 
   }
 
-  def openStream(path: ManagedFilePath): Try[InputStream] =
+  def createStream(path: ManagedFilePath): Try[InputStream] =
     Try(
         s3stream
           .download(S3Location(bucketName, assembleName(path)))
@@ -175,24 +187,24 @@ class S3Storage(bucketName: String, folderPrefix: String) extends FileStorage {
   def createSource(path: ManagedFilePath): Source[ByteString, _] =
     s3stream.download(S3Location(bucketName, assembleName(path)))
 
-  def exportFile(path: ManagedFilePath): Try[File] = {
+  def exportFile(path: ManagedFilePath): Future[File] = {
     val file = TempFile.createTempFile("")
     val s3loc = S3Location(bucketName, assembleName(path))
-    retry(5) {
-      val f1 = s3stream.download(s3loc).runWith(FileIO.toPath(file.toPath))
 
-      val metadata = Await.result(f1.flatMap(_ => s3stream.getMetadata(s3loc)),
-                                  atMost = 24 hours)
+    val f1 = s3stream.download(s3loc).runWith(FileIO.toPath(file.toPath))
 
+    f1.flatMap(_ => s3stream.getMetadata(s3loc)).map { metadata =>
       val (size1, hash1) = getLengthAndHash(metadata)
       if (size1 !== file.length)
         throw new RuntimeException("S3: Downloaded file length != metadata")
 
       file
     }
+
   }
 
-  def url(mp: ManagedFilePath): URL =
-    new URL("s3", bucketName, "/" + assembleName(mp))
+  def uri(mp: ManagedFilePath): tasks.util.Uri =
+    tasks.util.Uri(
+        new java.net.URI("s3", bucketName, "/" + assembleName(mp)).toString)
 
 }
