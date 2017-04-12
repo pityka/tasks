@@ -47,17 +47,6 @@ trait HasPersistent[+A] extends Serializable { self: A =>
   def persistent: A
 }
 
-// trait SimplePrerequisitive[+A] extends Prerequisitive[A] with Product {
-//   self: A =>
-//
-//   def ready = productIterator.forall {
-//     case x: Option[_] => x.isDefined
-//     case _ =>
-//       throw new RuntimeException(
-//           "SimplePrerequisitive should be a product of Options")
-//   }
-// }
-
 class TaskDefinition[A: Writer, B: Reader](val computation: CompFun2,
                                            val taskId: TaskId) {
 
@@ -68,13 +57,3 @@ class TaskDefinition[A: Writer, B: Reader](val computation: CompFun2,
       .?(components.actorsystem.dispatcher)
 
 }
-
-// case class UpdatePrerequisitive[A, B](pf: PartialFunction[(A, B), A])
-//     extends PartialFunction[(A, B), A] {
-//   def apply(v1: (A, B)) = pf.apply(v1)
-//   def isDefinedAt(x: (A, B)) = pf.isDefinedAt(x)
-// }
-
-// case class STP1[A1](a1: Option[A1]) extends SimplePrerequisitive[STP1[A1]]
-// case class STP2[A1, A2](a1: Option[A1], a2: Option[A2])
-// extends SimplePrerequisitive[STP2[A1, A2]]

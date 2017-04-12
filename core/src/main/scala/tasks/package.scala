@@ -254,15 +254,6 @@ package object tasks {
       comp: CompFun[A, C]): TaskDefinition[A, C] = macro Macros
     .taskDefinitionImpl[A, C]
 
-  // def identity[A, B]: UpdatePrerequisitive[A, B] =
-  //   UpdatePrerequisitive[A, B] {
-  //     case (x, _) => x
-  //   }
-
-  // implicit def tupleConverter[A1](t: (A1)): STP1[A1] = STP1(Some(t))
-  // implicit def tupleConverter[A1, A2](t: (A1, A2)): STP2[A1, A2] =
-  // STP2(Some(t._1), Some(t._2))
-
   def MasterSlaveGridEngineChosenFromConfig: MasterSlaveConfiguration = {
     if (config.global.disableRemoting) LocalConfigurationFromConfig
     else
