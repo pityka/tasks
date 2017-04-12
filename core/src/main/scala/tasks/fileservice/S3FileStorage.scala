@@ -66,41 +66,6 @@ class S3Storage(bucketName: String, folderPrefix: String)(
 
   def list(pattern: String): List[SharedFile] = ???
 
-  // def centralized = true
-  //
-  // @transient private var _system = ActorSystem("s3storage");
-  //
-  // implicit def system = {
-  //   if (_system == null) {
-  //     _system = ActorSystem("s3storage");
-  //   }
-  //   _system
-  // }
-  //
-  // implicit def ec = system.dispatcher
-  //
-  // @transient private var _mat = ActorMaterializer()
-  //
-  // implicit def mat = {
-  //   if (_mat == null) {
-  //     _mat = ActorMaterializer()
-  //   }
-  //   _mat
-  // }
-  //
-  // @transient private var s3stream = new S3Stream(S3Helpers.credentials)
-  //
-  // @transient private var _streamHelper = new StreamHelper
-  //
-  // def streamHelper = {
-  //   if (_streamHelper == null) {
-  //     _streamHelper = StreamHelper
-  //   }
-  //   _streamHelper
-  // }
-  //
-  // override def close = _system.shutdown
-
   def contains(path: ManagedFilePath, size: Long, hash: Int): Boolean = {
     val tr = retry(5) {
       try {
@@ -145,9 +110,6 @@ class S3Storage(bucketName: String, folderPrefix: String)(
                    atMost = 24 hours)
 
     val (size1, hash1) = getLengthAndHash(metadata)
-
-    // if (size1 !== f.length)
-    //   throw new RuntimeException("S3: Uploaded file length != on disk")
 
     (size1, hash1, managed)
   }

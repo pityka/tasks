@@ -29,7 +29,6 @@ package tasks
 
 import org.scalatest._
 import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
 import akka.testkit.TestKit
 import akka.testkit.ImplicitSender
@@ -42,6 +41,8 @@ import tasks.kvstore._
 import org.scalatest.FunSpec
 import org.scalatest.Matchers
 
+import akka.stream._
+import akka.actor._
 import tasks.queue._
 import tasks.caching._
 import tasks.caching.kvstore._
@@ -71,6 +72,13 @@ class FileServiceSpec
     with BeforeAndAfterAll {
   self: Suite =>
 
+  implicit val mat = ActorMaterializer()
+  val as = implicitly[ActorSystem]
+  import as.dispatcher
+  implicit val sh = new StreamHelper
+
+  val remoteStore = new RemoteFileStorage
+
   override def afterAll {
     Thread.sleep(1500)
     system.shutdown
@@ -91,11 +99,13 @@ class FileServiceSpec
       val folder2 =
         new File(new java.io.File(getClass.getResource("/").getPath), "test1f")
       folder2.mkdir
+      val fs = new FolderFileStorage(folder, false)
       val service = system.actorOf(
           Props(new FileService(
-                  new FolderFileStorage(folder, false)
+                  fs
               )))
-      implicit val serviceimpl = FileServiceActor(service)
+      implicit val serviceimpl =
+        FileServiceActor(service, Some(fs), remoteStore)
       val t = SharedFile(input, "proba")
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
@@ -113,11 +123,13 @@ class FileServiceSpec
       val folder2 =
         new File(new java.io.File(getClass.getResource("/").getPath), "test2f")
       folder2.mkdir
+      val fs = new FolderFileStorage(folder, false)
       val service = system.actorOf(
           Props(new FileService(
-                  new FolderFileStorage(folder, false)
+                  fs
               )))
-      implicit val serviceimpl = FileServiceActor(service)
+      implicit val serviceimpl =
+        FileServiceActor(service, Some(fs), remoteStore)
       implicit val nlc =
         NodeLocalCacheActor(system.actorOf(Props[NodeLocalCache]))
       val t: SharedFile = Await.result(SharedFile(input, "proba"), 50 seconds)
@@ -141,9 +153,10 @@ class FileServiceSpec
       val folder2 =
         new File(new java.io.File(getClass.getResource("/").getPath), "test4f")
       folder2.mkdir
-      val service = system.actorOf(
-          Props(new FileService(new FolderFileStorage(folder, false))))
-      implicit val serviceimpl = FileServiceActor(service)
+      val fs = new FolderFileStorage(folder, false)
+      val service = system.actorOf(Props(new FileService(fs)))
+      implicit val serviceimpl =
+        FileServiceActor(service, Some(fs), remoteStore)
       val t: SharedFile = Await.result(SharedFile(input, "proba"), 50 seconds)
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
@@ -166,9 +179,10 @@ class FileServiceSpec
       folder2.mkdir
       val input = new java.io.File(folder, "proba")
       writeBinaryToFile(input.getCanonicalPath, data)
-      val service = system.actorOf(
-          Props(new FileService(new FolderFileStorage(folder, false))))
-      implicit val serviceimpl = FileServiceActor(service)
+      val fs = new FolderFileStorage(folder, false)
+      val service = system.actorOf(Props(new FileService(fs)))
+      implicit val serviceimpl =
+        FileServiceActor(service, Some(fs), remoteStore)
       implicit val nlc =
         NodeLocalCacheActor(system.actorOf(Props[NodeLocalCache]))
 
@@ -198,11 +212,11 @@ class FileServiceSpec
       folder2.mkdir
       val input = new java.io.File(folder, "proba")
       writeBinaryToFile(input.getCanonicalPath, data)
-      val service = system.actorOf(
-          Props(new FileService(new FolderFileStorage(folder, true),
-                                8,
-                                (_: File) => false)))
-      implicit val serviceimpl = FileServiceActor(service)
+      val fs = new FolderFileStorage(folder, true)
+      val service =
+        system.actorOf(Props(new FileService(fs, 8, (_: File) => false)))
+      implicit val serviceimpl =
+        FileServiceActor(service, Some(fs), remoteStore)
       implicit val nlc =
         NodeLocalCacheActor(system.actorOf(Props[NodeLocalCache]))
 

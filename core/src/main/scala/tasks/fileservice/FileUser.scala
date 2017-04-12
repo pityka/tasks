@@ -87,18 +87,6 @@ class FileUserStream(sf: ManagedFilePath,
     finish
   }
 
-  // def handleCentralStorage(storage: FileStorage) {
-  //   val stream = storage.openStream(sf)
-  //   if (stream.isSuccess) {
-  //     result = Some(Success(stream.get))
-  //     finish
-  //   } else {
-  //     log.debug(
-  //         s"storage.openStream, (KnownPathsWithStorage($storage)): ${stream.toString}, $sf")
-  //     transfertome
-  //   }
-  // }
-
   override def receive = super.receive orElse {
     case FileSaved => {
       writeableChannel.get.close
@@ -147,11 +135,6 @@ class FileUserSource(sf: ManagedFilePath,
     finish
   }
 
-  // def handleCentralStorage(storage: FileStorage) {
-  //   result = Some(Success(storage.createSource(sf)))
-  //   finish
-  // }
-
   override def receive = super.receive orElse {
     case FileSaved => {
       writeableChannel.get.close
@@ -191,18 +174,6 @@ class FileUser(sf: ManagedFilePath,
     }
   }
 
-  // def handleCentralStorage(storage: FileStorage) {
-  //   val f = storage.exportFile(sf)
-  //   if (f.isSuccess && isLocal(f.get)) {
-  //     service ! NewPath(sf, f.get)
-  //     finishLocalFile(f.get)
-  //   } else {
-  //     log.debug(
-  //         s"storage.export, (KnownPathsWithStorage($storage)): ${f.toString}, $sf")
-  //     transfertome
-  //   }
-  // }
-
   override def receive = super.receive orElse {
     case FileSaved => {
       writeableChannel.get.close
@@ -230,7 +201,6 @@ abstract class AbstractFileUser[R](sf: ManagedFilePath,
 
   protected def transfertome: Unit
   protected def finishLocalFile(file: File): Unit
-  // protected def handleCentralStorage(storage: FileStorage): Unit
 
   private def fail(e: Throwable) {
     fileNotFound = true
@@ -259,15 +229,6 @@ abstract class AbstractFileUser[R](sf: ManagedFilePath,
       log.error("CannotSaveFile : " + sf + " Reason: " + e)
       fail(e)
     }
-    // case KnownPathsWithStorage(list, storage) => {
-    //   log.debug("KnownPathsWithStorage")
-    //   list.find(isLocal) match {
-    //     case Some(file) => finishLocalFile(file)
-    //     case None => {
-    //       handleCentralStorage(storage)
-    //     }
-    //   }
-    // }
     case KnownPaths(list) => {
       log.debug("KnownPaths:" + list)
       list.find(isLocal) match {
@@ -275,10 +236,6 @@ abstract class AbstractFileUser[R](sf: ManagedFilePath,
         case None => transfertome
       }
     }
-    // case TryToDownload(storage) => {
-    //   log.debug("trytodownload")
-    //   handleCentralStorage(storage)
-    // }
 
   }
 

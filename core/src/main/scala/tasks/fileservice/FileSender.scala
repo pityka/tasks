@@ -83,20 +83,6 @@ class FileSender(file: File,
           Props(new TransferOut(readablechannel, transferin, chunksize))
             .withDispatcher("transferout"))
 
-    // case TryToUpload(storage) =>
-    //   log.debug("trytoupload")
-    //   val f = storage.importFile(file, proposedPath)
-    //   if (f.isSuccess) {
-    //     log.debug("uploaded")
-    //     service ! Uploaded(f.get._1,
-    //                        f.get._2,
-    //                        (if (!deleteLocalFile) Some(f.get._3) else None),
-    //                        f.get._4)
-    //   } else {
-    //     log.debug("could not upload. send could not upload and transfer")
-    //     service ! CouldNotUpload(proposedPath)
-    //   }
-
     case WaitingForSharedFile =>
       listener = Some(sender)
       if (sharedFile.isDefined) {
@@ -151,20 +137,6 @@ class SourceSender(file: Source[ByteString, _],
           Props(new TransferOut(readablechannel, transferin, chunksize))
             .withDispatcher("transferout"))
 
-    // case TryToUpload(storage) =>
-    //   log.debug("trytoupload")
-    //   val f = storage.importSource(file, proposedPath)
-    //   if (f.isSuccess) {
-    //     log.debug("uploaded")
-    //     service ! Uploaded(f.get._1, f.get._2, None, f.get._3)
-    //   } else {
-    //     log.error("could not upload. send could not upload and transfer")
-    //     listener.foreach { x =>
-    //       x ! None
-    //       self ! PoisonPill
-    //     }
-    //   }
-
     case WaitingForSharedFile =>
       listener = Some(sender)
       if (sharedFile.isDefined) {
@@ -182,7 +154,6 @@ class SourceSender(file: Source[ByteString, _],
         x ! None
         self ! PoisonPill
       }
-
   }
 
 }

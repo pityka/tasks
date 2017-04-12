@@ -169,8 +169,7 @@ object SharedFileHelper {
   def getPathToFile(sf: SharedFile)(implicit service: FileServiceActor,
                                     context: ActorRefFactory,
                                     nlc: NodeLocalCacheActor,
-                                    ec: ExecutionContext): Future[File] = {
-
+                                    ec: ExecutionContext): Future[File] =
     NodeLocalCache.getItemAsync("fs::" + sf) {
       sf.path match {
         case p: RemoteFilePath => service.remote.exportFile(p)
@@ -203,7 +202,6 @@ object SharedFileHelper {
       }
 
     }
-  }
 
   def isAccessible(sf: SharedFile)(implicit service: FileServiceActor,
                                    context: ActorRefFactory): Future[Boolean] =
@@ -224,7 +222,7 @@ object SharedFileHelper {
     }
 
   def getUri(sf: SharedFile)(implicit service: FileServiceActor,
-                             context: ActorRefFactory): Future[Uri] = {
+                             context: ActorRefFactory): Future[Uri] =
     sf.path match {
       case RemoteFilePath(path) => Future.successful(path)
       case path: ManagedFilePath => {
@@ -236,7 +234,5 @@ object SharedFileHelper {
         }
       }
     }
-
-  }
 
 }

@@ -50,18 +50,11 @@ case class GetPaths(p: ManagedFilePath, size: Long, hash: Int)
 @SerialVersionUID(1L)
 case class KnownPaths(paths: List[File]) extends FileServiceMessage
 
-// @SerialVersionUID(1L)
-// case class KnownPathsWithStorage(paths: List[File], storage: FileStorage)
-// extends FileServiceMessage
-
 @SerialVersionUID(1L)
 case class TransferToMe(actor: ActorRef) extends FileServiceMessage
 
 @SerialVersionUID(1L)
 case class TransferFileToUser(actor: ActorRef, sf: ManagedFilePath)
-
-// @SerialVersionUID(1L)
-// case class NewPath(p: SharedFile, path: File) extends FileServiceMessage
 
 @SerialVersionUID(1L)
 case object WaitingForSharedFile extends FileServiceMessage
@@ -71,12 +64,6 @@ case object WaitingForPath extends FileServiceMessage
 
 @SerialVersionUID(1L)
 case class FileNotFound(e: Throwable) extends FileServiceMessage
-
-// @SerialVersionUID(1L)
-// case class TryToDownload(storage: FileStorage) extends FileServiceMessage
-
-// @SerialVersionUID(1L)
-// case class TryToUpload(storage: FileStorage) extends FileServiceMessage
 
 @SerialVersionUID(1L)
 case class Uploaded(length: Long,

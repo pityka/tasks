@@ -51,6 +51,7 @@ abstract class Reaper extends Actor with akka.actor.ActorLogging {
       log.debug("Watching: " + ref)
       context.watch(ref) // This ensures that the Terminated message will come
       watched += ref
+      sender ! true
     case Terminated(ref) =>
       watched -= ref
       if (watched.isEmpty) {
@@ -58,6 +59,10 @@ abstract class Reaper extends Actor with akka.actor.ActorLogging {
         latches.foreach(_.countDown)
       }
   }
+}
+
+class CallbackReaper(f: => Unit) extends Reaper {
+  def allSoulsReaped = f
 }
 
 class ProductionReaper extends Reaper {

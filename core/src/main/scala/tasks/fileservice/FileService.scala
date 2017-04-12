@@ -82,16 +82,12 @@ class FileService(storage: ManagedFileStorage,
 
   override def postStop {
     fjp.shutdown
-    storage.close
     log.info("FileService stopped.")
   }
 
   override def preStart {
     log.info("FileService will start.")
   }
-
-  private val knownPaths =
-    collection.mutable.AnyRefMap[ManagedFilePath, List[File]]()
 
   // transferinactor -> (name,channel,fileinbase,filesender)
   private val transferinactors =
@@ -110,34 +106,7 @@ class FileService(storage: ManagedFileStorage,
     }(ec)
   }
 
-  // private def create(path: RemoteFilePath): Future[Try[SharedFile]] =
-  //   Future {
-  //     SharedFileHelper.create(path)
-  //   }(ec)
-
-  private def recordToNames(file: File, sf: ManagedFilePath): Unit = {
-    if (knownPaths.contains(sf)) {
-      val oldlist = knownPaths(sf)
-      knownPaths.update(sf, (file.getCanonicalFile :: oldlist).distinct)
-    } else {
-      knownPaths.update(sf, List(file))
-    }
-
-  }
-
   def receive = {
-    // case NewRemote(uri) =>
-    //   try {
-    //     val remotepath = RemoteFilePath(uri)
-    //     val trySf = create(remotepath)
-    //     trySf.failed.foreach(e => log.error(e, "Error {}", uri))
-    //     trySf.pipeTo(sender)
-    //   } catch {
-    //     case e: Exception => {
-    //       log.error(e, "Error while accessing storage " + uri)
-    //       sender ! Failure(e)
-    //     }
-    //   }
     case NewFile(file, proposedPath, ephemeral) =>
       try {
         if (isLocal(file)) {
@@ -146,8 +115,6 @@ class FileService(storage: ManagedFileStorage,
             storage.importFile(file, proposedPath).get
 
           val sn = create(length, hash, managedFilePath)
-
-          // if (!ephemeral) { sn.foreach(sf => recordToNames(f, sf)) }
 
           sn.failed.foreach { e =>
             log.error(e,
@@ -160,12 +127,6 @@ class FileService(storage: ManagedFileStorage,
 
         } else {
 
-          // if (storage.centralized) {
-          //   log.debug("answer trytoupload")
-          //   sender ! TryToUpload
-          //
-          // } else {
-          // transfer
           val savePath = TempFile.createFileInTempFolderIfPossibleWithName(
               proposedPath.name)
           val writeableChannel =
@@ -178,7 +139,6 @@ class FileService(storage: ManagedFileStorage,
               (writeableChannel, savePath, sender, proposedPath, ephemeral))
 
           sender ! TransferToMe(transferinActor)
-          // }
 
         }
       } catch {
@@ -192,13 +152,6 @@ class FileService(storage: ManagedFileStorage,
 
     case NewSource(proposedPath) =>
       try {
-
-        // if (storage.centralized) {
-        //   log.debug("answer trytoupload")
-        //   sender ! TryToUpload
-        //
-        // } else {
-        // transfer
         val savePath =
           TempFile.createFileInTempFolderIfPossibleWithName(proposedPath.name)
         val writeableChannel =
@@ -211,7 +164,6 @@ class FileService(storage: ManagedFileStorage,
             (writeableChannel, savePath, sender, proposedPath, true))
 
         sender ! TransferToMe(transferinActor)
-        // }
 
       } catch {
         case e: Exception => {
@@ -219,21 +171,7 @@ class FileService(storage: ManagedFileStorage,
           sender ! ErrorWhileAccessingStore
         }
       }
-    // case Uploaded(length, hash, file, managedFilePath) => {
-    //   log.debug("got uploaded. record")
-    //
-    //   val sn = create(length, hash, managedFilePath)
-    //   // if (file.isDefined) {
-    //   //   sn.foreach(sf => recordToNames(file.get, sf))
-    //   // }
-    //   sn.failed.foreach { e =>
-    //     log.error(e,
-    //               "Error in creation of SharedFile {} {}",
-    //               file,
-    //               managedFilePath)
-    //   }
-    //   sn pipeTo sender
-    // }
+
     case CannotSaveFile(e) => {
       transferinactors.get(sender).foreach {
         case (channel, file, filesender, proposedPath, _) =>
@@ -253,10 +191,6 @@ class FileService(storage: ManagedFileStorage,
 
             val sn = create(length, hash, managedFilePath)
 
-            // if (!ephemeral) {
-            //   sn.foreach(sf => recordToNames(file, sf))
-            // }
-
             sn.failed.foreach { e =>
               log.error(e,
                         "Error in creation of SharedFile {} {}",
@@ -275,48 +209,20 @@ class FileService(storage: ManagedFileStorage,
       }
       transferinactors.remove(sender)
     }
-    // case CouldNotUpload(proposedPath) => {
-    //   val savePath =
-    //     TempFile.createFileInTempFolderIfPossibleWithName(proposedPath.name)
-    //   val writeableChannel = new java.io.FileOutputStream(savePath).getChannel
-    //   val transferinActor = context.actorOf(
-    //       Props(new TransferIn(writeableChannel, self))
-    //         .withDispatcher("transferin"))
-    //   transferinactors.update(
-    //       transferinActor,
-    //       (writeableChannel, savePath, sender, proposedPath, true))
-    //
-    //   sender ! TransferToMe(transferinActor)
-    //
-    // }
+
     case GetPaths(managedPath, size: Long, hash: Int) =>
       try {
-        knownPaths.get(managedPath) match {
-          case Some(l) => {
-            // if (storage.centralized) {
-            //   sender ! KnownPathsWithStorage(l, storage)
-            // } else {
-            sender ! KnownPaths(l)
-            // }
+        if (storage.contains(managedPath, size, hash)) {
 
-          }
-          case None => {
-            if (storage.contains(managedPath, size, hash)) {
-              // if (storage.centralized) {
-              //   sender ! TryToDownload
-              // } else {
-              storage
-                .exportFile(managedPath)
-                .map(f => KnownPaths(List(f)))
-                .pipeTo(sender)
+          storage
+            .exportFile(managedPath)
+            .map(f => KnownPaths(List(f)))
+            .pipeTo(sender)
 
-              // }
-            } else {
-              sender ! FileNotFound(
-                  new RuntimeException(
-                      s"SharedFile not found in storage. $storage # contains($managedPath) returned false. "))
-            }
-          }
+        } else {
+          sender ! FileNotFound(
+              new RuntimeException(
+                  s"SharedFile not found in storage. $storage # contains($managedPath) returned false. "))
         }
       } catch {
         case e: Exception => {
@@ -326,11 +232,7 @@ class FileService(storage: ManagedFileStorage,
       }
     case TransferFileToUser(transferinActor, sf) =>
       try {
-        val future = knownPaths(sf).find(isLocal) match {
-          case Some(x) => Future.successful(x)
-          case None => storage.exportFile(sf)
-        }
-        future.foreach { file =>
+        storage.exportFile(sf).foreach { file =>
           val readablechannel = new java.io.FileInputStream(file).getChannel
           val chunksize = tasks.util.config.global.fileSendChunkSize
           context.actorOf(
@@ -345,8 +247,6 @@ class FileService(storage: ManagedFileStorage,
           sender ! FileNotFound(e)
         }
       }
-    // case NewPath(sf, filePath) =>
-    // recordToNames(filePath, sf)
 
     case GetListOfFilesInStorage(regexp) => sender ! storage.list(regexp)
     case IsAccessible(managedPath, size, hash) =>

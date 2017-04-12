@@ -452,17 +452,20 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
     if (hostConfig.myRole == MASTER) {
       if (!shuttingDown) {
         shuttingDown = true
-        // implicit val timeout = akka.util.Timeout(10 seconds)
+        implicit val timeout = akka.util.Timeout(10 seconds)
         import system.dispatcher
 
         val latch = new java.util.concurrent.CountDownLatch(1)
         reaperActor ! Latch(latch)
-
+        val cacheReaper = system.actorOf(Props(new CallbackReaper({
+          fileActor ! PoisonPill
+          system.actorSelection("/user/fileservice_*") ! PoisonPill
+        })))
+        (cacheReaper ? WatchMe(cacherActor)).foreach { _ =>
+          cacherActor ! PoisonPillToCacheActor
+          system.actorSelection("/user/cache_*") ! PoisonPillToCacheActor
+        }
         queueActor ! PoisonPill
-        cacherActor ! PoisonPillToCacheActor
-        fileActor ! PoisonPill
-        system.actorSelection("/user/fileservice_*") ! PoisonPill
-        system.actorSelection("/user/cache_*") ! PoisonPillToCacheActor
 
         launcherActor.foreach(_ ! PoisonPill)
         if (!isLauncherOnly) {

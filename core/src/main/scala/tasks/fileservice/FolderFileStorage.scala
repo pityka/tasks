@@ -79,35 +79,6 @@ class FolderFileStorage(
     val centralized: Boolean,
     val extendedPaths: List[File] = Nil)(implicit mat: ActorMaterializer)
     extends ManagedFileStorage {
-  //
-  // @transient private var _system = ActorSystem("folderfilestorage");
-  //
-  // implicit def system = {
-  //   if (_system == null) {
-  //     _system = ActorSystem("s3storage");
-  //   }
-  //   _system
-  // }
-  //
-  // @transient private var _mat = ActorMaterializer()
-  //
-  // implicit def mat = {
-  //   if (_mat == null) {
-  //     _mat = ActorMaterializer()
-  //   }
-  //   _mat
-  // }
-  //
-  // @transient private var s3stream = new S3Stream(S3Helpers.credentials)
-  //
-  // @transient private var _streamHelper = new StreamHelper
-  //
-  // def streamHelper = {
-  //   if (_streamHelper == null) {
-  //     _streamHelper = StreamHelper
-  //   }
-  //   _streamHelper
-  // }
 
   if (basePath.exists && !basePath.isDirectory)
     throw new IllegalArgumentException(s"$basePath exists and not a folder")

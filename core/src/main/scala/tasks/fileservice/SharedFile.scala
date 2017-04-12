@@ -152,26 +152,11 @@ object SharedFile {
                      map("hash").str.toInt)
   }
 
-  // def openOutputStream[R](name: String)(f: OutputStream => R)(implicit service: FileServiceActor, context: ActorRefFactory): (R, SharedFile)
-
   def apply(uri: Uri)(implicit service: FileServiceActor,
                       context: ActorRefFactory,
                       prefix: FileServicePrefix,
-                      ec: ExecutionContext): Future[SharedFile] = {
-
-    val remotepath = RemoteFilePath(uri)
-    SharedFileHelper.create(remotepath, service.remote)
-
-    // val serviceactor = service.actor
-    //
-    //
-    // implicit val timout = akka.util.Timeout(1441 minutes)
-    //
-    // (serviceactor ? NewRemote(uri))
-    //   .asInstanceOf[Future[Try[SharedFile]]]
-    //   .map(_.get)
-
-  }
+                      ec: ExecutionContext): Future[SharedFile] =
+    SharedFileHelper.create(RemoteFilePath(uri), service.remote)
 
   def apply(file: File, name: String)(
       implicit service: FileServiceActor,
@@ -206,15 +191,11 @@ object SharedFile {
                              deleteFile,
                              serviceactor))
             .withDispatcher("filesender-dispatcher"))
-      val f = (ac ? WaitingForSharedFile)
+      (ac ? WaitingForSharedFile)
         .asInstanceOf[Future[Option[SharedFile]]]
         .map(_.get)
+        .andThen { case _ => ac ! PoisonPill }
 
-      f onComplete {
-        case _ => ac ! PoisonPill
-      }
-
-      f
     }
 
   def apply(source: Source[ByteString, _], name: String)(
@@ -238,15 +219,12 @@ object SharedFile {
       val ac = context.actorOf(
           Props(new SourceSender(source, prefix.propose(name), serviceactor))
             .withDispatcher("filesender-dispatcher"))
-      val f = (ac ? WaitingForSharedFile)
+
+      (ac ? WaitingForSharedFile)
         .asInstanceOf[Future[Option[SharedFile]]]
         .map(_.get)
+        .andThen { case _ => ac ! PoisonPill }
 
-      f onComplete {
-        case _ => ac ! PoisonPill
-      }
-
-      f
     }
 
   def apply(file: File)(implicit service: FileServiceActor,

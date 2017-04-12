@@ -124,6 +124,4 @@ trait ManagedFileStorage {
 
   def list(regexp: String): List[SharedFile]
 
-  def close = ()
-
 }

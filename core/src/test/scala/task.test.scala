@@ -30,6 +30,8 @@ import org.scalatest._
 import akka.testkit.TestKit
 import akka.testkit.ImplicitSender
 import akka.testkit.EventFilter
+import akka.stream.ActorMaterializer
+import akka.actor._
 import scala.concurrent.duration._
 
 import scala.io.Source
@@ -69,6 +71,11 @@ class TaskTestSuite
   // remote.start("localhost", 3985) //Start the server
   // remote.register("cache-service", )
 
+  implicit val mat = ActorMaterializer()
+  val as = implicitly[ActorSystem]
+  import as.dispatcher
+  implicit val sh = new StreamHelper
+
   implicit val prefix = FileServicePrefix(Vector())
 
   val tmpfile = TempFile.createTempFile(".cache")
@@ -77,6 +84,8 @@ class TaskTestSuite
   val folder = new FolderFileStorage(
       new java.io.File(getClass.getResource("/").getPath),
       true)
+
+  val remoteStore = new RemoteFileStorage
 
   val fileActor = system.actorOf(
       Props(new FileService(folder)).withDispatcher("my-pinned-dispatcher"),
@@ -87,7 +96,7 @@ class TaskTestSuite
           new TaskResultCache(
               LevelDBCache(tmpfile,
                            akka.serialization.SerializationExtension(system)),
-              FileServiceActor(fileActor)))
+              FileServiceActor(fileActor, Some(folder), remoteStore)))
         .withDispatcher("my-pinned-dispatcher"),
       "cache")
 
@@ -116,7 +125,8 @@ class TaskTestSuite
 
   implicit val starter = QueueActor(balancer)
 
-  implicit val fileService = FileServiceActor(fileActor)
+  implicit val fileService =
+    FileServiceActor(fileActor, Some(folder), remoteStore)
 
   implicit val cache = CacheActor(cacher)
 
