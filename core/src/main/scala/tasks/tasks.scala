@@ -39,7 +39,6 @@ import scala.concurrent._
 
 abstract class ResultWithSharedFiles(sf: SharedFile*) extends Product {
   def files = sf
-
 }
 
 // This is the prerequisitives of a task

@@ -69,20 +69,6 @@ case class TaskSystemComponents(
     val filePrefix: FileServicePrefix
 ) {
 
-  def getLogger(caller: AnyRef) = getApplicationLogger(caller)(actorsystem)
-
-  def registerApplicationFileLogger(f: File) = {
-    val fileLogger =
-      actorsystem.actorOf(Props(new FileLogger(f, Some("APPLICATION"))))
-    val fileLoggerAll = actorsystem.actorOf(
-        Props(new FileLogger(new File(f.getAbsolutePath + ".log.all"))))
-    actorsystem.eventStream
-      .subscribe(fileLogger, classOf[akka.event.Logging.LogEvent])
-    actorsystem.eventStream
-      .subscribe(fileLoggerAll, classOf[akka.event.Logging.LogEvent])
-    fileLogger
-  }
-
   def childPrefix(name: String) =
     this.copy(filePrefix = this.filePrefix.append(name))
 }
@@ -95,38 +81,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
   import as.dispatcher
   implicit val sh = new StreamHelper
 
-  val logger = system.actorOf(Props(new LogPublishActor(None)))
-  system.eventStream.subscribe(logger, classOf[akka.event.Logging.LogEvent])
-
-  private val tasksystemlog = tasks.getLogger(this)(system)
-
-  def registerApplicationFileLogger(f: File) =
-    components.registerApplicationFileLogger(f)
-
-  def registerFileLogger(f: File) = {
-    val fileLogger = system.actorOf(Props(new FileLogger(f)))
-    system.eventStream
-      .subscribe(fileLogger, classOf[akka.event.Logging.LogEvent])
-    fileLogger
-  }
-
-  def registerFileLoggerToErrorStream(f: File) = {
-    val fileLogger = system.actorOf(Props(new FileLogger(f)))
-    system.eventStream.subscribe(fileLogger, classOf[akka.event.Logging.Error])
-    fileLogger
-  }
-
-  def getLogger(caller: AnyRef) = getApplicationLogger(caller)(system)
-
-  val logFile: Option[File] = config.global.logFile match {
-    case x if x == "" => None
-    case x => Some(new File(x + System.currentTimeMillis.toString + ".log"))
-  }
-
-  logFile.foreach { f =>
-    registerFileLogger(f)
-    registerFileLoggerToErrorStream(new File(f.getCanonicalPath + ".errors"))
-  }
+  private val tasksystemlog = akka.event.Logging(as, "TaskSystem")
 
   tasksystemlog.info("Listening on: " + hostConfig.myAddress.toString)
   tasksystemlog.info("CPU: " + hostConfig.myCardinality.toString)
@@ -165,7 +120,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
   val reaperActor = elastic.elasticSupport match {
     case Some(EC2Grid) =>
       system.actorOf(Props(
-                         new EC2Reaper(logFile.toList,
+                         new EC2Reaper(Nil,
                                        config.global.logFileS3Path,
                                        config.global.terminateMaster)),
                      name = "reaper")

@@ -101,8 +101,6 @@ class TasksConfig(val raw: Config) {
   val fileServiceThreadPoolSize =
     raw.getInt("tasks.fileservice.threadPoolSize")
 
-  val logFile = raw.getString("tasks.logFile")
-
   val sshHosts = raw.getObject("tasks.elastic.ssh.hosts")
 
   val gridEngine = raw.getString("tasks.elastic.engine")

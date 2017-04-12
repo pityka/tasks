@@ -25,13 +25,6 @@
 
 package tasks.shared
 
-@SerialVersionUID(1L)
-case class LogMessage(level: String,
-                      message: String,
-                      time: String,
-                      cause: String)
-    extends Serializable
-
 sealed trait ResourceRequest extends Serializable
 
 sealed trait ResourceAllocated[T <: ResourceRequest] extends Serializable

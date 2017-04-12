@@ -77,10 +77,6 @@ package object tasks {
   def CPUMemoryRequest(cpu: Int, memory: Int) =
     tasks.shared.CPUMemoryRequest(cpu, memory)
 
-  def createLogger(s: AnyRef)(
-      implicit component: TaskSystemComponents): akka.event.LoggingAdapter =
-    component.getLogger(s)
-
   implicit def tsc(implicit ts: TaskSystem): TaskSystemComponents =
     ts.components
 
@@ -124,15 +120,6 @@ package object tasks {
 
   implicit def cacheActor(
       implicit component: TaskSystemComponents): CacheActor = component.cache
-  //
-  // def ls(pattern: String)(
-  //     implicit component: TaskSystemComponents): List[SharedFile] = {
-  //   implicit val timout = akka.util.Timeout(1441 minutes)
-  //   Await
-  //     .result(fs.actor ? GetListOfFilesInStorage(pattern),
-  //             atMost = scala.concurrent.duration.Duration.Inf)
-  //     .asInstanceOf[List[SharedFile]]
-  // }
 
   def remoteCacheAddress(implicit t: QueueActor, s: ActorContext): String =
     if (t.actor.path.address.host.isDefined && t.actor.path.address.port.isDefined)
@@ -262,22 +249,6 @@ package object tasks {
         case x if x == "NOENGINE" => MasterSlaveFromConfig
         case _ => MasterSlaveFromConfig
       }
-  }
-
-  def getLogger(sourceObject: AnyRef)(implicit as: ActorSystem) = {
-    implicit val logSource: LogSource[AnyRef] = new LogSource[AnyRef] {
-      def genString(o: AnyRef): String = o.getClass.getName
-      override def getClazz(o: AnyRef): Class[_] = o.getClass
-    }
-    akka.event.Logging(as, sourceObject)(logSource)
-  }
-
-  def getApplicationLogger(sourceObject: AnyRef)(implicit as: ActorSystem) = {
-    implicit val logSource: LogSource[AnyRef] = new LogSource[AnyRef] {
-      def genString(o: AnyRef): String = "APPLICATION-" + o.getClass.getName
-      override def getClazz(o: AnyRef): Class[_] = o.getClass
-    }
-    akka.event.Logging(as, sourceObject)(logSource)
   }
 
 }
