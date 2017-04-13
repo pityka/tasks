@@ -57,6 +57,7 @@ object Tests {
   val increment = Task[Int, IntWrapper]("increment", 1) {
     case c =>
       implicit computationEnvironment =>
+        log.info("increment {}", c)
         IntWrapper(c + 1)
   }
   val tmp = TempFile.createTempFile(".2leveldb")
