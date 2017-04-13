@@ -116,7 +116,7 @@ trait ManagedFileStorage {
       path: ProposedManagedFilePath): Try[(Long, Int, File, ManagedFilePath)]
 
   def importSource(s: Source[ByteString, _], path: ProposedManagedFilePath)(
-      implicit am: Materializer): Try[(Long, Int, ManagedFilePath)]
+      implicit am: Materializer): Future[(Long, Int, ManagedFilePath)]
 
   def exportFile(path: ManagedFilePath): Future[File]
 

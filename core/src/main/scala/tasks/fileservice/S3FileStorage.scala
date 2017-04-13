@@ -97,20 +97,18 @@ class S3Storage(bucketName: String, folderPrefix: String)(
       .mkString("/")
 
   def importSource(s: Source[ByteString, _], path: ProposedManagedFilePath)(
-      implicit am: Materializer): Try[(Long, Int, ManagedFilePath)] = Try {
+      implicit am: Materializer): Future[(Long, Int, ManagedFilePath)] = {
     val managed = path.toManaged
     val key = assembleName(managed)
     val s3loc = S3Location(bucketName, key)
     val sink = s3stream.multipartUpload(s3loc, serverSideEncryption = true)
     val future = s.runWith(sink)
 
-    val metadata =
-      Await.result(future.flatMap(_ => s3stream.getMetadata(s3loc)),
-                   atMost = 24 hours)
+    future.flatMap(_ => s3stream.getMetadata(s3loc)).map { metadata =>
+      val (size1, hash1) = getLengthAndHash(metadata)
 
-    val (size1, hash1) = getLengthAndHash(metadata)
-
-    (size1, hash1, managed)
+      (size1, hash1, managed)
+    }
   }
 
   def importFile(f: File, path: ProposedManagedFilePath)

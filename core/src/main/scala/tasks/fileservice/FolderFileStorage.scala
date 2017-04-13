@@ -74,10 +74,11 @@ object FolderFileStorage {
   }
 }
 
-class FolderFileStorage(
-    val basePath: File,
-    val centralized: Boolean,
-    val extendedPaths: List[File] = Nil)(implicit mat: ActorMaterializer)
+class FolderFileStorage(val basePath: File,
+                        val centralized: Boolean,
+                        val extendedPaths: List[File] = Nil)(
+    implicit mat: ActorMaterializer,
+    ec: ExecutionContext)
     extends ManagedFileStorage {
 
   if (basePath.exists && !basePath.isDirectory)
@@ -150,12 +151,14 @@ class FolderFileStorage(
   }
 
   def importSource(s: Source[ByteString, _], path: ProposedManagedFilePath)(
-      implicit mat: Materializer): Try[(Long, Int, ManagedFilePath)] = {
+      implicit mat: Materializer): Future[(Long, Int, ManagedFilePath)] = {
     val tmp = TempFile.createTempFile("foldertmp")
-    s.runWith(FileIO.toPath(tmp.toPath))
-    val r = importFile(tmp, path)
-    tmp.delete
-    r.map(x => (x._1, x._2, x._4))
+    s.runWith(FileIO.toPath(tmp.toPath)).flatMap { _ =>
+      val r = importFile(tmp, path)
+      tmp.delete
+      Future.fromTry(r.map(x => (x._1, x._2, x._4)))
+    }
+
   }
 
   def importFile(file: File, proposed: ProposedManagedFilePath)
