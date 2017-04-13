@@ -206,9 +206,9 @@ object SharedFile {
       mat: ActorMaterializer): Future[SharedFile] =
     if (service.storage.isDefined) {
       val proposedPath = prefix.propose(name)
-       service.storage.get.importSource(source, proposedPath).map{ x =>
-           SharedFileHelper.create(x._1, x._2, x._3)
-       }    
+      service.storage.get.importSource(source, proposedPath).map { x =>
+        SharedFileHelper.create(x._1, x._2, x._3)
+      }
     } else {
 
       val serviceactor = service.actor
