@@ -70,7 +70,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
       log.debug("SavingResult")
       context.become({
         case SetDone =>
-          log.info("Save done " + description.taskId)
+          log.debug("Save done " + description.taskId)
           unstashAll()
           context.unbecome()
         case _ => stash()
