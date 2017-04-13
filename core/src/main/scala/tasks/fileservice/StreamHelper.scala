@@ -26,12 +26,64 @@ package tasks.fileservice
 
 import akka.actor._
 import akka.stream._
+import akka.stream.actor._
 import akka.stream.scaladsl._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.Http
 import akka.util._
 import com.bluelabs.s3stream._
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
+
+/** Unbounded queue infront of akka-http
+  *
+  * HttpQueue.make returns a HttpRequest => Future[HttpResponse] function
+  * which can be used to dispatch requests
+  */
+object HttpQueue {
+  type T = (HttpRequest, Promise[HttpResponse])
+
+  class QueueActor
+      extends Actor
+      with ActorPublisher[(HttpRequest, Promise[HttpResponse])]
+      with Stash {
+
+    def receive = {
+      case m: HttpQueue.T =>
+        if (isActive && totalDemand > 0) {
+          onNext(m)
+        } else {
+          context.become({
+            case x: ActorPublisherMessage.Request =>
+              unstashAll()
+              context.unbecome()
+            case x =>
+              stash()
+          }, discardOld = false)
+        }
+
+    }
+  }
+
+  def make(implicit as: ActorSystem, am: ActorMaterializer) = {
+    val superPool = Http().superPool[Promise[HttpResponse]]()
+
+    val actorRef = Source
+      .actorPublisher[T](Props[QueueActor])
+      .via(superPool)
+      .toMat(Sink.foreach({
+        case (t, p) =>
+          p.complete(t)
+      }))(Keep.left)
+      .run()
+
+    (h: HttpRequest) =>
+      {
+        val p = Promise[HttpResponse]()
+        actorRef ! (h, p)
+        p.future
+      }
+  }
+}
 
 class StreamHelper(implicit as: ActorSystem,
                    actorMaterializer: ActorMaterializer,
@@ -39,6 +91,8 @@ class StreamHelper(implicit as: ActorSystem,
 
   val s3stream =
     new com.bluelabs.s3stream.S3Stream(tasks.util.S3Helpers.credentials)
+
+  val queue = HttpQueue.make
 
   def s3Loc(uri: Uri) = {
     val bucket = uri.authority.host.toString
@@ -48,8 +102,8 @@ class StreamHelper(implicit as: ActorSystem,
 
   def createSourceHttp(uri: Uri): Source[ByteString, _] =
     Source
-      .fromFuture(
-          Http().singleRequest(HttpRequest(uri = uri)).map(_.entity.dataBytes))
+      .fromFuture(queue(HttpRequest(uri = uri)))
+      .map(_.entity.dataBytes)
       .flatMapConcat(identity)
 
   def createSourceS3(uri: Uri): Source[ByteString, _] =
@@ -61,9 +115,9 @@ class StreamHelper(implicit as: ActorSystem,
   }
 
   def getContentLengthHttp(uri: Uri): Future[Long] =
-    Http()
-      .singleRequest(HttpRequest(uri = uri))
-      .map(_.header[headers.`Content-Length`].map(_.length).get)
+    queue(HttpRequest(uri = uri)).map(x => {
+      x.discardEntityBytes(); x
+    }.header[headers.`Content-Length`].map(_.length).get)
 
   def getContentLengthS3(uri: Uri): Future[Long] =
     s3stream.getMetadata(s3Loc(uri)).map(_.contentLength.get)
@@ -74,9 +128,11 @@ class StreamHelper(implicit as: ActorSystem,
   }
 
   def getETagHttp(uri: Uri): Future[String] =
-    Http()
-      .singleRequest(HttpRequest(uri = uri))
-      .map(_.header[headers.`ETag`].map(_.value).get)
+    queue(HttpRequest(uri = uri)).map(
+        x => { x.discardEntityBytes(); x }
+          .header[headers.`ETag`]
+          .map(_.value)
+          .get)
 
   def getETagS3(uri: Uri): Future[String] =
     s3stream.getMetadata(s3Loc(uri)).map(_.eTag.get)
