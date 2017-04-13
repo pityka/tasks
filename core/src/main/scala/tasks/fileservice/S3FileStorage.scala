@@ -60,32 +60,31 @@ import scala.concurrent.duration._
 
 class S3Storage(bucketName: String, folderPrefix: String)(
     implicit mat: ActorMaterializer,
+    as: ActorSystem,
     s3stream: S3Stream,
     ec: ExecutionContext)
     extends ManagedFileStorage {
 
+  val log = akka.event.Logging(as.eventStream, getClass)
+
   def list(pattern: String): List[SharedFile] = ???
 
-  def contains(path: ManagedFilePath, size: Long, hash: Int): Boolean = {
-    val tr = retry(5) {
-      try {
-        val metadata = Await.result(
-            s3stream.getMetadata(S3Location(bucketName, assembleName(path))),
-            atMost = 5 seconds)
-        if (size < 0) true
-        else {
-          val (size1, hash1) = getLengthAndHash(metadata)
-          size1 === size && (config.global.skipContentHashVerificationAfterCache || hash === hash1)
-        }
-      } catch {
-        case x: AmazonServiceException => false
+  def contains(path: ManagedFilePath, size: Long, hash: Int): Boolean =
+    try {
+      val metadata = Await.result(
+          s3stream.getMetadata(S3Location(bucketName, assembleName(path))),
+          atMost = 5 seconds)
+      if (size < 0) true
+      else {
+        val (size1, hash1) = getLengthAndHash(metadata)
+        size1 === size && (config.global.skipContentHashVerificationAfterCache || hash === hash1)
       }
+    } catch {
+      case x: AmazonServiceException => false
+      case x: Exception =>
+        log.debug("This might be an error, or likely a missing file. {}", x)
+        false
     }
-
-    tr.failed.foreach(println)
-
-    tr.getOrElse(false)
-  }
 
   def getLengthAndHash(metadata: ObjectMetadata): (Long, Int) =
     metadata.contentLength.get -> metadata.eTag.get.hashCode
