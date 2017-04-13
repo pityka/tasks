@@ -50,6 +50,7 @@ object SimpleTask {
     Future {
       val rs = implicitly[Reader[MyResultSet]].read(js)
       // Logger.debug( "task implementation started" + rs.num.toString)
+      log.warning("boo")
       NodeLocalCache
         .getItem("asdfsdaf") {
           "value"
