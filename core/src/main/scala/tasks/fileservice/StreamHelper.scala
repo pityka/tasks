@@ -59,6 +59,7 @@ object HttpQueue {
             case x =>
               stash()
           }, discardOld = false)
+          stash()
         }
 
     }
