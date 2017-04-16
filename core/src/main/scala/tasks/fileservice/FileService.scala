@@ -25,6 +25,10 @@
  * SOFTWARE.
  */
 
+ remove all awaits
+ insert log statement to each Future.recover
+ 
+
 package tasks.fileservice
 
 import akka.actor._

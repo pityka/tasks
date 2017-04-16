@@ -72,6 +72,7 @@ class RemoteFileStorage(implicit mat: ActorMaterializer,
 
   def getSizeAndHash(path: RemoteFilePath): Future[(Long, Int)] =
     streamHelper.getContentLength(uri(path).akka).map { size1 =>
+      remove this and use the streamhelper for etag
       val is = streamHelper
         .createSource(uri(path).akka)
         .runWith(StreamConverters.asInputStream())

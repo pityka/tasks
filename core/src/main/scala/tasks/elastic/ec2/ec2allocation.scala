@@ -168,10 +168,13 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     launchSpecification.setUserData(gzipBase64(userdata))
 
     // Add the security group to the request.
-    val securitygroups = (Set(config.global.securityGroup) & EC2Operations
-          .readMetadata("security-groups")
-          .toSet).toList
+    make this config key a list
+    val securitygroups = config.global.securityGroup
+
+    replace tihs with setAllSecurityGroups
     launchSpecification.setSecurityGroups(securitygroups)
+
+    add subnetId
 
     // Add the launch specification.
     requestRequest.setLaunchSpecification(launchSpecification)

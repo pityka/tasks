@@ -34,6 +34,10 @@ import akka.util._
 import com.bluelabs.s3stream._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
+make sure that only one of this is created per tasksystem (thread through)
+make sure that only one S3Stream is created per tasksystem (thread through)
+
+
 class StreamHelper(implicit as: ActorSystem,
                    actorMaterializer: ActorMaterializer,
                    ec: ExecutionContext) {
@@ -75,6 +79,8 @@ class StreamHelper(implicit as: ActorSystem,
     case "http" | "https" => getContentLengthHttp(uri)
     case "s3" => getContentLengthS3(uri)
   }
+
+  fuse etag and clength into one request
 
   def getETagHttp(uri: Uri): Future[String] =
     queue(HttpRequest(uri = uri)).map(

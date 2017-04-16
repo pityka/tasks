@@ -35,6 +35,8 @@ import tasks._
 
 class TasksConfig(val raw: Config) {
 
+  clean up references.conf
+
   val asString = raw.root.render
 
   val cacheEnabled = raw.getBoolean("tasks.cache.enabled")

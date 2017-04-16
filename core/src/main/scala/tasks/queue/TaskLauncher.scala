@@ -66,7 +66,7 @@ case class ScheduleTask(
     taskImplementation: String,
     resource: CPUMemoryRequest,
     balancerActor: ActorRef,
-    fileServiceActor: FileServiceActor,
+    fileServiceActor: ActorRef,
     fileServicePrefix: FileServicePrefix,
     cacheActor: ActorRef
 ) extends Serializable
@@ -111,7 +111,7 @@ class TaskLauncher(
               .newInstance(),
             self,
             sch.balancerActor,
-            sch.fileServiceActor,
+            FileServiceActor(sch.fileServiceActor,remoteStorage,managedStorage),
             sch.cacheActor,
             nodeLocalCache,
             allocatedResource,
@@ -169,14 +169,16 @@ class TaskLauncher(
       .getOrElse(throw new RuntimeException(
               "Wrong message received. No such taskActor."))
     val sch = elem._2
-
-    sch.cacheActor.!(
+    import akka.pattern.ask
+    (sch.cacheActor.?(
         SaveResult(sch.description,
                    receivedResult,
-                   sch.fileServicePrefix.append(sch.description.taskId.id)))(
-        sender = taskActor)
+                   sch.fileServicePrefix.append(sch.description.taskId.id)),
+        sender = taskActor,
+      timeout = 5 seconds)).foreach{ _ =>
 
     taskQueue ! TaskDone(sch, receivedResult)
+  }
 
     startedTasks = startedTasks.filterNot(_ == elem)
     if (!freed.contains(taskActor)) {

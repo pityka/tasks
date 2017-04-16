@@ -45,7 +45,6 @@ object NodeLocalCache {
       ec: ExecutionContext): Future[A] = {
     implicit val to = akka.util.Timeout(168 hours)
     (nlc.actor ? LookUp(key)).map { answer =>
-      // val answer = concurrent.Await.result(f, Duration.Inf)
       answer match {
         case YouShouldSetIt => {
           val c = orElse

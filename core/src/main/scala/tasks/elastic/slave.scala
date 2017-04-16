@@ -38,7 +38,7 @@ object Deployment {
       download: URL,
       runScript: String
   ): String = {
-    val downloadScript = s"curl $download > package"
+    val downloadScript = s"curl -m 60 $download > package"
 
     val edited = runScript
       .replaceAllLiterally(
