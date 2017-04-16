@@ -28,6 +28,7 @@ lazy val core = project.in(file("core"))
       "com.typesafe.akka" %% "akka-testkit" % "2.4.17",
       "com.typesafe.akka" %% "akka-http-core" % "10.0.5",
       "com.typesafe" % "config" % "1.3.0",
+      "io.github.pityka" %% "akka-http-unboundedqueue" % "1.0.0",
       "io.github.pityka" %% "s3-stream-fork" % "0.0.4-fork4-SNAPSHOT",
       "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24",
       "org.iq80.leveldb" % "leveldb" % "0.9",

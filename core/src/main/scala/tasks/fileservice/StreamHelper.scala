@@ -34,58 +34,6 @@ import akka.util._
 import com.bluelabs.s3stream._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
-/** Unbounded queue infront of akka-http
-  *
-  * HttpQueue.make returns a HttpRequest => Future[HttpResponse] function
-  * which can be used to dispatch requests
-  */
-object HttpQueue {
-  type T = (HttpRequest, Promise[HttpResponse])
-
-  class QueueActor
-      extends Actor
-      with ActorPublisher[(HttpRequest, Promise[HttpResponse])]
-      with Stash {
-
-    def receive = {
-      case m: HttpQueue.T =>
-        if (isActive && totalDemand > 0) {
-          onNext(m)
-        } else {
-          context.become({
-            case x: ActorPublisherMessage.Request =>
-              unstashAll()
-              context.unbecome()
-            case x =>
-              stash()
-          }, discardOld = false)
-          stash()
-        }
-
-    }
-  }
-
-  def make(implicit as: ActorSystem, am: ActorMaterializer) = {
-    val superPool = Http().superPool[Promise[HttpResponse]]()
-
-    val actorRef = Source
-      .actorPublisher[T](Props[QueueActor])
-      .via(superPool)
-      .toMat(Sink.foreach({
-        case (t, p) =>
-          p.complete(t)
-      }))(Keep.left)
-      .run()
-
-    (h: HttpRequest) =>
-      {
-        val p = Promise[HttpResponse]()
-        actorRef ! (h, p)
-        p.future
-      }
-  }
-}
-
 class StreamHelper(implicit as: ActorSystem,
                    actorMaterializer: ActorMaterializer,
                    ec: ExecutionContext) {
@@ -93,7 +41,7 @@ class StreamHelper(implicit as: ActorSystem,
   val s3stream =
     new com.bluelabs.s3stream.S3Stream(tasks.util.S3Helpers.credentials)
 
-  val queue = HttpQueue.make
+  val queue = (rq: HttpRequest) => httpqueue.HttpQueue(as).queue(rq)
 
   def s3Loc(uri: Uri) = {
     val bucket = uri.authority.host.toString
