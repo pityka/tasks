@@ -35,8 +35,6 @@ import tasks._
 
 class TasksConfig(val raw: Config) {
 
-  clean up references.conf
-
   val asString = raw.root.render
 
   val cacheEnabled = raw.getBoolean("tasks.cache.enabled")
@@ -54,9 +52,6 @@ class TasksConfig(val raw: Config) {
     raw.getDuration("tasks.failuredetector.heartbeat-interval")
 
   val fileSendChunkSize = raw.getBytes("tasks.fileSendChunkSize").toInt
-
-  val includeFullPathInDefaultSharedName =
-    raw.getBoolean("tasks.includeFullPathInDefaultSharedName")
 
   val resubmitFailedTask = raw.getBoolean("tasks.resubmitFailedTask")
 
@@ -87,6 +82,8 @@ class TasksConfig(val raw: Config) {
   val hostReservedCPU = raw.getInt("hosts.reservedCPU")
 
   val hostPort = raw.getInt("hosts.port")
+
+  val auxThreads = raw.getInt("tasks.auxThreads")
 
   val storageURI =
     new java.net.URI(raw.getString("tasks.fileservice.storageURI"))
@@ -128,10 +125,6 @@ class TasksConfig(val raw: Config) {
 
   val logQueueStatus = raw.getBoolean("tasks.elastic.logQueueStatus")
 
-  val runscript = raw.getString("tasks.elastic.runscript")
-
-  val assembledPackage = raw.getString("tasks.elastic.bin")
-
   val endpoint: String = raw.getString("tasks.elastic.aws.endpoint")
 
   val spotPrice: Double = raw.getDouble("tasks.elastic.aws.spotPrice")
@@ -141,6 +134,11 @@ class TasksConfig(val raw: Config) {
   val slaveInstanceType = raw.getString("tasks.elastic.aws.instanceType")
 
   val securityGroup: String = raw.getString("tasks.elastic.aws.securityGroup")
+
+  val securityGroups: List[String] =
+    raw.getStringList("tasks.elastic.aws.securityGroups").toList
+
+  val subnetId = raw.getString("tasks.elastic.aws.subnetId")
 
   val keyName = raw.getString("tasks.elastic.aws.keyName")
 
@@ -159,12 +157,7 @@ class TasksConfig(val raw: Config) {
       case x => Some(x)
     }
 
-  val logFileS3Path = {
-    val buck = raw.getString("tasks.elastic.aws.fileStoreBucket")
-    val pref = raw.getString("tasks.elastic.aws.fileStoreBucketFolderPrefix")
-
-    if (buck.isEmpty) None else Some(buck -> pref)
-  }
+  val s3Region = raw.getString("tasks.s3.region")
 
   val terminateMaster = raw.getBoolean("tasks.elastic.aws.terminateMaster")
 

@@ -53,6 +53,7 @@ import com.amazonaws.services.ec2.model.LaunchSpecification;
 import com.amazonaws.services.ec2.model.RequestSpotInstancesRequest;
 import com.amazonaws.services.ec2.model.RequestSpotInstancesResult;
 import com.amazonaws.services.ec2.model.SpotInstanceRequest;
+import com.amazonaws.services.ec2.model.GroupIdentifier
 import com.amazonaws.services.ec2.model.Tag;
 import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
 import com.amazonaws.auth.InstanceProfileCredentialsProvider
@@ -161,20 +162,24 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
           download = new java.net.URL("http",
                                       masterAddress.getHostName,
                                       masterAddress.getPort + 1,
-                                      "/"),
-          runScript = config.global.runscript
+                                      "/")
       )
 
     launchSpecification.setUserData(gzipBase64(userdata))
 
-    // Add the security group to the request.
-    make this config key a list
-    val securitygroups = config.global.securityGroup
+    val securitygroups =
+      (config.global.securityGroup +: config.global.securityGroups).distinct
+        .filter(_.size > 0)
 
-    replace tihs with setAllSecurityGroups
-    launchSpecification.setSecurityGroups(securitygroups)
+    launchSpecification.setAllSecurityGroups(securitygroups.map { x =>
+      val g = new GroupIdentifier
+      g.setGroupId(x)
+      g
+    })
 
-    add subnetId
+    val subnetId = config.global.subnetId
+
+    launchSpecification.setSubnetId(subnetId)
 
     // Add the launch specification.
     requestRequest.setLaunchSpecification(launchSpecification)
@@ -242,11 +247,7 @@ class EC2SelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
 
 }
 
-class EC2Reaper(filesToSave: List[File],
-                s3path: Option[(String, String)],
-                terminateSelf: Boolean)
-    extends Reaper
-    with EC2Shutdown {
+class EC2Reaper(terminateSelf: Boolean) extends Reaper with EC2Shutdown {
 
   val ec2 = new AmazonEC2Client()
   // val s3Client = new AmazonS3Client();

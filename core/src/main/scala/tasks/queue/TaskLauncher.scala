@@ -29,8 +29,9 @@ package tasks.queue
 
 import akka.actor.{Actor, PoisonPill, ActorRef, Props, Cancellable, ActorRefFactory}
 import akka.actor.Actor._
+import akka.stream.ActorMaterializer
 
-import scala.concurrent.Future
+import scala.concurrent.{Future, ExecutionContext}
 import scala.concurrent.duration._
 
 import java.lang.Class
@@ -75,7 +76,11 @@ class TaskLauncher(
     taskQueue: ActorRef,
     nodeLocalCache: ActorRef,
     slots: CPUMemoryAvailable = CPUMemoryAvailable(cpu = 1, memory = 2000),
-    refreshRate: FiniteDuration = 100 milliseconds
+    refreshRate: FiniteDuration = 100 milliseconds,
+    auxExecutionContext: ExecutionContext,
+    actorMaterializer: ActorMaterializer,
+    remoteStorage: RemoteFileStorage,
+    managedStorage: Option[ManagedFileStorage]
 ) extends Actor
     with akka.actor.ActorLogging {
 
@@ -111,11 +116,15 @@ class TaskLauncher(
               .newInstance(),
             self,
             sch.balancerActor,
-            FileServiceActor(sch.fileServiceActor,remoteStorage,managedStorage),
+            FileServiceActor(sch.fileServiceActor,
+                             managedStorage,
+                             remoteStorage),
             sch.cacheActor,
             nodeLocalCache,
             allocatedResource,
-            sch.fileServicePrefix.append(sch.description.taskId.id)
+            sch.fileServicePrefix.append(sch.description.taskId.id),
+            auxExecutionContext,
+            actorMaterializer
         ).withDispatcher("task-worker-dispatcher")
     )
     log.debug("Actor constructed")
@@ -170,15 +179,16 @@ class TaskLauncher(
               "Wrong message received. No such taskActor."))
     val sch = elem._2
     import akka.pattern.ask
-    (sch.cacheActor.?(
-        SaveResult(sch.description,
-                   receivedResult,
-                   sch.fileServicePrefix.append(sch.description.taskId.id)),
-        sender = taskActor,
-      timeout = 5 seconds)).foreach{ _ =>
-
-    taskQueue ! TaskDone(sch, receivedResult)
-  }
+    import context.dispatcher
+    (sch.cacheActor
+      .?(SaveResult(sch.description,
+                    receivedResult,
+                    sch.fileServicePrefix.append(sch.description.taskId.id)))(
+          sender = taskActor,
+          timeout = 5 seconds))
+      .foreach { _ =>
+        taskQueue ! TaskDone(sch, receivedResult)
+      }
 
     startedTasks = startedTasks.filterNot(_ == elem)
     if (!freed.contains(taskActor)) {

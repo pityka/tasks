@@ -44,10 +44,10 @@ import upickle.Js
 
 import com.google.common.hash.Hashing
 
-class SharedFileCache(implicit fs: FileServiceActor,
-                      nlc: NodeLocalCacheActor,
-                      af: ActorRefFactory,
-                      ec: ExecutionContext)
+private[tasks] class SharedFileCache(implicit fs: FileServiceActor,
+                                     nlc: NodeLocalCacheActor,
+                                     af: ActorRefFactory,
+                                     ec: ExecutionContext)
     extends Cache
     with TaskSerializer {
 
@@ -65,10 +65,12 @@ class SharedFileCache(implicit fs: FileServiceActor,
 
     SharedFileHelper
       .getByNameUnchecked("__meta__result__" + hash)
-      .flatMap(_.file)
+      .flatMap(sf => SharedFileHelper.getPathToFile(sf))
       .map(x => Some(x))
       .recover {
-        case e => None
+        case e =>
+          println(e)
+          None
       }
       .map { f =>
         f.flatMap { f =>
@@ -84,11 +86,17 @@ class SharedFileCache(implicit fs: FileServiceActor,
       val kh = getHash(std)
       val v: File = writeBinaryToFile(serializeResult(r))
       val k: File = writeBinaryToFile(std)
-      SharedFile(v, name = "__meta__result__" + kh).flatMap { _ =>
-        SharedFile(k, name = "__meta__input__" + kh).map { _ =>
-          ()
+      SharedFileHelper
+        .createFromFile(v, name = "__meta__result__" + kh, deleteFile = true)
+        .flatMap { _ =>
+          SharedFileHelper
+            .createFromFile(k,
+                            name = "__meta__input__" + kh,
+                            deleteFile = true)
+            .map { _ =>
+              ()
+            }
         }
-      }
     } catch {
       case e: Throwable => {
         shutDown

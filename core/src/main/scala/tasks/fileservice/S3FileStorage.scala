@@ -69,18 +69,15 @@ class S3Storage(bucketName: String, folderPrefix: String)(
 
   def list(pattern: String): List[SharedFile] = ???
 
-  def contains(path: ManagedFilePath, size: Long, hash: Int): Boolean =
-    try {
-      val metadata = Await.result(
-          s3stream.getMetadata(S3Location(bucketName, assembleName(path))),
-          atMost = 5 seconds)
-      if (size < 0) true
-      else {
-        val (size1, hash1) = getLengthAndHash(metadata)
-        size1 === size && (config.global.skipContentHashVerificationAfterCache || hash === hash1)
-      }
-    } catch {
-      case x: AmazonServiceException => false
+  def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean] =
+    s3stream.getMetadata(S3Location(bucketName, assembleName(path))).map {
+      metadata =>
+        if (size < 0 && metadata.response.status.intValue == 200) true
+        else {
+          val (size1, hash1) = getLengthAndHash(metadata)
+          metadata.response.status.intValue == 200 && size1 === size && (config.global.skipContentHashVerificationAfterCache || hash === hash1)
+        }
+    } recover {
       case x: Exception =>
         log.debug("This might be an error, or likely a missing file. {}", x)
         false
@@ -112,27 +109,22 @@ class S3Storage(bucketName: String, folderPrefix: String)(
   }
 
   def importFile(f: File, path: ProposedManagedFilePath)
-    : Try[(Long, Int, File, ManagedFilePath)] = {
+    : Future[(Long, Int, File, ManagedFilePath)] = {
     val managed = path.toManaged
     val key = assembleName(managed)
     val s3loc = S3Location(bucketName, key)
-    retry(5) {
 
-      val sink = s3stream.multipartUpload(s3loc, serverSideEncryption = true)
+    val sink = s3stream.multipartUpload(s3loc, serverSideEncryption = true)
 
-      val future = FileIO.fromPath(f.toPath).runWith(sink)
+    FileIO.fromPath(f.toPath).runWith(sink).flatMap { _ =>
+      s3stream.getMetadata(s3loc).map { metadata =>
+        val (size1, hash1) = getLengthAndHash(metadata)
 
-      val metadata =
-        Await.result(future.flatMap(_ => s3stream.getMetadata(s3loc)),
-                     atMost = 24 hours)
+        if (size1 !== f.length)
+          throw new RuntimeException("S3: Uploaded file length != on disk")
 
-      val (size1, hash1) = getLengthAndHash(metadata)
-
-      if (size1 !== f.length)
-        throw new RuntimeException("S3: Uploaded file length != on disk")
-
-      (size1, hash1, f, managed)
-
+        (size1, hash1, f, managed)
+      }
     }
 
   }

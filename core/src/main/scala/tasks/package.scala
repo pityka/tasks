@@ -59,11 +59,6 @@ import upickle.Js
 
 import scala.language.experimental.macros
 
-// todo {
-//   4. the serialized output should be written in the filestore
-//   5. some issue with shutdown
-// }
-
 package object tasks {
 
   val SharedFile = tasks.fileservice.SharedFile
@@ -102,24 +97,6 @@ package object tasks {
     component.resourceAllocated
 
   implicit def log(implicit component: ComputationEnvironment) = component.log
-
-  implicit def actorsystem(
-      implicit component: TaskSystemComponents): ActorSystem =
-    component.actorsystem
-
-  implicit def filePrefix(
-      implicit component: TaskSystemComponents): FileServicePrefix =
-    component.filePrefix
-
-  implicit def nodeLocalCache(
-      implicit component: TaskSystemComponents): NodeLocalCacheActor =
-    component.nodeLocalCache
-
-  implicit def queueActor(
-      implicit component: TaskSystemComponents): QueueActor = component.queue
-
-  implicit def cacheActor(
-      implicit component: TaskSystemComponents): CacheActor = component.cache
 
   def remoteCacheAddress(implicit t: QueueActor, s: ActorContext): String =
     if (t.actor.path.address.host.isDefined && t.actor.path.address.port.isDefined)

@@ -34,16 +34,10 @@ import akka.util._
 import com.bluelabs.s3stream._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
-make sure that only one of this is created per tasksystem (thread through)
-make sure that only one S3Stream is created per tasksystem (thread through)
-
-
 class StreamHelper(implicit as: ActorSystem,
                    actorMaterializer: ActorMaterializer,
-                   ec: ExecutionContext) {
-
-  val s3stream =
-    new com.bluelabs.s3stream.S3Stream(tasks.util.S3Helpers.credentials)
+                   ec: ExecutionContext,
+                   s3stream: S3Stream) {
 
   val queue = (rq: HttpRequest) => httpqueue.HttpQueue(as).queue(rq)
 
@@ -67,34 +61,23 @@ class StreamHelper(implicit as: ActorSystem,
     case "s3" => createSourceS3(uri)
   }
 
-  def getContentLengthHttp(uri: Uri): Future[Long] =
+  def getContentLengthAndETagHttp(
+      uri: Uri): Future[(Option[Long], Option[String])] =
     queue(HttpRequest(uri = uri)).map(x => {
-      x.discardEntityBytes(); x
-    }.header[headers.`Content-Length`].map(_.length).get)
+      x.discardEntityBytes();
+      val etag = x.header[headers.`ETag`].map(_.value)
+      val clength = x.header[headers.`Content-Length`].map(_.length)
+      (clength, etag)
+    })
 
-  def getContentLengthS3(uri: Uri): Future[Long] =
-    s3stream.getMetadata(s3Loc(uri)).map(_.contentLength.get)
+  def getContentLengthAndETagS3(
+      uri: Uri): Future[(Option[Long], Option[String])] =
+    s3stream.getMetadata(s3Loc(uri)).map(x => x.contentLength -> x.eTag)
 
-  def getContentLength(uri: Uri): Future[Long] = uri.scheme match {
-    case "http" | "https" => getContentLengthHttp(uri)
-    case "s3" => getContentLengthS3(uri)
-  }
-
-  fuse etag and clength into one request
-
-  def getETagHttp(uri: Uri): Future[String] =
-    queue(HttpRequest(uri = uri)).map(
-        x => { x.discardEntityBytes(); x }
-          .header[headers.`ETag`]
-          .map(_.value)
-          .get)
-
-  def getETagS3(uri: Uri): Future[String] =
-    s3stream.getMetadata(s3Loc(uri)).map(_.eTag.get)
-
-  def getETag(uri: Uri): Future[String] = uri.scheme match {
-    case "http" | "https" => getETagHttp(uri)
-    case "s3" => getETagS3(uri)
+  def getContentLengthAndETag(
+      uri: Uri): Future[(Option[Long], Option[String])] = uri.scheme match {
+    case "http" | "https" => getContentLengthAndETagHttp(uri)
+    case "s3" => getContentLengthAndETagS3(uri)
   }
 
 }

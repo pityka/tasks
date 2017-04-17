@@ -49,6 +49,8 @@ import scala.util._
 import tasks.util.eq._
 import tasks.util.Uri
 import tasks.queue._
+import tasks.TaskSystemComponents
+import tasks.Implicits._
 
 import upickle.default._
 import upickle.Js
@@ -89,30 +91,19 @@ class SharedFile private[tasks] (
 
   override def toString = s"SharedFile($path)"
 
-  def file(implicit service: FileServiceActor,
-           nlc: NodeLocalCacheActor,
-           context: ActorRefFactory,
-           ec: ExecutionContext) =
+  def file(implicit tsc: TaskSystemComponents) =
     SharedFileHelper.getPathToFile(this)
 
-  def source(implicit service: FileServiceActor,
-             nlc: NodeLocalCacheActor,
-             context: ActorRefFactory,
-             ec: ExecutionContext) =
+  def source(implicit tsc: TaskSystemComponents) =
     SharedFileHelper.getSourceToFile(this)
 
-  def openStream[R](f: InputStream => R)(implicit service: FileServiceActor,
-                                         context: ActorRefFactory,
-                                         ec: ExecutionContext) =
+  def openStream[R](f: InputStream => R)(implicit tsc: TaskSystemComponents) =
     SharedFileHelper.openStreamToFile(this)(f)
 
-  def isAccessible(implicit service: FileServiceActor,
-                   context: ActorRefFactory) =
+  def isAccessible(implicit tsc: TaskSystemComponents) =
     SharedFileHelper.isAccessible(this)
 
-  def uri(implicit service: FileServiceActor,
-          context: ActorRefFactory,
-          ec: ExecutionContext): Future[Uri] =
+  def uri(implicit tsc: TaskSystemComponents): Future[Uri] =
     SharedFileHelper.getUri(this)
 
   def name = path.name
@@ -152,87 +143,19 @@ object SharedFile {
                      map("hash").str.toInt)
   }
 
-  def apply(uri: Uri)(implicit service: FileServiceActor,
-                      context: ActorRefFactory,
-                      prefix: FileServicePrefix,
-                      ec: ExecutionContext): Future[SharedFile] =
-    SharedFileHelper.create(RemoteFilePath(uri), service.remote)
+  def apply(uri: Uri)(implicit tsc: TaskSystemComponents): Future[SharedFile] =
+    SharedFileHelper.create(RemoteFilePath(uri), tsc.fs.remote)
 
   def apply(file: File, name: String)(
-      implicit service: FileServiceActor,
-      context: ActorRefFactory,
-      prefix: FileServicePrefix,
-      ec: ExecutionContext): Future[SharedFile] =
+      implicit tsc: TaskSystemComponents): Future[SharedFile] =
     apply(file, name, false)
 
   def apply(file: File, name: String, deleteFile: Boolean)(
-      implicit service: FileServiceActor,
-      context: ActorRefFactory,
-      prefix: FileServicePrefix,
-      ec: ExecutionContext): Future[SharedFile] =
-    if (service.storage.isDefined) {
-      Future {
-        val f = service.storage.get.importFile(file, prefix.propose(name))
-        SharedFileHelper.create(f.get._1, f.get._2, f.get._4)
-      }
-
-    } else {
-      val serviceactor = service.actor
-      if (!file.canRead) {
-        throw new java.io.FileNotFoundException("not found" + file)
-      }
-
-      implicit val timout = akka.util.Timeout(1441 minutes)
-
-      val ac = context.actorOf(
-          Props(
-              new FileSender(file,
-                             prefix.propose(name),
-                             deleteFile,
-                             serviceactor))
-            .withDispatcher("filesender-dispatcher"))
-      (ac ? WaitingForSharedFile)
-        .asInstanceOf[Future[Option[SharedFile]]]
-        .map(_.get)
-        .andThen { case _ => ac ! PoisonPill }
-
-    }
+      implicit tsc: TaskSystemComponents): Future[SharedFile] =
+    SharedFileHelper.createFromFile(file, name, deleteFile)
 
   def apply(source: Source[ByteString, _], name: String)(
-      implicit service: FileServiceActor,
-      context: ActorRefFactory,
-      prefix: FileServicePrefix,
-      ec: ExecutionContext,
-      mat: ActorMaterializer): Future[SharedFile] =
-    if (service.storage.isDefined) {
-      val proposedPath = prefix.propose(name)
-      service.storage.get.importSource(source, proposedPath).map { x =>
-        SharedFileHelper.create(x._1, x._2, x._3)
-      }
-    } else {
-
-      val serviceactor = service.actor
-
-      implicit val timout = akka.util.Timeout(1441 minutes)
-
-      val ac = context.actorOf(
-          Props(new SourceSender(source, prefix.propose(name), serviceactor))
-            .withDispatcher("filesender-dispatcher"))
-
-      (ac ? WaitingForSharedFile)
-        .asInstanceOf[Future[Option[SharedFile]]]
-        .map(_.get)
-        .andThen { case _ => ac ! PoisonPill }
-
-    }
-
-  def apply(file: File)(implicit service: FileServiceActor,
-                        context: ActorRefFactory,
-                        prefix: FileServicePrefix,
-                        ec: ExecutionContext): Future[SharedFile] =
-    apply(file,
-          if (tasks.util.config.global.includeFullPathInDefaultSharedName)
-            file.getAbsolutePath.replace(File.separator, "_")
-          else file.getName)
+      implicit tsc: TaskSystemComponents): Future[SharedFile] =
+    SharedFileHelper.createFromSource(source, name)
 
 }

@@ -28,19 +28,25 @@ import tasks.util._
 import tasks.util.eq._
 
 import java.net._
+import java.io.File
 
 object Deployment {
+
+  def pack: File = {
+    val tmp = TempFile.createTempFile("package")
+    selfpackage.write(tmp)
+    tmp
+  }
 
   def script(
       memory: Int,
       gridEngine: ElasticSupport[_, _],
       masterAddress: InetSocketAddress,
-      download: URL,
-      runScript: String
+      download: URL
   ): String = {
-    val downloadScript = s"curl -m 60 $download > package"
+    val downloadScript = s"curl -m 60 $download > package && chmod u+x package"
 
-    val edited = runScript
+    val edited = "exec package -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER}"
       .replaceAllLiterally(
           "{RAM}",
           math
@@ -51,15 +57,9 @@ object Deployment {
           "{MASTER}",
           masterAddress.getHostName + ":" + masterAddress.getPort)
       .replaceAllLiterally("{GRID}", gridEngine.toString)
-      .replaceAllLiterally("{PACKAGE}", "package")
 
     s"""
-$downloadScript ;
-cat << 'EOF' | nohup bash 1> stdout 2>stderr &
-$edited
-EOF
-
-
+$downloadScript && nohup $edited 1> stdout 2>stderr &
 """
 
   }

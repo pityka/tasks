@@ -51,6 +51,9 @@ import tasks.util._
 import tasks.shared._
 import tasks.simpletask._
 
+import com.bluelabs.akkaaws._
+import com.bluelabs.s3stream._
+
 object Conf {
   val str = """my-pinned-dispatcher {
   executor = "thread-pool-executor"
@@ -75,6 +78,7 @@ class FileServiceSpec
   implicit val mat = ActorMaterializer()
   val as = implicitly[ActorSystem]
   import as.dispatcher
+  implicit val s3stream = new S3Stream(AWSCredentials("na", "na"), "na")
   implicit val sh = new StreamHelper
 
   val remoteStore = new RemoteFileStorage
@@ -106,7 +110,7 @@ class FileServiceSpec
               )))
       implicit val serviceimpl =
         FileServiceActor(service, Some(fs), remoteStore)
-      val t = SharedFile(input, "proba")
+      val t = SharedFileHelper.createFromFile(input, "proba", false)
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
           data.deep)
@@ -132,7 +136,9 @@ class FileServiceSpec
         FileServiceActor(service, Some(fs), remoteStore)
       implicit val nlc =
         NodeLocalCacheActor(system.actorOf(Props[NodeLocalCache]))
-      val t: SharedFile = Await.result(SharedFile(input, "proba"), 50 seconds)
+      val t: SharedFile =
+        Await.result(SharedFileHelper.createFromFile(input, "proba", false),
+                     50 seconds)
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
           data.deep)
@@ -157,7 +163,9 @@ class FileServiceSpec
       val service = system.actorOf(Props(new FileService(fs)))
       implicit val serviceimpl =
         FileServiceActor(service, Some(fs), remoteStore)
-      val t: SharedFile = Await.result(SharedFile(input, "proba"), 50 seconds)
+      val t: SharedFile =
+        Await.result(SharedFileHelper.createFromFile(input, "proba", false),
+                     50 seconds)
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
           data.deep)
@@ -194,7 +202,8 @@ class FileServiceSpec
       val path = Await.result(SharedFileHelper.getPathToFile(t), 50 seconds)
       readBinaryFile(path.getCanonicalPath).deep should equal(data.deep)
 
-      Await.result(t.isAccessible, 30 seconds) should be(true)
+      Await.result(SharedFileHelper.isAccessible(t), 30 seconds) should be(
+          true)
 
     }
   }

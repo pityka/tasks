@@ -32,7 +32,7 @@ import akka.actor.Actor._
 import akka.pattern.ask
 import akka.pattern.pipe
 import akka.stream._
-import scala.concurrent.{Future, Await, ExecutionContext}
+import scala.concurrent.{Future, ExecutionContext}
 import java.lang.Class
 import java.io.{File, InputStream, FileInputStream, BufferedInputStream}
 import scala.concurrent.duration._
@@ -108,11 +108,12 @@ class FolderFileStorage(val basePath: File,
 
   }
 
-  def contains(path: ManagedFilePath, size: Long, hash: Int): Boolean = {
-    val f = assemblePath(path)
-    f.canRead && (size < 0 || (f.length === size && (tasks.util.config.global.skipContentHashVerificationAfterCache || FolderFileStorage
-                  .getContentHash(f) === hash)))
-  }
+  def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean] =
+    Future.successful {
+      val f = assemblePath(path)
+      f.canRead && (size < 0 || (f.length === size && (tasks.util.config.global.skipContentHashVerificationAfterCache || FolderFileStorage
+                    .getContentHash(f) === hash)))
+    }
 
   def createSource(path: ManagedFilePath): Source[ByteString, _] =
     FileIO.fromPath(assemblePath(path).toPath)
@@ -156,14 +157,14 @@ class FolderFileStorage(val basePath: File,
     s.runWith(FileIO.toPath(tmp.toPath)).flatMap { _ =>
       val r = importFile(tmp, path)
       tmp.delete
-      Future.fromTry(r.map(x => (x._1, x._2, x._4)))
+      r.map(x => (x._1, x._2, x._4))
     }
 
   }
 
   def importFile(file: File, proposed: ProposedManagedFilePath)
-    : Try[(Long, Int, File, ManagedFilePath)] =
-    Try({
+    : Future[(Long, Int, File, ManagedFilePath)] =
+    Future.successful({
 
       val size = file.length
       val hash = FolderFileStorage.getContentHash(file)

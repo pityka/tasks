@@ -60,13 +60,17 @@ import collection.JavaConversions._
 import scala.concurrent.duration._
 import scala.concurrent._
 
+import com.bluelabs.s3stream.S3Stream
+
 case class TaskSystemComponents(
-    val queue: QueueActor,
-    val fs: FileServiceActor,
-    val actorsystem: ActorSystem,
-    val cache: CacheActor,
-    val nodeLocalCache: NodeLocalCacheActor,
-    val filePrefix: FileServicePrefix
+    queue: QueueActor,
+    fs: FileServiceActor,
+    actorsystem: ActorSystem,
+    cache: CacheActor,
+    nodeLocalCache: NodeLocalCacheActor,
+    filePrefix: FileServicePrefix,
+    executionContext: ExecutionContext,
+    actorMaterializer: ActorMaterializer
 ) {
 
   def childPrefix(name: String) =
@@ -79,6 +83,8 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
   implicit val as = system
   implicit val mat = ActorMaterializer()
   import as.dispatcher
+  implicit val s3Stream =
+    new S3Stream(S3Helpers.credentials, config.global.s3Region)
   implicit val sh = new StreamHelper
 
   private val tasksystemlog = akka.event.Logging(as, "TaskSystem")
@@ -119,10 +125,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
 
   val reaperActor = elastic.elasticSupport match {
     case Some(EC2Grid) =>
-      system.actorOf(Props(
-                         new EC2Reaper(Nil,
-                                       config.global.logFileS3Path,
-                                       config.global.terminateMaster)),
+      system.actorOf(Props(new EC2Reaper(config.global.terminateMaster)),
                      name = "reaper")
     case _ =>
       system.actorOf(Props[ProductionReaper], name = "reaper")
@@ -139,17 +142,6 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
       Some(noderegistry)
     } else None
 
-  val cacheFile: Option[File] = try {
-    if (config.global.cacheEnabled && !isLauncherOnly)
-      Some(new File(config.global.cachePath))
-    else None
-  } catch {
-    case e: Throwable => {
-      initFailed
-      throw e
-    }
-  }
-
   val remoteFileStorage = new RemoteFileStorage
 
   val managedFileStorage: Option[ManagedFileStorage] =
@@ -164,8 +156,6 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
 
       if (s3bucket.isDefined) {
         val actorsystem = 1 // shade implicit conversion
-        implicit val s3stream =
-          new com.bluelabs.s3stream.S3Stream(tasks.util.S3Helpers.credentials)
         import as.dispatcher
         Some(new S3Storage(s3bucket.get._1, s3bucket.get._2))
       } else {
@@ -252,7 +242,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
                                     system,
                                     system.dispatcher)
             case other =>
-              val store = new LevelDBWrapper(cacheFile.get)
+              val store = new LevelDBWrapper(new File(config.global.cachePath))
               new KVCache(store,
                           akka.serialization.SerializationExtension(system))
           }
@@ -332,11 +322,12 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
   val packageServer: Option[ActorRef] =
     if (!isLauncherOnly && elasticSupportFactory.isDefined) {
 
-      val service = system.actorOf(
-          Props(
-              new PackageServerActor(
-                  new File(config.global.assembledPackage))),
-          "deliver-service")
+      val pack = Deployment.pack
+      tasksystemlog
+        .info("Written executable package to: {}", pack.getAbsolutePath)
+
+      val service =
+        system.actorOf(Props(new PackageServerActor(pack)), "deliver-service")
 
       val actorsystem = 1 //shade implicit conversion
 
@@ -346,14 +337,20 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
 
     } else None
 
-  implicit val components = TaskSystemComponents(
-      queue = QueueActor(queueActor),
-      fs = fileServiceActor,
-      actorsystem = system,
-      cache = CacheActor(cacherActor),
-      nodeLocalCache = nodeLocalCache,
-      filePrefix = FileServicePrefix(Vector())
-  )
+  private val auxFjp = tasks.util.concurrent
+    .newJavaForkJoinPoolWithNamePrefix("tasks-aux", config.global.auxThreads)
+  private val auxExecutionContext =
+    scala.concurrent.ExecutionContext.fromExecutorService(auxFjp)
+
+  val components = TaskSystemComponents(queue = QueueActor(queueActor),
+                                        fs = fileServiceActor,
+                                        actorsystem = system,
+                                        cache = CacheActor(cacherActor),
+                                        nodeLocalCache = nodeLocalCache,
+                                        filePrefix =
+                                          FileServicePrefix(Vector()),
+                                        executionContext = auxExecutionContext,
+                                        actorMaterializer = mat)
 
   private val launcherActor = if (numberOfCores > 0) {
     val refresh = config.global.askInterval
@@ -363,7 +360,11 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
                              nodeLocalCacheActor,
                              CPUMemoryAvailable(cpu = numberOfCores,
                                                 memory = availableMemory),
-                             refreshRate = refresh))
+                             refreshRate = refresh,
+                             auxExecutionContext = auxExecutionContext,
+                             actorMaterializer = mat,
+                             remoteStorage = remoteFileStorage,
+                             managedStorage = managedFileStorage))
           .withDispatcher("launcher"),
         "launcher")
     reaperActor ! WatchMe(ac)
@@ -427,8 +428,10 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
           noderegistry.foreach(_ ! PoisonPill)
         }
         nodeLocalCacheActor ! PoisonPill
+
         tasksystemlog.info("Shutting down tasksystem. Waiting for the latch.")
         latch.await
+        auxFjp.shutdown
       }
     } else {
       system.shutdown

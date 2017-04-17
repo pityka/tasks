@@ -30,6 +30,7 @@ package tasks.queue
 import akka.actor.{Actor, PoisonPill, ActorRef, ActorContext, ActorRefFactory}
 import akka.util.Timeout
 import akka.pattern.ask
+import akka.stream.ActorMaterializer
 
 import scala.concurrent.duration._
 import scala.concurrent.Future
@@ -112,7 +113,9 @@ private class Task(
     globalCacheActor: ActorRef,
     nodeLocalCache: ActorRef,
     resourceAllocated: CPUMemoryAllocated,
-    fileServicePrefix: FileServicePrefix
+    fileServicePrefix: FileServicePrefix,
+    auxExecutionContext: ExecutionContext,
+    actorMaterializer: ActorMaterializer
 ) extends Actor
     with akka.actor.ActorLogging {
 
@@ -157,7 +160,9 @@ private class Task(
               context.system,
               CacheActor(globalCacheActor),
               NodeLocalCacheActor(nodeLocalCache),
-              fileServicePrefix
+              fileServicePrefix,
+              auxExecutionContext,
+              actorMaterializer
           ),
           akka.event.Logging(
               context.system.eventStream,
@@ -272,7 +277,7 @@ class ProxyTask[MyPrerequisitive, MyResult](
           runTaskClass.getName,
           resourceConsumed,
           starter,
-          fileServiceActor,
+          fileServiceActor.actor,
           fileServicePrefix,
           cacheActor
       )

@@ -31,16 +31,26 @@ import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 
+import tasks.TaskSystemComponents
+import tasks.Implicits._
+
 @SerialVersionUID(1L)
 case object YouShouldSetIt
 
 object NodeLocalCache {
-
   def getItemAsync[A](key: String)(orElse: => Future[A])(
-      implicit nlc: NodeLocalCacheActor,
-      ec: ExecutionContext): Future[A] = getItem(key)(orElse).flatMap(x => x)
+      implicit tsc: TaskSystemComponents): Future[A] =
+    _getItemAsync(key)(orElse)
 
   def getItem[A](key: String)(orElse: => A)(
+      implicit tsc: TaskSystemComponents): Future[A] = _getItem(key)(orElse)
+
+  private[tasks] def _getItemAsync[A](key: String)(orElse: => Future[A])(
+      implicit nlc: NodeLocalCacheActor,
+      ec: ExecutionContext): Future[A] =
+    _getItem(key)(orElse).flatMap(x => x)
+
+  private[tasks] def _getItem[A](key: String)(orElse: => A)(
       implicit nlc: NodeLocalCacheActor,
       ec: ExecutionContext): Future[A] = {
     implicit val to = akka.util.Timeout(168 hours)

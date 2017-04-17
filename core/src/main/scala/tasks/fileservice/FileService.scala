@@ -25,10 +25,6 @@
  * SOFTWARE.
  */
 
- remove all awaits
- insert log statement to each Future.recover
- 
-
 package tasks.fileservice
 
 import akka.actor._
@@ -115,19 +111,20 @@ class FileService(storage: ManagedFileStorage,
       try {
         if (isLocal(file)) {
 
-          val (length, hash, f, managedFilePath) =
-            storage.importFile(file, proposedPath).get
-
-          val sn = create(length, hash, managedFilePath)
-
-          sn.failed.foreach { e =>
-            log.error(e,
-                      "Error in creation of SharedFile {} {}",
-                      file,
-                      proposedPath)
-          }
-
-          sn.pipeTo(sender)
+          storage
+            .importFile(file, proposedPath)
+            .flatMap {
+              case (length, hash, f, managedFilePath) =>
+                create(length, hash, managedFilePath).recover {
+                  case e =>
+                    log.error(e,
+                              "Error in creation of SharedFile {} {}",
+                              file,
+                              proposedPath)
+                    throw e
+                }
+            }
+            .pipeTo(sender)
 
         } else {
 
@@ -190,19 +187,19 @@ class FileService(storage: ManagedFileStorage,
         case (channel, file, filesender, proposedPath, ephemeral) =>
           channel.close
           try {
-            val (length, hash, f, managedFilePath) =
-              storage.importFile(file, proposedPath).get
 
-            val sn = create(length, hash, managedFilePath)
+            storage.importFile(file, proposedPath).flatMap {
+              case (length, hash, f, managedFilePath) =>
+                create(length, hash, managedFilePath).recover {
+                  case e =>
+                    log.error(e,
+                              "Error in creation of SharedFile {} {}",
+                              file,
+                              proposedPath)
+                    throw e
+                }
 
-            sn.failed.foreach { e =>
-              log.error(e,
-                        "Error in creation of SharedFile {} {}",
-                        file,
-                        proposedPath)
-            }
-
-            sn pipeTo filesender
+            } pipeTo filesender
 
           } catch {
             case e: Exception => {
@@ -216,18 +213,16 @@ class FileService(storage: ManagedFileStorage,
 
     case GetPaths(managedPath, size: Long, hash: Int) =>
       try {
-        if (storage.contains(managedPath, size, hash)) {
-
-          storage
-            .exportFile(managedPath)
-            .map(f => KnownPaths(List(f)))
-            .pipeTo(sender)
-
-        } else {
-          sender ! FileNotFound(
-              new RuntimeException(
-                  s"SharedFile not found in storage. $storage # contains($managedPath) returned false. "))
-        }
+        storage
+          .contains(managedPath, size, hash)
+          .flatMap { contains =>
+            if (contains)
+              storage.exportFile(managedPath).map(f => KnownPaths(List(f)))
+            else
+              Future.successful(FileNotFound(new RuntimeException(
+                          s"SharedFile not found in storage. $storage # contains($managedPath) returned false. ")))
+          }
+          .pipeTo(sender)
       } catch {
         case e: Exception => {
           log.error(e.toString)

@@ -82,6 +82,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
         }
         .recover {
           case e =>
+            log.error(e, "Error while saving into cache")
             SetDone
         }
         .pipeTo(self)
@@ -92,7 +93,9 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
         .get(sch.description)(
             sch.fileServicePrefix.append(sch.description.taskId.id))
         .recover {
-          case e => None
+          case e =>
+            log.error(e, "Error while looking up in cache")
+            None
         }
         .foreach { res =>
           if (res.isEmpty) {
@@ -108,7 +111,8 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
               savedSender ! AnswerFromCache(Right(res), originalSender, sch)
             } else {
               Future
-                .sequence(res.get.files.map(_.isAccessible))
+                .sequence(
+                    res.get.files.map(sf => SharedFileHelper.isAccessible(sf)))
                 .map(_.forall(x => x))
                 .recover {
                   case e =>

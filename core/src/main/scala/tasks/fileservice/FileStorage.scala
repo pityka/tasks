@@ -63,7 +63,10 @@ object FileStorage {
 
 class RemoteFileStorage(implicit mat: ActorMaterializer,
                         ec: ExecutionContext,
-                        streamHelper: StreamHelper) {
+                        streamHelper: StreamHelper,
+                        as: ActorSystem) {
+
+  val log = akka.event.Logging(as.eventStream, "remote-storage")
 
   def uri(mp: RemoteFilePath): Uri = mp.uri
 
@@ -71,21 +74,20 @@ class RemoteFileStorage(implicit mat: ActorMaterializer,
     streamHelper.createSource(uri(path).akka)
 
   def getSizeAndHash(path: RemoteFilePath): Future[(Long, Int)] =
-    streamHelper.getContentLength(uri(path).akka).map { size1 =>
-      remove this and use the streamhelper for etag
-      val is = streamHelper
-        .createSource(uri(path).akka)
-        .runWith(StreamConverters.asInputStream())
-      val hash1 = FileStorage.getContentHash(is)
-      is.close
-      (size1.toLong, hash1)
+    streamHelper.getContentLengthAndETagHttp(uri(path).akka).map {
+      case (size, etag) =>
+        (size.get, etag.map(_.hashCode).getOrElse(-1))
     }
 
   def contains(path: RemoteFilePath, size: Long, hash: Int): Future[Boolean] =
     getSizeAndHash(path).map {
       case (size1, hash1) =>
         size1 === size && (tasks.util.config.global.skipContentHashVerificationAfterCache || hash === hash1)
-    }.recover { case _ => false }
+    }.recover {
+      case e =>
+        log.debug("Exception while looking up remote file. {}", e)
+        false
+    }
 
   def exportFile(path: RemoteFilePath): Future[File] = {
     val localFile = path.uri.akka.scheme == "file" && new File(
@@ -110,11 +112,10 @@ trait ManagedFileStorage {
 
   def createSource(path: ManagedFilePath): Source[ByteString, _]
 
-  def contains(path: ManagedFilePath, size: Long, hash: Int): Boolean
+  def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean]
 
-  def importFile(
-      f: File,
-      path: ProposedManagedFilePath): Try[(Long, Int, File, ManagedFilePath)]
+  def importFile(f: File, path: ProposedManagedFilePath)
+    : Future[(Long, Int, File, ManagedFilePath)]
 
   def importSource(s: Source[ByteString, _], path: ProposedManagedFilePath)(
       implicit am: Materializer): Future[(Long, Int, ManagedFilePath)]
