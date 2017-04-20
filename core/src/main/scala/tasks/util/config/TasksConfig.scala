@@ -159,6 +159,15 @@ class TasksConfig(val raw: Config) {
 
   val s3Region = raw.getString("tasks.s3.region")
 
+  val s3ServerSideEncryption = raw.getBoolean("tasks.s3.serverSideEncryption")
+
+  val s3CannedAcl = raw.getStringList("tasks.s3.cannedAcls").toList
+
+  val s3GrantFullControl = raw
+    .getStringList("tasks.s3.grantFullControl")
+    .grouped(2)
+    .map(x => x(0) -> x(1))
+
   val terminateMaster = raw.getBoolean("tasks.elastic.aws.terminateMaster")
 
 }

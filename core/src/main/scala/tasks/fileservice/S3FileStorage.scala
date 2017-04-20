@@ -67,7 +67,17 @@ class S3Storage(bucketName: String, folderPrefix: String)(
 
   val log = akka.event.Logging(as.eventStream, getClass)
 
-  val putObjectParams = PutObjectRequest.default.serverSideEncryption
+  val putObjectParams = {
+    val sse = config.global.s3ServerSideEncryption
+    val cannedAcls = config.global.s3CannedAcl
+    val grantFullControl = config.global.s3GrantFullControl
+
+    val rq = grantFullControl.foldLeft(
+        cannedAcls.foldLeft(PutObjectRequest.default)((rq, acl) =>
+              rq.cannedAcl(acl)))((rq, acl) =>
+          rq.grantFullControl(acl._1, acl._2))
+    if (sse) rq.serverSideEncryption else rq
+  }
 
   def list(pattern: String): List[SharedFile] = ???
 

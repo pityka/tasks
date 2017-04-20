@@ -1,7 +1,7 @@
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.11.8",
-  version :="0.0.7",
+  version :="0.0.8",
   parallelExecution in Test := false
 ) ++ reformatOnCompileSettings
 
