@@ -54,7 +54,7 @@ class StreamHelper(implicit as: ActorSystem,
       .flatMapConcat(identity)
 
   def createSourceS3(uri: Uri): Source[ByteString, _] =
-    s3stream.download(s3Loc(uri))
+    s3stream.getData(s3Loc(uri))
 
   def createSource(uri: Uri) = uri.scheme match {
     case "http" | "https" => createSourceHttp(uri)

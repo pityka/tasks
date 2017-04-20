@@ -60,7 +60,7 @@ import collection.JavaConversions._
 import scala.concurrent.duration._
 import scala.concurrent._
 
-import com.bluelabs.s3stream.S3Stream
+import com.bluelabs.s3stream.S3StreamQueued
 
 case class TaskSystemComponents(
     queue: QueueActor,
@@ -84,7 +84,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
   implicit val mat = ActorMaterializer()
   import as.dispatcher
   implicit val s3Stream =
-    new S3Stream(S3Helpers.credentials, config.global.s3Region)
+    new S3StreamQueued(S3Helpers.credentials, config.global.s3Region)
   implicit val sh = new StreamHelper
 
   private val tasksystemlog = akka.event.Logging(as, "TaskSystem")

@@ -67,6 +67,8 @@ class S3Storage(bucketName: String, folderPrefix: String)(
 
   val log = akka.event.Logging(as.eventStream, getClass)
 
+  val putObjectParams = PutObjectRequest.default.serverSideEncryption
+
   def list(pattern: String): List[SharedFile] = ???
 
   def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean] =
@@ -98,7 +100,7 @@ class S3Storage(bucketName: String, folderPrefix: String)(
     val managed = path.toManaged
     val key = assembleName(managed)
     val s3loc = S3Location(bucketName, key)
-    val sink = s3stream.multipartUpload(s3loc, serverSideEncryption = true)
+    val sink = s3stream.multipartUpload(s3loc, params = putObjectParams)
     val future = s.runWith(sink)
 
     future.flatMap(_ => s3stream.getMetadata(s3loc)).map { metadata =>
@@ -114,7 +116,7 @@ class S3Storage(bucketName: String, folderPrefix: String)(
     val key = assembleName(managed)
     val s3loc = S3Location(bucketName, key)
 
-    val sink = s3stream.multipartUpload(s3loc, serverSideEncryption = true)
+    val sink = s3stream.multipartUpload(s3loc, params = putObjectParams)
 
     FileIO.fromPath(f.toPath).runWith(sink).flatMap { _ =>
       s3stream.getMetadata(s3loc).map { metadata =>
@@ -132,17 +134,17 @@ class S3Storage(bucketName: String, folderPrefix: String)(
   def createStream(path: ManagedFilePath): Try[InputStream] =
     Try(
         s3stream
-          .download(S3Location(bucketName, assembleName(path)))
+          .getData(S3Location(bucketName, assembleName(path)))
           .runWith(StreamConverters.asInputStream()))
 
   def createSource(path: ManagedFilePath): Source[ByteString, _] =
-    s3stream.download(S3Location(bucketName, assembleName(path)))
+    s3stream.getData(S3Location(bucketName, assembleName(path)))
 
   def exportFile(path: ManagedFilePath): Future[File] = {
     val file = TempFile.createTempFile("")
     val s3loc = S3Location(bucketName, assembleName(path))
 
-    val f1 = s3stream.download(s3loc).runWith(FileIO.toPath(file.toPath))
+    val f1 = s3stream.getData(s3loc).runWith(FileIO.toPath(file.toPath))
 
     f1.flatMap(_ => s3stream.getMetadata(s3loc)).map { metadata =>
       val (size1, hash1) = getLengthAndHash(metadata)
