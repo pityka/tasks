@@ -167,6 +167,13 @@ class TasksConfig(val raw: Config) {
     .getStringList("tasks.s3.grantFullControl")
     .grouped(2)
     .map(x => x(0) -> x(1))
+    .toList
+
+  val instanceTags = raw
+    .getStringList("tasks.elastic.aws.tags")
+    .grouped(2)
+    .map(x => x(0) -> x(1))
+    .toList
 
   val terminateMaster = raw.getBoolean("tasks.elastic.aws.terminateMaster")
 

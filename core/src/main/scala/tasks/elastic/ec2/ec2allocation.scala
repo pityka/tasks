@@ -62,6 +62,7 @@ import com.amazonaws.services.ec2.model.SpotInstanceType
 import com.amazonaws.services.ec2.model.BlockDeviceMapping
 import com.amazonaws.services.ec2.model.CancelSpotInstanceRequestsRequest
 import com.amazonaws.services.ec2.model.SpotPlacement
+import com.amazonaws.services.ec2.model.CreateTagsRequest
 import com.amazonaws.AmazonServiceException
 import java.net.URL
 
@@ -207,6 +208,11 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 
   def initializeNode(node: Node): Unit = {
     val ac = node.launcherActor
+
+    ec2.createTags(
+        new CreateTagsRequest(List(node.name.value),
+                              config.global.instanceTags.map(t =>
+                                    new Tag(t._1, t._2))))
 
     val ackil = context.actorOf(
         Props(new EC2NodeKiller(ac, node))
