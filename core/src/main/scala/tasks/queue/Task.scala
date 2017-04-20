@@ -57,6 +57,7 @@ object UntypedResult {
   def fs(r: Any): Set[SharedFile] = r match {
     case x: ResultWithSharedFiles =>
       x.files.toSet ++ x.productIterator.flatMap(x => fs(x)).toSet
+    case x: SharedFile => Set(x)
     case _ => Set()
   }
 
