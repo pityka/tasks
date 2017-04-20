@@ -157,7 +157,6 @@ class S3Storage(bucketName: String, folderPrefix: String)(
   }
 
   def uri(mp: ManagedFilePath): tasks.util.Uri =
-    tasks.util.Uri(
-        new java.net.URI("s3", bucketName, "/" + assembleName(mp)).toString)
+    tasks.util.Uri("s3://" + bucketName + "/" + assembleName(mp))
 
 }
