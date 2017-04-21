@@ -187,9 +187,9 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
 
       }
     }
-    case NegotiationTimeout =>
-      log.debug("TaskLauncher did not Ack'd back on sending task. Requeueing.")
-      negotiation = None
+    // case NegotiationTimeout =>
+    //   log.debug("TaskLauncher did not Ack'd back on sending task. Requeueing.")
+    //   negotiation = None
 
     case AskForWork(resource) =>
       if (negotiation.isEmpty) {
@@ -223,10 +223,10 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
 
           val resp = launcher ! ScheduleWithProxy(task._1, task._2)
 
-          context.system.scheduler.scheduleOnce(
-              30 seconds,
-              self,
-              NegotiationTimeout)(context.dispatcher)
+        // context.system.scheduler.scheduleOnce(
+        //     30 seconds,
+        //     self,
+        //     NegotiationTimeout)(context.dispatcher)
 
         }
       } else {

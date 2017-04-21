@@ -99,7 +99,7 @@ case class MessageFromTask(result: UntypedResult) extends Serializable
 
 case object SaveDone
 
-private[tasks] case object NegotiationTimeout
+// private[tasks] case object NegotiationTimeout
 
 @SerialVersionUID(1L)
 private[tasks] case class Ack(allocated: CPUMemoryAllocated)
