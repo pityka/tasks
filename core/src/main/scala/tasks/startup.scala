@@ -83,9 +83,10 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
   implicit val as = system
   implicit val mat = ActorMaterializer()
   import as.dispatcher
-  implicit val s3Stream =
-    new S3StreamQueued(S3Helpers.credentials, config.global.s3Region)
-  implicit val sh = new StreamHelper
+  implicit val s3Stream = scala.util
+    .Try(new S3StreamQueued(S3Helpers.credentials, config.global.s3Region))
+    .toOption
+  implicit val sh = new StreamHelper(s3Stream)
 
   private val tasksystemlog = akka.event.Logging(as, "TaskSystem")
 
@@ -157,7 +158,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
       if (s3bucket.isDefined) {
         val actorsystem = 1 // shade implicit conversion
         import as.dispatcher
-        Some(new S3Storage(s3bucket.get._1, s3bucket.get._2))
+        Some(new S3Storage(s3bucket.get._1, s3bucket.get._2, s3Stream.get))
       } else {
         val folder1Path =
           if (config.global.storageURI.getScheme == null)

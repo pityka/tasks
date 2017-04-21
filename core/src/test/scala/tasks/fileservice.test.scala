@@ -78,8 +78,8 @@ class FileServiceSpec
   implicit val mat = ActorMaterializer()
   val as = implicitly[ActorSystem]
   import as.dispatcher
-  implicit val s3stream = new S3Stream(AWSCredentials("na", "na"), "na")
-  implicit val sh = new StreamHelper
+  // implicit val s3stream = new S3StreamQueued(AWSCredentials("na", "na"), "na")
+  implicit val sh = new StreamHelper(None)
 
   val remoteStore = new RemoteFileStorage
 

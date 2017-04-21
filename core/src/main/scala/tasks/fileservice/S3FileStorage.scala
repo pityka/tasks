@@ -58,10 +58,9 @@ import akka.stream.scaladsl._
 import scala.concurrent._
 import scala.concurrent.duration._
 
-class S3Storage(bucketName: String, folderPrefix: String)(
+class S3Storage(bucketName: String, folderPrefix: String, s3stream: S3Stream)(
     implicit mat: ActorMaterializer,
     as: ActorSystem,
-    s3stream: S3Stream,
     ec: ExecutionContext)
     extends ManagedFileStorage {
 

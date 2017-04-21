@@ -34,10 +34,10 @@ import akka.util._
 import com.bluelabs.s3stream._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
-class StreamHelper(implicit as: ActorSystem,
-                   actorMaterializer: ActorMaterializer,
-                   ec: ExecutionContext,
-                   s3stream: S3Stream) {
+class StreamHelper(s3stream: Option[S3Stream])(
+    implicit as: ActorSystem,
+    actorMaterializer: ActorMaterializer,
+    ec: ExecutionContext) {
 
   val queue = (rq: HttpRequest) => httpqueue.HttpQueue(as).queue(rq)
 
@@ -54,7 +54,7 @@ class StreamHelper(implicit as: ActorSystem,
       .flatMapConcat(identity)
 
   def createSourceS3(uri: Uri): Source[ByteString, _] =
-    s3stream.getData(s3Loc(uri))
+    s3stream.get.getData(s3Loc(uri))
 
   def createSource(uri: Uri) = uri.scheme match {
     case "http" | "https" => createSourceHttp(uri)
@@ -72,7 +72,7 @@ class StreamHelper(implicit as: ActorSystem,
 
   def getContentLengthAndETagS3(
       uri: Uri): Future[(Option[Long], Option[String])] =
-    s3stream.getMetadata(s3Loc(uri)).map(x => x.contentLength -> x.eTag)
+    s3stream.get.getMetadata(s3Loc(uri)).map(x => x.contentLength -> x.eTag)
 
   def getContentLengthAndETag(
       uri: Uri): Future[(Option[Long], Option[String])] = uri.scheme match {
