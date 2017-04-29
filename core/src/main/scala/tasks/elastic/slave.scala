@@ -46,7 +46,7 @@ object Deployment {
   ): String = {
     val downloadScript = s"curl -m 60 $download > package && chmod u+x package"
 
-    val edited = "exec package -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dtasks.fileservice.storageURI={STORAGE}"
+    val edited = "./package -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dtasks.fileservice.storageURI={STORAGE}"
       .replaceAllLiterally(
           "{RAM}",
           math

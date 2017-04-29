@@ -71,10 +71,10 @@ class RemoteFileStorage(implicit mat: ActorMaterializer,
   def uri(mp: RemoteFilePath): Uri = mp.uri
 
   def createSource(path: RemoteFilePath): Source[ByteString, _] =
-    streamHelper.createSource(uri(path).akka)
+    streamHelper.createSource(uri(path))
 
   def getSizeAndHash(path: RemoteFilePath): Future[(Long, Int)] =
-    streamHelper.getContentLengthAndETagHttp(uri(path).akka).map {
+    streamHelper.getContentLengthAndETag(uri(path)).map {
       case (size, etag) =>
         (size.get, etag.map(_.hashCode).getOrElse(-1))
     }

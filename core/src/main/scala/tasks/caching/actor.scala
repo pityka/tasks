@@ -86,6 +86,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
             SetDone
         }
         .pipeTo(self)
+      sender ! true
 
     case CheckResult(sch, originalSender) =>
       val savedSender = sender
