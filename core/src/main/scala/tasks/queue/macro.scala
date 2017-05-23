@@ -64,34 +64,4 @@ object Macros {
     r
   }
 
-  def taskDefinitionImpl[A: cxt.WeakTypeTag, C: cxt.WeakTypeTag](cxt: Context)(
-      taskID: cxt.Expr[String],
-      taskVersion: cxt.Expr[Int]
-  )(
-      comp: cxt.Expr[A => ComputationEnvironment => C]
-  ) = {
-    import cxt.universe._
-    val a = weakTypeOf[A]
-    val c = weakTypeOf[C]
-    val h = taskID.tree match {
-      case Literal(Constant(s: String)) => TypeName(s)
-      case _ => cxt.abort(cxt.enclosingPosition, "Not a string literal")
-    }
-    val t =
-      tq"Function1[upickle.Js.Value,Function1[tasks.queue.ComputationEnvironment,scala.concurrent.Future[tasks.queue.UntypedResult]]]"
-    val r = q"""
-    class $h extends $t {
-      val r = implicitly[upickle.default.Reader[$a]]
-      val w = implicitly[upickle.default.Writer[$c]]
-      val c = $comp
-      def apply(j:upickle.Js.Value) =
-          ((ce:tasks.queue.ComputationEnvironment) => scala.concurrent.Future(tasks.queue.UntypedResult.make(c(r.read(j))(ce))(w))(ce.executionContext))
-
-
-    }
-    new TaskDefinition[$a,$c](new $h,tasks.queue.TaskId($taskID,$taskVersion))
-    """
-    r
-  }
-
 }

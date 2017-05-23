@@ -144,15 +144,6 @@ private class Task(
     try {
       log.debug("Starttask from the executing dispatcher (future).")
 
-      // val logSource = new akka.event.LogSource[Unit] {
-      //   override def genString(t: Unit): String =
-      //     "usertasks." + fileServicePrefix.list.mkString(".")
-      //   override def genString(t: Unit,
-      //                          system: akka.actor.ActorSystem): String =
-      //     genString(t) + "(" + system + ")"
-      //   override def getClazz(t: Unit): Class[_] = runTask.getClass
-      // }
-
       val ce = ComputationEnvironment(
           resourceAllocated,
           TaskSystemComponents(

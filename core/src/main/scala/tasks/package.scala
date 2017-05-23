@@ -214,10 +214,6 @@ package object tasks {
       comp: CompFun[A, Future[C]]): TaskDefinition[A, C] = macro Macros
     .asyncTaskDefinitionImpl[A, C]
 
-  def Task[A, C](taskID: String, taskVersion: Int)(
-      comp: CompFun[A, C]): TaskDefinition[A, C] = macro Macros
-    .taskDefinitionImpl[A, C]
-
   def MasterSlaveGridEngineChosenFromConfig: MasterSlaveConfiguration = {
     if (config.global.disableRemoting) LocalConfigurationFromConfig
     else

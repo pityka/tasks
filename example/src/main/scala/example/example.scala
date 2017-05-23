@@ -25,6 +25,7 @@
 package example
 
 import tasks._
+import tasks.collection._
 
 import scala.concurrent._
 import scala.concurrent.duration._
@@ -84,10 +85,10 @@ object PiTasks {
       }
   }
 
-  val piCalc = Task[PiInput, PiResult]("reduce", 1) {
+  val piCalc = AsyncTask[PiInput, PiResult]("reduce", 1) {
     case PiInput(in, out) =>
       implicit ctx =>
-        PiResult(in.toDouble / (in + out) * 4d)
+        Future.successful(PiResult(in.toDouble / (in + out) * 4d))
   }
 }
 
@@ -105,10 +106,10 @@ object Fib {
 
   case class FibReduce(f1: Int, f2: Int)
 
-  val reduce = Task[FibReduce, Int]("fibreduce", 1) {
+  val reduce = AsyncTask[FibReduce, Int]("fibreduce", 1) {
     case FibReduce(f1, f2) =>
       implicit ce =>
-        f1 + f2
+        Future.successful(f1 + f2)
   }
 
   /** Recursive Fibonacci
@@ -158,12 +159,33 @@ object Fib {
 
 }
 
+// object Twice {
+//   val twice = MacroPlay.map((_: Int) * 3)
+// }
+
 object PiApp extends App {
 
   import PiTasks._
   import Fib._
 
   import scala.concurrent.ExecutionContext.Implicits.global
+
+  val twice = EColl.map("twice", 1)((_: Int) * 3)
+
+  val odd = EColl.filter("odd", 1)((_: Int) % 1 == 0)
+
+  val sort = EColl.sortBy("sortByToString", 1)(10, (_: Int).toString)
+
+  val group = EColl.groupBy("groupByToConstant", 1)(10, (_: Int) => "a")
+
+  val join = EColl.outerJoinBy("outerjoinByToString", 1)(10, (_: Int).toString)
+
+  val count =
+    EColl.foldLeft("count", 1)(0, (x: Int, y: Seq[Option[Int]]) => x + 1)
+
+  val sum = EColl.foldLeft("sum", 1)(0, (x: Int, y: Int) => x + y)
+
+  // val count = MacroPlay.foldLeft
 
   /**
     *Opens and closes a TaskSystem with default configuration
@@ -202,11 +224,25 @@ object PiApp extends App {
     }
 
     /* Start tasks for Fibonacci, subtasks are started by this task. */
-    val fibResult = fibtask(FibInput(16))(CPUMemoryRequest(1, 1000))
+    val fibResult = fibtask(FibInput(4))(CPUMemoryRequest(1, 1000))
 
     /* Block and wait for the futures */
     println(Await.result(pi, atMost = 10 minutes))
     println(Await.result(fibResult, atMost = 10 minutes))
+
+    val mappedEColl = for {
+      e1 <- EColl.fromSource(akka.stream.scaladsl.Source(List(3, 2, 1)),
+                             name = "ecollint")
+      e2 <- twice(e1)(CPUMemoryRequest(1, 1))
+      e3 <- odd(e2)(CPUMemoryRequest(1, 1))
+      e4 <- sort(e3)(CPUMemoryRequest(1, 1))
+      e5 <- group(e4)(CPUMemoryRequest(1, 1))
+      e6 <- join(List(e1, e2, e3))(CPUMemoryRequest(1, 1))
+      e7 <- count(e6)(CPUMemoryRequest(1, 1))
+      e8 <- sum(e4)(CPUMemoryRequest(1, 1))
+    } yield e8
+
+    println(Await.result(mappedEColl, atMost = 10 minutes))
 
   }
 
