@@ -72,10 +72,13 @@ object EC2Operations {
   )
 
   def currentInstanceType =
-    instanceTypes.find(_._1 == readMetadata("instance-type").head).get
+    instanceTypes
+      .find(_._1 == readMetadata("instance-type").head)
+      .getOrElse(instanceTypes.head)
 
-  val slaveInstanceType =
-    instanceTypes.find(_._1 == config.global.slaveInstanceType).get
+  val slaveInstanceType = instanceTypes
+    .find(_._1 == config.global.slaveInstanceType)
+    .getOrElse(instanceTypes.head)
 
   def terminateInstance(ec2: AmazonEC2Client, instanceId: String): Unit = {
     retry(5) {

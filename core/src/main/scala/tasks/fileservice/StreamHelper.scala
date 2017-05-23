@@ -28,11 +28,12 @@ import akka.actor._
 import akka.stream._
 import akka.stream.actor._
 import akka.stream.scaladsl._
-import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.{HttpRequest, HttpResponse, headers}
 import akka.http.scaladsl.Http
 import akka.util._
 import com.bluelabs.s3stream._
 import scala.concurrent.{ExecutionContext, Future, Promise}
+import tasks.util.Uri
 
 class StreamHelper(s3stream: Option[S3Stream])(
     implicit as: ActorSystem,
@@ -42,18 +43,18 @@ class StreamHelper(s3stream: Option[S3Stream])(
   val queue = (rq: HttpRequest) => httpqueue.HttpQueue(as).queue(rq)
 
   def s3Loc(uri: Uri) = {
-    val bucket = uri.authority.host.toString
+    val bucket = uri.authority.toString
     val key = uri.path.toString.drop(1)
     S3Location(bucket, key)
   }
 
-  def createSourceHttp(uri: Uri): Source[ByteString, _] =
+  private def createSourceHttp(uri: Uri): Source[ByteString, _] =
     Source
-      .fromFuture(queue(HttpRequest(uri = uri)))
+      .fromFuture(queue(HttpRequest(uri = uri.akka)))
       .map(_.entity.dataBytes)
       .flatMapConcat(identity)
 
-  def createSourceS3(uri: Uri): Source[ByteString, _] =
+  private def createSourceS3(uri: Uri): Source[ByteString, _] =
     s3stream.get.getData(s3Loc(uri))
 
   def createSource(uri: Uri) = uri.scheme match {
@@ -61,16 +62,16 @@ class StreamHelper(s3stream: Option[S3Stream])(
     case "s3" => createSourceS3(uri)
   }
 
-  def getContentLengthAndETagHttp(
+  private def getContentLengthAndETagHttp(
       uri: Uri): Future[(Option[Long], Option[String])] =
-    queue(HttpRequest(uri = uri)).map(x => {
+    queue(HttpRequest(uri = uri.akka)).map(x => {
       x.discardEntityBytes();
       val etag = x.header[headers.`ETag`].map(_.value)
       val clength = x.header[headers.`Content-Length`].map(_.length)
       (clength, etag)
     })
 
-  def getContentLengthAndETagS3(
+  private def getContentLengthAndETagS3(
       uri: Uri): Future[(Option[Long], Option[String])] =
     s3stream.get.getMetadata(s3Loc(uri)).map(x => x.contentLength -> x.eTag)
 
