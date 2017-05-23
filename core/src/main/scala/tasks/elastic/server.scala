@@ -26,24 +26,18 @@
 package tasks.elastic
 
 import java.io.File
-import org.parboiled.common.FileUtils
 import scala.concurrent.duration._
 import akka.actor._
 import akka.pattern.ask
-import spray.routing.{HttpService, RequestContext}
-import spray.routing.directives.CachingDirectives
-import spray.httpx.marshalling.Marshaller
-import spray.httpx.encoding.Gzip
-import spray.util._
-import spray.http._
-import MediaTypes._
-import CachingDirectives._
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.model._
+import akka.http.scaladsl.server.Directives._
 
-class PackageServerActor(pack: File) extends Actor with HttpService {
+class PackageServerActor(pack: File) {
 
-  def actorRefFactory = context
-
-  def receive = runRoute(route)
+  // def actorRefFactory = context
+  //
+  // def receive = runRoute(route)
 
   val route = get {
     getFromFile(pack)

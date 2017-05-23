@@ -46,8 +46,6 @@ import akka.io.IO
 import akka.pattern.ask
 import akka.stream.ActorMaterializer
 
-import spray.can.Http
-
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.InetAddress
@@ -320,21 +318,22 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
       Some(ac)
     } else None
 
-  val packageServer: Option[ActorRef] =
+  val packageServer =
     if (!isLauncherOnly && elasticSupportFactory.isDefined) {
+      import akka.http.scaladsl.Http
+
 
       val pack = Deployment.pack
       tasksystemlog
         .info("Written executable package to: {}", pack.getAbsolutePath)
 
-      val service =
-        system.actorOf(Props(new PackageServerActor(pack)), "deliver-service")
+      val service = new PackageServerActor(pack)
 
       val actorsystem = 1 //shade implicit conversion
 
-      IO(Http) ! Http.Bind(service, "0.0.0.0", port = host.getPort + 1)
+      val bindingFuture = Http().bindAndHandle(service.route, "0.0.0.0", host.getPort + 1)
 
-      Some(service)
+      Some(bindingFuture)
 
     } else None
 

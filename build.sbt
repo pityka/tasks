@@ -1,17 +1,17 @@
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.11.11",
-  version :="0.0.8",
+  scalaVersion := "2.12.2",
+  version :="0.0.9",
   parallelExecution in Test := false
   // scalacOptions ++= Seq("-Xlog-implicits")
-) ++ reformatOnCompileSettings
+) //++ reformatOnCompileSettings
 
 
 lazy val shared = project.in(file("shared"))
   .settings(
     name := "tasks-shared",
     libraryDependencies ++= Seq(
-      "com.lihaoyi" %% "upickle" % "0.4.1"
+      "com.lihaoyi" %% "upickle" % "0.4.4"
     )
   )
   .settings(commonSettings:_*)
@@ -34,10 +34,8 @@ lazy val core = project.in(file("core"))
       "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24",
       "org.iq80.leveldb" % "leveldb" % "0.9",
       "ch.ethz.ganymed" % "ganymed-ssh2" % "261",
-      "org.scalatest" %% "scalatest" % "2.1.5" % "test",
-      "io.spray" %% "spray-routing" % "1.3.3",
-      "io.spray" %% "spray-can" % "1.3.3",
-      "com.lihaoyi" %% "upickle" % "0.4.3",
+      "org.scalatest" %% "scalatest" % "3.0.0" % "test",
+      "com.lihaoyi" %% "upickle" % "0.4.4",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value
     )
   )
