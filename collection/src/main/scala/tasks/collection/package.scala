@@ -6,7 +6,8 @@ import flatjoin._
 // import io.circe.parser._
 import upickle.default.{Reader, Writer}
 import tasks._
-
+import java.io.File
+import akka.NotUsed
 import akka.stream._
 import akka.stream.scaladsl._
 import akka.util.ByteString
@@ -23,7 +24,7 @@ case class EColl[T](partitions: List[SharedFile])
   def source(implicit decoder: Reader[T],
              tsc: TaskSystemComponents): Source[T, _] =
     Source(partitions).flatMapConcat(
-        _.source
+        _.source.via(Compression.gunzip())
           .via(Framing.delimiter(ByteString("\n"),
                                  maximumFrameLength = Int.MaxValue,
                                  allowTruncation = false))
@@ -31,7 +32,7 @@ case class EColl[T](partitions: List[SharedFile])
 
   def source(i: Int)(implicit decoder: Reader[T],
                      tsc: TaskSystemComponents): Source[T, _] =
-    partitions(i).source
+    partitions(i).source.via(Compression.gunzip())
       .via(Framing.delimiter(ByteString("\n"),
                              maximumFrameLength = Int.MaxValue,
                              allowTruncation = false))
@@ -41,14 +42,69 @@ case class EColl[T](partitions: List[SharedFile])
 
 object EColl {
 
-  def partitionsFromSource[T: Format: StringKey](source: Source[T, _],
+  def partitionsFromSource[T:  StringKey](source: Source[T, _],
                                                  name: String)(
       implicit encoder: Writer[T],
       tsc: TaskSystemComponents
   ) = {
     implicit val ec = tsc.executionContext
     implicit val mat = tsc.actorMaterializer
-    val shardFlow = flatjoin_akka.shard[T]
+
+    def sinkToFlow[T, U](sink: Sink[T, U]): Flow[T, U, U] =
+    Flow.fromGraph(GraphDSL.create(sink) { implicit builder => sink =>
+      FlowShape.of(sink.in, builder.materializedValue)
+    })
+
+
+    val shardFlow: Flow[T, Seq[File], NotUsed] = {
+
+    val files = 0 until 128 map { i =>
+      val file = File.createTempFile("shard_" + i + "_", "shard")
+      file.deleteOnExit
+      (i, file)
+    } toMap
+
+    val hash = (t: T) =>
+      math.abs(
+        scala.util.hashing.MurmurHash3
+          .stringHash(implicitly[StringKey[T]].key(t)) % 128)
+
+    val flows: List[Flow[(ByteString, Int), Seq[File], _]] = files.map {
+      case (idx, file) =>
+        sinkToFlow(
+          Flow[(ByteString, Int)]
+            .filter(_._2 == idx) //todo
+            .map(_._1++ByteString("\n")).via(Compression.gzip)
+            .toMat(FileIO.toPath(file.toPath))(Keep.right)
+            .mapMaterializedValue(_.map(_ => file :: Nil))).mapAsync(1)(x => x)
+
+    }.toList
+
+    val shardFlow: Flow[(ByteString, Int), Seq[File], NotUsed] = Flow
+      .fromGraph(
+        GraphDSL.create() { implicit b =>
+          import GraphDSL.Implicits._
+          // Use Partition instead
+          val broadcast = b.add(Broadcast[(ByteString, Int)](flows.size))
+          val merge = b.add(Merge[Seq[File]](flows.size))
+          flows.zipWithIndex.foreach {
+            case (f, i) =>
+              val flowShape = b.add(f)
+              broadcast.out(i) ~> flowShape.in
+              flowShape.out ~> merge.in(i)
+          }
+
+          new FlowShape(broadcast.in, merge.out)
+        }
+      )
+      .reduce(_ ++ _)
+
+    Flow[T].map {
+      case elem =>
+        ByteString(upickle.json.write(encoder.write(elem))) -> hash(elem)
+    }.viaMat(shardFlow)(Keep.right)
+  }
+
     source
       .via(shardFlow)
       .mapAsync(1) { files =>
@@ -67,7 +123,7 @@ object EColl {
       implicit encoder: Writer[T],
       tsc: TaskSystemComponents): Future[EColl[T]] = {
     val s2 =
-      source.map(t => ByteString(upickle.json.write(encoder.write(t)) + "\n"))
+      source.map(t => ByteString(upickle.json.write(encoder.write(t)) + "\n")).via(Compression.gzip)
 
     SharedFile(s2, name + ".0")
       .map(sf => EColl[T](sf :: Nil))(tsc.executionContext)
