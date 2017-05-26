@@ -119,7 +119,14 @@ class S3Storage(bucketName: String, folderPrefix: String, s3stream: S3Stream)(
     }
   }
 
+  def retryFuture[A](f: =>Future[A],c:Int) : Future[A] =
+    if (c > 0) f.recoverWith{case e => akka.pattern.after(2 seconds, as.scheduler)(retryFuture(f,c-1))}
+    else f
+
   def importFile(f: File, path: ProposedManagedFilePath)
+      : Future[(Long, Int, File, ManagedFilePath)] = retryFuture(importFile1(f,path),4)
+
+  def importFile1(f: File, path: ProposedManagedFilePath)
     : Future[(Long, Int, File, ManagedFilePath)] = {
     val managed = path.toManaged
     val key = assembleName(managed)
