@@ -53,13 +53,6 @@ abstract class Cache {
 
 }
 
-object LevelDBCache {
-  def apply(
-      f: File,
-      serialization: akka.serialization.Serialization
-  ) =
-    new KVCache(new LevelDBWrapper(f), serialization)
-}
 
 class KVCache(
     kvstore: KVStore,

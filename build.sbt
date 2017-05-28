@@ -23,6 +23,7 @@ lazy val core = project.in(file("core"))
   .settings(
     name := "tasks-core",
     libraryDependencies ++= Seq(
+      "com.google.guava" % "guava" % "22.0",
       "com.typesafe.akka" %% "akka-actor" % "2.4.17",
       "com.typesafe.akka" %% "akka-remote" % "2.4.17",
       "com.typesafe.akka" %% "akka-testkit" % "2.4.17",
@@ -32,7 +33,6 @@ lazy val core = project.in(file("core"))
       "io.github.pityka" %% "selfpackage" % "0.0.1",
       "io.github.pityka" %% "s3-stream-fork" % "0.0.3-SNAPSHOT",
       "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24",
-      "org.iq80.leveldb" % "leveldb" % "0.9",
       "ch.ethz.ganymed" % "ganymed-ssh2" % "261",
       "org.scalatest" %% "scalatest" % "3.0.0" % "test",
       "com.lihaoyi" %% "upickle" % "0.4.4",

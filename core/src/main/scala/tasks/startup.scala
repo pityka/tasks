@@ -241,9 +241,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
                                     system,
                                     system.dispatcher)
             case other =>
-              val store = new LevelDBWrapper(new File(config.global.cachePath))
-              new KVCache(store,
-                          akka.serialization.SerializationExtension(system))
+        throw new RuntimeException("only sharedfile cache")
           }
 
         }
