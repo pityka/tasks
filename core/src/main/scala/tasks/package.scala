@@ -54,8 +54,6 @@ import tasks.shared._
 import tasks.elastic.ec2._
 import tasks.elastic.ssh._
 
-import upickle.default._
-import upickle.Js
 
 import scala.language.experimental.macros
 

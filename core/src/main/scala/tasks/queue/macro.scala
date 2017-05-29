@@ -25,8 +25,6 @@
 package tasks.queue
 
 import tasks._
-import upickle.default._
-import upickle.Js
 import scala.concurrent.Future
 
 object Macros {
@@ -49,14 +47,14 @@ object Macros {
     }
 
     val t =
-      tq"Function1[upickle.Js.Value,Function1[tasks.queue.ComputationEnvironment,scala.concurrent.Future[tasks.queue.UntypedResult]]]"
+      tq"Function1[io.circe.Json,Function1[tasks.queue.ComputationEnvironment,scala.concurrent.Future[tasks.queue.UntypedResult]]]"
     val r = q"""
     class $h extends $t {
-      val r = implicitly[upickle.default.Reader[$a]]
-      val w = implicitly[upickle.default.Writer[$c]]
+      val r = implicitly[io.circe.Decoder[$a]]
+      val w = implicitly[io.circe.Encoder[$c]]
       val c = $comp
-      def apply(j:upickle.Js.Value) =
-          (ce:tasks.queue.ComputationEnvironment) => (c(r.read(j))(ce)).map(x => tasks.queue.UntypedResult.make(x)(w))(ce.executionContext)
+      def apply(j:io.circe.Json) =
+          (ce:tasks.queue.ComputationEnvironment) => (c(r.decodeJson(j).right.get)(ce)).map(x => tasks.queue.UntypedResult.make(x)(w))(ce.executionContext)
 
     }
     new TaskDefinition[$a,$c](new $h,tasks.queue.TaskId($taskID,$taskVersion))

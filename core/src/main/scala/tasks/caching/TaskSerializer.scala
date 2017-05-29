@@ -29,8 +29,8 @@ import tasks.queue._
 import tasks.fileservice._
 import tasks.fileservice.SharedFile._
 
-import upickle.Js
-import upickle.default._
+import io.circe._
+
 
 trait TaskSerializer {
   def serializeTaskDescription(original: TaskDescription): Array[Byte] = {
@@ -40,15 +40,16 @@ trait TaskSerializer {
   }
 
   def serializeResult(original: UntypedResult): Array[Byte] = {
-    val js = Js.Obj(
-        "files" -> implicitly[Writer[Set[SharedFile]]].write(original.files),
-        "data" -> Js.Str(original.data.value))
-    upickle.json.write(js).getBytes("UTF8")
+    val js = Json.obj("files" -> implicitly[Encoder[Set[SharedFile]]].apply(original.files),
+    "data" -> Json.fromString(original.data.value)
+  )
+    js.noSpaces.getBytes("UTF8")
   }
 
   def deserializeResult(ab: Array[Byte]): UntypedResult = {
-    val m = upickle.json.read(new String(ab)).obj
-    val files = implicitly[Reader[Set[SharedFile]]].read(m("files"))
-    UntypedResult(files, JsonString(m("data").str))
+    val m = io.circe.parser.parse(new String(ab)).right.get.asObject.get
+
+    val files = implicitly[Decoder[Set[SharedFile]]].decodeJson(m("files").get).right.get
+    UntypedResult(files, JsonString(m("data").get.asString.get))
   }
 }

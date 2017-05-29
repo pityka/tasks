@@ -32,10 +32,10 @@ import tasks.shared._
 import tasks.fileservice._
 
 import akka.actor._
-import upickle.default._
-import upickle.Js
 
 import scala.concurrent._
+
+import io.circe.{Encoder,Decoder}
 
 abstract class ResultWithSharedFiles(sf: SharedFile*) extends Product {
   def files = sf
@@ -46,7 +46,7 @@ trait HasPersistent[+A] extends Serializable { self: A =>
   def persistent: A
 }
 
-class TaskDefinition[A: Writer, B: Reader](val computation: CompFun2,
+class TaskDefinition[A: Encoder, B: Decoder](val computation: CompFun2,
                                            val taskId: TaskId) {
 
   def apply(a: A)(resource: CPUMemoryRequest)(

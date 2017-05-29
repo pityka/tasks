@@ -29,6 +29,7 @@ import tasks.collection._
 
 import scala.concurrent._
 import scala.concurrent.duration._
+import io.circe.generic.auto._
 
 /** Definitions of subtasks for calculating Pi
   *

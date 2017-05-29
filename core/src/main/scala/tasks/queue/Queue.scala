@@ -49,8 +49,6 @@ import tasks.caching._
 import tasks.util._
 import tasks._
 
-import upickle.Js
-
 class TaskQueue extends Actor with akka.actor.ActorLogging {
 
   // ActorRef here is the proxy of the task

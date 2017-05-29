@@ -46,8 +46,6 @@ import tasks.caching._
 import tasks.elastic._
 import tasks._
 
-import upickle.Js
-
 @SerialVersionUID(1L)
 case class ScheduleWithProxy(sch: ScheduleTask, ac: List[ActorRef])
     extends Serializable

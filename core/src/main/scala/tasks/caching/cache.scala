@@ -39,7 +39,6 @@ import tasks._
 
 import tasks.fileservice.FileServicePrefix
 
-import upickle.Js
 
 abstract class Cache {
 

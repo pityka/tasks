@@ -35,3 +35,10 @@ case class Uri(uri: String) {
   def authority = jUri.getAuthority
   def path = jUri.getPath
 }
+
+object Uri {
+  import io.circe.generic.semiauto._
+  import io.circe._
+  implicit val decoder: Decoder[Uri] = deriveDecoder[Uri]
+  implicit val encoder: Encoder[Uri] = deriveEncoder[Uri]
+}

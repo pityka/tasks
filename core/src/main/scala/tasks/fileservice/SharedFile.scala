@@ -52,32 +52,38 @@ import tasks.queue._
 import tasks.TaskSystemComponents
 import tasks.Implicits._
 
-import upickle.default._
-import upickle.Js
+import io.circe.{Json,Decoder,Encoder}
+import io.circe.syntax._
+import io.circe.generic.semiauto._
 
 sealed trait FilePath {
   def name: String
 }
 
-@SerialVersionUID(1L)
 case class ManagedFilePath(pathElements: Vector[String]) extends FilePath {
   override def toString = "/" + pathElements.mkString("/")
   def name = pathElements.last
 }
 
-@SerialVersionUID(1L)
 case class RemoteFilePath(uri: Uri) extends FilePath {
   override def toString = uri.toString
   def name = uri.akka.path.toString.split("/").filter(_.size > 0).last
 }
 
+object FilePath {
+
+  implicit val decoder: Decoder[FilePath] = deriveDecoder[FilePath]
+  implicit val encoder: Encoder[FilePath] = deriveEncoder[FilePath]
+}
+
+
+
 @SerialVersionUID(1L)
-class SharedFile private[tasks] (
+case class SharedFile (
     val path: FilePath,
     val byteSize: Long,
     val hash: Int
-) extends Serializable
-    with Serializable {
+) extends Serializable {
   def canEqual(other: Any): Boolean = other.isInstanceOf[SharedFile]
 
   override def hashCode: Int =
@@ -111,37 +117,11 @@ class SharedFile private[tasks] (
 
 object SharedFile {
 
-  implicit val fpWriter = Writer[FilePath] {
-    case ManagedFilePath(pathElements) =>
-      Js.Obj("type" -> Js.Str("managed"),
-             "path" -> Js.Arr(pathElements.map(x => Js.Str(x)): _*))
-    case RemoteFilePath(uri) =>
-      Js.Obj("type" -> Js.Str("remote"), "path" -> Js.Str(uri.toString))
-  }
+  implicit val encoder : Encoder[SharedFile]= //deriveEncoder[SharedFile]
+      Encoder.forProduct3("path","byteSize","hash")(sf => (sf.path,sf.byteSize,sf.hash))
 
-  implicit val fpReader = Reader[FilePath] {
-    case Js.Obj(p @ _ *) =>
-      val map = p.toMap
-      map("type").str match {
-        case "managed" => ManagedFilePath(map("path").arr.toVector.map(_.str))
-        case "remote" => RemoteFilePath(Uri(map("path").str))
-      }
-  }
-
-  implicit val sfWriter = Writer[SharedFile] {
-    case t =>
-      Js.Obj("path" -> writeJs(t.path),
-             "byteSize" -> Js.Str(t.byteSize.toString),
-             "hash" -> Js.Str(t.hash.toString))
-  }
-
-  implicit val sfReader = Reader[SharedFile] {
-    case Js.Obj(p @ _ *) =>
-      val map = p.toMap
-      new SharedFile(fpReader.read(map("path")),
-                     map("byteSize").str.toLong,
-                     map("hash").str.toInt)
-  }
+  implicit val decoder : Decoder[SharedFile] = //deriveDecoder[SharedFile]
+      Decoder.forProduct3("path","byteSize","hash")((a:FilePath,b:Long,c:Int) => new SharedFile(a,b,c))
 
   def apply(uri: Uri)(implicit tsc: TaskSystemComponents): Future[SharedFile] =
     SharedFileHelper.create(RemoteFilePath(uri), tsc.fs.remote)

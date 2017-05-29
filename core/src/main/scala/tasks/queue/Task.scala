@@ -45,8 +45,10 @@ import tasks.shared._
 import tasks._
 import tasks.caching._
 
-import upickle.Js
-import upickle.default._
+import io.circe.{Decoder,Encoder,Json}
+import io.circe.parser.decode
+import io.circe.syntax._
+
 
 case class UntypedResult(files: Set[SharedFile], data: JsonString)
 
@@ -61,8 +63,8 @@ object UntypedResult {
     case _ => Set()
   }
 
-  def make[A: Writer](r: A): UntypedResult =
-    UntypedResult(fs(r), JsonString(write(r)))
+  def make[A: Encoder](r: A): UntypedResult =
+    UntypedResult(fs(r), JsonString(r.asJson.noSpaces))
 
 }
 
@@ -140,7 +142,7 @@ private class Task(
 
   var startdat: Option[String] = None
 
-  def startTask(msg: Js.Value): Unit =
+  def startTask(msg: Json): Unit =
     try {
       log.debug("Starttask from the executing dispatcher (future).")
 
@@ -211,7 +213,7 @@ private class Task(
     case JsonString(msg) =>
       log.debug("StartTask, from taskactor")
       startdat = Some(msg)
-      startTask(upickle.json.read(msg))
+      startTask(io.circe.parser.parse(msg).right.get)
 
     case RegisterForNotification(ac) =>
       log.debug("Received: " + ac.toString)
@@ -225,8 +227,8 @@ class ProxyTask[MyPrerequisitive, MyResult](
     taskId: TaskId,
     runTaskClass: java.lang.Class[_ <: CompFun2],
     incomings: MyPrerequisitive,
-    writer: Writer[MyPrerequisitive],
-    reader: Reader[MyResult],
+    writer: Encoder[MyPrerequisitive],
+    reader: Decoder[MyResult],
     resourceConsumed: CPUMemoryRequest,
     starter: ActorRef,
     fileServiceActor: FileServiceActor,
@@ -263,9 +265,9 @@ class ProxyTask[MyPrerequisitive, MyResult](
       val s = ScheduleTask(
           TaskDescription(
               taskId,
-              JsonString(upickle.json.write(writer.write(incomings))),
+              JsonString(writer(incomings).noSpaces),
               persisted.map(x =>
-                    JsonString(upickle.json.write(writer.write(x))))),
+                    JsonString(writer(x).noSpaces))),
           runTaskClass.getName,
           resourceConsumed,
           starter,
@@ -293,7 +295,7 @@ class ProxyTask[MyPrerequisitive, MyResult](
   def receive = {
     case MessageFromTask(incomingResultJs) =>
       val incomingResult: MyResult =
-        reader.read(upickle.json.read(incomingResultJs.data.value))
+        reader.decodeJson(io.circe.parser.parse(incomingResultJs.data.value).right.get).right.get
       log.debug("MessageFromTask received from: {}, {}, {},{}",
                 sender,
                 incomingResultJs,

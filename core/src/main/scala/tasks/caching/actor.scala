@@ -41,7 +41,7 @@ import tasks.util.eq._
 import tasks.queue._
 import tasks.fileservice._
 
-import upickle.default._
+
 
 class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
     extends Actor

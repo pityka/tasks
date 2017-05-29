@@ -33,8 +33,6 @@ import tasks.queue._
 import tasks.fileservice._
 import tasks._
 
-import upickle.Js
-
 import akka.actor.ActorRef
 
 @SerialVersionUID(1L)

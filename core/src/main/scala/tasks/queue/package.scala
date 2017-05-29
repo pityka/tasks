@@ -26,14 +26,13 @@
 package tasks
 import tasks._
 
-import upickle.default._
-import upickle.Js
+import io.circe.{Decoder,Encoder, Json}
 import akka.actor._
 import scala.concurrent._
 
 package object queue {
 
-  type CompFun2 = Js.Value => ComputationEnvironment => Future[UntypedResult]
+  type CompFun2 = Json => ComputationEnvironment => Future[UntypedResult]
 
   def newTask[A, B](
       prerequisitives: B,
@@ -41,8 +40,8 @@ package object queue {
       f: CompFun2,
       taskId: TaskId
   )(implicit components: TaskSystemComponents,
-    writer1: Writer[B],
-    reader2: Reader[A]): ProxyTaskActorRef[B, A] = {
+    writer1: Encoder[B],
+    reader2: Decoder[A]): ProxyTaskActorRef[B, A] = {
     implicit val queue = components.queue
     implicit val fileService = components.fs
     implicit val cache = components.cache

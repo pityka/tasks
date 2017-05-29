@@ -32,8 +32,6 @@ import akka.actor._
 import tasks._
 import tasks.shared._
 
-import upickle.Js
-
 @SerialVersionUID(1L)
 case class LookUp(s: String)
 

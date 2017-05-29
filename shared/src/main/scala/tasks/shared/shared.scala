@@ -48,21 +48,14 @@ case class CPUMemoryRequest(cpu: (Int, Int), memory: Int)
 
 @SerialVersionUID(1L)
 object CPUMemoryRequest {
-
+  import io.circe._
+  import io.circe.generic.semiauto._
+  
   def apply(cpu: Int, memory: Int): CPUMemoryRequest =
     CPUMemoryRequest((cpu, cpu), memory)
 
-  implicit val writer = upickle.default.Writer[CPUMemoryRequest] {
-    case t =>
-      implicitly[upickle.default.Writer[(Int, Int, Int)]]
-        .write(t.cpu._1, t.cpu._2, t.memory)
-  }
-  implicit val reader = upickle.default.Reader[CPUMemoryRequest] {
-    case js: upickle.Js.Value =>
-      val (a, b, c) =
-        implicitly[upickle.default.Reader[(Int, Int, Int)]].read(js)
-      CPUMemoryRequest((a, b), c)
-  }
+  implicit val decoder: Decoder[CPUMemoryRequest] = deriveDecoder[CPUMemoryRequest]
+  implicit val encoder: Encoder[CPUMemoryRequest] = deriveEncoder[CPUMemoryRequest]
 }
 
 @SerialVersionUID(1L)

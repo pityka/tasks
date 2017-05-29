@@ -40,7 +40,7 @@ import tasks._
 import tasks.util._
 import tasks.fileservice.{FileServiceActor, FileServicePrefix, SharedFileHelper}
 
-import upickle.Js
+
 
 import com.google.common.hash.Hashing
 

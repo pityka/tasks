@@ -38,7 +38,9 @@ import tasks.queue._
 import tasks.caching._
 import tasks.fileservice._
 
-import upickle.default._
+import io.circe.{Decoder,Encoder}
+import io.circe.syntax._
+import io.circe.generic.auto._
 
 case class IntResult(val value: Int)
 
@@ -48,7 +50,7 @@ object SimpleTask {
 
   val runTask: CompFun2 = { js => implicit env =>
     Future {
-      val rs = implicitly[Reader[MyResultSet]].read(js)
+      val rs = implicitly[Decoder[MyResultSet]].decodeJson(js).right.get
       // Logger.debug( "task implementation started" + rs.num.toString)
       log.warning("boo")
       NodeLocalCache
@@ -63,7 +65,7 @@ object SimpleTask {
           // Logger.debug( "task implementation ended")
           // Logger.debug( rs.num.get)
 
-          UntypedResult(Set(), JsonString(write(new IntResult(rs.num.get))))
+          UntypedResult(Set(), JsonString((new IntResult(rs.num.get)).asJson.noSpaces))
         }
 
     }.flatMap(x => x)
@@ -72,8 +74,8 @@ object SimpleTask {
 
   def spawn(counter: Int, id: Int = 0)(
       implicit components: TaskSystemComponents,
-      writer1: Writer[MyResultSet],
-      reader2: Reader[IntResult]) =
+      writer1: Encoder[MyResultSet],
+      reader2: Decoder[IntResult]) =
     newTask[IntResult, MyResultSet](
         prerequisitives = MyResultSet(Some(counter), Some(id)),
         resource = CPUMemoryRequest(cpu = 1, memory = 500),

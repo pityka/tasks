@@ -11,7 +11,9 @@ lazy val shared = project.in(file("shared"))
   .settings(
     name := "tasks-shared",
     libraryDependencies ++= Seq(
-      "com.lihaoyi" %% "upickle" % "0.4.4"
+      "io.circe" %% "circe-core" % "0.8.0",
+      "io.circe" %% "circe-generic" % "0.8.0",
+      "io.circe" %% "circe-parser" % "0.8.0"
     )
   )
   .settings(commonSettings:_*)
@@ -35,7 +37,6 @@ lazy val core = project.in(file("core"))
       "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24",
       "ch.ethz.ganymed" % "ganymed-ssh2" % "261",
       "org.scalatest" %% "scalatest" % "3.0.0" % "test",
-      "com.lihaoyi" %% "upickle" % "0.4.4",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value
     )
   )
