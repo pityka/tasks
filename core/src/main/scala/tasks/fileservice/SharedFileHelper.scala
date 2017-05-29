@@ -93,13 +93,13 @@ private[tasks] object SharedFileHelper {
         val serviceactor = service.actor
         implicit val timout = akka.util.Timeout(1441 minutes)
         val ac = context.actorOf(
-            Props(
-                new FileUserStream(path,
-                                   sf.byteSize,
-                                   sf.hash,
-                                   serviceactor,
-                                   isLocal))
-              .withDispatcher("fileuser-dispatcher"))
+          Props(
+            new FileUserStream(path,
+                               sf.byteSize,
+                               sf.hash,
+                               serviceactor,
+                               isLocal))
+            .withDispatcher("fileuser-dispatcher"))
 
         val f = (ac ? WaitingForPath).asInstanceOf[Future[Try[InputStream]]]
 
@@ -108,10 +108,10 @@ private[tasks] object SharedFileHelper {
         }
 
         f map (_ match {
-              case Success(r) => r
-              case Failure(e) =>
-                throw new RuntimeException("getStreamToFile failed. " + sf, e)
-            })
+          case Success(r) => r
+          case Failure(e) =>
+            throw new RuntimeException("getStreamToFile failed. " + sf, e)
+        })
       }
     }
   }
@@ -129,13 +129,13 @@ private[tasks] object SharedFileHelper {
           val serviceactor = service.actor
           implicit val timout = akka.util.Timeout(1441 minutes)
           val ac = context.actorOf(
-              Props(
-                  new FileUserSource(path,
-                                     sf.byteSize,
-                                     sf.hash,
-                                     serviceactor,
-                                     isLocal))
-                .withDispatcher("fileuser-dispatcher"))
+            Props(
+              new FileUserSource(path,
+                                 sf.byteSize,
+                                 sf.hash,
+                                 serviceactor,
+                                 isLocal))
+              .withDispatcher("fileuser-dispatcher"))
 
           val f = (ac ? WaitingForPath)
             .asInstanceOf[Future[Try[Source[ByteString, _]]]]
@@ -145,11 +145,10 @@ private[tasks] object SharedFileHelper {
           }
 
           val f2 = f map (_ match {
-                case Success(r) => r
-                case Failure(e) =>
-                  throw new RuntimeException("getSourceToFile failed. " + sf,
-                                             e)
-              })
+            case Success(r) => r
+            case Failure(e) =>
+              throw new RuntimeException("getSourceToFile failed. " + sf, e)
+          })
 
           Source.fromFuture(f2).flatMapConcat(x => x)
         }
@@ -178,13 +177,9 @@ private[tasks] object SharedFileHelper {
             val serviceactor = service.actor
             implicit val timout = akka.util.Timeout(1441 minutes)
             val ac = context.actorOf(
-                Props(
-                    new FileUser(p,
-                                 sf.byteSize,
-                                 sf.hash,
-                                 serviceactor,
-                                 isLocal))
-                  .withDispatcher("fileuser-dispatcher"))
+              Props(
+                new FileUser(p, sf.byteSize, sf.hash, serviceactor, isLocal))
+                .withDispatcher("fileuser-dispatcher"))
 
             val f = (ac ? WaitingForPath).asInstanceOf[Future[Try[File]]]
             f onComplete {
@@ -192,10 +187,10 @@ private[tasks] object SharedFileHelper {
             }
 
             f map (_ match {
-                  case Success(r) => r
-                  case Failure(e) =>
-                    throw new RuntimeException("getPathToFile failed. " + p, e)
-                })
+              case Success(r) => r
+              case Failure(e) =>
+                throw new RuntimeException("getPathToFile failed. " + p, e)
+            })
           }
       }
 
@@ -250,12 +245,9 @@ private[tasks] object SharedFileHelper {
       implicit val timout = akka.util.Timeout(1441 minutes)
 
       val ac = context.actorOf(
-          Props(
-              new FileSender(file,
-                             prefix.propose(name),
-                             deleteFile,
-                             serviceactor))
-            .withDispatcher("filesender-dispatcher"))
+        Props(
+          new FileSender(file, prefix.propose(name), deleteFile, serviceactor))
+          .withDispatcher("filesender-dispatcher"))
       (ac ? WaitingForSharedFile)
         .asInstanceOf[Future[Option[SharedFile]]]
         .map(_.get)
@@ -281,8 +273,8 @@ private[tasks] object SharedFileHelper {
       implicit val timout = akka.util.Timeout(1441 minutes)
 
       val ac = context.actorOf(
-          Props(new SourceSender(source, prefix.propose(name), serviceactor))
-            .withDispatcher("filesender-dispatcher"))
+        Props(new SourceSender(source, prefix.propose(name), serviceactor))
+          .withDispatcher("filesender-dispatcher"))
 
       (ac ? WaitingForSharedFile)
         .asInstanceOf[Future[Option[SharedFile]]]

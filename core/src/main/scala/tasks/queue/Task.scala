@@ -45,10 +45,9 @@ import tasks.shared._
 import tasks._
 import tasks.caching._
 
-import io.circe.{Decoder,Encoder,Json}
+import io.circe.{Decoder, Encoder, Json}
 import io.circe.parser.decode
 import io.circe.syntax._
-
 
 case class UntypedResult(files: Set[SharedFile], data: JsonString)
 
@@ -147,23 +146,23 @@ private class Task(
       log.debug("Starttask from the executing dispatcher (future).")
 
       val ce = ComputationEnvironment(
-          resourceAllocated,
-          TaskSystemComponents(
-              QueueActor(balancerActor),
-              fileServiceActor,
-              context.system,
-              CacheActor(globalCacheActor),
-              NodeLocalCacheActor(nodeLocalCache),
-              fileServicePrefix,
-              auxExecutionContext,
-              actorMaterializer
-          ),
-          akka.event.Logging(
-              context.system.eventStream,
-              "usertasks." + fileServicePrefix.list.mkString(".")),
-          LauncherActor(launcherActor),
-          executionContext,
-          self
+        resourceAllocated,
+        TaskSystemComponents(
+          QueueActor(balancerActor),
+          fileServiceActor,
+          context.system,
+          CacheActor(globalCacheActor),
+          NodeLocalCacheActor(nodeLocalCache),
+          fileServicePrefix,
+          auxExecutionContext,
+          actorMaterializer
+        ),
+        akka.event.Logging(
+          context.system.eventStream,
+          "usertasks." + fileServicePrefix.list.mkString(".")),
+        LauncherActor(launcherActor),
+        executionContext,
+        self
       )
 
       log.debug("CE {}", ce)
@@ -183,8 +182,8 @@ private class Task(
         case Failure(x) =>
           x.printStackTrace()
           log.error(
-              x,
-              "Exception caught in the executing dispatcher of a task. " + x.getMessage)
+            x,
+            "Exception caught in the executing dispatcher of a task. " + x.getMessage)
           launcherActor ! InternalMessageTaskFailed(mainActor, x)
           self ! PoisonPill
 
@@ -194,16 +193,16 @@ private class Task(
       case x: Exception => {
         x.printStackTrace()
         log.error(
-            x,
-            "Exception caught in the executing dispatcher of a task. " + x.getMessage)
+          x,
+          "Exception caught in the executing dispatcher of a task. " + x.getMessage)
         launcherActor ! InternalMessageTaskFailed(mainActor, x)
         self ! PoisonPill
       }
       case x: AssertionError => {
         x.printStackTrace()
         log.error(
-            x,
-            "Exception caught in the executing dispatcher of a task. " + x.getMessage)
+          x,
+          "Exception caught in the executing dispatcher of a task. " + x.getMessage)
         launcherActor ! InternalMessageTaskFailed(mainActor, x)
         self ! PoisonPill
       }
@@ -246,7 +245,7 @@ class ProxyTask[MyPrerequisitive, MyResult](
   private def distributeResult: Unit = {
     log.debug("Distributing result to targets: {}", _channels)
     result.foreach(r =>
-          _channels.foreach { ch =>
+      _channels.foreach { ch =>
         ch ! r
     })
   }
@@ -263,17 +262,15 @@ class ProxyTask[MyPrerequisitive, MyResult](
       }
 
       val s = ScheduleTask(
-          TaskDescription(
-              taskId,
-              JsonString(writer(incomings).noSpaces),
-              persisted.map(x =>
-                    JsonString(writer(x).noSpaces))),
-          runTaskClass.getName,
-          resourceConsumed,
-          starter,
-          fileServiceActor.actor,
-          fileServicePrefix,
-          cacheActor
+        TaskDescription(taskId,
+                        JsonString(writer(incomings).noSpaces),
+                        persisted.map(x => JsonString(writer(x).noSpaces))),
+        runTaskClass.getName,
+        resourceConsumed,
+        starter,
+        fileServiceActor.actor,
+        fileServicePrefix,
+        cacheActor
       )
 
       log.debug("proxy submitting ScheduleTask object to queue.")
@@ -295,7 +292,11 @@ class ProxyTask[MyPrerequisitive, MyResult](
   def receive = {
     case MessageFromTask(incomingResultJs) =>
       val incomingResult: MyResult =
-        reader.decodeJson(io.circe.parser.parse(incomingResultJs.data.value).right.get).right.get
+        reader
+          .decodeJson(
+            io.circe.parser.parse(incomingResultJs.data.value).right.get)
+          .right
+          .get
       log.debug("MessageFromTask received from: {}, {}, {},{}",
                 sender,
                 incomingResultJs,
@@ -308,7 +309,7 @@ class ProxyTask[MyPrerequisitive, MyResult](
 
     case GetBackResult =>
       log.debug(
-          "GetBackResult message received. Registering for notification: " + sender.toString)
+        "GetBackResult message received. Registering for notification: " + sender.toString)
       _channels = _channels + sender //.asInstanceOf[Channel[Result]]
       distributeResult
 

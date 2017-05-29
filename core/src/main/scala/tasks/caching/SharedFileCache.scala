@@ -38,9 +38,11 @@ import akka.actor.ActorRefFactory
 import tasks.queue._
 import tasks._
 import tasks.util._
-import tasks.fileservice.{FileServiceActor, FileServicePrefix, SharedFileHelper}
-
-
+import tasks.fileservice.{
+  FileServiceActor,
+  FileServicePrefix,
+  SharedFileHelper
+}
 
 import com.google.common.hash.Hashing
 

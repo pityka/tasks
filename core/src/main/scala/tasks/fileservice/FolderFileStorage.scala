@@ -70,7 +70,7 @@ object FolderFileStorage {
     val canonicalParents = getParents(canonical, Nil).map(_.getCanonicalPath)
 
     (nonLocalFileSystemsCanonical).exists(path =>
-          canonicalParents.contains(path))
+      canonicalParents.contains(path))
   }
 }
 
@@ -104,7 +104,7 @@ class FolderFileStorage(val basePath: File,
     val canonicalParents = getParents(canonical, Nil).map(_.getCanonicalPath)
 
     (canonicalBasePath :: canonicalExtendedPaths).exists(path =>
-          canonicalParents.contains(path))
+      canonicalParents.contains(path))
 
   }
 
@@ -112,7 +112,7 @@ class FolderFileStorage(val basePath: File,
     Future.successful {
       val f = assemblePath(path)
       f.canRead && (size < 0 || (f.length === size && (tasks.util.config.global.skipContentHashVerificationAfterCache || FolderFileStorage
-                    .getContentHash(f) === hash)))
+        .getContentHash(f) === hash)))
     }
 
   def createSource(path: ManagedFilePath): Source[ByteString, _] =
@@ -141,14 +141,14 @@ class FolderFileStorage(val basePath: File,
 
   private def assemblePath(path: ManagedFilePath): File = {
     new File(
-        basePath.getAbsolutePath + File.separator + path.pathElements.mkString(
-            File.separator))
+      basePath.getAbsolutePath + File.separator + path.pathElements.mkString(
+        File.separator))
   }
 
   private def assemblePath(path: ManagedFilePath, str: String): File = {
     new File(
-        basePath.getAbsolutePath + File.separator + path.pathElements.mkString(
-            File.separator) + str)
+      basePath.getAbsolutePath + File.separator + path.pathElements.mkString(
+        File.separator) + str)
   }
 
   def importSource(s: Source[ByteString, _], path: ProposedManagedFilePath)(
@@ -222,11 +222,11 @@ class FolderFileStorage(val basePath: File,
         val l = file.length
         val h = FolderFileStorage.getContentHash(file)
         new SharedFile(ManagedFilePath(
-                           basePath.toPath
-                             .relativize(path)
-                             .iterator
-                             .map(_.toString)
-                             .toVector),
+                         basePath.toPath
+                           .relativize(path)
+                           .iterator
+                           .map(_.toString)
+                           .toVector),
                        l,
                        h)
       }

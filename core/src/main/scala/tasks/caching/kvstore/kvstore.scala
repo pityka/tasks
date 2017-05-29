@@ -27,7 +27,13 @@
 
 package tasks.caching.kvstore
 
-import java.io.{File, FileOutputStream, DataOutputStream, FileInputStream, DataInputStream}
+import java.io.{
+  File,
+  FileOutputStream,
+  DataOutputStream,
+  FileInputStream,
+  DataInputStream
+}
 import collection.JavaConversions._
 import java.io.{DataOutputStream, DataInputStream}
 import com.google.common.hash._

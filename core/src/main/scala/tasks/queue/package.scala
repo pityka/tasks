@@ -26,7 +26,7 @@
 package tasks
 import tasks._
 
-import io.circe.{Decoder,Encoder, Json}
+import io.circe.{Decoder, Encoder, Json}
 import akka.actor._
 import scala.concurrent._
 
@@ -51,20 +51,20 @@ package object queue {
     val taskId1 = taskId
 
     ProxyTaskActorRef[B, A](
-        context.actorOf(
-            Props(
-                new ProxyTask[B, A](taskId1,
-                                    f.getClass,
-                                    prerequisitives,
-                                    writer1,
-                                    reader2,
-                                    resource,
-                                    queue.actor,
-                                    fileService,
-                                    prefix,
-                                    cache.actor)
-            ).withDispatcher("proxytask-dispatcher")
-        )
+      context.actorOf(
+        Props(
+          new ProxyTask[B, A](taskId1,
+                              f.getClass,
+                              prerequisitives,
+                              writer1,
+                              reader2,
+                              resource,
+                              queue.actor,
+                              fileService,
+                              prefix,
+                              cache.actor)
+        ).withDispatcher("proxytask-dispatcher")
+      )
     )
   }
 }

@@ -1,3 +1,3 @@
-//addSbtPlugin("com.geirsson" % "sbt-scalafmt" % "0.2.11")
+addSbtPlugin("com.lucidchart" % "sbt-scalafmt" % "0.3")
 
 addSbtPlugin("com.typesafe.sbt" % "sbt-native-packager" % "1.1.1")

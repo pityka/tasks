@@ -72,9 +72,8 @@ class S3Storage(bucketName: String, folderPrefix: String, s3stream: S3Stream)(
     val grantFullControl = config.global.s3GrantFullControl
 
     val rq = grantFullControl.foldLeft(
-        cannedAcls.foldLeft(PostObjectRequest.default)((rq, acl) =>
-              rq.cannedAcl(acl)))((rq, acl) =>
-          rq.grantFullControl(acl._1, acl._2))
+      cannedAcls.foldLeft(PostObjectRequest.default)((rq, acl) =>
+        rq.cannedAcl(acl)))((rq, acl) => rq.grantFullControl(acl._1, acl._2))
     if (sse) rq.serverSideEncryption else rq
   }
 
@@ -119,12 +118,15 @@ class S3Storage(bucketName: String, folderPrefix: String, s3stream: S3Stream)(
     }
   }
 
-  def retryFuture[A](f: =>Future[A],c:Int) : Future[A] =
-    if (c > 0) f.recoverWith{case e => akka.pattern.after(2 seconds, as.scheduler)(retryFuture(f,c-1))}
-    else f
+  def retryFuture[A](f: => Future[A], c: Int): Future[A] =
+    if (c > 0) f.recoverWith {
+      case e =>
+        akka.pattern.after(2 seconds, as.scheduler)(retryFuture(f, c - 1))
+    } else f
 
   def importFile(f: File, path: ProposedManagedFilePath)
-      : Future[(Long, Int, File, ManagedFilePath)] = retryFuture(importFile1(f,path),4)
+    : Future[(Long, Int, File, ManagedFilePath)] =
+    retryFuture(importFile1(f, path), 4)
 
   def importFile1(f: File, path: ProposedManagedFilePath)
     : Future[(Long, Int, File, ManagedFilePath)] = {
@@ -149,9 +151,9 @@ class S3Storage(bucketName: String, folderPrefix: String, s3stream: S3Stream)(
 
   def createStream(path: ManagedFilePath): Try[InputStream] =
     Try(
-        s3stream
-          .getData(S3Location(bucketName, assembleName(path)))
-          .runWith(StreamConverters.asInputStream()))
+      s3stream
+        .getData(S3Location(bucketName, assembleName(path)))
+        .runWith(StreamConverters.asInputStream()))
 
   def createSource(path: ManagedFilePath): Source[ByteString, _] =
     s3stream.getData(S3Location(bucketName, assembleName(path)))

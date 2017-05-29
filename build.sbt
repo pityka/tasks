@@ -15,7 +15,7 @@ lazy val shared = project.in(file("shared"))
       "io.circe" %% "circe-generic" % "0.8.0",
       "io.circe" %% "circe-parser" % "0.8.0"
     )
-  )
+  ).enablePlugins(ScalafmtPlugin)
   .settings(commonSettings:_*)
 
 resolvers += Resolver.jcenterRepo
@@ -39,7 +39,7 @@ lazy val core = project.in(file("core"))
       "org.scalatest" %% "scalatest" % "3.0.0" % "test",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value
     )
-  )
+  ).enablePlugins(ScalafmtPlugin)
   .dependsOn(shared)
 
 lazy val example = project.in(file("example"))
@@ -56,4 +56,4 @@ lazy val collection = project.in(file("collection")).settings(commonSettings:_*)
   name := "tasks-collection",
   libraryDependencies ++= Seq("io.github.pityka" %% "flatjoin-akka-stream" % "0.0.1-SNAPSHOT",
     "io.github.pityka" %% "flatjoin-upickle" % "0.0.1-SNAPSHOT")
-).dependsOn(core)
+).dependsOn(core).enablePlugins(ScalafmtPlugin)

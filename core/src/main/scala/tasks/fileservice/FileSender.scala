@@ -80,8 +80,8 @@ class FileSender(file: File,
       val readablechannel = new java.io.FileInputStream(file).getChannel
       val chunksize = tasks.util.config.global.fileSendChunkSize
       context.actorOf(
-          Props(new TransferOut(readablechannel, transferin, chunksize))
-            .withDispatcher("transferout"))
+        Props(new TransferOut(readablechannel, transferin, chunksize))
+          .withDispatcher("transferout"))
 
     case WaitingForSharedFile =>
       listener = Some(sender)
@@ -134,8 +134,8 @@ class SourceSender(file: Source[ByteString, _],
       val readablechannel = java.nio.channels.Channels.newChannel(is)
       val chunksize = tasks.util.config.global.fileSendChunkSize
       context.actorOf(
-          Props(new TransferOut(readablechannel, transferin, chunksize))
-            .withDispatcher("transferout"))
+        Props(new TransferOut(readablechannel, transferin, chunksize))
+          .withDispatcher("transferout"))
 
     case WaitingForSharedFile =>
       listener = Some(sender)

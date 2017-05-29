@@ -54,7 +54,6 @@ import tasks.shared._
 import tasks.elastic.ec2._
 import tasks.elastic.ssh._
 
-
 import scala.language.experimental.macros
 
 package object tasks {
@@ -173,11 +172,11 @@ package object tasks {
           .withFallback(akkaconf)
           .withFallback(ConfigFactory.load)
       } getOrElse (
-          ConfigFactory.defaultOverrides
-            .withFallback(customConf)
-            .withFallback(akkaconf)
-            .withFallback(ConfigFactory.load)
-      )
+        ConfigFactory.defaultOverrides
+          .withFallback(customConf)
+          .withFallback(akkaconf)
+          .withFallback(ConfigFactory.load)
+        )
 
     }
 
@@ -209,8 +208,9 @@ package object tasks {
   type CompFun[A, B] = A => ComputationEnvironment => B
 
   def AsyncTask[A, C](taskID: String, taskVersion: Int)(
-      comp: CompFun[A, Future[C]]): TaskDefinition[A, C] = macro Macros
-    .asyncTaskDefinitionImpl[A, C]
+      comp: CompFun[A, Future[C]]): TaskDefinition[A, C] =
+    macro Macros
+      .asyncTaskDefinitionImpl[A, C]
 
   def MasterSlaveGridEngineChosenFromConfig: MasterSlaveConfiguration = {
     if (config.global.disableRemoting) LocalConfigurationFromConfig

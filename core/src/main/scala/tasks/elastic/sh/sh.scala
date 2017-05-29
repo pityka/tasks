@@ -64,24 +64,24 @@ trait SHNodeRegistryImp extends Actor with GridJobRegistry {
   def requestOneNewJobFromGridScheduler(requestSize: CPUMemoryRequest)
     : Try[Tuple2[PendingJobId, CPUMemoryAvailable]] = {
     val script = Deployment.script(
-        memory = requestSize.memory,
-        gridEngine = SHGrid,
-        masterAddress = masterAddress,
-        download = new java.net.URL("http",
-                                    masterAddress.getHostName,
-                                    masterAddress.getPort + 1,
-                                    "/")
+      memory = requestSize.memory,
+      gridEngine = SHGrid,
+      masterAddress = masterAddress,
+      download = new java.net.URL("http",
+                                  masterAddress.getHostName,
+                                  masterAddress.getPort + 1,
+                                  "/")
     )
 
     val (stdout, stderr, code) = execGetStreamsAndCode(
-        Process(Seq("bash", "-c", script + "echo $!;exit;")))
+      Process(Seq("bash", "-c", script + "echo $!;exit;")))
 
     val pid = stdout.mkString("").trim.toInt
 
     Try(
-        (PendingJobId(pid.toString),
-         CPUMemoryAvailable(cpu = requestSize.cpu._1,
-                            memory = requestSize.memory)))
+      (PendingJobId(pid.toString),
+       CPUMemoryAvailable(cpu = requestSize.cpu._1,
+                          memory = requestSize.memory)))
 
   }
 
@@ -89,9 +89,9 @@ trait SHNodeRegistryImp extends Actor with GridJobRegistry {
     val ac = node.launcherActor
 
     val ackil = context.actorOf(
-        Props(new SHNodeKiller(ac, node))
-          .withDispatcher("my-pinned-dispatcher"),
-        "nodekiller" + node.name.value.replace("://", "___"))
+      Props(new SHNodeKiller(ac, node))
+        .withDispatcher("my-pinned-dispatcher"),
+      "nodekiller" + node.name.value.replace("://", "___"))
   }
 
 }

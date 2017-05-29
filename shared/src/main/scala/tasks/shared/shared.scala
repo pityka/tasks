@@ -50,12 +50,14 @@ case class CPUMemoryRequest(cpu: (Int, Int), memory: Int)
 object CPUMemoryRequest {
   import io.circe._
   import io.circe.generic.semiauto._
-  
+
   def apply(cpu: Int, memory: Int): CPUMemoryRequest =
     CPUMemoryRequest((cpu, cpu), memory)
 
-  implicit val decoder: Decoder[CPUMemoryRequest] = deriveDecoder[CPUMemoryRequest]
-  implicit val encoder: Encoder[CPUMemoryRequest] = deriveEncoder[CPUMemoryRequest]
+  implicit val decoder: Decoder[CPUMemoryRequest] =
+    deriveDecoder[CPUMemoryRequest]
+  implicit val encoder: Encoder[CPUMemoryRequest] =
+    deriveEncoder[CPUMemoryRequest]
 }
 
 @SerialVersionUID(1L)

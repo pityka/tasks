@@ -74,8 +74,8 @@ class FileService(storage: ManagedFileStorage,
     with akka.actor.ActorLogging {
 
   val fjp = tasks.util.concurrent.newJavaForkJoinPoolWithNamePrefix(
-      "fileservice-recordtonames",
-      threadpoolsize)
+    "fileservice-recordtonames",
+    threadpoolsize)
   val ec = ExecutionContext.fromExecutorService(fjp)
 
   import context.dispatcher
@@ -129,15 +129,15 @@ class FileService(storage: ManagedFileStorage,
         } else {
 
           val savePath = TempFile.createFileInTempFolderIfPossibleWithName(
-              proposedPath.name)
+            proposedPath.name)
           val writeableChannel =
             new java.io.FileOutputStream(savePath).getChannel
           val transferinActor = context.actorOf(
-              Props(new TransferIn(writeableChannel, self))
-                .withDispatcher("transferin"))
+            Props(new TransferIn(writeableChannel, self))
+              .withDispatcher("transferin"))
           transferinactors.update(
-              transferinActor,
-              (writeableChannel, savePath, sender, proposedPath, ephemeral))
+            transferinActor,
+            (writeableChannel, savePath, sender, proposedPath, ephemeral))
 
           sender ! TransferToMe(transferinActor)
 
@@ -145,8 +145,8 @@ class FileService(storage: ManagedFileStorage,
       } catch {
         case e: Exception => {
           log.error(
-              e,
-              "Error while accessing storage " + file + " " + proposedPath)
+            e,
+            "Error while accessing storage " + file + " " + proposedPath)
           sender ! ErrorWhileAccessingStore
         }
       }
@@ -158,11 +158,11 @@ class FileService(storage: ManagedFileStorage,
         val writeableChannel =
           new java.io.FileOutputStream(savePath).getChannel
         val transferinActor = context.actorOf(
-            Props(new TransferIn(writeableChannel, self))
-              .withDispatcher("transferin"))
+          Props(new TransferIn(writeableChannel, self))
+            .withDispatcher("transferin"))
         transferinactors.update(
-            transferinActor,
-            (writeableChannel, savePath, sender, proposedPath, true))
+          transferinActor,
+          (writeableChannel, savePath, sender, proposedPath, true))
 
         sender ! TransferToMe(transferinActor)
 
@@ -220,7 +220,7 @@ class FileService(storage: ManagedFileStorage,
               storage.exportFile(managedPath).map(f => KnownPaths(List(f)))
             else
               Future.successful(FileNotFound(new RuntimeException(
-                          s"SharedFile not found in storage. $storage # contains($managedPath) returned false. ")))
+                s"SharedFile not found in storage. $storage # contains($managedPath) returned false. ")))
           }
           .pipeTo(sender)
       } catch {
@@ -235,9 +235,8 @@ class FileService(storage: ManagedFileStorage,
           val readablechannel = new java.io.FileInputStream(file).getChannel
           val chunksize = tasks.util.config.global.fileSendChunkSize
           context.actorOf(
-              Props(
-                  new TransferOut(readablechannel, transferinActor, chunksize))
-                .withDispatcher("transferout"))
+            Props(new TransferOut(readablechannel, transferinActor, chunksize))
+              .withDispatcher("transferout"))
         }
 
       } catch {

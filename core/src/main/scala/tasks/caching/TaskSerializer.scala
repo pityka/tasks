@@ -31,7 +31,6 @@ import tasks.fileservice.SharedFile._
 
 import io.circe._
 
-
 trait TaskSerializer {
   def serializeTaskDescription(original: TaskDescription): Array[Byte] = {
     val x = original.persistent.getOrElse(original.startData).value
@@ -40,16 +39,17 @@ trait TaskSerializer {
   }
 
   def serializeResult(original: UntypedResult): Array[Byte] = {
-    val js = Json.obj("files" -> implicitly[Encoder[Set[SharedFile]]].apply(original.files),
-    "data" -> Json.fromString(original.data.value)
-  )
+    val js = Json.obj(
+      "files" -> implicitly[Encoder[Set[SharedFile]]].apply(original.files),
+      "data" -> Json.fromString(original.data.value))
     js.noSpaces.getBytes("UTF8")
   }
 
   def deserializeResult(ab: Array[Byte]): UntypedResult = {
     val m = io.circe.parser.parse(new String(ab)).right.get.asObject.get
 
-    val files = implicitly[Decoder[Set[SharedFile]]].decodeJson(m("files").get).right.get
+    val files =
+      implicitly[Decoder[Set[SharedFile]]].decodeJson(m("files").get).right.get
     UntypedResult(files, JsonString(m("data").get.asString.get))
   }
 }

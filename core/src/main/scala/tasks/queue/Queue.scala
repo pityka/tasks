@@ -99,8 +99,8 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
         routedMessages.remove(sch)
         if (config.global.resubmitFailedTask) {
           log.error(
-              cause,
-              "Task execution failed ( resubmitting infinite time until done): " + sch.toString)
+            cause,
+            "Task execution failed ( resubmitting infinite time until done): " + sch.toString)
           enQueue(sch, proxies)
           log.info("Requeued 1 message. Queue size: " + queuedTasks.keys.size)
         } else {
@@ -123,7 +123,7 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
       enQueue(sch, proxies)
     }
     log.info(
-        "Requeued " + msgs.size + " messages. Queue size: " + queuedTasks.keys.size)
+      "Requeued " + msgs.size + " messages. Queue size: " + queuedTasks.keys.size)
 
     knownLaunchers -= crashedLauncher
   }
@@ -156,8 +156,8 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
                    }
                    .getOrElse(false)) {
         log.debug(
-            "Scheduletask received multiple times from different proxies. Not queueing this one, but delivering result if ready. {}",
-            m)
+          "Scheduletask received multiple times from different proxies. Not queueing this one, but delivering result if ready. {}",
+          m)
         addProxyToRoutedMessages(m, sender :: Nil)
       } else {
         val ch = sender
@@ -192,41 +192,44 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
     case AskForWork(resource) =>
       if (negotiation.isEmpty) {
         log.debug(
-            "AskForWork. Sender: {}. Resource: {}. Negotition state: {}. Queue state: {}",
-            sender,
-            resource,
-            negotiation,
-            queuedTasks
-              .map(x => (x._1.description.taskId, x._1.resource))
-              .toSeq)
+          "AskForWork. Sender: {}. Resource: {}. Negotition state: {}. Queue state: {}",
+          sender,
+          resource,
+          negotiation,
+          queuedTasks
+            .map(x => (x._1.description.taskId, x._1.resource))
+            .toSeq
+        )
 
         val launcher = sender
 
-        queuedTasks.find {
-          case (k, v) => resource.canFulfillRequest(k.resource)
-        }.foreach { task =>
-          negotiation = Some(launcher -> task._1)
-          log.debug("Dequeued. Sending task to " + launcher)
-          log.debug(negotiation.toString)
-
-          if (!knownLaunchers.contains(launcher)) {
-            knownLaunchers += launcher
-            context.actorOf(Props(new HeartBeatActor(launcher))
-                              .withDispatcher("heartbeat"),
-                            "heartbeatOf" + launcher.path.address.toString
-                              .replace("://", "___") + launcher.path.name)
-            context.system.eventStream
-              .subscribe(self, classOf[HeartBeatStopped])
+        queuedTasks
+          .find {
+            case (k, v) => resource.canFulfillRequest(k.resource)
           }
+          .foreach { task =>
+            negotiation = Some(launcher -> task._1)
+            log.debug("Dequeued. Sending task to " + launcher)
+            log.debug(negotiation.toString)
 
-          val resp = launcher ! ScheduleWithProxy(task._1, task._2)
+            if (!knownLaunchers.contains(launcher)) {
+              knownLaunchers += launcher
+              context.actorOf(Props(new HeartBeatActor(launcher))
+                                .withDispatcher("heartbeat"),
+                              "heartbeatOf" + launcher.path.address.toString
+                                .replace("://", "___") + launcher.path.name)
+              context.system.eventStream
+                .subscribe(self, classOf[HeartBeatStopped])
+            }
 
-        // context.system.scheduler.scheduleOnce(
-        //     30 seconds,
-        //     self,
-        //     NegotiationTimeout)(context.dispatcher)
+            val resp = launcher ! ScheduleWithProxy(task._1, task._2)
 
-        }
+          // context.system.scheduler.scheduleOnce(
+          //     30 seconds,
+          //     self,
+          //     NegotiationTimeout)(context.dispatcher)
+
+          }
       } else {
         log.debug("AskForWork received but currently in negotiation state.")
       }
@@ -238,7 +241,7 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
 
       if (routedMessages.contains(task)) {
         log.error(
-            "Routed messages already contains task. This is unexpected and can lead to lost messages.")
+          "Routed messages already contains task. This is unexpected and can lead to lost messages.")
       }
 
       val proxies = queuedTasks(task)
@@ -266,13 +269,14 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
     case HowLoadedAreYou => {
       // EventHandler.debug(this,queue.toString+routedMessages.toString)
       val qs = QueueStat(
-          queuedTasks.toList
-            .map(_._1)
-            .map(x => (x.description.taskId.toString, x.resource))
-            .toList,
-          routedMessages.toSeq
-            .map(x => x._1.description.taskId.toString -> x._2._2)
-            .toList)
+        queuedTasks.toList
+          .map(_._1)
+          .map(x => (x.description.taskId.toString, x.resource))
+          .toList,
+        routedMessages.toSeq
+          .map(x => x._1.description.taskId.toString -> x._2._2)
+          .toList
+      )
       context.system.eventStream.publish(qs)
       sender ! qs
     }

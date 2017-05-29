@@ -44,10 +44,10 @@ package object concurrent {
     }
 
     new ForkJoinPool(
-        parallelism,
-        factory,
-        null.asInstanceOf[java.lang.Thread.UncaughtExceptionHandler],
-        true
+      parallelism,
+      factory,
+      null.asInstanceOf[java.lang.Thread.UncaughtExceptionHandler],
+      true
     )
   }
 

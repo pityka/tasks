@@ -35,7 +35,7 @@ import akka.actor._
 
 import scala.concurrent._
 
-import io.circe.{Encoder,Decoder}
+import io.circe.{Encoder, Decoder}
 
 abstract class ResultWithSharedFiles(sf: SharedFile*) extends Product {
   def files = sf
@@ -47,7 +47,7 @@ trait HasPersistent[+A] extends Serializable { self: A =>
 }
 
 class TaskDefinition[A: Encoder, B: Decoder](val computation: CompFun2,
-                                           val taskId: TaskId) {
+                                             val taskId: TaskId) {
 
   def apply(a: A)(resource: CPUMemoryRequest)(
       implicit components: TaskSystemComponents): Future[B] =

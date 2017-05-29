@@ -80,18 +80,20 @@ class RemoteFileStorage(implicit mat: ActorMaterializer,
     }
 
   def contains(path: RemoteFilePath, size: Long, hash: Int): Future[Boolean] =
-    getSizeAndHash(path).map {
-      case (size1, hash1) =>
-        size1 === size && (tasks.util.config.global.skipContentHashVerificationAfterCache || hash === hash1)
-    }.recover {
-      case e =>
-        log.debug("Exception while looking up remote file. {}", e)
-        false
-    }
+    getSizeAndHash(path)
+      .map {
+        case (size1, hash1) =>
+          size1 === size && (tasks.util.config.global.skipContentHashVerificationAfterCache || hash === hash1)
+      }
+      .recover {
+        case e =>
+          log.debug("Exception while looking up remote file. {}", e)
+          false
+      }
 
   def exportFile(path: RemoteFilePath): Future[File] = {
     val localFile = path.uri.akka.scheme == "file" && new File(
-          path.uri.akka.path.toString).canRead
+      path.uri.akka.path.toString).canRead
     if (localFile) Future.successful(new File(path.uri.akka.path.toString))
     else {
       val file = TempFile.createTempFile("")
@@ -101,7 +103,7 @@ class RemoteFileStorage(implicit mat: ActorMaterializer,
   }
 
   def createStream(path: RemoteFilePath): Try[InputStream] = Try(
-      createSource(path).runWith(StreamConverters.asInputStream())
+    createSource(path).runWith(StreamConverters.asInputStream())
   )
 
 }

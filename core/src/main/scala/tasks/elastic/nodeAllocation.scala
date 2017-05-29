@@ -85,7 +85,8 @@ trait DecideNewNode {
 
 trait NodeRegistry {
 
-  def allRegisteredNodes: Set[Tuple2[RunningJobId, CPUMemoryAvailable]] // name and resources
+  def allRegisteredNodes
+    : Set[Tuple2[RunningJobId, CPUMemoryAvailable]] // name and resources
 
   def pendingNodes: Set[Tuple2[PendingJobId, CPUMemoryAvailable]]
 
@@ -136,7 +137,7 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
           allTime <= config.global.maxNodesCumulative) {
 
         log.info(
-            "Request " + types.size + " node. One from each: " + types.keySet)
+          "Request " + types.size + " node. One from each: " + types.keySet)
 
         types.foreach {
           case (request, n) =>
@@ -158,7 +159,7 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
 
       } else {
         log.info(
-            "New node request will not proceed: pending nodes or reached max nodes. max: " + config.global.maxNodes + ", pending: " + pending.size + ", running: " + jobregistry.size)
+          "New node request will not proceed: pending nodes or reached max nodes. max: " + config.global.maxNodes + ", pending: " + pending.size + ", running: " + jobregistry.size)
       }
     }
   }
@@ -274,10 +275,10 @@ trait NodeCreatorImpl
     import context.dispatcher
 
     scheduler = context.system.scheduler.schedule(
-        initialDelay = config.global.queueCheckInitialDelay,
-        interval = config.global.queueCheckInterval,
-        receiver = self,
-        message = MeasureTime
+      initialDelay = config.global.queueCheckInitialDelay,
+      interval = config.global.queueCheckInterval,
+      receiver = self,
+      message = MeasureTime
     )
 
     context.system.eventStream.subscribe(self, classOf[NodeIsDown])
@@ -311,16 +312,16 @@ trait NodeCreatorImpl
     case m: QueueStat => {
       if (config.global.logQueueStatus) {
         log.info(
-            s"Queued tasks: ${m.queued.size}. Running tasks: ${m.running.size}. Pending nodes: ${pendingNodes.size} . Running nodes: ${allRegisteredNodes.size}. Largest request: ${m.queued
-          .sortBy(_._2.cpu)
-          .lastOption}/${m.queued.sortBy(_._2.memory).lastOption}")
+          s"Queued tasks: ${m.queued.size}. Running tasks: ${m.running.size}. Pending nodes: ${pendingNodes.size} . Running nodes: ${allRegisteredNodes.size}. Largest request: ${m.queued
+            .sortBy(_._2.cpu)
+            .lastOption}/${m.queued.sortBy(_._2.memory).lastOption}")
       }
       try {
         startNewNode(
-            needNewNode(
-                m,
-                allRegisteredNodes.toSeq.map(_._2) ++ Seq(unmanagedResource),
-                pendingNodes.toSeq.map(_._2)))
+          needNewNode(
+            m,
+            allRegisteredNodes.toSeq.map(_._2) ++ Seq(unmanagedResource),
+            pendingNodes.toSeq.map(_._2)))
       } catch {
         case e: Exception => log.error(e, "Error during requesting node")
       }
@@ -372,15 +373,15 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
 
   override def preStart {
     log.debug(
-        "NodeKiller start. Monitoring actor: " + targetLauncherActor + " on node: " + targetNode.name)
+      "NodeKiller start. Monitoring actor: " + targetLauncherActor + " on node: " + targetNode.name)
 
     import context.dispatcher
 
     scheduler = context.system.scheduler.schedule(
-        initialDelay = 0 seconds,
-        interval = config.global.nodeKillerMonitorInterval,
-        receiver = self,
-        message = MeasureTime
+      initialDelay = 0 seconds,
+      interval = config.global.nodeKillerMonitorInterval,
+      receiver = self,
+      message = MeasureTime
     )
 
     context.system.eventStream.subscribe(self, classOf[HeartBeatStopped])
@@ -400,7 +401,7 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
 
   def shutdown {
     log.info(
-        "Shutting down target node: name= " + targetNode.name + " , actor= " + targetLauncherActor)
+      "Shutting down target node: name= " + targetNode.name + " , actor= " + targetLauncherActor)
     shutdownRunningNode(targetNode.name)
     context.system.eventStream.publish(NodeIsDown(targetNode))
     scheduler.cancel
@@ -411,10 +412,11 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
     case HeartBeatStopped(down) if targetLauncherActor == down => shutdown
     case MeasureTime =>
       if (targetIsIdle &&
-          (System.nanoTime() - lastIdleSessionStart) >= config.global.idleNodeTimeout.toNanos) {
+          (System
+            .nanoTime() - lastIdleSessionStart) >= config.global.idleNodeTimeout.toNanos) {
         try {
           log.info(
-              "Target is idle. Start shutdown sequence. Send PrepareForShutdown to " + targetLauncherActor)
+            "Target is idle. Start shutdown sequence. Send PrepareForShutdown to " + targetLauncherActor)
           targetLauncherActor ! PrepareForShutdown
           log.info("PrepareForShutdown sent to " + targetLauncherActor)
         } catch {
@@ -464,7 +466,7 @@ trait SelfShutdown extends Actor with akka.actor.ActorLogging {
 
     case de: akka.remote.DisassociatedEvent =>
       log.error(
-          "DisassociatedEvent. " + de.remoteAddress + " vs " + balancerActor.path.address)
+        "DisassociatedEvent. " + de.remoteAddress + " vs " + balancerActor.path.address)
       if (de.remoteAddress == balancerActor.path.address) {
         shutdown
       }

@@ -27,7 +27,14 @@
 
 package tasks.queue
 
-import akka.actor.{Actor, PoisonPill, ActorRef, Props, Cancellable, ActorRefFactory}
+import akka.actor.{
+  Actor,
+  PoisonPill,
+  ActorRef,
+  Props,
+  Cancellable,
+  ActorRefFactory
+}
 import akka.actor.Actor._
 import akka.stream.ActorMaterializer
 
@@ -105,25 +112,23 @@ class TaskLauncher(
     availableResources = availableResources.substract(allocatedResource)
 
     val actor = context.actorOf(
-        Props(
-            classOf[Task],
-            Class
-              .forName(sch.taskImplementation)
-              .asInstanceOf[java.lang.Class[_]]
-              .getConstructor()
-              .newInstance(),
-            self,
-            sch.balancerActor,
-            FileServiceActor(sch.fileServiceActor,
-                             managedStorage,
-                             remoteStorage),
-            sch.cacheActor,
-            nodeLocalCache,
-            allocatedResource,
-            sch.fileServicePrefix.append(sch.description.taskId.id),
-            auxExecutionContext,
-            actorMaterializer
-        ).withDispatcher("task-worker-dispatcher")
+      Props(
+        classOf[Task],
+        Class
+          .forName(sch.taskImplementation)
+          .asInstanceOf[java.lang.Class[_]]
+          .getConstructor()
+          .newInstance(),
+        self,
+        sch.balancerActor,
+        FileServiceActor(sch.fileServiceActor, managedStorage, remoteStorage),
+        sch.cacheActor,
+        nodeLocalCache,
+        allocatedResource,
+        sch.fileServicePrefix.append(sch.description.taskId.id),
+        auxExecutionContext,
+        actorMaterializer
+      ).withDispatcher("task-worker-dispatcher")
     )
     log.debug("Actor constructed")
     // log.debug( "Actor started")
@@ -154,10 +159,10 @@ class TaskLauncher(
     import context.dispatcher
 
     scheduler = context.system.scheduler.schedule(
-        initialDelay = 0 seconds,
-        interval = refreshRate,
-        receiver = self,
-        message = CheckQueue
+      initialDelay = 0 seconds,
+      interval = refreshRate,
+      receiver = self,
+      message = CheckQueue
     )
 
   }
@@ -167,23 +172,27 @@ class TaskLauncher(
 
     startedTasks.foreach(x => x._1 ! PoisonPill)
     log.info(
-        s"TaskLauncher stopped, sent PoisonPill to ${startedTasks.size} running tasks.")
+      s"TaskLauncher stopped, sent PoisonPill to ${startedTasks.size} running tasks.")
   }
 
   def taskFinished(taskActor: ActorRef, receivedResult: UntypedResult) {
     val elem = startedTasks
       .find(_._1 == taskActor)
       .getOrElse(throw new RuntimeException(
-              "Wrong message received. No such taskActor."))
+        "Wrong message received. No such taskActor."))
     val sch = elem._2
     import akka.pattern.ask
     import context.dispatcher
-    (sch.cacheActor
-      .?(SaveResult(sch.description,
-                    receivedResult,
-                    sch.fileServicePrefix.append(sch.description.taskId.id)))(
+    (
+      sch.cacheActor
+        .?(
+          SaveResult(sch.description,
+                     receivedResult,
+                     sch.fileServicePrefix.append(sch.description.taskId.id)))(
           sender = taskActor,
-          timeout = 5 seconds))
+          timeout = 5 seconds
+        )
+      )
       .foreach { _ =>
         taskQueue ! TaskDone(sch, receivedResult)
       }
@@ -201,7 +210,7 @@ class TaskLauncher(
     val elem = startedTasks
       .find(_._1 == taskActor)
       .getOrElse(throw new RuntimeException(
-              "Wrong message received. No such taskActor."))
+        "Wrong message received. No such taskActor."))
     val sch = elem._2
 
     startedTasks = startedTasks.filterNot(_ == elem)
@@ -259,7 +268,7 @@ class TaskLauncher(
       if (allocated.isEmpty) log.error("Can't find actor ")
       else {
         availableResources = availableResources.addBack(
-            CPUMemoryAllocated(allocated.get.cpu, allocated.get.memory))
+          CPUMemoryAllocated(allocated.get.cpu, allocated.get.memory))
         freed = freed + taskActor
       }
       askForWork

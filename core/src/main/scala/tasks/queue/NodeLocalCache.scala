@@ -86,7 +86,7 @@ class NodeLocalCache extends Actor with akka.actor.ActorLogging {
           sender ! r.get.get
         } else {
           log.debug(
-              "LookUp(" + s + "): Item is under production, adding sender to waiting list.")
+            "LookUp(" + s + "): Item is under production, adding sender to waiting list.")
           waitingList += s -> sender
         }
       }

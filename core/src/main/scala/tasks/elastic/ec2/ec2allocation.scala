@@ -123,7 +123,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 
     if (config.global.spotPrice > 2.5)
       throw new RuntimeException(
-          "Spotprice too high:" + config.global.spotPrice)
+        "Spotprice too high:" + config.global.spotPrice)
 
     requestRequest.setSpotPrice(config.global.spotPrice.toString);
     requestRequest.setInstanceCount(1);
@@ -142,7 +142,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     blockDeviceMappingSDC.setVirtualName("ephemeral1");
 
     launchSpecification.setBlockDeviceMappings(
-        List(blockDeviceMappingSDB, blockDeviceMappingSDC));
+      List(blockDeviceMappingSDB, blockDeviceMappingSDC));
 
     config.global.iamRole.foreach { iamRole =>
       val iamprofile = new IamInstanceProfileSpecification()
@@ -157,14 +157,14 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     }
 
     val userdata = "#!/usr/bin/env bash\n" + Deployment.script(
-          memory = selectedInstanceType._2.memory,
-          gridEngine = EC2Grid,
-          masterAddress = masterAddress,
-          download = new java.net.URL("http",
-                                      masterAddress.getHostName,
-                                      masterAddress.getPort + 1,
-                                      "/")
-      )
+      memory = selectedInstanceType._2.memory,
+      gridEngine = EC2Grid,
+      masterAddress = masterAddress,
+      download = new java.net.URL("http",
+                                  masterAddress.getHostName,
+                                  masterAddress.getPort + 1,
+                                  "/")
+    )
 
     launchSpecification.setUserData(gzipBase64(userdata))
 
@@ -200,8 +200,8 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     val (requestid, instancetype) = requestSpotInstance(request)
     val jobid = PendingJobId(requestid)
     val size = CPUMemoryAvailable(
-        cpu = instancetype._2.cpu,
-        memory = instancetype._2.memory
+      cpu = instancetype._2.cpu,
+      memory = instancetype._2.memory
     )
     (jobid, size)
   }
@@ -210,14 +210,14 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     val ac = node.launcherActor
 
     ec2.createTags(
-        new CreateTagsRequest(List(node.name.value),
-                              config.global.instanceTags.map(t =>
-                                    new Tag(t._1, t._2))))
+      new CreateTagsRequest(List(node.name.value),
+                            config.global.instanceTags.map(t =>
+                              new Tag(t._1, t._2))))
 
     val ackil = context.actorOf(
-        Props(new EC2NodeKiller(ac, node))
-          .withDispatcher("my-pinned-dispatcher"),
-        "nodekiller" + node.name.value.replace("://", "___"))
+      Props(new EC2NodeKiller(ac, node))
+        .withDispatcher("my-pinned-dispatcher"),
+      "nodekiller" + node.name.value.replace("://", "___"))
 
   }
 

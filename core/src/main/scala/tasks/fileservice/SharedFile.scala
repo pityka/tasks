@@ -36,7 +36,13 @@ import akka.stream.ActorMaterializer
 import akka.util._
 import scala.concurrent.{Future, ExecutionContext}
 import java.lang.Class
-import java.io.{File, InputStream, FileInputStream, BufferedInputStream, OutputStream}
+import java.io.{
+  File,
+  InputStream,
+  FileInputStream,
+  BufferedInputStream,
+  OutputStream
+}
 import scala.concurrent.duration._
 import java.util.concurrent.{TimeUnit, ScheduledFuture}
 import java.nio.channels.{WritableByteChannel, ReadableByteChannel}
@@ -52,7 +58,7 @@ import tasks.queue._
 import tasks.TaskSystemComponents
 import tasks.Implicits._
 
-import io.circe.{Json,Decoder,Encoder}
+import io.circe.{Json, Decoder, Encoder}
 import io.circe.syntax._
 import io.circe.generic.semiauto._
 
@@ -76,10 +82,8 @@ object FilePath {
   implicit val encoder: Encoder[FilePath] = deriveEncoder[FilePath]
 }
 
-
-
 @SerialVersionUID(1L)
-case class SharedFile (
+case class SharedFile(
     val path: FilePath,
     val byteSize: Long,
     val hash: Int
@@ -117,11 +121,13 @@ case class SharedFile (
 
 object SharedFile {
 
-  implicit val encoder : Encoder[SharedFile]= //deriveEncoder[SharedFile]
-      Encoder.forProduct3("path","byteSize","hash")(sf => (sf.path,sf.byteSize,sf.hash))
+  implicit val encoder: Encoder[SharedFile] = //deriveEncoder[SharedFile]
+    Encoder.forProduct3("path", "byteSize", "hash")(sf =>
+      (sf.path, sf.byteSize, sf.hash))
 
-  implicit val decoder : Decoder[SharedFile] = //deriveDecoder[SharedFile]
-      Decoder.forProduct3("path","byteSize","hash")((a:FilePath,b:Long,c:Int) => new SharedFile(a,b,c))
+  implicit val decoder: Decoder[SharedFile] = //deriveDecoder[SharedFile]
+    Decoder.forProduct3("path", "byteSize", "hash")(
+      (a: FilePath, b: Long, c: Int) => new SharedFile(a, b, c))
 
   def apply(uri: Uri)(implicit tsc: TaskSystemComponents): Future[SharedFile] =
     SharedFileHelper.create(RemoteFilePath(uri), tsc.fs.remote)

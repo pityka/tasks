@@ -38,7 +38,7 @@ import tasks.queue._
 import tasks.caching._
 import tasks.fileservice._
 
-import io.circe.{Decoder,Encoder}
+import io.circe.{Decoder, Encoder}
 import io.circe.syntax._
 import io.circe.generic.auto._
 
@@ -65,7 +65,9 @@ object SimpleTask {
           // Logger.debug( "task implementation ended")
           // Logger.debug( rs.num.get)
 
-          UntypedResult(Set(), JsonString((new IntResult(rs.num.get)).asJson.noSpaces))
+          UntypedResult(
+            Set(),
+            JsonString((new IntResult(rs.num.get)).asJson.noSpaces))
         }
 
     }.flatMap(x => x)
@@ -77,10 +79,10 @@ object SimpleTask {
       writer1: Encoder[MyResultSet],
       reader2: Decoder[IntResult]) =
     newTask[IntResult, MyResultSet](
-        prerequisitives = MyResultSet(Some(counter), Some(id)),
-        resource = CPUMemoryRequest(cpu = 1, memory = 500),
-        f = runTask,
-        taskId = TaskId(runTask.getClass.getName, 1)
+      prerequisitives = MyResultSet(Some(counter), Some(id)),
+      resource = CPUMemoryRequest(cpu = 1, memory = 500),
+      f = runTask,
+      taskId = TaskId(runTask.getClass.getName, 1)
     ).actor
 
 }

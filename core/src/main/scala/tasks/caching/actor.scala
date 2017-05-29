@@ -41,8 +41,6 @@ import tasks.util.eq._
 import tasks.queue._
 import tasks.fileservice._
 
-
-
 class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
     extends Actor
     with akka.actor.ActorLogging
@@ -56,7 +54,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
 
   override def preStart = {
     log.info(
-        "Cache service starting. " + cacheMap.toString + s". config.global.verifySharedFileInCache: ${config.global.verifySharedFileInCache}. config.global.skipContentHashVerificationAfterCache: ${config.global.skipContentHashVerificationAfterCache}.")
+      "Cache service starting. " + cacheMap.toString + s". config.global.verifySharedFileInCache: ${config.global.verifySharedFileInCache}. config.global.skipContentHashVerificationAfterCache: ${config.global.skipContentHashVerificationAfterCache}.")
   }
 
   override def postStop {
@@ -92,7 +90,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
       val savedSender = sender
       cacheMap
         .get(sch.description)(
-            sch.fileServicePrefix.append(sch.description.taskId.id))
+          sch.fileServicePrefix.append(sch.description.taskId.id))
         .recover {
           case e =>
             log.error(e, "Error while looking up in cache")
@@ -113,27 +111,27 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
             } else {
               Future
                 .sequence(
-                    res.get.files.map(sf => SharedFileHelper.isAccessible(sf)))
+                  res.get.files.map(sf => SharedFileHelper.isAccessible(sf)))
                 .map(_.forall(x => x))
                 .recover {
                   case e =>
                     log.warning(
-                        "Checking: {}. Got something ({}), but failed to verify after cache with error:{}.",
-                        sch.description.taskId,
-                        res.get,
-                        e)
+                      "Checking: {}. Got something ({}), but failed to verify after cache with error:{}.",
+                      sch.description.taskId,
+                      res.get,
+                      e)
                     false
                 }
                 .foreach { verified =>
                   if (!verified) {
                     log.warning(
-                        "Checking: {}. Got something ({}), but failed to verify after cache.",
-                        sch.description.taskId,
-                        res.get)
+                      "Checking: {}. Got something ({}), but failed to verify after cache.",
+                      sch.description.taskId,
+                      res.get)
                     savedSender ! AnswerFromCache(
-                        Left(TaskNotFoundInCache(true)),
-                        originalSender,
-                        sch)
+                      Left(TaskNotFoundInCache(true)),
+                      originalSender,
+                      sch)
                   } else {
                     log.debug("Checking: {}. Got something (verified).",
                               sch.description.taskId)

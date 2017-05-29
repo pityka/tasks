@@ -96,9 +96,9 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
 
   if (hostConfig.myCardinality > Runtime.getRuntime().availableProcessors()) {
     tasksystemlog.warning(
-        "Number of CPUs in the machine is " + Runtime
-          .getRuntime()
-          .availableProcessors + ". numCPU should not be greater than this.")
+      "Number of CPUs in the machine is " + Runtime
+        .getRuntime()
+        .availableProcessors + ". numCPU should not be greater than this.")
   }
 
   tasksystemlog.info("Master node address is: " + hostConfig.master.toString)
@@ -135,8 +135,8 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
       val remotepath =
         s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/noderegistry"
       val noderegistry = Await.result(
-          system.actorSelection(remotepath).resolveOne(600 seconds),
-          atMost = 600 seconds)
+        system.actorSelection(remotepath).resolveOne(600 seconds),
+        atMost = 600 seconds)
       tasksystemlog.info("NodeRegistry: " + noderegistry)
       Some(noderegistry)
     } else None
@@ -149,8 +149,8 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
       val s3bucket =
         if (config.global.storageURI.getScheme != null && config.global.storageURI.getScheme == "s3") {
           Some(
-              (config.global.storageURI.getAuthority,
-               config.global.storageURI.getPath.drop(1)))
+            (config.global.storageURI.getAuthority,
+             config.global.storageURI.getPath.drop(1)))
         } else None
 
       if (s3bucket.isDefined) {
@@ -165,7 +165,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
             config.global.storageURI.getPath
           else {
             tasksystemlog.error(
-                s"${config.global.storageURI} unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative")
+              s"${config.global.storageURI} unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative")
             System.exit(1)
             throw new RuntimeException("dsf")
           }
@@ -182,7 +182,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
         val centralized = config.global.fileServiceBaseFolderIsShared
         if (folder1.list.size != 0) {
           tasksystemlog.warning(
-              s"fileServiceBaseFolder (${folder1.getCanonicalPath}) is not empty. This is only safe if you restart a pipeline. ")
+            s"fileServiceBaseFolder (${folder1.getCanonicalPath}) is not empty. This is only safe if you restart a pipeline. ")
         }
         Some(new FolderFileStorage(folder1, centralized, folders2))
       }
@@ -196,17 +196,17 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
       val threadpoolsize = config.global.fileServiceThreadPoolSize
 
       val ac = system.actorOf(
-          Props(new FileService(managedFileStorage.get, threadpoolsize))
-            .withDispatcher("my-pinned-dispatcher"),
-          "fileservice")
+        Props(new FileService(managedFileStorage.get, threadpoolsize))
+          .withDispatcher("my-pinned-dispatcher"),
+        "fileservice")
       reaperActor ! WatchMe(ac)
       ac
     } else {
       val actorpath =
         s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/fileservice"
       val globalFileService = Await.result(
-          system.actorSelection(actorpath).resolveOne(600 seconds),
-          atMost = 600 seconds)
+        system.actorSelection(actorpath).resolveOne(600 seconds),
+        atMost = 600 seconds)
 
       tasksystemlog.info("FileService: " + globalFileService)
       globalFileService
@@ -222,8 +222,8 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
     FileServiceActor(fileActor, managedFileStorage, remoteFileStorage)
 
   val nodeLocalCacheActor = system.actorOf(
-      Props[NodeLocalCache].withDispatcher("my-pinned-dispatcher"),
-      name = "nodeLocalCache")
+    Props[NodeLocalCache].withDispatcher("my-pinned-dispatcher"),
+    name = "nodeLocalCache")
 
   reaperActor ! WatchMe(nodeLocalCacheActor)
 
@@ -241,16 +241,16 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
                                     system,
                                     system.dispatcher)
             case other =>
-        throw new RuntimeException("only sharedfile cache")
+              throw new RuntimeException("only sharedfile cache")
           }
 
         }
         case false => new DisabledCache
       }
       val ac = system.actorOf(
-          Props(new TaskResultCache(cache, fileServiceActor))
-            .withDispatcher("my-pinned-dispatcher"),
-          "cache")
+        Props(new TaskResultCache(cache, fileServiceActor))
+          .withDispatcher("my-pinned-dispatcher"),
+        "cache")
       reaperActor ! WatchMe(ac)
       ac
     } else {
@@ -283,8 +283,8 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
       val actorpath =
         s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/queue"
       val ac = Await.result(
-          system.actorSelection(actorpath).resolveOne(600 seconds),
-          atMost = 600 seconds)
+        system.actorSelection(actorpath).resolveOne(600 seconds),
+        atMost = 600 seconds)
       tasksystemlog.info("Queue: " + ac)
       ac
     }
@@ -296,11 +296,11 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
   }
 
   val elasticSupportFactory = elastic.elasticSupport.map(
-      es =>
-        es(master = hostConfig.master,
-           queueActor = queueActor,
-           resource = CPUMemoryAvailable(cpu = hostConfig.myCardinality,
-                                         memory = hostConfig.availableMemory)))
+    es =>
+      es(master = hostConfig.master,
+         queueActor = queueActor,
+         resource = CPUMemoryAvailable(cpu = hostConfig.myCardinality,
+                                       memory = hostConfig.availableMemory)))
 
   // start up noderegistry
   val noderegistry: Option[ActorRef] =
@@ -320,7 +320,6 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
     if (!isLauncherOnly && elasticSupportFactory.isDefined) {
       import akka.http.scaladsl.Http
 
-
       val pack = Deployment.pack
       tasksystemlog
         .info("Written executable package to: {}", pack.getAbsolutePath)
@@ -329,7 +328,8 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
 
       val actorsystem = 1 //shade implicit conversion
 
-      val bindingFuture = Http().bindAndHandle(service.route, "0.0.0.0", host.getPort + 1)
+      val bindingFuture =
+        Http().bindAndHandle(service.route, "0.0.0.0", host.getPort + 1)
 
       Some(bindingFuture)
 
@@ -340,31 +340,34 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
   private val auxExecutionContext =
     scala.concurrent.ExecutionContext.fromExecutorService(auxFjp)
 
-  val components = TaskSystemComponents(queue = QueueActor(queueActor),
-                                        fs = fileServiceActor,
-                                        actorsystem = system,
-                                        cache = CacheActor(cacherActor),
-                                        nodeLocalCache = nodeLocalCache,
-                                        filePrefix =
-                                          FileServicePrefix(Vector()),
-                                        executionContext = auxExecutionContext,
-                                        actorMaterializer = mat)
+  val components = TaskSystemComponents(
+    queue = QueueActor(queueActor),
+    fs = fileServiceActor,
+    actorsystem = system,
+    cache = CacheActor(cacherActor),
+    nodeLocalCache = nodeLocalCache,
+    filePrefix = FileServicePrefix(Vector()),
+    executionContext = auxExecutionContext,
+    actorMaterializer = mat
+  )
 
   private val launcherActor = if (numberOfCores > 0) {
     val refresh = config.global.askInterval
     val ac = system.actorOf(
-        Props(
-            new TaskLauncher(queueActor,
-                             nodeLocalCacheActor,
-                             CPUMemoryAvailable(cpu = numberOfCores,
-                                                memory = availableMemory),
-                             refreshRate = refresh,
-                             auxExecutionContext = auxExecutionContext,
-                             actorMaterializer = mat,
-                             remoteStorage = remoteFileStorage,
-                             managedStorage = managedFileStorage))
-          .withDispatcher("launcher"),
-        "launcher")
+      Props(
+        new TaskLauncher(
+          queueActor,
+          nodeLocalCacheActor,
+          CPUMemoryAvailable(cpu = numberOfCores, memory = availableMemory),
+          refreshRate = refresh,
+          auxExecutionContext = auxExecutionContext,
+          actorMaterializer = mat,
+          remoteStorage = remoteFileStorage,
+          managedStorage = managedFileStorage
+        ))
+        .withDispatcher("launcher"),
+      "launcher"
+    )
     reaperActor ! WatchMe(ac)
     Some(ac)
   } else None
@@ -373,22 +376,23 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
     val nodeName = getNodeName
 
     tasksystemlog.info(
-        "This is a worker node. ElasticNodeAllocation is enabled. Node name: " + nodeName)
+      "This is a worker node. ElasticNodeAllocation is enabled. Node name: " + nodeName)
 
     remotenoderegistry.get ! NodeComingUp(
-        Node(RunningJobId(nodeName),
-             CPUMemoryAvailable(hostConfig.myCardinality,
-                                hostConfig.availableMemory),
-             launcherActor.get))
+      Node(RunningJobId(nodeName),
+           CPUMemoryAvailable(hostConfig.myCardinality,
+                              hostConfig.availableMemory),
+           launcherActor.get))
 
     val balancerHeartbeat = system.actorOf(
-        Props(new HeartBeatActor(queueActor)).withDispatcher("heartbeat"),
-        "heartbeatOf" + queueActor.path.address.toString
-          .replace("://", "___") + queueActor.path.name)
+      Props(new HeartBeatActor(queueActor)).withDispatcher("heartbeat"),
+      "heartbeatOf" + queueActor.path.address.toString
+        .replace("://", "___") + queueActor.path.name
+    )
 
     system.actorOf(
-        Props(elasticSupportFactory.get.createSelfShutdown)
-          .withDispatcher("my-pinned-dispatcher"))
+      Props(elasticSupportFactory.get.createSelfShutdown)
+        .withDispatcher("my-pinned-dispatcher"))
 
   } else {
     tasksystemlog.warning("Nodename/jobname is not defined.")
@@ -439,7 +443,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
 
   scala.sys.addShutdownHook {
     tasksystemlog.warning(
-        "JVM is shutting down - will call tasksystem shutdown.")
+      "JVM is shutting down - will call tasksystem shutdown.")
     shutdown
     tasksystemlog.warning("JVM is shutting down - called tasksystem shutdown.")
   }

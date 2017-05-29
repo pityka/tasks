@@ -107,7 +107,7 @@ object SSHOperations {
 
   object HostKeyVerifier extends ServerHostKeyVerifier {
     val kh = new KnownHosts(
-        new File(System.getProperty("user.home") + "/.ssh/known_hosts"))
+      new File(System.getProperty("user.home") + "/.ssh/known_hosts"))
     def verifyServerHostKey(hostname: String,
                             port: Int,
                             serverHostKeyAlgorithm: String,
@@ -147,18 +147,18 @@ trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
     SSHSettings.hosts
       .filter(x => x._2._2 == true)
       .filter(x =>
-            x._2._1.cpu >= requestSize.cpu._1 && x._2._1.memory >= requestSize.memory)
+        x._2._1.cpu >= requestSize.cpu._1 && x._2._1.memory >= requestSize.memory)
       .iterator
       .map {
         case (name, (host, _)) =>
           val script = Deployment.script(
-              memory = requestSize.memory,
-              gridEngine = SSHGrid,
-              masterAddress = masterAddress,
-              download = new java.net.URL("http",
-                                          masterAddress.getHostName,
-                                          masterAddress.getPort + 1,
-                                          "/")
+            memory = requestSize.memory,
+            gridEngine = SSHGrid,
+            masterAddress = masterAddress,
+            download = new java.net.URL("http",
+                                        masterAddress.getHostName,
+                                        masterAddress.getPort + 1,
+                                        "/")
           )
           // Try(
           SSHOperations.openSession(host) { session =>
@@ -191,9 +191,9 @@ trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
     val ac = node.launcherActor //.revive
 
     val ackil = context.actorOf(
-        Props(new SSHNodeKiller(ac, node))
-          .withDispatcher("my-pinned-dispatcher"),
-        "nodekiller" + node.name.value.replace("://", "___"))
+      Props(new SSHNodeKiller(ac, node))
+        .withDispatcher("my-pinned-dispatcher"),
+      "nodekiller" + node.name.value.replace("://", "___"))
   }
 
 }

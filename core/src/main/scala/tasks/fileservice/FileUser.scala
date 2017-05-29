@@ -64,13 +64,13 @@ class FileUserStream(sf: ManagedFilePath,
     val pipe = java.nio.channels.Pipe.open
     writeableChannel = Some(pipe.sink)
     val transferinActor = context.actorOf(
-        Props(new TransferIn(writeableChannel.get, self))
-          .withDispatcher("transferin"))
+      Props(new TransferIn(writeableChannel.get, self))
+        .withDispatcher("transferin"))
 
     service ! TransferFileToUser(transferinActor, sf)
 
     result = Some(
-        Success(java.nio.channels.Channels.newInputStream(pipe.source)))
+      Success(java.nio.channels.Channels.newInputStream(pipe.source)))
     finish
   }
 
@@ -112,13 +112,13 @@ class FileUserSource(sf: ManagedFilePath,
     val pipe = java.nio.channels.Pipe.open
     writeableChannel = Some(pipe.sink)
     val transferinActor = context.actorOf(
-        Props(new TransferIn(writeableChannel.get, self))
-          .withDispatcher("transferin"))
+      Props(new TransferIn(writeableChannel.get, self))
+        .withDispatcher("transferin"))
 
     service ! TransferFileToUser(transferinActor, sf)
 
     result = Some(Success(StreamConverters.fromInputStream(() =>
-                  java.nio.channels.Channels.newInputStream(pipe.source))))
+      java.nio.channels.Channels.newInputStream(pipe.source))))
     finish
   }
 
@@ -157,10 +157,10 @@ class FileUser(sf: ManagedFilePath,
     val fileToSave = TempFile.createFileInTempFolderIfPossibleWithName(sf.name)
     fileUnderTransfer = Some(fileToSave)
     writeableChannel = Some(
-        new java.io.FileOutputStream(fileToSave).getChannel)
+      new java.io.FileOutputStream(fileToSave).getChannel)
     val transferinActor = context.actorOf(
-        Props(new TransferIn(writeableChannel.get, self))
-          .withDispatcher("transferin"))
+      Props(new TransferIn(writeableChannel.get, self))
+        .withDispatcher("transferin"))
 
     service ! TransferFileToUser(transferinActor, sf)
   }

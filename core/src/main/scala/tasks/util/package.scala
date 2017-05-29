@@ -26,7 +26,22 @@
 package tasks
 
 import scala.io.Source
-import java.io.{PrintWriter, BufferedWriter, FileWriter, FileInputStream, FileOutputStream, BufferedOutputStream, LineNumberReader, InputStream, BufferedReader, FileReader, BufferedInputStream, StringWriter, File, EOFException}
+import java.io.{
+  PrintWriter,
+  BufferedWriter,
+  FileWriter,
+  FileInputStream,
+  FileOutputStream,
+  BufferedOutputStream,
+  LineNumberReader,
+  InputStream,
+  BufferedReader,
+  FileReader,
+  BufferedInputStream,
+  StringWriter,
+  File,
+  EOFException
+}
 import java.util.zip.GZIPInputStream
 
 import scala.sys.process._
@@ -58,15 +73,17 @@ package object util {
   }
 
   def chooseNetworkPort: Int =
-    Try(config.global.hostPort).flatMap { p =>
-      if (available(p)) Success(p) else Failure(new RuntimeException)
-    }.getOrElse {
+    Try(config.global.hostPort)
+      .flatMap { p =>
+        if (available(p)) Success(p) else Failure(new RuntimeException)
+      }
+      .getOrElse {
 
-      val s = new java.net.ServerSocket(0);
-      val p = s.getLocalPort()
-      s.close
-      p
-    }
+        val s = new java.net.ServerSocket(0);
+        val p = s.getLocalPort()
+        s.close
+        p
+      }
 
   def stackTraceAsString(t: Any): String = {
     if (t.isInstanceOf[Throwable]) {
@@ -77,9 +94,9 @@ package object util {
     } else t.toString
   }
 
-  def rethrow[T](messageOnError: => String,
-                 exceptionFactory: (=> String,
-                                    Throwable) => Throwable)(block: => T): T =
+  def rethrow[T](
+      messageOnError: => String,
+      exceptionFactory: (=> String, Throwable) => Throwable)(block: => T): T =
     try {
       block
     } catch {
@@ -180,7 +197,7 @@ package object util {
   def openFileOutputStream[T](fileName: File, append: Boolean = false)(
       func: BufferedOutputStream => T) =
     useResource(
-        new BufferedOutputStream(new FileOutputStream(fileName, append)))(func)
+      new BufferedOutputStream(new FileOutputStream(fileName, append)))(func)
 
   /** Opens a buffered [[java.io.BufferedInputStream]] on the file. Closes it after the block is executed. */
   def openFileInputStream[T](fileName: File)(func: BufferedInputStream => T) =

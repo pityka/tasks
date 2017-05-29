@@ -31,7 +31,7 @@ object eq {
       equality.areNotEqual(left, right)
   }
   @scala.annotation.implicitNotFound(
-      "TypeWiseBalancedEquality requires ${L} and ${R} to be in a subtype relationship!")
+    "TypeWiseBalancedEquality requires ${L} and ${R} to be in a subtype relationship!")
   trait Equality[L, R] {
     def areEqual(left: L, right: R): Boolean
     def areNotEqual(left: L, right: R): Boolean

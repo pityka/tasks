@@ -39,7 +39,6 @@ import tasks._
 
 import tasks.fileservice.FileServicePrefix
 
-
 abstract class Cache {
 
   def get(x: TaskDescription)(
@@ -51,7 +50,6 @@ abstract class Cache {
   def shutDown: Unit
 
 }
-
 
 class KVCache(
     kvstore: KVStore,
@@ -99,8 +97,8 @@ class DisabledCache extends Cache {
 
 class FakeCacheForTest extends Cache {
 
-  var cacheMap: scala.collection.mutable.ListMap[TaskDescription,
-                                                 UntypedResult] =
+  var cacheMap
+    : scala.collection.mutable.ListMap[TaskDescription, UntypedResult] =
     scala.collection.mutable.ListMap[TaskDescription, UntypedResult]()
 
   def get(x: TaskDescription)(implicit p: FileServicePrefix) =

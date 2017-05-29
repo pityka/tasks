@@ -48,14 +48,14 @@ object Deployment {
 
     val edited = "./package -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dtasks.fileservice.storageURI={STORAGE}"
       .replaceAllLiterally(
-          "{RAM}",
-          math
-            .max(1, (memory.toDouble * config.global.jvmMaxHeapFactor).toInt)
-            .toString)
+        "{RAM}",
+        math
+          .max(1, (memory.toDouble * config.global.jvmMaxHeapFactor).toInt)
+          .toString)
       .replaceAllLiterally("{EXTRA}", config.global.additionalJavaCommandline)
       .replaceAllLiterally(
-          "{MASTER}",
-          masterAddress.getHostName + ":" + masterAddress.getPort)
+        "{MASTER}",
+        masterAddress.getHostName + ":" + masterAddress.getPort)
       .replaceAllLiterally("{GRID}", gridEngine.toString)
       .replaceAllLiterally("{STORAGE}", config.global.storageURI.toString)
 
