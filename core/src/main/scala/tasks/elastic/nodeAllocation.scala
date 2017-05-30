@@ -25,7 +25,7 @@
 
 package tasks.elastic
 
-import akka.actor.{Actor, PoisonPill, ActorRef, Props, Cancellable}
+import akka.actor.{Actor, PoisonPill, ActorRef, Props, Cancellable,ExtendedActorSystem}
 import scala.concurrent.duration._
 import java.util.concurrent.{TimeUnit, ScheduledFuture}
 import java.net.InetSocketAddress
@@ -38,31 +38,40 @@ import tasks.shared.monitor._
 import tasks.shared._
 import tasks.util._
 import tasks.queue._
+import tasks.wire._
 
-@SerialVersionUID(1L)
-case object GetNodeRegistryStat extends Serializable
+import io.circe.{Encoder, Decoder}
+import io.circe.generic.semiauto._
 
-private[elastic] case object MeasureTime
-
-private[tasks] case class Idling(state: Long)
-
-private[tasks] case object Working
-
-private[tasks] case object WhatAreYouDoing
-
-private[tasks] case object PrepareForShutdown
-
-private[tasks] case object ReadyForShutdown
-
-private[tasks] case class NodeComingUp(node: Node)
-
-private[tasks] case class InitFailed(nodename: PendingJobId)
-
-private[tasks] case class NodeIsDown(node: Node)
+// @SerialVersionUID(1L)
+// case object GetNodeRegistryStat extends Serializable
+//
+// private[elastic] case object MeasureTime
+//
+// private[tasks] case class Idling(state: Long)
+//
+// private[tasks] case object Working
+//
+// private[tasks] case object WhatAreYouDoing
+//
+// private[tasks] case object PrepareForShutdown
+//
+// private[tasks] case object ReadyForShutdown
+//
+// private[tasks] case class NodeComingUp(node: Node)
+//
+// private[tasks] case class InitFailed(nodename: PendingJobId)
+//
+// private[tasks] case class NodeIsDown(node: Node)
 
 case class Node(name: RunningJobId,
                 size: CPUMemoryAvailable,
                 launcherActor: ActorRef)
+
+object Node {
+  implicit val enc : Encoder[Node] = deriveEncoder[Node]
+  implicit def dec(implicit as:ExtendedActorSystem) : Decoder[Node] = deriveDecoder[Node]
+}
 
 trait ShutdownNode {
 

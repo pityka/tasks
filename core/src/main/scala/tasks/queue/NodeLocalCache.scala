@@ -33,9 +33,8 @@ import scala.concurrent.Future
 
 import tasks.TaskSystemComponents
 import tasks.Implicits._
+import tasks.wire._
 
-@SerialVersionUID(1L)
-case object YouShouldSetIt
 
 object NodeLocalCache {
   def getItemAsync[A](key: String)(orElse: => Future[A])(

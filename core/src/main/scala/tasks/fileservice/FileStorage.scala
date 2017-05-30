@@ -61,7 +61,7 @@ object FileStorage {
   }
 }
 
-class RemoteFileStorage(implicit mat: ActorMaterializer,
+class RemoteFileStorage(implicit mat: Materializer,
                         ec: ExecutionContext,
                         streamHelper: StreamHelper,
                         as: ActorSystem) {

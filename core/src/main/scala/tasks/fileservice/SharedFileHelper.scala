@@ -47,6 +47,7 @@ import tasks.util._
 import tasks.util.eq._
 import tasks.caching._
 import tasks.queue._
+import tasks.wire._
 
 private[tasks] object SharedFileHelper {
 
@@ -260,7 +261,7 @@ private[tasks] object SharedFileHelper {
       ec: ExecutionContext,
       service: FileServiceActor,
       context: ActorRefFactory,
-      mat: ActorMaterializer) =
+      mat: Materializer) =
     if (service.storage.isDefined) {
       val proposedPath = prefix.propose(name)
       service.storage.get.importSource(source, proposedPath).map { x =>

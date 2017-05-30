@@ -49,22 +49,34 @@ import tasks.util._
 import tasks.util.eq._
 import tasks.caching._
 import tasks.queue._
+import tasks.wire._
 
-@SerialVersionUID(1L)
+import io.circe.generic.semiauto._
+import io.circe.{Encoder, Decoder}
+
 case class FileServiceActor(actor: ActorRef,
                             storage: Option[ManagedFileStorage],
                             remote: RemoteFileStorage)
 
-@SerialVersionUID(1L)
 case class FileServicePrefix(list: Vector[String]) {
   def append(n: String) = FileServicePrefix(list :+ n)
   def propose(name: String) = ProposedManagedFilePath(list :+ name)
 }
+object FileServicePrefix {
+  implicit val encoder: Encoder[FileServicePrefix] =
+    deriveEncoder[FileServicePrefix]
+    implicit val decoder: Decoder[FileServicePrefix] =
+      deriveDecoder[FileServicePrefix]
+}
 
-@SerialVersionUID(1L)
 case class ProposedManagedFilePath(list: Vector[String]) {
   def name = list.last
   def toManaged = ManagedFilePath(list)
+}
+
+object ProposedManagedFilePath {
+  implicit val enc : Encoder[ProposedManagedFilePath] = deriveEncoder[ProposedManagedFilePath]
+  implicit val dec : Decoder[ProposedManagedFilePath] = deriveDecoder[ProposedManagedFilePath]
 }
 
 class FileService(storage: ManagedFileStorage,
@@ -173,7 +185,7 @@ class FileService(storage: ManagedFileStorage,
         }
       }
 
-    case CannotSaveFile(e) => {
+    case FileTransferMessage.CannotSaveFile(e) => {
       transferinactors.get(sender).foreach {
         case (channel, file, filesender, proposedPath, _) =>
           channel.close
@@ -182,7 +194,7 @@ class FileService(storage: ManagedFileStorage,
       }
       transferinactors.remove(sender)
     }
-    case FileSaved => {
+    case FileTransferMessage.FileSaved => {
       transferinactors.get(sender).foreach {
         case (channel, file, filesender, proposedPath, ephemeral) =>
           channel.close

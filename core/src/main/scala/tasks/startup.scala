@@ -34,6 +34,7 @@ import tasks.deploy._
 import tasks.util._
 import tasks.util.eq._
 import tasks.fileservice._
+import tasks.wire._
 import tasks.elastic._
 import tasks.elastic.ec2._
 import tasks.elastic.ssh._
@@ -44,7 +45,7 @@ import akka.actor._
 import akka.util.Timeout
 import akka.io.IO
 import akka.pattern.ask
-import akka.stream.ActorMaterializer
+import akka.stream._
 
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
@@ -68,7 +69,7 @@ case class TaskSystemComponents(
     nodeLocalCache: NodeLocalCacheActor,
     filePrefix: FileServicePrefix,
     executionContext: ExecutionContext,
-    actorMaterializer: ActorMaterializer
+    actorMaterializer: Materializer
 ) {
 
   def childPrefix(name: String) =

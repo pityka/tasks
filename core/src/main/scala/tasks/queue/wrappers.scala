@@ -34,23 +34,13 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import tasks.util._
 
-@SerialVersionUID(1L)
-case class NodeLocalCacheActor(actor: ActorRef) extends Serializable
+case class NodeLocalCacheActor(actor: ActorRef)
 
-@SerialVersionUID(1L)
-case class QueueActor(actor: ActorRef) extends Serializable
+case class QueueActor(actor: ActorRef)
 
-@SerialVersionUID(1L)
-case class LauncherActor(actor: ActorRef) extends Serializable
+case class LauncherActor(actor: ActorRef)
 
 case class ProxyTaskActorRef[B, T](private[tasks] val actor: ActorRef) {
-
-  // def ~>[C <: Prerequisitive[C], A](child: ProxyTaskActorRef[C, A])(
-  //     implicit updater: UpdatePrerequisitive[C, T])
-  //   : ProxyTaskActorRef[C, A] = {
-  //   ProxyTask.addTarget(actor, child.actor, updater)
-  //   child
-  // }
 
   def ?(implicit ec: ExecutionContext) =
     ProxyTask
@@ -59,8 +49,5 @@ case class ProxyTaskActorRef[B, T](private[tasks] val actor: ActorRef) {
 
   def ?(timeoutp: FiniteDuration)(implicit ec: ExecutionContext) =
     ProxyTask.getBackResultFuture(actor, timeoutp).asInstanceOf[Future[T]]
-
-  // def <~[A](result: A)(implicit updater: UpdatePrerequisitive[B, A]): Unit =
-  //   actor ! result
 
 }

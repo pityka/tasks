@@ -49,6 +49,7 @@ import tasks.util._
 import tasks.util.eq._
 import tasks.caching._
 import tasks.queue._
+import tasks.wire._
 
 class FileSender(file: File,
                  proposedPath: ProposedManagedFilePath,

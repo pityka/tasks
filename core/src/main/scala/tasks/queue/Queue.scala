@@ -47,6 +47,7 @@ import tasks.shared.monitor._
 import tasks.fileservice._
 import tasks.caching._
 import tasks.util._
+import tasks.wire._
 import tasks._
 
 class TaskQueue extends Actor with akka.actor.ActorLogging {
@@ -281,7 +282,7 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
       sender ! qs
     }
 
-    case GetQueueInformation => sender ! QueueInfo(queuedTasks.toMap)
+    case GetQueueInformation => sender ! QueueInfo(queuedTasks.toList)
 
     case m => log.warning("Unhandled message. " + m.toString)
   }

@@ -34,11 +34,7 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
 
 class PackageServerActor(pack: File) {
-
-  // def actorRefFactory = context
-  //
-  // def receive = runRoute(route)
-
+  
   val route = get {
     getFromFile(pack)
   }

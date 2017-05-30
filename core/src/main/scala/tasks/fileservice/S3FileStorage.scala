@@ -59,7 +59,7 @@ import scala.concurrent._
 import scala.concurrent.duration._
 
 class S3Storage(bucketName: String, folderPrefix: String, s3stream: S3Stream)(
-    implicit mat: ActorMaterializer,
+    implicit mat: Materializer,
     as: ActorSystem,
     ec: ExecutionContext)
     extends ManagedFileStorage {
@@ -104,7 +104,7 @@ class S3Storage(bucketName: String, folderPrefix: String, s3stream: S3Stream)(
       .mkString("/")
 
   def importSource(s: Source[ByteString, _], path: ProposedManagedFilePath)(
-      implicit am: Materializer): Future[(Long, Int, ManagedFilePath)] = {
+      implicit mat: Materializer): Future[(Long, Int, ManagedFilePath)] = {
     val managed = path.toManaged
     val key = assembleName(managed)
     val s3loc = S3Location(bucketName, key)

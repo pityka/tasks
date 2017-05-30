@@ -45,6 +45,7 @@ import scala.concurrent.duration._
 import scala.concurrent._
 import akka.pattern.ask
 
+import tasks.wire._
 import tasks.caching._
 import tasks.queue._
 import tasks.fileservice._

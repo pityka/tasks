@@ -42,22 +42,14 @@ import java.util.concurrent.{TimeUnit, ScheduledFuture}
 import tasks.util.eq._
 import tasks.util._
 import tasks.queue._
+import tasks.wire._
 
-@SerialVersionUID(1L)
-private[tasks] case object Ping extends Serializable
-
-@SerialVersionUID(1L)
-private[tasks] case object Pong extends Serializable
-
-@SerialVersionUID(1L)
-private[tasks] case class HeartBeatStopped(ac: ActorRef) extends Serializable
 
 class HeartBeatActor(target: ActorRef)
     extends Actor
     with akka.actor.ActorLogging {
 
-  @SerialVersionUID(1L)
-  case object CheckHeartBeat
+  private case object CheckHeartBeat
 
   private var scheduledHeartBeats: Cancellable = null
 

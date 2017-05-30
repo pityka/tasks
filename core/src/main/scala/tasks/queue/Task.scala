@@ -30,7 +30,7 @@ package tasks.queue
 import akka.actor.{Actor, PoisonPill, ActorRef, ActorContext, ActorRefFactory}
 import akka.util.Timeout
 import akka.pattern.ask
-import akka.stream.ActorMaterializer
+import akka.stream.Materializer
 
 import scala.concurrent.duration._
 import scala.concurrent.Future
@@ -44,14 +44,20 @@ import tasks.util._
 import tasks.shared._
 import tasks._
 import tasks.caching._
+import tasks.wire._
 
 import io.circe.{Decoder, Encoder, Json}
 import io.circe.parser.decode
+import io.circe.generic.semiauto._
 import io.circe.syntax._
 
 case class UntypedResult(files: Set[SharedFile], data: JsonString)
 
 case class TaskId(id: String, version: Int)
+object TaskId {
+  implicit val encoder: Encoder[TaskId] = deriveEncoder[TaskId]
+  implicit val dec: Decoder[TaskId] = deriveDecoder[TaskId]
+}
 
 object UntypedResult {
 
@@ -65,6 +71,9 @@ object UntypedResult {
   def make[A: Encoder](r: A): UntypedResult =
     UntypedResult(fs(r), JsonString(r.asJson.noSpaces))
 
+  implicit val encoder: Encoder[UntypedResult] = deriveEncoder[UntypedResult]
+
+implicit val decoder: Decoder[UntypedResult] = deriveDecoder[UntypedResult]
 }
 
 case class ComputationEnvironment(
@@ -74,7 +83,7 @@ case class ComputationEnvironment(
     implicit val launcher: LauncherActor,
     implicit val executionContext: ExecutionContext,
     val taskActor: ActorRef
-) extends Serializable {
+) {
 
   implicit def fs: FileServiceActor = components.fs
 
@@ -117,7 +126,7 @@ private class Task(
     resourceAllocated: CPUMemoryAllocated,
     fileServicePrefix: FileServicePrefix,
     auxExecutionContext: ExecutionContext,
-    actorMaterializer: ActorMaterializer
+    actorMaterializer: Materializer
 ) extends Actor
     with akka.actor.ActorLogging {
 

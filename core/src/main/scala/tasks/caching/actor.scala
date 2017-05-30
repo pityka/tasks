@@ -40,6 +40,7 @@ import tasks.util._
 import tasks.util.eq._
 import tasks.queue._
 import tasks.fileservice._
+import tasks.wire._
 
 class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
     extends Actor
@@ -100,7 +101,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
           if (res.isEmpty) {
             log.debug("Checking: {}. Not found in cache.",
                       sch.description.taskId)
-            savedSender ! AnswerFromCache(Left(TaskNotFoundInCache(true)),
+            savedSender ! AnswerFromCache(Left("TaskNotFoundInCache"),
                                           originalSender,
                                           sch)
           } else {
@@ -129,7 +130,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
                       sch.description.taskId,
                       res.get)
                     savedSender ! AnswerFromCache(
-                      Left(TaskNotFoundInCache(true)),
+                      Left("TaskNotFoundInCache"),
                       originalSender,
                       sch)
                   } else {

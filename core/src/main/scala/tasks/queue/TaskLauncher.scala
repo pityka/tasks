@@ -33,10 +33,10 @@ import akka.actor.{
   ActorRef,
   Props,
   Cancellable,
-  ActorRefFactory
+  ActorRefFactory,ExtendedActorSystem
 }
 import akka.actor.Actor._
-import akka.stream.ActorMaterializer
+import akka.stream.Materializer
 
 import scala.concurrent.{Future, ExecutionContext}
 import scala.concurrent.duration._
@@ -51,22 +51,29 @@ import tasks.shared._
 import tasks.fileservice._
 import tasks.caching._
 import tasks.elastic._
+import tasks.wire._
 import tasks._
 
-@SerialVersionUID(1L)
-case class ScheduleWithProxy(sch: ScheduleTask, ac: List[ActorRef])
-    extends Serializable
+import io.circe.{Decoder, Encoder}
+import io.circe.generic.semiauto._
 
-@SerialVersionUID(1L)
-case class JsonString(value: String) extends Serializable
+case class JsonString(value: String)
+object JsonString {
+  implicit val encoder: Encoder[JsonString] = deriveEncoder[JsonString]
+  implicit val decoder: Decoder[JsonString] = deriveDecoder[JsonString]
+}
 
-@SerialVersionUID(1L)
 case class TaskDescription(taskId: TaskId,
                            startData: JsonString,
                            persistent: Option[JsonString])
-    extends Serializable
 
-@SerialVersionUID(1L)
+object TaskDescription {
+  implicit val encoder: Encoder[TaskDescription] =
+    deriveEncoder[TaskDescription]
+    implicit val dec: Decoder[TaskDescription] =
+      deriveDecoder[TaskDescription]
+}
+
 case class ScheduleTask(
     description: TaskDescription,
     taskImplementation: String,
@@ -75,7 +82,12 @@ case class ScheduleTask(
     fileServiceActor: ActorRef,
     fileServicePrefix: FileServicePrefix,
     cacheActor: ActorRef
-) extends Serializable
+)
+
+object ScheduleTask {
+  implicit val encoder: Encoder[ScheduleTask] = deriveEncoder[ScheduleTask]
+  implicit def decoder(implicit as:ExtendedActorSystem) = deriveDecoder[ScheduleTask]
+}
 
 class TaskLauncher(
     taskQueue: ActorRef,
@@ -83,14 +95,13 @@ class TaskLauncher(
     slots: CPUMemoryAvailable = CPUMemoryAvailable(cpu = 1, memory = 2000),
     refreshRate: FiniteDuration = 100 milliseconds,
     auxExecutionContext: ExecutionContext,
-    actorMaterializer: ActorMaterializer,
+    actorMaterializer: Materializer,
     remoteStorage: RemoteFileStorage,
     managedStorage: Option[ManagedFileStorage]
 ) extends Actor
     with akka.actor.ActorLogging {
 
-  @SerialVersionUID(1L)
-  private case object CheckQueue
+  private case object CheckQueue extends Serializable
 
   val maxResources: CPUMemoryAvailable = slots
   var availableResources: CPUMemoryAvailable = maxResources

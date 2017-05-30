@@ -32,7 +32,7 @@ import akka.actor.Actor._
 import akka.pattern.ask
 import akka.pattern.pipe
 import akka.stream.scaladsl._
-import akka.stream.ActorMaterializer
+import akka.stream._
 import akka.util._
 import scala.concurrent.{Future, ExecutionContext}
 import java.lang.Class
@@ -71,23 +71,17 @@ case class ManagedFilePath(pathElements: Vector[String]) extends FilePath {
   def name = pathElements.last
 }
 
+
 case class RemoteFilePath(uri: Uri) extends FilePath {
   override def toString = uri.toString
   def name = uri.akka.path.toString.split("/").filter(_.size > 0).last
 }
 
-object FilePath {
-
-  implicit val decoder: Decoder[FilePath] = deriveDecoder[FilePath]
-  implicit val encoder: Encoder[FilePath] = deriveEncoder[FilePath]
-}
-
-@SerialVersionUID(1L)
 case class SharedFile(
     val path: FilePath,
     val byteSize: Long,
     val hash: Int
-) extends Serializable {
+) {
   def canEqual(other: Any): Boolean = other.isInstanceOf[SharedFile]
 
   override def hashCode: Int =
@@ -144,4 +138,19 @@ object SharedFile {
       implicit tsc: TaskSystemComponents): Future[SharedFile] =
     SharedFileHelper.createFromSource(source, name)
 
+}
+
+object ManagedFilePath {
+  implicit val decoder: Decoder[ManagedFilePath] = deriveDecoder[ManagedFilePath]
+  implicit val encoder: Encoder[ManagedFilePath] = deriveEncoder[ManagedFilePath]
+}
+
+object RemoteFilePath {
+  implicit val decoder: Decoder[RemoteFilePath] = deriveDecoder[RemoteFilePath]
+  implicit val encoder: Encoder[RemoteFilePath] = deriveEncoder[RemoteFilePath]
+}
+
+object FilePath {
+  implicit val decoder: Decoder[FilePath] = deriveDecoder[FilePath]
+  implicit val encoder: Encoder[FilePath] = deriveEncoder[FilePath]
 }

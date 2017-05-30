@@ -49,6 +49,7 @@ import tasks.util._
 import tasks.util.eq._
 import tasks.caching._
 import tasks.queue._
+import tasks.wire._
 
 class FileUserStream(sf: ManagedFilePath,
                      size: Long,
@@ -88,7 +89,7 @@ class FileUserStream(sf: ManagedFilePath,
   }
 
   override def receive = super.receive orElse {
-    case FileSaved => {
+    case FileTransferMessage.FileSaved => {
       writeableChannel.get.close
     }
   }
@@ -136,7 +137,7 @@ class FileUserSource(sf: ManagedFilePath,
   }
 
   override def receive = super.receive orElse {
-    case FileSaved => {
+    case FileTransferMessage.FileSaved => {
       writeableChannel.get.close
     }
   }
@@ -175,7 +176,7 @@ class FileUser(sf: ManagedFilePath,
   }
 
   override def receive = super.receive orElse {
-    case FileSaved => {
+    case FileTransferMessage.FileSaved => {
       writeableChannel.get.close
       // service ! NewPath(sf, fileUnderTransfer.get)
       finishLocalFile(fileUnderTransfer.get)
@@ -225,7 +226,7 @@ abstract class AbstractFileUser[R](sf: ManagedFilePath,
       }
       fail(e)
     }
-    case CannotSaveFile(e) => {
+    case FileTransferMessage.CannotSaveFile(e) => {
       log.error("CannotSaveFile : " + sf + " Reason: " + e)
       fail(e)
     }

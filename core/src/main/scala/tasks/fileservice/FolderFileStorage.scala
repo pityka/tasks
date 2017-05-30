@@ -77,7 +77,7 @@ object FolderFileStorage {
 class FolderFileStorage(val basePath: File,
                         val centralized: Boolean,
                         val extendedPaths: List[File] = Nil)(
-    implicit mat: ActorMaterializer,
+    implicit mat: Materializer,
     ec: ExecutionContext)
     extends ManagedFileStorage {
 

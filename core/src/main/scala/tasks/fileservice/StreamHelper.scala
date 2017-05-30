@@ -37,7 +37,7 @@ import tasks.util.Uri
 
 class StreamHelper(s3stream: Option[S3Stream])(
     implicit as: ActorSystem,
-    actorMaterializer: ActorMaterializer,
+    actorMaterializer: Materializer,
     ec: ExecutionContext) {
 
   val queue = (rq: HttpRequest) => httpqueue.HttpQueue(as).queue(rq)

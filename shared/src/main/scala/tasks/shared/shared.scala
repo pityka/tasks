@@ -25,6 +25,9 @@
 
 package tasks.shared
 
+import io.circe._
+import io.circe.generic.semiauto._
+
 sealed trait ResourceRequest extends Serializable
 
 sealed trait ResourceAllocated[T <: ResourceRequest] extends Serializable
@@ -42,14 +45,10 @@ sealed trait ResourceAvailable[T <: ResourceRequest, A <: ResourceAllocated[T]] 
 
 }
 
-@SerialVersionUID(1L)
 case class CPUMemoryRequest(cpu: (Int, Int), memory: Int)
     extends ResourceRequest
 
-@SerialVersionUID(1L)
 object CPUMemoryRequest {
-  import io.circe._
-  import io.circe.generic.semiauto._
 
   def apply(cpu: Int, memory: Int): CPUMemoryRequest =
     CPUMemoryRequest((cpu, cpu), memory)
@@ -60,11 +59,16 @@ object CPUMemoryRequest {
     deriveEncoder[CPUMemoryRequest]
 }
 
-@SerialVersionUID(1L)
 case class CPUMemoryAllocated(cpu: Int, memory: Int)
     extends ResourceAllocated[CPUMemoryRequest]
 
-@SerialVersionUID(1L)
+object CPUMemoryAllocated {
+  implicit val decoder: Decoder[CPUMemoryAllocated] =
+    deriveDecoder[CPUMemoryAllocated]
+  implicit val encoder: Encoder[CPUMemoryAllocated] =
+    deriveEncoder[CPUMemoryAllocated]
+}
+
 case class CPUMemoryAvailable(cpu: Int, memory: Int)
     extends ResourceAvailable[CPUMemoryRequest, CPUMemoryAllocated] {
 
@@ -93,8 +97,25 @@ case class CPUMemoryAvailable(cpu: Int, memory: Int)
 
 }
 
-@SerialVersionUID(1L)
-case class RunningJobId(value: String) extends Serializable
+object CPUMemoryAvailable {
+  implicit val decoder: Decoder[CPUMemoryAvailable] =
+    deriveDecoder[CPUMemoryAvailable]
+  implicit val encoder: Encoder[CPUMemoryAvailable] =
+    deriveEncoder[CPUMemoryAvailable]
+}
 
-@SerialVersionUID(1L)
-case class PendingJobId(value: String) extends Serializable
+case class RunningJobId(value: String)
+
+object RunningJobId {
+  implicit val decoder: Decoder[RunningJobId] =
+    deriveDecoder[RunningJobId]
+  implicit val encoder: Encoder[RunningJobId] =
+    deriveEncoder[RunningJobId]
+}
+
+case class PendingJobId(value: String)
+
+object PendingJobId {
+  implicit val decoder: Decoder[PendingJobId] = deriveDecoder[PendingJobId]
+  implicit val encoder: Encoder[PendingJobId] = deriveEncoder[PendingJobId]
+}

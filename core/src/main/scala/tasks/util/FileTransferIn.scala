@@ -33,11 +33,14 @@ import java.io.FileInputStream
 import scala.util.{Try, Failure, Success}
 
 sealed trait FileTransferMessage extends Serializable
+object FileTransferMessage {
 case class Chunk(data: ByteString) extends FileTransferMessage
 case object Ack extends FileTransferMessage
 case object EndChunk extends FileTransferMessage
 case object FileSaved extends FileTransferMessage
 case class CannotSaveFile(e: Throwable) extends FileTransferMessage
+}
+import FileTransferMessage._
 
 class TransferIn(output: WritableByteChannel, notification: ActorRef)
     extends Actor

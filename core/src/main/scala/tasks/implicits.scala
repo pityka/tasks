@@ -29,7 +29,7 @@ package tasks
 
 import java.io.File
 import akka.actor.{ActorRef, ActorSystem}
-import akka.stream.ActorMaterializer
+import akka.stream._
 import scala.concurrent.Future
 import akka.event.LogSource
 import java.util.concurrent.TimeUnit.{MILLISECONDS, NANOSECONDS, SECONDS}
@@ -56,6 +56,7 @@ import tasks.deploy._
 import tasks.shared._
 import tasks.elastic.ec2._
 import tasks.elastic.ssh._
+import tasks.wire._
 
 private[tasks] object Implicits {
 
@@ -68,7 +69,7 @@ private[tasks] object Implicits {
     component.actorsystem
 
   implicit def actormaterializer(
-      implicit component: TaskSystemComponents): ActorMaterializer =
+      implicit component: TaskSystemComponents): Materializer =
     component.actorMaterializer
 
   implicit def filePrefix(
