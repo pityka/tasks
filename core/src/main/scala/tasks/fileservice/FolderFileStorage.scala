@@ -75,7 +75,6 @@ object FolderFileStorage {
 }
 
 class FolderFileStorage(val basePath: File,
-                        val centralized: Boolean,
                         val extendedPaths: List[File] = Nil)(
     implicit mat: Materializer,
     ec: ExecutionContext)
@@ -89,7 +88,7 @@ class FolderFileStorage(val basePath: File,
     throw new RuntimeException(s"Could not create $basePath")
 
   override def toString =
-    s"FolderFileStorage(basePath=$basePath, centralized=$centralized, extendedPaths=$extendedPaths)"
+    s"FolderFileStorage(basePath=$basePath, extendedPaths=$extendedPaths)"
 
   private val canonicalExtendedPaths = extendedPaths.map(_.getCanonicalPath)
   private val canonicalBasePath = basePath.getCanonicalPath
@@ -116,7 +115,7 @@ class FolderFileStorage(val basePath: File,
     }
 
   def createSource(path: ManagedFilePath): Source[ByteString, _] =
-    FileIO.fromPath(assemblePath(path).toPath)  
+    FileIO.fromPath(assemblePath(path).toPath)
 
   def exportFile(path: ManagedFilePath): Future[File] =
     Future.successful(assemblePath(path))

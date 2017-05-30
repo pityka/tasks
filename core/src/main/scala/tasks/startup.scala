@@ -180,12 +180,11 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
           folder1.mkdirs
         }
         val folders2 = config.global.fileServiceExtendedFolders
-        val centralized = config.global.fileServiceBaseFolderIsShared
         if (folder1.list.size != 0) {
           tasksystemlog.warning(
             s"fileServiceBaseFolder (${folder1.getCanonicalPath}) is not empty. This is only safe if you restart a pipeline. ")
         }
-        Some(new FolderFileStorage(folder1, centralized, folders2))
+        Some(new FolderFileStorage(folder1, folders2))
       }
     }
 

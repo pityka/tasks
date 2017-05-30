@@ -94,9 +94,6 @@ class TasksConfig(val raw: Config) {
     .toList
     .filter(_.isDirectory)
 
-  val fileServiceBaseFolderIsShared =
-    raw.getBoolean("tasks.fileservice.baseFolderIsShared")
-
   val fileServiceThreadPoolSize =
     raw.getInt("tasks.fileservice.threadPoolSize")
 
