@@ -47,10 +47,10 @@ lazy val core = project.in(file("core"))
 lazy val example = project.in(file("example"))
 .settings(commonSettings:_*)
 .dependsOn(core,collection)
-// .enablePlugins(JavaAppPackaging)
+.enablePlugins(JavaAppPackaging)
 .settings(
-    // executableScriptName := "entrypoint",
-    // topLevelDirectory := None
+    executableScriptName := "entrypoint",
+    topLevelDirectory := None
 )
 
 lazy val collection = project.in(file("collection")).settings(commonSettings:_*)
