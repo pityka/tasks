@@ -100,9 +100,6 @@ case class SharedFile(
   def source(implicit tsc: TaskSystemComponents) =
     SharedFileHelper.getSourceToFile(this)
 
-  def openStream[R](f: InputStream => R)(implicit tsc: TaskSystemComponents) =
-    SharedFileHelper.openStreamToFile(this)(f)
-
   def isAccessible(implicit tsc: TaskSystemComponents) =
     SharedFileHelper.isAccessible(this)
 

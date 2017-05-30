@@ -81,41 +81,6 @@ private[tasks] object SharedFileHelper {
 
   val isLocal = (f: File) => f.canRead
 
-  def getStreamToFile(sf: SharedFile)(
-      implicit service: FileServiceActor,
-      context: ActorRefFactory,
-      ec: ExecutionContext): Future[InputStream] = sf.path match {
-    case path: RemoteFilePath =>
-      Future.fromTry(service.remote.createStream(path))
-    case path: ManagedFilePath => {
-      if (service.storage.isDefined) {
-        Future.fromTry(service.storage.get.createStream(path))
-      } else {
-        val serviceactor = service.actor
-        implicit val timout = akka.util.Timeout(1441 minutes)
-        val ac = context.actorOf(
-          Props(
-            new FileUserStream(path,
-                               sf.byteSize,
-                               sf.hash,
-                               serviceactor,
-                               isLocal))
-            .withDispatcher("fileuser-dispatcher"))
-
-        val f = (ac ? WaitingForPath).asInstanceOf[Future[Try[InputStream]]]
-
-        f onComplete {
-          case _ => ac ! PoisonPill
-        }
-
-        f map (_ match {
-          case Success(r) => r
-          case Failure(e) =>
-            throw new RuntimeException("getStreamToFile failed. " + sf, e)
-        })
-      }
-    }
-  }
 
   def getSourceToFile(sf: SharedFile)(
       implicit service: FileServiceActor,
@@ -155,14 +120,6 @@ private[tasks] object SharedFileHelper {
         }
     }
 
-  def openStreamToFile[R](sf: SharedFile)(fun: InputStream => R)(
-      implicit service: FileServiceActor,
-      context: ActorRefFactory,
-      ec: ExecutionContext): Future[R] = getStreamToFile(sf).map { is =>
-    val r = fun(is)
-    is.close
-    r
-  }
 
   def getPathToFile(sf: SharedFile)(implicit service: FileServiceActor,
                                     context: ActorRefFactory,

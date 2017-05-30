@@ -102,9 +102,7 @@ class RemoteFileStorage(implicit mat: Materializer,
 
   }
 
-  def createStream(path: RemoteFilePath): Try[InputStream] = Try(
-    createSource(path).runWith(StreamConverters.asInputStream())
-  )
+
 
 }
 
@@ -123,9 +121,7 @@ trait ManagedFileStorage {
       implicit am: Materializer): Future[(Long, Int, ManagedFilePath)]
 
   def exportFile(path: ManagedFilePath): Future[File]
-
-  def createStream(path: ManagedFilePath): Try[InputStream]
-
+  
   def list(regexp: String): List[SharedFile]
 
 }

@@ -116,10 +116,7 @@ class FolderFileStorage(val basePath: File,
     }
 
   def createSource(path: ManagedFilePath): Source[ByteString, _] =
-    FileIO.fromPath(assemblePath(path).toPath)
-
-  def createStream(path: ManagedFilePath): Try[InputStream] =
-    Try(new FileInputStream(assemblePath(path)))
+    FileIO.fromPath(assemblePath(path).toPath)  
 
   def exportFile(path: ManagedFilePath): Future[File] =
     Future.successful(assemblePath(path))
