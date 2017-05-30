@@ -73,7 +73,7 @@ object UntypedResult {
 
   implicit val encoder: Encoder[UntypedResult] = deriveEncoder[UntypedResult]
 
-implicit val decoder: Decoder[UntypedResult] = deriveDecoder[UntypedResult]
+  implicit val decoder: Decoder[UntypedResult] = deriveDecoder[UntypedResult]
 }
 
 case class ComputationEnvironment(

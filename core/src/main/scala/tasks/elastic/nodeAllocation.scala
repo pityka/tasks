@@ -25,7 +25,14 @@
 
 package tasks.elastic
 
-import akka.actor.{Actor, PoisonPill, ActorRef, Props, Cancellable,ExtendedActorSystem}
+import akka.actor.{
+  Actor,
+  PoisonPill,
+  ActorRef,
+  Props,
+  Cancellable,
+  ExtendedActorSystem
+}
 import scala.concurrent.duration._
 import java.util.concurrent.{TimeUnit, ScheduledFuture}
 import java.net.InetSocketAddress
@@ -48,8 +55,9 @@ case class Node(name: RunningJobId,
                 launcherActor: ActorRef)
 
 object Node {
-  implicit val enc : Encoder[Node] = deriveEncoder[Node]
-  implicit def dec(implicit as:ExtendedActorSystem) : Decoder[Node] = deriveDecoder[Node]
+  implicit val enc: Encoder[Node] = deriveEncoder[Node]
+  implicit def dec(implicit as: ExtendedActorSystem): Decoder[Node] =
+    deriveDecoder[Node]
 }
 
 trait ShutdownNode {

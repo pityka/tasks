@@ -65,8 +65,8 @@ case class FileServicePrefix(list: Vector[String]) {
 object FileServicePrefix {
   implicit val encoder: Encoder[FileServicePrefix] =
     deriveEncoder[FileServicePrefix]
-    implicit val decoder: Decoder[FileServicePrefix] =
-      deriveDecoder[FileServicePrefix]
+  implicit val decoder: Decoder[FileServicePrefix] =
+    deriveDecoder[FileServicePrefix]
 }
 
 case class ProposedManagedFilePath(list: Vector[String]) {
@@ -75,8 +75,10 @@ case class ProposedManagedFilePath(list: Vector[String]) {
 }
 
 object ProposedManagedFilePath {
-  implicit val enc : Encoder[ProposedManagedFilePath] = deriveEncoder[ProposedManagedFilePath]
-  implicit val dec : Decoder[ProposedManagedFilePath] = deriveDecoder[ProposedManagedFilePath]
+  implicit val enc: Encoder[ProposedManagedFilePath] =
+    deriveEncoder[ProposedManagedFilePath]
+  implicit val dec: Decoder[ProposedManagedFilePath] =
+    deriveDecoder[ProposedManagedFilePath]
 }
 
 class FileService(storage: ManagedFileStorage,

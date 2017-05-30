@@ -44,7 +44,6 @@ import tasks.util._
 import tasks.queue._
 import tasks.wire._
 
-
 class HeartBeatActor(target: ActorRef)
     extends Actor
     with akka.actor.ActorLogging {

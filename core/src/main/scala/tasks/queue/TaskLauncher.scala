@@ -33,7 +33,8 @@ import akka.actor.{
   ActorRef,
   Props,
   Cancellable,
-  ActorRefFactory,ExtendedActorSystem
+  ActorRefFactory,
+  ExtendedActorSystem
 }
 import akka.actor.Actor._
 import akka.stream.Materializer
@@ -70,8 +71,8 @@ case class TaskDescription(taskId: TaskId,
 object TaskDescription {
   implicit val encoder: Encoder[TaskDescription] =
     deriveEncoder[TaskDescription]
-    implicit val dec: Decoder[TaskDescription] =
-      deriveDecoder[TaskDescription]
+  implicit val dec: Decoder[TaskDescription] =
+    deriveDecoder[TaskDescription]
 }
 
 case class ScheduleTask(
@@ -86,7 +87,8 @@ case class ScheduleTask(
 
 object ScheduleTask {
   implicit val encoder: Encoder[ScheduleTask] = deriveEncoder[ScheduleTask]
-  implicit def decoder(implicit as:ExtendedActorSystem) = deriveDecoder[ScheduleTask]
+  implicit def decoder(implicit as: ExtendedActorSystem) =
+    deriveDecoder[ScheduleTask]
 }
 
 class TaskLauncher(

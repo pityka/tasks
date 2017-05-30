@@ -129,10 +129,9 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
                       "Checking: {}. Got something ({}), but failed to verify after cache.",
                       sch.description.taskId,
                       res.get)
-                    savedSender ! AnswerFromCache(
-                      Left("TaskNotFoundInCache"),
-                      originalSender,
-                      sch)
+                    savedSender ! AnswerFromCache(Left("TaskNotFoundInCache"),
+                                                  originalSender,
+                                                  sch)
                   } else {
                     log.debug("Checking: {}. Got something (verified).",
                               sch.description.taskId)

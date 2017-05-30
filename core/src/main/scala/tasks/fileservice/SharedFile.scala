@@ -71,7 +71,6 @@ case class ManagedFilePath(pathElements: Vector[String]) extends FilePath {
   def name = pathElements.last
 }
 
-
 case class RemoteFilePath(uri: Uri) extends FilePath {
   override def toString = uri.toString
   def name = uri.akka.path.toString.split("/").filter(_.size > 0).last
@@ -141,8 +140,10 @@ object SharedFile {
 }
 
 object ManagedFilePath {
-  implicit val decoder: Decoder[ManagedFilePath] = deriveDecoder[ManagedFilePath]
-  implicit val encoder: Encoder[ManagedFilePath] = deriveEncoder[ManagedFilePath]
+  implicit val decoder: Decoder[ManagedFilePath] =
+    deriveDecoder[ManagedFilePath]
+  implicit val encoder: Encoder[ManagedFilePath] =
+    deriveEncoder[ManagedFilePath]
 }
 
 object RemoteFilePath {

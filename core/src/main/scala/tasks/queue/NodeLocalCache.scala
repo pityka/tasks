@@ -35,7 +35,6 @@ import tasks.TaskSystemComponents
 import tasks.Implicits._
 import tasks.wire._
 
-
 object NodeLocalCache {
   def getItemAsync[A](key: String)(orElse: => Future[A])(
       implicit tsc: TaskSystemComponents): Future[A] =

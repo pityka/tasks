@@ -37,7 +37,7 @@ object TempFile {
     val t = if (tempDir.isDirectory) {
       Some(tempDir)
     } else {
-      println("Failed to create "+tempDir)
+      println("Failed to create " + tempDir)
       None
     }
 

@@ -35,10 +35,9 @@ import com.bluelabs.s3stream._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import tasks.util.Uri
 
-class StreamHelper(s3stream: Option[S3Stream])(
-    implicit as: ActorSystem,
-    actorMaterializer: Materializer,
-    ec: ExecutionContext) {
+class StreamHelper(s3stream: Option[S3Stream])(implicit as: ActorSystem,
+                                               actorMaterializer: Materializer,
+                                               ec: ExecutionContext) {
 
   val queue = (rq: HttpRequest) => httpqueue.HttpQueue(as).queue(rq)
 
