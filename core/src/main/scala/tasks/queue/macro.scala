@@ -41,9 +41,10 @@ object Macros {
     import cxt.universe._
     val a = weakTypeOf[A]
     val c = weakTypeOf[C]
-    val h = taskID.tree match {
-      case Literal(Constant(s: String)) => TypeName(s)
-      case _ => cxt.abort(cxt.enclosingPosition, "Not a string literal")
+    val h =  {
+      // evaluates the tree. taskID should not depend on runtime values
+      val taskIDEval = cxt.eval(cxt.Expr[String](cxt.resetLocalAttrs(taskID.tree.duplicate)))
+      TypeName(taskIDEval)
     }
 
     val t =
