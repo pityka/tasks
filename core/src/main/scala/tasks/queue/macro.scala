@@ -49,14 +49,14 @@ object Macros {
     }
 
     val t =
-      tq"Function1[io.circe.Json,Function1[tasks.queue.ComputationEnvironment,scala.concurrent.Future[tasks.queue.UntypedResult]]]"
+      tq"Function1[tasks.queue.Base64Data,Function1[tasks.queue.ComputationEnvironment,scala.concurrent.Future[tasks.queue.UntypedResult]]]"
     val r = q"""
     class $h extends $t {
-      val r = implicitly[io.circe.Decoder[$a]]
-      val w = implicitly[io.circe.Encoder[$c]]
+      val r = implicitly[tasks.queue.Deserializer[$a]]
+      val w = implicitly[tasks.queue.Serializer[$c]]
       val c = $comp
-      def apply(j:io.circe.Json) =
-          (ce:tasks.queue.ComputationEnvironment) => (c(r.decodeJson(j).right.get)(ce)).map(x => tasks.queue.UntypedResult.make(x)(w))(ce.executionContext)
+      def apply(j:tasks.queue.Base64Data) =
+          (ce:tasks.queue.ComputationEnvironment) => (c(r(j.bytes))(ce)).map(x => tasks.queue.UntypedResult.make(x)(w))(ce.executionContext)
 
     }
     new TaskDefinition[$a,$c](new $h,tasks.queue.TaskId($taskID,$taskVersion))

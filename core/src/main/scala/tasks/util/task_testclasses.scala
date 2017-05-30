@@ -48,9 +48,9 @@ object SimpleTask {
 
   case class MyResultSet(val num: Option[Int], val id: Option[Int])
 
-  val runTask: CompFun2 = { js => implicit env =>
+  val runTask: CompFun2 = { data => implicit env =>
     Future {
-      val rs = implicitly[Decoder[MyResultSet]].decodeJson(js).right.get
+      val rs = implicitly[Decoder[MyResultSet]].decodeJson(io.circe.parser.parse(data.value).right.get).right.get
       // Logger.debug( "task implementation started" + rs.num.toString)
       log.warning("boo")
       NodeLocalCache
@@ -67,7 +67,7 @@ object SimpleTask {
 
           UntypedResult(
             Set(),
-            JsonString((new IntResult(rs.num.get)).asJson.noSpaces))
+            Base64Data((new IntResult(rs.num.get)).asJson.noSpaces))
         }
 
     }.flatMap(x => x)
@@ -76,8 +76,8 @@ object SimpleTask {
 
   def spawn(counter: Int, id: Int = 0)(
       implicit components: TaskSystemComponents,
-      writer1: Encoder[MyResultSet],
-      reader2: Decoder[IntResult]) =
+      writer1: Serializer[MyResultSet],
+      reader2: Deserializer[IntResult]) =
     newTask[IntResult, MyResultSet](
       prerequisitives = MyResultSet(Some(counter), Some(id)),
       resource = CPUMemoryRequest(cpu = 1, memory = 500),

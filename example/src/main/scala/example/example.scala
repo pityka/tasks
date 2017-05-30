@@ -26,6 +26,7 @@ package example
 
 import tasks._
 import tasks.collection._
+import tasks.queue.CirceSerializer._
 
 import scala.concurrent._
 import scala.concurrent.duration._

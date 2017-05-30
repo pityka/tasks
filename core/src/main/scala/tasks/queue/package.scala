@@ -32,7 +32,7 @@ import scala.concurrent._
 
 package object queue {
 
-  type CompFun2 = Json => ComputationEnvironment => Future[UntypedResult]
+  type CompFun2 = Base64Data => ComputationEnvironment => Future[UntypedResult]
 
   def newTask[A, B](
       prerequisitives: B,
@@ -40,8 +40,8 @@ package object queue {
       f: CompFun2,
       taskId: TaskId
   )(implicit components: TaskSystemComponents,
-    writer1: Encoder[B],
-    reader2: Decoder[A]): ProxyTaskActorRef[B, A] = {
+    writer1: Serializer[B],
+    reader2: Deserializer[A]): ProxyTaskActorRef[B, A] = {
     implicit val queue = components.queue
     implicit val fileService = components.fs
     implicit val cache = components.cache

@@ -58,15 +58,18 @@ import tasks._
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
 
-case class JsonString(value: String)
-object JsonString {
-  implicit val encoder: Encoder[JsonString] = deriveEncoder[JsonString]
-  implicit val decoder: Decoder[JsonString] = deriveDecoder[JsonString]
+case class Base64Data(value: String) {
+  def bytes : Array[Byte] = base64(value)
+}
+object Base64Data {
+  implicit val encoder: Encoder[Base64Data] = deriveEncoder[Base64Data]
+  implicit val decoder: Decoder[Base64Data] = deriveDecoder[Base64Data]
+  def apply(b:Array[Byte]) : Base64Data = Base64Data(base64(b))
 }
 
 case class TaskDescription(taskId: TaskId,
-                           startData: JsonString,
-                           persistent: Option[JsonString])
+                           startData: Base64Data,
+                           persistent: Option[Base64Data])
 
 object TaskDescription {
   implicit val encoder: Encoder[TaskDescription] =

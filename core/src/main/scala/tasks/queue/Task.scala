@@ -51,7 +51,7 @@ import io.circe.parser.decode
 import io.circe.generic.semiauto._
 import io.circe.syntax._
 
-case class UntypedResult(files: Set[SharedFile], data: JsonString)
+case class UntypedResult(files: Set[SharedFile], data: Base64Data)
 
 case class TaskId(id: String, version: Int)
 object TaskId {
@@ -68,8 +68,8 @@ object UntypedResult {
     case _ => Set()
   }
 
-  def make[A: Encoder](r: A): UntypedResult =
-    UntypedResult(fs(r), JsonString(r.asJson.noSpaces))
+  def make[A](r: A)(implicit ser:Serializer[A]): UntypedResult =
+    UntypedResult(fs(r), Base64Data(ser(r)))
 
   implicit val encoder: Encoder[UntypedResult] = deriveEncoder[UntypedResult]
 
@@ -150,7 +150,7 @@ private class Task(
 
   var startdat: Option[String] = None
 
-  def startTask(msg: Json): Unit =
+  def startTask(msg: Base64Data): Unit =
     try {
       log.debug("Starttask from the executing dispatcher (future).")
 
@@ -218,10 +218,11 @@ private class Task(
     }
 
   def receive = {
-    case JsonString(msg) =>
+    case bd: Base64Data =>
       log.debug("StartTask, from taskactor")
-      startdat = Some(msg)
-      startTask(io.circe.parser.parse(msg).right.get)
+      startdat = Some(bd.value)
+      startTask(bd)
+      // startTask(io.circe.parser.parse(msg).right.get)
 
     case RegisterForNotification(ac) =>
       log.debug("Received: " + ac.toString)
@@ -235,8 +236,8 @@ class ProxyTask[MyPrerequisitive, MyResult](
     taskId: TaskId,
     runTaskClass: java.lang.Class[_ <: CompFun2],
     incomings: MyPrerequisitive,
-    writer: Encoder[MyPrerequisitive],
-    reader: Decoder[MyResult],
+    writer: Serializer[MyPrerequisitive],
+    reader: Deserializer[MyResult],
     resourceConsumed: CPUMemoryRequest,
     starter: ActorRef,
     fileServiceActor: FileServiceActor,
@@ -272,8 +273,8 @@ class ProxyTask[MyPrerequisitive, MyResult](
 
       val s = ScheduleTask(
         TaskDescription(taskId,
-                        JsonString(writer(incomings).noSpaces),
-                        persisted.map(x => JsonString(writer(x).noSpaces))),
+                        Base64Data(writer(incomings)),
+                        persisted.map(x => Base64Data(writer(x)))),
         runTaskClass.getName,
         resourceConsumed,
         starter,
@@ -299,16 +300,16 @@ class ProxyTask[MyPrerequisitive, MyResult](
   }
 
   def receive = {
-    case MessageFromTask(incomingResultJs) =>
-      val incomingResult: MyResult =
-        reader
-          .decodeJson(
-            io.circe.parser.parse(incomingResultJs.data.value).right.get)
-          .right
-          .get
+    case MessageFromTask(incomingResultRaw) =>
+      val incomingResult: MyResult = reader(incomingResultRaw.data.bytes)
+        // reader
+        //   .decodeJson(
+        //     io.circe.parser.parse(incomingResultJs.data.value).right.get)
+        //   .right
+        //   .get
       log.debug("MessageFromTask received from: {}, {}, {},{}",
                 sender,
-                incomingResultJs,
+                incomingResultRaw,
                 result,
                 incomingResult)
       if (result.isEmpty) {

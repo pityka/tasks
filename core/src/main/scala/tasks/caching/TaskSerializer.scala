@@ -50,6 +50,6 @@ trait TaskSerializer {
 
     val files =
       implicitly[Decoder[Set[SharedFile]]].decodeJson(m("files").get).right.get
-    UntypedResult(files, JsonString(m("data").get.asString.get))
+    UntypedResult(files, Base64Data(m("data").get.asString.get))
   }
 }
