@@ -41,8 +41,7 @@ lazy val core = project.in(file("core"))
       "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24",
       "ch.ethz.ganymed" % "ganymed-ssh2" % "261",
       "org.scalatest" %% "scalatest" % "3.0.0" % "test",
-      "org.scala-lang" % "scala-reflect" % scalaVersion.value,
-      "beyondthelines" %% "pbdirect" % "0.0.3"
+      "org.scala-lang" % "scala-reflect" % scalaVersion.value
     )
   ).enablePlugins(ScalafmtPlugin)
   .dependsOn(shared)
@@ -55,6 +54,11 @@ lazy val example = project.in(file("example"))
     executableScriptName := "entrypoint",
     topLevelDirectory := None
 )
+
+lazy val upicklesupport = project.in(file("upickle")).settings(commonSettings:_*).settings(
+  name := "tasks-upickle",
+  libraryDependencies += "com.lihaoyi" %% "upickle" % "0.4.4"
+).dependsOn(core)
 
 lazy val collection = project.in(file("collection")).settings(commonSettings:_*)
 .settings(
