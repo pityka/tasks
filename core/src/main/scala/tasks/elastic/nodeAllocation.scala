@@ -43,27 +43,6 @@ import tasks.wire._
 import io.circe.{Encoder, Decoder}
 import io.circe.generic.semiauto._
 
-// @SerialVersionUID(1L)
-// case object GetNodeRegistryStat extends Serializable
-//
-// private[elastic] case object MeasureTime
-//
-// private[tasks] case class Idling(state: Long)
-//
-// private[tasks] case object Working
-//
-// private[tasks] case object WhatAreYouDoing
-//
-// private[tasks] case object PrepareForShutdown
-//
-// private[tasks] case object ReadyForShutdown
-//
-// private[tasks] case class NodeComingUp(node: Node)
-//
-// private[tasks] case class InitFailed(nodename: PendingJobId)
-//
-// private[tasks] case class NodeIsDown(node: Node)
-
 case class Node(name: RunningJobId,
                 size: CPUMemoryAvailable,
                 launcherActor: ActorRef)

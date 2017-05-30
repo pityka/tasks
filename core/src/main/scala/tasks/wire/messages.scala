@@ -19,29 +19,9 @@ import tasks.elastic._
 
 case class Save(s: String, v: Any) extends java.io.Serializable
 
-object ActorRefCodec {
+sealed trait StaticMessage extends java.io.Serializable
 
-  implicit val actorRefEncoder: Encoder[ActorRef] =
-    Encoder.encodeString.contramap[ActorRef](ar =>
-      akka.serialization.Serialization.serializedActorPath(ar))
-  implicit def actorRefDecoder(implicit as: ExtendedActorSystem) : Decoder[ActorRef] = Decoder.decodeString.emap(str => Either.catchNonFatal(as.provider.resolveActorRef(str)).leftMap(t => "ActorRef"))
-}
-import ActorRefCodec._
-
-object ThrowableCodec {
-  implicit val throwableEncoder: Encoder[Throwable] =
-    Encoder.encodeString.contramap[Throwable](_.getMessage)
-  implicit val throwableDecoder: Decoder[Throwable] = Decoder.decodeString.emap(str => Either.catchNonFatal(new RuntimeException(str)).leftMap(t => "ActorRef"))
-}
-import ThrowableCodec._
-
-
-
-sealed trait StaticMessage
-
-//
 // Messages related to the queue
-//
 
 case class LookUp(s: String) extends StaticMessage
 
