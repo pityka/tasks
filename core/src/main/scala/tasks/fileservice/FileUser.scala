@@ -89,7 +89,7 @@ class FileUserStream(sf: ManagedFilePath,
   }
 
   override def receive = super.receive orElse {
-    case FileTransferMessage.FileSaved => {
+    case filetransfermessages.FileSaved() => {
       writeableChannel.get.close
     }
   }
@@ -137,7 +137,7 @@ class FileUserSource(sf: ManagedFilePath,
   }
 
   override def receive = super.receive orElse {
-    case FileTransferMessage.FileSaved => {
+    case filetransfermessages.FileSaved() => {
       writeableChannel.get.close
     }
   }
@@ -176,7 +176,7 @@ class FileUser(sf: ManagedFilePath,
   }
 
   override def receive = super.receive orElse {
-    case FileTransferMessage.FileSaved => {
+    case filetransfermessages.FileSaved() => {
       writeableChannel.get.close
       // service ! NewPath(sf, fileUnderTransfer.get)
       finishLocalFile(fileUnderTransfer.get)
@@ -226,9 +226,9 @@ abstract class AbstractFileUser[R](sf: ManagedFilePath,
       }
       fail(e)
     }
-    case FileTransferMessage.CannotSaveFile(e) => {
+    case filetransfermessages.CannotSaveFile(e) => {
       log.error("CannotSaveFile : " + sf + " Reason: " + e)
-      fail(e)
+      fail(new RuntimeException(e))
     }
     case KnownPaths(list) => {
       log.debug("KnownPaths:" + list)

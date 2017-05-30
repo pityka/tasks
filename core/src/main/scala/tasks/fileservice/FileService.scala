@@ -187,16 +187,16 @@ class FileService(storage: ManagedFileStorage,
         }
       }
 
-    case FileTransferMessage.CannotSaveFile(e) => {
+    case filetransfermessages.CannotSaveFile(e) => {
       transferinactors.get(sender).foreach {
         case (channel, file, filesender, proposedPath, _) =>
           channel.close
           log.error("CannotSaveFile(" + e + ")")
-          filesender ! ErrorWhileAccessingStore(e)
+          filesender ! ErrorWhileAccessingStore(new RuntimeException(e))
       }
       transferinactors.remove(sender)
     }
-    case FileTransferMessage.FileSaved => {
+    case filetransfermessages.FileSaved() => {
       transferinactors.get(sender).foreach {
         case (channel, file, filesender, proposedPath, ephemeral) =>
           channel.close

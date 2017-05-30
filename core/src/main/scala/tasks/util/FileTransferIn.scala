@@ -31,16 +31,7 @@ import java.nio.channels.{WritableByteChannel, ReadableByteChannel}
 import java.nio.ByteBuffer
 import java.io.FileInputStream
 import scala.util.{Try, Failure, Success}
-
-sealed trait FileTransferMessage extends Serializable
-object FileTransferMessage {
-  case class Chunk(data: ByteString) extends FileTransferMessage
-  case object Ack extends FileTransferMessage
-  case object EndChunk extends FileTransferMessage
-  case object FileSaved extends FileTransferMessage
-  case class CannotSaveFile(e: Throwable) extends FileTransferMessage
-}
-import FileTransferMessage._
+import tasks.wire.filetransfermessages._
 
 class TransferIn(output: WritableByteChannel, notification: ActorRef)
     extends Actor
@@ -49,18 +40,18 @@ class TransferIn(output: WritableByteChannel, notification: ActorRef)
   def receive = {
     case Chunk(bytestring) =>
       Try {
-        output.write(bytestring.asByteBuffer)
+        output.write(bytestring.asReadOnlyByteBuffer)
       } match {
-        case Success(_) => sender ! Ack
+        case Success(_) => sender ! Ack()
         case Failure(e) => {
-          notification ! CannotSaveFile(e)
-          sender ! CannotSaveFile(e)
+          notification ! CannotSaveFile(e.getMessage)
+          sender ! CannotSaveFile(e.getMessage)
           self ! PoisonPill
         }
       }
 
     case EndChunk =>
-      notification ! FileSaved
+      notification ! FileSaved()
       self ! PoisonPill
 
   }
@@ -92,10 +83,10 @@ class TransferOut(file: ReadableByteChannel,
     readAhead
 
     if (eof) {
-      transferIn ! EndChunk
+      transferIn ! EndChunk()
       self ! PoisonPill
     } else {
-      transferIn ! Chunk(ByteString(buffer))
+      transferIn ! Chunk(com.google.protobuf.ByteString.copyFrom(buffer))
     }
     buffer.rewind
 
@@ -107,7 +98,7 @@ class TransferOut(file: ReadableByteChannel,
   }
 
   def receive = {
-    case Ack => send
+    case Ack() => send
     case CannotSaveFile(_) => self ! PoisonPill
   }
 }

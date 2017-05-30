@@ -25,6 +25,9 @@ lazy val core = project.in(file("core"))
   .settings(
     name := "tasks-core",
     resolvers +=  Resolver.bintrayRepo("beyondthelines", "maven"),
+    PB.targets in Compile := Seq(
+      scalapb.gen() -> (sourceManaged in Compile).value
+    ),
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "22.0",
       "com.typesafe.akka" %% "akka-actor" % "2.4.17",

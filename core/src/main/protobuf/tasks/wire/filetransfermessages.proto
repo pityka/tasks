@@ -1,0 +1,15 @@
+syntax = "proto3";
+package tasks.wire;
+message Chunk {
+  bytes data = 1;
+}
+
+message Ack {}
+
+message EndChunk {}
+
+message FileSaved {}
+
+message CannotSaveFile {
+  string cause = 1;
+}
