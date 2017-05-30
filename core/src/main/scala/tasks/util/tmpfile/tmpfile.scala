@@ -33,9 +33,13 @@ object TempFile {
     val baseDir = new File(System.getProperty("java.io.tmpdir"));
 
     val tempDir = new File(baseDir, baseName);
-    val t = if (tempDir.mkdir()) {
+    tempDir.mkdirs()
+    val t = if (tempDir.isDirectory) {
       Some(tempDir)
-    } else None
+    } else {
+      println("Failed to create "+tempDir)
+      None
+    }
 
     t.foreach(_.deleteOnExit)
 
