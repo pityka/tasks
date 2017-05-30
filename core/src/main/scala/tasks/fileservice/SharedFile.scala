@@ -77,20 +77,10 @@ case class RemoteFilePath(uri: Uri) extends FilePath {
 }
 
 case class SharedFile(
-    val path: FilePath,
-    val byteSize: Long,
-    val hash: Int
-) {
-  def canEqual(other: Any): Boolean = other.isInstanceOf[SharedFile]
-
-  override def hashCode: Int =
-    41 * (41 * (41 * (path.hashCode + 41) + byteSize.hashCode) + hash.hashCode)
-
-  override def equals(that: Any): Boolean = that match {
-    case t: SharedFile =>
-      t.canEqual(this) && t.path === this.path && t.byteSize === this.byteSize && t.hash === this.hash
-    case _ => false
-  }
+    path: FilePath,
+    byteSize: Long,
+    hash: Int
+) {  
 
   override def toString = s"SharedFile($path)"
 
