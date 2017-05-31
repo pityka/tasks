@@ -103,7 +103,7 @@ class FileServiceSpec
       val folder2 =
         new File(new java.io.File(getClass.getResource("/").getPath), "test1f")
       folder2.mkdir
-      val fs = new FolderFileStorage(folder, false)
+      val fs = new FolderFileStorage(folder)
       val service = system.actorOf(
           Props(new FileService(
                   fs
@@ -127,7 +127,7 @@ class FileServiceSpec
       val folder2 =
         new File(new java.io.File(getClass.getResource("/").getPath), "test2f")
       folder2.mkdir
-      val fs = new FolderFileStorage(folder, false)
+      val fs = new FolderFileStorage(folder)
       val service = system.actorOf(
           Props(new FileService(
                   fs
@@ -146,35 +146,7 @@ class FileServiceSpec
       val path = Await.result(SharedFileHelper.getPathToFile(t), 50 seconds)
       readBinaryFile(path.getCanonicalPath).deep should equal(data.deep)
 
-    }
-
-    it("add new file and ask for streaming") {
-      val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
-      val input = TempFile.createTempFile(".in")
-      writeBinaryToFile(input.getCanonicalPath, data)
-
-      val folder =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test2")
-      folder.mkdir
-      val folder2 =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test4f")
-      folder2.mkdir
-      val fs = new FolderFileStorage(folder, false)
-      val service = system.actorOf(Props(new FileService(fs)))
-      implicit val serviceimpl =
-        FileServiceActor(service, Some(fs), remoteStore)
-      val t: SharedFile =
-        Await.result(SharedFileHelper.createFromFile(input, "proba", false),
-                     50 seconds)
-
-      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
-          data.deep)
-
-      Await.result(SharedFileHelper.openStreamToFile(t) { inputstream =>
-        readBinaryStream(inputstream).deep should equal(data.deep)
-      }, 50 seconds)
-
-    }
+    }  
 
     it("after cache restart") {
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
@@ -187,7 +159,7 @@ class FileServiceSpec
       folder2.mkdir
       val input = new java.io.File(folder, "proba")
       writeBinaryToFile(input.getCanonicalPath, data)
-      val fs = new FolderFileStorage(folder, false)
+      val fs = new FolderFileStorage(folder)
       val service = system.actorOf(Props(new FileService(fs)))
       implicit val serviceimpl =
         FileServiceActor(service, Some(fs), remoteStore)
@@ -221,7 +193,7 @@ class FileServiceSpec
       folder2.mkdir
       val input = new java.io.File(folder, "proba")
       writeBinaryToFile(input.getCanonicalPath, data)
-      val fs = new FolderFileStorage(folder, true)
+      val fs = new FolderFileStorage(folder)
       val service =
         system.actorOf(Props(new FileService(fs, 8, (_: File) => false)))
       implicit val serviceimpl =

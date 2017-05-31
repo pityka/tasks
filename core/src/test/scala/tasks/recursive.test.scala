@@ -43,17 +43,18 @@ import scala.concurrent._
 import duration._
 import Duration._
 import com.typesafe.config.ConfigFactory
-import scala.concurrent.ExecutionContext.Implicits.global
 
 import tasks.queue._
 import tasks.caching._
 import tasks.fileservice._
 import tasks.util._
 import tasks.deploy._
+import tasks.circesupport._
+
+import io.circe.generic.auto._
+
 
 object Fib {
-
-  import scala.concurrent.ExecutionContext.Implicits.global
 
   def serial(n: Int): Int = n match {
     case 0 => 0
@@ -93,7 +94,6 @@ object Fib {
 
     }
 
-  println(fibtask.taskId)
 
 }
 
@@ -116,7 +116,7 @@ tasks.disableRemoting = true
   test("long") {
     val n = 16
     val r = await(fibtask(FibInput(n))(CPUMemoryRequest(1, 1))).n
-    expectResult(r)(serial(n))
+    assertResult(r)(serial(n))
   }
 
   override def afterAll {

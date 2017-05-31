@@ -16,6 +16,7 @@ import tasks.queue._
 import tasks.caching._
 import tasks.fileservice._
 import tasks.util._
+import tasks.wire.filetransfermessages._
 
 object Conf {
   val str = """my-pinned-dispatcher {
@@ -60,7 +61,7 @@ class TransferSpec
       val transferout = system.actorOf(
           Props(new TransferOut(readablechannel, transferin, chunksize)))
 
-      expectMsg(1000 millis, FileSaved)
+      expectMsg(1000 millis, FileSaved())
 
       readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
 
@@ -81,7 +82,7 @@ class TransferSpec
       val transferout = system.actorOf(
           Props(new TransferOut(readablechannel, transferin, chunksize)))
 
-      expectMsg(100 millis, FileSaved)
+      expectMsg(100 millis, FileSaved())
 
       readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
 
@@ -102,7 +103,7 @@ class TransferSpec
       val transferout = system.actorOf(
           Props(new TransferOut(readablechannel, transferin, chunksize)))
 
-      expectMsg(100 millis, FileSaved)
+      expectMsg(100 millis, FileSaved())
 
       readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
 
@@ -123,7 +124,7 @@ class TransferSpec
       val transferout = system.actorOf(
           Props(new TransferOut(readablechannel, transferin, chunksize)))
 
-      expectMsg(100 millis, FileSaved)
+      expectMsg(100 millis, FileSaved())
 
       readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
 
@@ -144,7 +145,7 @@ class TransferSpec
       val transferout = system.actorOf(
           Props(new TransferOut(readablechannel, transferin, chunksize)))
 
-      expectMsg(100 millis, FileSaved)
+      expectMsg(100 millis, FileSaved())
 
       readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
 
@@ -166,7 +167,7 @@ class TransferSpec
       val transferout = system.actorOf(
           Props(new TransferOut(readablechannel, transferin, chunksize)))
 
-      expectMsg(100 millis, FileSaved)
+      expectMsg(100 millis, FileSaved())
       writeablechannel.close
 
       readBinaryStream(java.nio.channels.Channels.newInputStream(pipe.source)).deep should equal(

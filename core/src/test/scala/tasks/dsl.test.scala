@@ -33,7 +33,6 @@ import tasks._
 
 import org.scalatest.FunSpec
 import org.scalatest.Matchers
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent._
 import scala.concurrent.duration._
 
@@ -41,43 +40,49 @@ import tasks.queue._
 import tasks.caching._
 import tasks.fileservice._
 import tasks.util._
+import tasks.circesupport._
 
 import com.typesafe.config.ConfigFactory
+import io.circe._
+import io.circe.generic.semiauto._
 
 object Tests {
 
   def await[T](f: Future[T]) = Await.result(f, atMost = Duration.Inf)
 
   case class IntWrapper(i: Int)
-  // implicit val updateCounter: UpdatePrerequisitive[STP1[Int], IntWrapper] =
-  //   UpdatePrerequisitive {
-  //     case (old, i: IntWrapper) => old.copy(a1 = Some(i.i))
-  //   }
-
-  val increment = Task[Int, IntWrapper]("increment", 1) {
-    case c =>
-      implicit computationEnvironment =>
-        log.info("increment {}", c)
-        IntWrapper(c + 1)
+  object IntWrapper {
+    implicit val enc : Encoder[IntWrapper] = deriveEncoder[IntWrapper]
+    implicit val dec : Decoder[IntWrapper] = deriveDecoder[IntWrapper]
   }
-  val tmp = TempFile.createTempFile(".2leveldb")
-  tmp.delete
-  val Some(r1) = withTaskSystem(
+
+  val increment = AsyncTask[IntWrapper, Int]("incrementtask", 1) {
+    case IntWrapper(c) =>
+    println(c)
+      implicit computationEnvironment =>
+        println("increment")
+        Future(c + 1)
+  }
+
+  def run ={
+    val tmp = TempFile.createTempFile(".2leveldb")
+    tmp.delete
+     withTaskSystem(
       Some(ConfigFactory.parseString(
               s"tasks.cache.file=${tmp.getAbsolutePath}"
           ))) { implicit ts =>
-    def t1(i: Int) = increment(i)(CPUMemoryRequest(1, 500))
 
-    (await(increment(0)(CPUMemoryRequest(1, 500))).i)
+    (await(increment(IntWrapper(0))(CPUMemoryRequest(1, 500))))
 
   }
+}
 
 }
 
 class TaskDSLTestSuite extends FunSuite with Matchers {
 
   test("chains should work") {
-    Tests.r1 should equal(1)
+    Tests.run.get should equal(1)
   }
 
 }
