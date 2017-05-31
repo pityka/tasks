@@ -49,9 +49,7 @@ import akka.util._
 
 object FolderFileStorage {
 
-  private def getContentHash(file: File): Int = {
-    val checkedSize = 1024 * 256
-    val buffer = Array.fill[Byte](checkedSize)(0)
+  private def getContentHash(file: File): Int = {    
     openFileInputStream(file) { is =>
       FileStorage.getContentHash(is)
     }
