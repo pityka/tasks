@@ -208,7 +208,7 @@ package object tasks {
 
   type CompFun[A, B] = A => ComputationEnvironment => B
 
-  def AsyncTask[A<:AnyRef, C](taskID: String, taskVersion: Int)(
+  def AsyncTask[A <: AnyRef, C](taskID: String, taskVersion: Int)(
       comp: CompFun[A, Future[C]]): TaskDefinition[A, C] =
     macro Macros
       .asyncTaskDefinitionImpl[A, C]

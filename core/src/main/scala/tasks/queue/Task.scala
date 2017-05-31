@@ -68,7 +68,7 @@ object UntypedResult {
     case _ => Set()
   }
 
-  def make[A](r: A)(implicit ser:Serializer[A]): UntypedResult =
+  def make[A](r: A)(implicit ser: Serializer[A]): UntypedResult =
     UntypedResult(fs(r), Base64Data(ser(r)))
 
   implicit val encoder: Encoder[UntypedResult] = deriveEncoder[UntypedResult]
@@ -222,7 +222,7 @@ private class Task(
       log.debug("StartTask, from taskactor")
       startdat = Some(bd.value)
       startTask(bd)
-      // startTask(io.circe.parser.parse(msg).right.get)
+    // startTask(io.circe.parser.parse(msg).right.get)
 
     case RegisterForNotification(ac) =>
       log.debug("Received: " + ac.toString)
@@ -302,11 +302,11 @@ class ProxyTask[MyPrerequisitive, MyResult](
   def receive = {
     case MessageFromTask(incomingResultRaw) =>
       val incomingResult: MyResult = reader(incomingResultRaw.data.bytes)
-        // reader
-        //   .decodeJson(
-        //     io.circe.parser.parse(incomingResultJs.data.value).right.get)
-        //   .right
-        //   .get
+      // reader
+      //   .decodeJson(
+      //     io.circe.parser.parse(incomingResultJs.data.value).right.get)
+      //   .right
+      //   .get
       log.debug("MessageFromTask received from: {}, {}, {},{}",
                 sender,
                 incomingResultRaw,

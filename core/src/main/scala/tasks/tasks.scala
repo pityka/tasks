@@ -47,7 +47,7 @@ trait HasPersistent[+A] extends Serializable { self: A =>
 }
 
 class TaskDefinition[A: Serializer, B: Deserializer](val computation: CompFun2,
-                                             val taskId: TaskId) {
+                                                     val taskId: TaskId) {
 
   def apply(a: A)(resource: CPUMemoryRequest)(
       implicit components: TaskSystemComponents): Future[B] =

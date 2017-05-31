@@ -50,7 +50,10 @@ object SimpleTask {
 
   val runTask: CompFun2 = { data => implicit env =>
     Future {
-      val rs = implicitly[Decoder[MyResultSet]].decodeJson(io.circe.parser.parse(data.value).right.get).right.get
+      val rs = implicitly[Decoder[MyResultSet]]
+        .decodeJson(io.circe.parser.parse(data.value).right.get)
+        .right
+        .get
       // Logger.debug( "task implementation started" + rs.num.toString)
       log.warning("boo")
       NodeLocalCache

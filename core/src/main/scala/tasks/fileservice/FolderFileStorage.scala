@@ -49,7 +49,7 @@ import akka.util._
 
 object FolderFileStorage {
 
-  private def getContentHash(file: File): Int = {    
+  private def getContentHash(file: File): Int = {
     openFileInputStream(file) { is =>
       FileStorage.getContentHash(is)
     }

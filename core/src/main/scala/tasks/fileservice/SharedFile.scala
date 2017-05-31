@@ -80,7 +80,7 @@ case class SharedFile(
     path: FilePath,
     byteSize: Long,
     hash: Int
-) {  
+) {
 
   override def toString = s"SharedFile($path)"
 

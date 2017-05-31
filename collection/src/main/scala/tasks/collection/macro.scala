@@ -33,8 +33,6 @@ object Macros {
   import scala.reflect.macros.Context
   import scala.language.experimental.macros
 
-
-
   def mapMacro[A: cxt.WeakTypeTag, B: cxt.WeakTypeTag](
       cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
       fun: cxt.Expr[A => B]

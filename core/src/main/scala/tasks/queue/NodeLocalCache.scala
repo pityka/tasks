@@ -43,8 +43,8 @@ object NodeLocalCache {
   def getItem[A](key: String)(orElse: => A)(
       implicit tsc: TaskSystemComponents): Future[A] = _getItem(key)(orElse)
 
-      def drop(key: String)(
-          implicit tsc: TaskSystemComponents) = tsc.nodeLocalCache.actor ! Drop(key)
+  def drop(key: String)(implicit tsc: TaskSystemComponents) =
+    tsc.nodeLocalCache.actor ! Drop(key)
 
   private[tasks] def _getItemAsync[A](key: String)(orElse: => Future[A])(
       implicit nlc: NodeLocalCacheActor,
@@ -92,14 +92,13 @@ class NodeLocalCache extends Actor with akka.actor.ActorLogging {
         }
       }
 
-
     case Save(s, r) =>
       log.debug("Save(" + s + "): Distributing to waiting list.")
       map += s -> Some(r)
       waitingList.filter(_._1 == s).map(_._2).foreach(_ ! r)
 
     case Drop(s) =>
-      log.debug("Drop {}",s)
+      log.debug("Drop {}", s)
       map -= s
   }
 

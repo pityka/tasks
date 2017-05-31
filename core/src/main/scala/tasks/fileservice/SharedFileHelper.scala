@@ -81,7 +81,6 @@ private[tasks] object SharedFileHelper {
 
   val isLocal = (f: File) => f.canRead
 
-
   def getSourceToFile(sf: SharedFile)(
       implicit service: FileServiceActor,
       context: ActorRefFactory,
@@ -119,7 +118,6 @@ private[tasks] object SharedFileHelper {
           Source.fromFuture(f2).flatMapConcat(x => x)
         }
     }
-
 
   def getPathToFile(sf: SharedFile)(implicit service: FileServiceActor,
                                     context: ActorRefFactory,

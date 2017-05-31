@@ -149,8 +149,6 @@ class S3Storage(bucketName: String, folderPrefix: String, s3stream: S3Stream)(
 
   }
 
-
-
   def createSource(path: ManagedFilePath): Source[ByteString, _] =
     s3stream.getData(S3Location(bucketName, assembleName(path)))
 

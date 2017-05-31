@@ -102,8 +102,6 @@ class RemoteFileStorage(implicit mat: Materializer,
 
   }
 
-
-
 }
 
 trait ManagedFileStorage {
@@ -121,7 +119,7 @@ trait ManagedFileStorage {
       implicit am: Materializer): Future[(Long, Int, ManagedFilePath)]
 
   def exportFile(path: ManagedFilePath): Future[File]
-  
+
   def list(regexp: String): List[SharedFile]
 
 }
