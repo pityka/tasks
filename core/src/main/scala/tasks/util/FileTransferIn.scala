@@ -50,7 +50,7 @@ class TransferIn(output: WritableByteChannel, notification: ActorRef)
         }
       }
 
-    case EndChunk =>
+    case EndChunk() =>
       notification ! FileSaved()
       self ! PoisonPill
 
