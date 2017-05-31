@@ -52,9 +52,9 @@ object Macros {
       tq"Function1[tasks.queue.Base64Data,Function1[tasks.queue.ComputationEnvironment,scala.concurrent.Future[tasks.queue.UntypedResult]]]"
     val r = q"""
     class $h extends $t {
-      val r = implicitly[tasks.queue.Deserializer[$a]]
-      val w = implicitly[tasks.queue.Serializer[$c]]
-      val c = $comp
+      private[this] val r = implicitly[tasks.queue.Deserializer[$a]]
+      private[this] val w = implicitly[tasks.queue.Serializer[$c]]
+      private[this] val c = $comp
       def apply(j:tasks.queue.Base64Data) =
           (ce:tasks.queue.ComputationEnvironment) => (c(r(j.bytes))(ce)).map(x => tasks.queue.UntypedResult.make(x)(w))(ce.executionContext)
 
