@@ -25,8 +25,6 @@
 package tasks.collection
 
 import tasks._
-import upickle.default._
-import upickle.Js
 import scala.concurrent.Future
 
 object Macros {

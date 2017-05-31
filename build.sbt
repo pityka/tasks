@@ -63,6 +63,5 @@ lazy val upicklesupport = project.in(file("upickle")).settings(commonSettings:_*
 lazy val collection = project.in(file("collection")).settings(commonSettings:_*)
 .settings(
   name := "tasks-collection",
-  libraryDependencies ++= Seq("io.github.pityka" %% "flatjoin-akka-stream" % "0.0.1-SNAPSHOT",
-    "io.github.pityka" %% "flatjoin-upickle" % "0.0.1-SNAPSHOT")
+  libraryDependencies ++= Seq("io.github.pityka" %% "flatjoin-akka-stream" % "0.0.1-SNAPSHOT","org.scalatest" %% "scalatest" % "3.0.0" % "test")
 ).dependsOn(core).enablePlugins(ScalafmtPlugin)
