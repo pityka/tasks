@@ -43,6 +43,9 @@ object NodeLocalCache {
   def getItem[A](key: String)(orElse: => A)(
       implicit tsc: TaskSystemComponents): Future[A] = _getItem(key)(orElse)
 
+      def drop(key: String)(
+          implicit tsc: TaskSystemComponents) = tsc.nodeLocalCache.actor ! Drop(key)
+
   private[tasks] def _getItemAsync[A](key: String)(orElse: => Future[A])(
       implicit nlc: NodeLocalCacheActor,
       ec: ExecutionContext): Future[A] =
@@ -72,7 +75,7 @@ class NodeLocalCache extends Actor with akka.actor.ActorLogging {
     scala.collection.mutable.ListBuffer[Tuple2[String, ActorRef]]()
 
   def receive = {
-    case LookUp(s) => {
+    case LookUp(s) =>
       val r = map.get(s)
       if (r.isEmpty) {
         log.debug("LookUp(" + s + "): Not Found. Reply with YouShouldSetIt")
@@ -89,12 +92,15 @@ class NodeLocalCache extends Actor with akka.actor.ActorLogging {
         }
       }
 
-    }
-    case Save(s, r) => {
+
+    case Save(s, r) =>
       log.debug("Save(" + s + "): Distributing to waiting list.")
       map += s -> Some(r)
       waitingList.filter(_._1 == s).map(_._2).foreach(_ ! r)
-    }
+
+    case Drop(s) =>
+      log.debug("Drop {}",s)
+      map -= s
   }
 
 }

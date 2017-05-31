@@ -22,6 +22,8 @@ sealed trait StaticMessage extends java.io.Serializable
 
 // Messages related to the queue
 
+case class Drop(s: String) extends StaticMessage
+
 case class LookUp(s: String) extends StaticMessage
 
 case object ATaskWasForwarded extends StaticMessage
