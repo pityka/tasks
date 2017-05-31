@@ -33,6 +33,8 @@ object Macros {
   import scala.reflect.macros.Context
   import scala.language.experimental.macros
 
+
+
   def mapMacro[A: cxt.WeakTypeTag, B: cxt.WeakTypeTag](
       cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
       fun: cxt.Expr[A => B]
@@ -46,8 +48,8 @@ object Macros {
 
            val subtask = tasks.AsyncTask[(Int,EColl[$a]), EColl[$b]]("partition-"+$taskID, $taskVersion) { case (idx,t) => implicit ctx =>
            val fun = $fun
-           val r = implicitly[upickle.default.Reader[$a]]
-           val w = implicitly[upickle.default.Writer[$b]]
+           val r = implicitly[tasks.queue.Deserializer[$a]]
+           val w = implicitly[tasks.queue.Serializer[$b]]
             EColl.fromSource(t.source(idx)(r,ctx.components).map(x => fun(x)), (t.basename))(w,ctx.components)
           }
 
@@ -72,8 +74,8 @@ object Macros {
 
       val subtask = tasks.AsyncTask[(Int,EColl[$a]), EColl[$a]]("partition-"+$taskID, $taskVersion) { case (idx,t) => implicit ctx =>
         val fun = $fun
-        val r = implicitly[upickle.default.Reader[$a]]
-        val w = implicitly[upickle.default.Writer[$a]]
+        val r = implicitly[tasks.queue.Deserializer[$a]]
+        val w = implicitly[tasks.queue.Serializer[$a]]
          EColl.fromSource(t.source(idx)(r,ctx.components).filter(x => fun(x)), (t.basename))(w,ctx.components)
       }
 
@@ -100,8 +102,8 @@ object Macros {
 
       val subtask = tasks.AsyncTask[(Int,EColl[$a]), EColl[$b]]("partition-"+$taskID, $taskVersion) { case (idx,t) => implicit ctx =>
         val fun = $fun
-        val r = implicitly[upickle.default.Reader[$a]]
-        val w = implicitly[upickle.default.Writer[$b]]
+        val r = implicitly[tasks.queue.Deserializer[$a]]
+        val w = implicitly[tasks.queue.Serializer[$b]]
          EColl.fromSource(t.source(idx)(r,ctx.components).mapConcat(x => fun(x)), (t.basename))(w,ctx.components)
       }
 
@@ -127,9 +129,9 @@ object Macros {
           val subtask = tasks.AsyncTask[(Int,Int,EColl[$a]), EColl[$a]]("partition-"+$taskID, $taskVersion) { case (idx,batchSize,t) => implicit ctx =>
             val fun = $fun
             implicit val mat = ctx.components.actorMaterializer
-            implicit val r = implicitly[upickle.default.Reader[$a]]
-            implicit val w = implicitly[upickle.default.Writer[$a]]
-            implicit val fmt = flatjoin.upickleformat.format[$a]
+            val r = implicitly[tasks.queue.Deserializer[$a]]
+            val w = implicitly[tasks.queue.Serializer[$a]]
+            implicit val fmt = tasks.collection.EColl.flatJoinFormat[$a]
             implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
             val sortedSource = t.source(idx)(r,ctx.components).via(flatjoin_akka.sort(batchSize))
              EColl.fromSource(sortedSource, (t.basename))(w,ctx.components)
@@ -143,9 +145,9 @@ object Macros {
           else {
             val fun = $fun
             implicit val mat = ctx.components.actorMaterializer
-            implicit val r = implicitly[upickle.default.Reader[$a]]
-            implicit val w = implicitly[upickle.default.Writer[$a]]
-            implicit val fmt = flatjoin.upickleformat.format[$a]
+            val r = implicitly[tasks.queue.Deserializer[$a]]
+            val w = implicitly[tasks.queue.Serializer[$a]]
+            implicit val fmt = tasks.collection.EColl.flatJoinFormat[$a]
             implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
 
             scala.concurrent.Future.sequence(partitions.map(_.partitions.head.file)).flatMap{ files =>
@@ -170,9 +172,9 @@ object Macros {
         tasks.AsyncTask[EColl[$a], EColl[Seq[$a]]]($taskID, $taskVersion) { t => implicit ctx =>
           val fun = $fun
           implicit val mat = ctx.components.actorMaterializer
-          implicit val r = implicitly[upickle.default.Reader[$a]]
-          implicit val w = implicitly[upickle.default.Writer[Seq[$a]]]
-          implicit val fmt = flatjoin.upickleformat.format[$a]
+          val r = implicitly[tasks.queue.Deserializer[$a]]
+          val w = implicitly[tasks.queue.Serializer[Seq[$a]]]
+          implicit val fmt = tasks.collection.EColl.flatJoinFormat[$a]
           implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
           val groupedSource = t.source(r,ctx.components).via(flatjoin_akka.groupByShardsInMemory($parallelism))
            EColl.fromSource(groupedSource, (t.basename))(w,ctx.components)
@@ -192,12 +194,12 @@ object Macros {
         tasks.AsyncTask[List[EColl[$a]], EColl[Seq[Option[$a]]]]($taskID, $taskVersion) { ts => implicit ctx =>
           val fun = $fun
           implicit val mat = ctx.components.actorMaterializer
-          implicit val r = implicitly[upickle.default.Reader[$a]]
-          implicit val w = implicitly[upickle.default.Writer[Seq[Option[$a]]]]
-          implicit val r2 = implicitly[upickle.default.Reader[(Int,$a)]]
-          implicit val w2 = implicitly[upickle.default.Writer[(Int,$a)]]
-          implicit val fmt = flatjoin.upickleformat.format[$a]
-          implicit val fmt2 = flatjoin.upickleformat.format[(Int,$a)]
+          implicit val r = implicitly[tasks.queue.Deserializer[$a]]
+          implicit val w = implicitly[tasks.queue.Serializer[Seq[Option[$a]]]]
+          implicit val r2 = implicitly[tasks.queue.Deserializer[(Int,$a)]]
+          implicit val w2 = implicitly[tasks.queue.Serializer[(Int,$a)]]
+          implicit val fmt = tasks.collection.EColl.flatJoinFormat[$a]
+          implicit val fmt2 = tasks.collection.EColl.flatJoinFormat[(Int,$a)]
           implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
 
           val catted = akka.stream.scaladsl.Source(ts.zipWithIndex).flatMapConcat(x => x._1.source.map(y =>x._2 -> y))
@@ -222,8 +224,8 @@ object Macros {
           implicit val mat = ctx.components.actorMaterializer
           val fun = $fun
           val z = $zero
-          val r = implicitly[upickle.default.Reader[$a]]
-          val w = implicitly[upickle.default.Writer[$b]]
+          val r = implicitly[tasks.queue.Deserializer[$a]]
+          val w = implicitly[tasks.queue.Serializer[$b]]
            t.source(r,ctx.components).runFold(z)(fun)
         }
     """
@@ -243,8 +245,8 @@ object Macros {
           val subtask = tasks.AsyncTask[(Int,EColl[$a]), $a]("partition-"+$taskID, $taskVersion) { case (idx,t) => implicit ctx =>
             implicit val mat = ctx.components.actorMaterializer
             val fun = $fun
-            val r = implicitly[upickle.default.Reader[$a]]
-            val w = implicitly[upickle.default.Writer[$a]]
+            val r = implicitly[tasks.queue.Deserializer[$a]]
+            val w = implicitly[tasks.queue.Serializer[$a]]
              t.source(idx)(r,ctx.components).runReduce(fun)
           }
 

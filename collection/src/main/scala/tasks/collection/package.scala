@@ -1,10 +1,7 @@
 package tasks.collection
 
 import flatjoin._
-// import io.circe._
-// import io.circe.syntax._
-// import io.circe.parser._
-import upickle.default.{Reader, Writer}
+import tasks.queue._
 import tasks._
 import java.io.File
 import akka.NotUsed
@@ -12,6 +9,7 @@ import akka.stream._
 import akka.stream.scaladsl._
 import akka.util.ByteString
 import scala.concurrent.Future
+import java.nio._
 
 case class EColl[T](partitions: List[SharedFile])
     extends ResultWithSharedFiles(partitions: _*) {
@@ -21,7 +19,7 @@ case class EColl[T](partitions: List[SharedFile])
 
   def ++(that: EColl[T]): EColl[T] = EColl[T](partitions ++ that.partitions)
 
-  def source(implicit decoder: Reader[T],
+  def source(implicit decoder: Deserializer[T],
              tsc: TaskSystemComponents): Source[T, _] =
     Source(partitions).flatMapConcat(
       _.source
@@ -29,9 +27,9 @@ case class EColl[T](partitions: List[SharedFile])
         .via(Framing.delimiter(ByteString("\n"),
                                maximumFrameLength = Int.MaxValue,
                                allowTruncation = false))
-        .map(line => decoder.read(upickle.json.read(line.utf8String))))
+        .map(line => decoder(line.toArray)))
 
-  def source(i: Int)(implicit decoder: Reader[T],
+  def source(i: Int)(implicit decoder: Deserializer[T],
                      tsc: TaskSystemComponents): Source[T, _] =
     partitions(i).source
       .via(Compression.gunzip())
@@ -39,14 +37,14 @@ case class EColl[T](partitions: List[SharedFile])
         Framing.delimiter(ByteString("\n"),
                           maximumFrameLength = Int.MaxValue,
                           allowTruncation = false))
-      .map(line => decoder.read(upickle.json.read(line.utf8String)))
+      .map(line => decoder.apply(line.toArray))
 
 }
 
 object EColl {
 
   def partitionsFromSource[T: StringKey](source: Source[T, _], name: String)(
-      implicit encoder: Writer[T],
+      implicit encoder: Serializer[T],
       tsc: TaskSystemComponents
   ) = {
     implicit val ec = tsc.executionContext
@@ -105,7 +103,7 @@ object EColl {
       Flow[T]
         .map {
           case elem =>
-            ByteString(upickle.json.write(encoder.write(elem))) -> hash(elem)
+            ByteString(encoder.apply(elem)) -> hash(elem)
         }
         .viaMat(shardFlow)(Keep.right)
     }
@@ -125,11 +123,11 @@ object EColl {
   }
 
   def fromSource[T](source: Source[T, _], name: String)(
-      implicit encoder: Writer[T],
+      implicit encoder: Serializer[T],
       tsc: TaskSystemComponents): Future[EColl[T]] = {
     val s2 =
       source
-        .map(t => ByteString(upickle.json.write(encoder.write(t)) + "\n"))
+        .map(t => ByteString(encoder.apply(t)) ++ ByteString("\n"))
         .via(Compression.gzip)
 
     SharedFile(s2, name + ".0")
@@ -181,6 +179,18 @@ object EColl {
       fun: (A, A) => A): TaskDefinition[EColl[A], A] =
     macro Macros
       .reduceMacro[A]
+
+      implicit def flatJoinFormat[T: Deserializer: Serializer] = new Format[T] {
+        def toBytes(t: T): ByteBuffer =
+          ByteBuffer.wrap(implicitly[Serializer[T]].apply(t))
+        def fromBytes(bb: ByteBuffer): T = {
+          val ba = ByteBuffer.allocate(bb.remaining)
+          while (ba.hasRemaining) {
+            ba.put(bb.get)
+          }
+          implicitly[Deserializer[T]].apply(ba.array)
+        }
+      }
 
 }
 // circe:
