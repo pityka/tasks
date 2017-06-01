@@ -37,6 +37,8 @@ import scala.concurrent._
 import scala.concurrent.duration._
 import io.circe.generic.auto._
 
+import com.typesafe.config.ConfigFactory
+
 object Tests {
 
   val twice =
@@ -56,9 +58,11 @@ object Tests {
 
   val sum = EColl.reduce("sum", 1)( (x: Int, y: Int) => x + y)
 
-  def run ={
+  def run(folder:String) ={
 
-    withTaskSystem { implicit ts =>
+    withTaskSystem(
+             s"tasks.fileservice.storageURI=$folder"
+         ) { implicit ts =>
       import scala.concurrent.ExecutionContext.Implicits.global
 
     val mappedEColl = for {
@@ -83,9 +87,12 @@ object Tests {
 
 class TaskCollectionTestSuite extends FunSuite with Matchers {
 
-  test("chains should work") {
-    Tests.run.get should equal(18)
-    Tests.run.get should equal(18)
+  test("collection") {
+    val tmp = tasks.util.TempFile.createTempFile(".temp")
+    tmp.delete
+    println(tmp)
+    Tests.run(tmp.getAbsolutePath).get should equal(18)
+    Tests.run(tmp.getAbsolutePath).get should equal(18)
   }
 
 }

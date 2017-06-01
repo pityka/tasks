@@ -52,6 +52,7 @@ import scala.io.Codec
 import util.eq._
 import scala.collection.mutable.ArrayBuffer
 import scala.util._
+import tasks.util.config._
 
 package object util {
 
@@ -76,8 +77,8 @@ package object util {
     }
   }
 
-  def chooseNetworkPort: Int =
-    Try(config.global.hostPort)
+  def chooseNetworkPort(implicit config:TasksConfig): Int =
+    Try(config.hostPort)
       .flatMap { p =>
         if (available(p)) Success(p) else Failure(new RuntimeException)
       }

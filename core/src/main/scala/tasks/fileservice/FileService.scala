@@ -46,6 +46,7 @@ import java.util.concurrent.{TimeUnit, ScheduledFuture}
 import java.nio.channels.{WritableByteChannel, ReadableByteChannel}
 
 import tasks.util._
+import tasks.util.config._
 import tasks.util.eq._
 import tasks.caching._
 import tasks.queue._
@@ -83,7 +84,7 @@ object ProposedManagedFilePath {
 
 class FileService(storage: ManagedFileStorage,
                   threadpoolsize: Int = 8,
-                  isLocal: File => Boolean = _.canRead)
+                  isLocal: File => Boolean = _.canRead)(implicit config: TasksConfig)
     extends Actor
     with akka.actor.ActorLogging {
 
@@ -247,7 +248,7 @@ class FileService(storage: ManagedFileStorage,
       try {
         storage.exportFile(sf).foreach { file =>
           val readablechannel = new java.io.FileInputStream(file).getChannel
-          val chunksize = tasks.util.config.global.fileSendChunkSize
+          val chunksize = config.fileSendChunkSize
           context.actorOf(
             Props(new TransferOut(readablechannel, transferinActor, chunksize))
               .withDispatcher("transferout"))

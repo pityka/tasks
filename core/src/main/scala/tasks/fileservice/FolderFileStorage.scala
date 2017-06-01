@@ -44,6 +44,7 @@ import com.google.common.hash._
 import scala.concurrent._
 import scala.util._
 import tasks.util.eq._
+import tasks.util.config._
 import akka.stream.scaladsl._
 import akka.util._
 
@@ -55,27 +56,13 @@ object FolderFileStorage {
     }
   }
 
-  private def fileIsRelativeToNonLocalFileSystem(f: File): Boolean = {
-    val nonLocalFileSystemsCanonical =
-      tasks.util.config.global.nonLocalFileSystems.map(_.getCanonicalPath)
-
-    val canonical = f.getCanonicalFile
-
-    def getParents(f: File, p: List[File]): List[File] =
-      if (f == null) p
-      else getParents(f.getParentFile, f :: p)
-
-    val canonicalParents = getParents(canonical, Nil).map(_.getCanonicalPath)
-
-    (nonLocalFileSystemsCanonical).exists(path =>
-      canonicalParents.contains(path))
-  }
 }
 
 class FolderFileStorage(val basePath: File,
                         val extendedPaths: List[File] = Nil)(
     implicit mat: Materializer,
-    ec: ExecutionContext)
+    ec: ExecutionContext,
+  config:TasksConfig)
     extends ManagedFileStorage {
 
   if (basePath.exists && !basePath.isDirectory)
@@ -108,7 +95,7 @@ class FolderFileStorage(val basePath: File,
   def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean] =
     Future.successful {
       val f = assemblePath(path)
-      f.canRead && (size < 0 || (f.length === size && (tasks.util.config.global.skipContentHashVerificationAfterCache || FolderFileStorage
+      f.canRead && (size < 0 || (f.length === size && (config.skipContentHashVerificationAfterCache || FolderFileStorage
         .getContentHash(f) === hash)))
     }
 

@@ -45,6 +45,7 @@ import java.nio.channels.{WritableByteChannel, ReadableByteChannel}
 
 import tasks.util._
 import tasks.util.eq._
+import tasks.util.config._
 import tasks.caching._
 import tasks.queue._
 import tasks.wire._
@@ -187,7 +188,8 @@ private[tasks] object SharedFileHelper {
       implicit prefix: FileServicePrefix,
       ec: ExecutionContext,
       service: FileServiceActor,
-      context: ActorRefFactory) =
+      context: ActorRefFactory,
+    config: TasksConfig) =
     if (service.storage.isDefined) {
       service.storage.get.importFile(file, prefix.propose(name)).map { f =>
         SharedFileHelper.create(f._1, f._2, f._4)
@@ -216,7 +218,8 @@ private[tasks] object SharedFileHelper {
       ec: ExecutionContext,
       service: FileServiceActor,
       context: ActorRefFactory,
-      mat: Materializer) =
+      mat: Materializer,
+    config: TasksConfig) =
     if (service.storage.isDefined) {
       val proposedPath = prefix.propose(name)
       service.storage.get.importSource(source, proposedPath).map { x =>

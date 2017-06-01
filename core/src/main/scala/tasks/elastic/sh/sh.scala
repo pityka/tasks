@@ -43,6 +43,7 @@ import tasks.deploy._
 import tasks.shared._
 import tasks.shared.monitor._
 import tasks.util._
+import tasks.util.config._
 import tasks.queue._
 
 trait SHShutdown extends ShutdownNode {
@@ -99,7 +100,7 @@ trait SHNodeRegistryImp extends Actor with GridJobRegistry {
 class SHNodeKiller(
     val targetLauncherActor: ActorRef,
     val targetNode: Node
-) extends NodeKillerImpl
+)(implicit val config:TasksConfig) extends NodeKillerImpl
     with SHShutdown
     with akka.actor.ActorLogging
 
@@ -107,7 +108,7 @@ class SHNodeRegistry(
     val masterAddress: InetSocketAddress,
     val targetQueue: ActorRef,
     override val unmanagedResource: CPUMemoryAvailable
-) extends SHNodeRegistryImp
+)(implicit val config:TasksConfig) extends SHNodeRegistryImp
     with NodeCreatorImpl
     with SimpleDecideNewNode
     with SHShutdown
@@ -124,7 +125,7 @@ object SHGrid extends ElasticSupport[SHNodeRegistry, SHSelfShutdown] {
 
   def apply(master: InetSocketAddress,
             balancerActor: ActorRef,
-            resource: CPUMemoryAvailable) = new Inner {
+            resource: CPUMemoryAvailable)(implicit config:TasksConfig) = new Inner {
     def getNodeName = {
       val pid = java.lang.management.ManagementFactory
         .getRuntimeMXBean()

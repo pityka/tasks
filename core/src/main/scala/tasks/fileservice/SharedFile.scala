@@ -51,7 +51,7 @@ import scala.util.{Try, Failure, Success}
 import com.google.common.hash._
 import scala.concurrent._
 import scala.util._
-
+import tasks.util.config._
 import tasks.util.eq._
 import tasks.util.Uri
 import tasks.queue._

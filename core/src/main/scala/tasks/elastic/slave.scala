@@ -25,6 +25,7 @@ package tasks.elastic
 
 import tasks._
 import tasks.util._
+import tasks.util.config._
 import tasks.util.eq._
 
 import java.net._
@@ -43,21 +44,21 @@ object Deployment {
       gridEngine: ElasticSupport[_, _],
       masterAddress: InetSocketAddress,
       download: URL
-  ): String = {
+  )(implicit config: TasksConfig): String = {
     val downloadScript = s"curl -m 60 $download > package && chmod u+x package"
 
     val edited = "./package -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dtasks.fileservice.storageURI={STORAGE}"
       .replaceAllLiterally(
         "{RAM}",
         math
-          .max(1, (memory.toDouble * config.global.jvmMaxHeapFactor).toInt)
+          .max(1, (memory.toDouble * config.jvmMaxHeapFactor).toInt)
           .toString)
-      .replaceAllLiterally("{EXTRA}", config.global.additionalJavaCommandline)
+      .replaceAllLiterally("{EXTRA}", config.additionalJavaCommandline)
       .replaceAllLiterally(
         "{MASTER}",
         masterAddress.getHostName + ":" + masterAddress.getPort)
       .replaceAllLiterally("{GRID}", gridEngine.toString)
-      .replaceAllLiterally("{STORAGE}", config.global.storageURI.toString)
+      .replaceAllLiterally("{STORAGE}", config.storageURI.toString)
 
     s"""
 $downloadScript && nohup $edited 1> stdout 2>stderr &

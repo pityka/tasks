@@ -39,6 +39,7 @@ import scala.util._
 import tasks.deploy._
 import tasks.shared._
 import tasks.util._
+import tasks.util.config._
 import tasks.util.eq._
 import tasks.fileservice._
 
@@ -61,15 +62,16 @@ import scala.concurrent.duration._
 class S3Storage(bucketName: String, folderPrefix: String, s3stream: S3Stream)(
     implicit mat: Materializer,
     as: ActorSystem,
-    ec: ExecutionContext)
+    ec: ExecutionContext,
+  config:TasksConfig)
     extends ManagedFileStorage {
 
   val log = akka.event.Logging(as.eventStream, getClass)
 
   val putObjectParams = {
-    val sse = config.global.s3ServerSideEncryption
-    val cannedAcls = config.global.s3CannedAcl
-    val grantFullControl = config.global.s3GrantFullControl
+    val sse = config.s3ServerSideEncryption
+    val cannedAcls = config.s3CannedAcl
+    val grantFullControl = config.s3GrantFullControl
 
     val rq = grantFullControl.foldLeft(
       cannedAcls.foldLeft(PostObjectRequest.default)((rq, acl) =>
@@ -85,7 +87,7 @@ class S3Storage(bucketName: String, folderPrefix: String, s3stream: S3Stream)(
         if (size < 0 && metadata.response.status.intValue == 200) true
         else {
           val (size1, hash1) = getLengthAndHash(metadata)
-          metadata.response.status.intValue == 200 && size1 === size && (config.global.skipContentHashVerificationAfterCache || hash === hash1)
+          metadata.response.status.intValue == 200 && size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1)
         }
     } recover {
       case x: Exception =>

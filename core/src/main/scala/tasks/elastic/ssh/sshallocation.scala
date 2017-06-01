@@ -42,10 +42,10 @@ import tasks.deploy._
 import tasks.shared._
 import tasks.shared.monitor._
 import tasks.util._
+import tasks.util.config._
 import tasks.queue._
 
 object SSHSettings {
-
   case class Host(hostname: String,
                   keyFile: File,
                   username: String,
@@ -64,8 +64,13 @@ object SSHSettings {
     }
   }
 
+}
+
+class SSHSettings(implicit config: TasksConfig) {
+  import SSHSettings._
+
   val hosts: collection.mutable.Map[String, (Host, Boolean)] =
-    collection.mutable.Map(config.global.sshHosts.map {
+    collection.mutable.Map(config.sshHosts.map {
       case (key, value) =>
         val host = Host.fromConfig(value.asInstanceOf[ConfigObject].toConfig)
         (host.hostname, (host, true))
@@ -127,11 +132,13 @@ trait SSHShutdown extends ShutdownNode {
 
   def log: LoggingAdapter
 
+  def settings : SSHSettings
+
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
     val hostname = nodeName.value.split(":")(0)
     val pid = nodeName.value.split(":")(1)
-    SSHOperations.terminateProcess(SSHSettings.hosts(hostname)._1, pid)
-    SSHSettings.enableHost(hostname)
+    SSHOperations.terminateProcess(settings.hosts(hostname)._1, pid)
+    settings.enableHost(hostname)
   }
 
   def shutdownPendingNode(nodeName: PendingJobId): Unit = ()
@@ -142,9 +149,11 @@ trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
 
   val masterAddress: InetSocketAddress
 
+  def settings : SSHSettings
+
   def requestOneNewJobFromGridScheduler(requestSize: CPUMemoryRequest)
     : Try[Tuple2[PendingJobId, CPUMemoryAvailable]] =
-    SSHSettings.hosts
+    settings.hosts
       .filter(x => x._2._2 == true)
       .filter(x =>
         x._2._1.cpu >= requestSize.cpu._1 && x._2._1.memory >= requestSize.memory)
@@ -177,7 +186,7 @@ trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
 
             val pid = stdout.trim.toInt
 
-            SSHSettings.disableHost(name)
+            settings.disableHost(name)
 
             (PendingJobId(host.hostname + ":" + pid.toString),
              CPUMemoryAvailable(cpu = host.cpu, memory = host.memory))
@@ -201,19 +210,23 @@ trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
 class SSHNodeKiller(
     val targetLauncherActor: ActorRef,
     val targetNode: Node
-) extends NodeKillerImpl
+)(implicit val config: TasksConfig) extends NodeKillerImpl
     with SSHShutdown
-    with akka.actor.ActorLogging
+    with akka.actor.ActorLogging {
+      val settings = new SSHSettings
+    }
 
 class SSHNodeRegistry(
     val masterAddress: InetSocketAddress,
     val targetQueue: ActorRef,
     override val unmanagedResource: CPUMemoryAvailable
-) extends SSHNodeRegistryImp
+)(implicit val config: TasksConfig) extends SSHNodeRegistryImp
     with NodeCreatorImpl
     with SimpleDecideNewNode
     with SSHShutdown
-    with akka.actor.ActorLogging
+    with akka.actor.ActorLogging {
+      val settings = new SSHSettings
+    }
 
 class SSHSelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
     extends SelfShutdown {
@@ -226,14 +239,14 @@ object SSHGrid extends ElasticSupport[SSHNodeRegistry, SSHSelfShutdown] {
 
   def apply(master: InetSocketAddress,
             balancerActor: ActorRef,
-            resource: CPUMemoryAvailable) = new Inner {
+            resource: CPUMemoryAvailable)(implicit config: TasksConfig) = new Inner {
     def getNodeName = {
       val pid = java.lang.management.ManagementFactory
         .getRuntimeMXBean()
         .getName()
         .split("@")
         .head
-      val hostname = tasks.util.config.global.hostName
+      val hostname = config.hostName
       hostname + ":" + pid
     }
     def createRegistry = new SSHNodeRegistry(master, balancerActor, resource)

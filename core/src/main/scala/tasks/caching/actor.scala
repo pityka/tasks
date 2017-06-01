@@ -37,12 +37,13 @@ import java.io.File
 import scala.util._
 
 import tasks.util._
+import tasks.util.config._
 import tasks.util.eq._
 import tasks.queue._
 import tasks.fileservice._
 import tasks.wire._
 
-class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
+class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)(implicit config: TasksConfig)
     extends Actor
     with akka.actor.ActorLogging
     with akka.actor.Stash {
@@ -55,7 +56,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
 
   override def preStart = {
     log.info(
-      "Cache service starting. " + cacheMap.toString + s". config.global.verifySharedFileInCache: ${config.global.verifySharedFileInCache}. config.global.skipContentHashVerificationAfterCache: ${config.global.skipContentHashVerificationAfterCache}.")
+      "Cache service starting. " + cacheMap.toString + s". config.verifySharedFileInCache: ${config.verifySharedFileInCache}. config.skipContentHashVerificationAfterCache: ${config.skipContentHashVerificationAfterCache}.")
   }
 
   override def postStop {
@@ -105,7 +106,7 @@ class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)
                                           originalSender,
                                           sch)
           } else {
-            if (!config.global.verifySharedFileInCache) {
+            if (!config.verifySharedFileInCache) {
               log.debug("Checking: {}. Got something (not verified).",
                         sch.description.taskId)
               savedSender ! AnswerFromCache(Right(res), originalSender, sch)

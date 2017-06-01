@@ -38,6 +38,7 @@ import akka.actor.ActorRefFactory
 import tasks.queue._
 import tasks._
 import tasks.util._
+import tasks.util.config._
 import tasks.fileservice.{
   FileServiceActor,
   FileServicePrefix,
@@ -49,7 +50,7 @@ import com.google.common.hash.Hashing
 private[tasks] class SharedFileCache(implicit fs: FileServiceActor,
                                      nlc: NodeLocalCacheActor,
                                      af: ActorRefFactory,
-                                     ec: ExecutionContext)
+                                     ec: ExecutionContext,config:TasksConfig)
     extends Cache
     with TaskSerializer {
 

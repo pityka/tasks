@@ -32,6 +32,7 @@ import tasks.caching._
 import tasks.queue._
 import tasks.deploy._
 import tasks.util._
+import tasks.util.config.TasksConfig
 import tasks.util.eq._
 import tasks.fileservice._
 import tasks.wire._
@@ -69,7 +70,8 @@ case class TaskSystemComponents(
     nodeLocalCache: NodeLocalCacheActor,
     filePrefix: FileServicePrefix,
     executionContext: ExecutionContext,
-    actorMaterializer: Materializer
+    actorMaterializer: Materializer,
+    tasksConfig : TasksConfig
 ) {
 
   def childPrefix(name: String) =
@@ -77,13 +79,14 @@ case class TaskSystemComponents(
 }
 
 class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
-                                 val system: ActorSystem) {
+                                 val system: ActorSystem)(implicit
+                                  val config: TasksConfig) {
 
   implicit val as = system
   implicit val mat = ActorMaterializer()
   import as.dispatcher
   implicit val s3Stream = scala.util
-    .Try(new S3StreamQueued(S3Helpers.credentials, config.global.s3Region))
+    .Try(new S3StreamQueued(S3Helpers.credentials, config.s3Region))
     .toOption
   implicit val sh = new StreamHelper(s3Stream)
 
@@ -125,7 +128,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
 
   val reaperActor = elastic.elasticSupport match {
     case Some(EC2Grid) =>
-      system.actorOf(Props(new EC2Reaper(config.global.terminateMaster)),
+      system.actorOf(Props(new EC2Reaper(config.terminateMaster)),
                      name = "reaper")
     case _ =>
       system.actorOf(Props[ProductionReaper], name = "reaper")
@@ -145,13 +148,13 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
   val remoteFileStorage = new RemoteFileStorage
 
   val managedFileStorage: Option[ManagedFileStorage] =
-    if (config.global.storageURI.toString == "") None
+    if (config.storageURI.toString == "") None
     else {
       val s3bucket =
-        if (config.global.storageURI.getScheme != null && config.global.storageURI.getScheme == "s3") {
+        if (config.storageURI.getScheme != null && config.storageURI.getScheme == "s3") {
           Some(
-            (config.global.storageURI.getAuthority,
-             config.global.storageURI.getPath.drop(1)))
+            (config.storageURI.getAuthority,
+             config.storageURI.getPath.drop(1)))
         } else None
 
       if (s3bucket.isDefined) {
@@ -160,13 +163,13 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
         Some(new S3Storage(s3bucket.get._1, s3bucket.get._2, s3Stream.get))
       } else {
         val folder1Path =
-          if (config.global.storageURI.getScheme == null)
-            config.global.storageURI.getPath
-          else if (config.global.storageURI.getScheme == "file")
-            config.global.storageURI.getPath
+          if (config.storageURI.getScheme == null)
+            config.storageURI.getPath
+          else if (config.storageURI.getScheme == "file")
+            config.storageURI.getPath
           else {
             tasksystemlog.error(
-              s"${config.global.storageURI} unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative")
+              s"${config.storageURI} unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative")
             System.exit(1)
             throw new RuntimeException("dsf")
           }
@@ -179,7 +182,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
           tasksystemlog.warning(s"Folder $folder1 does not exists. mkdir ")
           folder1.mkdirs
         }
-        val folders2 = config.global.fileServiceExtendedFolders
+        val folders2 = config.fileServiceExtendedFolders
         if (folder1.list.size != 0) {
           tasksystemlog.warning(
             s"fileServiceBaseFolder (${folder1.getCanonicalPath}) is not empty. This is only safe if you restart a pipeline. ")
@@ -193,7 +196,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
   val fileActor = try {
     if (!isLauncherOnly) {
 
-      val threadpoolsize = config.global.fileServiceThreadPoolSize
+      val threadpoolsize = config.fileServiceThreadPoolSize
 
       val ac = system.actorOf(
         Props(new FileService(managedFileStorage.get, threadpoolsize))
@@ -230,16 +233,16 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
   val nodeLocalCache = NodeLocalCacheActor(nodeLocalCacheActor)
 
   val cacherActor = try {
-    if (!isLauncherOnly && hostConfig.cacheAddress.isEmpty) {
+    if (!isLauncherOnly ) {
 
-      val cache: Cache = config.global.cacheEnabled match {
+      val cache: Cache = config.cacheEnabled match {
         case true => {
-          config.global.cacheType match {
+          config.cacheType match {
             case "sharedfile" =>
               new SharedFileCache()(fileServiceActor,
                                     nodeLocalCache,
                                     system,
-                                    system.dispatcher)
+                                    system.dispatcher,config)
             case other =>
               throw new RuntimeException("only sharedfile cache")
           }
@@ -254,17 +257,11 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
       reaperActor ! WatchMe(ac)
       ac
     } else {
-      if (hostConfig.cacheAddress.isEmpty) {
         val actorpath =
           s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/cache"
         Await.result(system.actorSelection(actorpath).resolveOne(600 seconds),
                      atMost = 600 seconds)
-      } else {
-        val actorpath =
-          s"akka.tcp://tasks@${hostConfig.cacheAddress.get.getHostName}:${hostConfig.cacheAddress.get.getPort}/user/cache"
-        Await.result(system.actorSelection(actorpath).resolveOne(600 seconds),
-                     atMost = 600 seconds)
-      }
+
     }
   } catch {
     case e: Throwable => {
@@ -276,7 +273,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
   val queueActor = try {
     if (!isLauncherOnly) {
       val ac =
-        system.actorOf(Props[TaskQueue].withDispatcher("taskqueue"), "queue")
+        system.actorOf(Props(new TaskQueue).withDispatcher("taskqueue"), "queue")
       reaperActor ! WatchMe(ac)
       ac
     } else {
@@ -336,7 +333,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
     } else None
 
   private val auxFjp = tasks.util.concurrent
-    .newJavaForkJoinPoolWithNamePrefix("tasks-aux", config.global.auxThreads)
+    .newJavaForkJoinPoolWithNamePrefix("tasks-aux", config.auxThreads)
   private val auxExecutionContext =
     scala.concurrent.ExecutionContext.fromExecutorService(auxFjp)
 
@@ -348,11 +345,12 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
     nodeLocalCache = nodeLocalCache,
     filePrefix = FileServicePrefix(Vector()),
     executionContext = auxExecutionContext,
-    actorMaterializer = mat
+    actorMaterializer = mat,
+    tasksConfig = config
   )
 
   private val launcherActor = if (numberOfCores > 0) {
-    val refresh = config.global.askInterval
+    val refresh = config.askInterval
     val ac = system.actorOf(
       Props(
         new TaskLauncher(

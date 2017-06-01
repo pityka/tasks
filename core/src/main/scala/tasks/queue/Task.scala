@@ -41,6 +41,7 @@ import java.io.File
 
 import tasks.fileservice._
 import tasks.util._
+import tasks.util.config._
 import tasks.shared._
 import tasks._
 import tasks.caching._
@@ -105,8 +106,7 @@ case class ComputationEnvironment(
 private[tasks] object ProxyTask {
 
   def getBackResultFuture(actor: ActorRef,
-                          timeoutp: FiniteDuration =
-                            config.global.proxyTaskGetBackResult)(
+                          timeoutp: FiniteDuration)(
       implicit ec: ExecutionContext): Future[Any] = {
 
     implicit val timout = Timeout(timeoutp)
@@ -126,7 +126,8 @@ private class Task(
     resourceAllocated: CPUMemoryAllocated,
     fileServicePrefix: FileServicePrefix,
     auxExecutionContext: ExecutionContext,
-    actorMaterializer: Materializer
+    actorMaterializer: Materializer,
+    tasksConfig: TasksConfig
 ) extends Actor
     with akka.actor.ActorLogging {
 
@@ -164,7 +165,8 @@ private class Task(
           NodeLocalCacheActor(nodeLocalCache),
           fileServicePrefix,
           auxExecutionContext,
-          actorMaterializer
+          actorMaterializer,
+          tasksConfig
         ),
         akka.event.Logging(
           context.system.eventStream,

@@ -47,10 +47,11 @@ import tasks.shared.monitor._
 import tasks.fileservice._
 import tasks.caching._
 import tasks.util._
+import tasks.util.config._
 import tasks.wire._
 import tasks._
 
-class TaskQueue extends Actor with akka.actor.ActorLogging {
+class TaskQueue(implicit config:TasksConfig) extends Actor with akka.actor.ActorLogging {
 
   // ActorRef here is the proxy of the task
   private val queuedTasks =
@@ -98,7 +99,7 @@ class TaskQueue extends Actor with akka.actor.ActorLogging {
     routedMessages.get(sch).foreach {
       case (launcher, allocation, proxies) =>
         routedMessages.remove(sch)
-        if (config.global.resubmitFailedTask) {
+        if (config.resubmitFailedTask) {
           log.error(
             cause,
             "Task execution failed ( resubmitting infinite time until done): " + sch.toString)

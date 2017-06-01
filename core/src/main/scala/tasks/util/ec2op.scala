@@ -52,6 +52,7 @@ import scala.util._
 import java.io._
 
 import tasks.shared._
+import tasks.util.config._
 
 object EC2Operations {
 
@@ -76,8 +77,8 @@ object EC2Operations {
       .find(_._1 == readMetadata("instance-type").head)
       .getOrElse(instanceTypes.head)
 
-  val slaveInstanceType = instanceTypes
-    .find(_._1 == config.global.slaveInstanceType)
+  def slaveInstanceType(implicit config: TasksConfig) = instanceTypes
+    .find(_._1 == config.slaveInstanceType)
     .getOrElse(instanceTypes.head)
 
   def terminateInstance(ec2: AmazonEC2Client, instanceId: String): Unit = {

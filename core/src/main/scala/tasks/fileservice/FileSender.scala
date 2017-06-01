@@ -47,6 +47,7 @@ import java.nio.channels.{WritableByteChannel, ReadableByteChannel}
 
 import tasks.util._
 import tasks.util.eq._
+import tasks.util.config._
 import tasks.caching._
 import tasks.queue._
 import tasks.wire._
@@ -54,7 +55,7 @@ import tasks.wire._
 class FileSender(file: File,
                  proposedPath: ProposedManagedFilePath,
                  deleteLocalFile: Boolean,
-                 service: ActorRef)
+                 service: ActorRef)(implicit config: TasksConfig)
     extends Actor
     with akka.actor.ActorLogging {
 
@@ -79,7 +80,7 @@ class FileSender(file: File,
 
     case TransferToMe(transferin) =>
       val readablechannel = new java.io.FileInputStream(file).getChannel
-      val chunksize = tasks.util.config.global.fileSendChunkSize
+      val chunksize = config.fileSendChunkSize
       context.actorOf(
         Props(new TransferOut(readablechannel, transferin, chunksize))
           .withDispatcher("transferout"))
@@ -108,7 +109,7 @@ class FileSender(file: File,
 
 class SourceSender(file: Source[ByteString, _],
                    proposedPath: ProposedManagedFilePath,
-                   service: ActorRef)
+                   service: ActorRef)(implicit config: TasksConfig)
     extends Actor
     with akka.actor.ActorLogging {
 
@@ -133,7 +134,7 @@ class SourceSender(file: Source[ByteString, _],
     case TransferToMe(transferin) =>
       val is = file.runWith(StreamConverters.asInputStream())
       val readablechannel = java.nio.channels.Channels.newChannel(is)
-      val chunksize = tasks.util.config.global.fileSendChunkSize
+      val chunksize = config.fileSendChunkSize
       context.actorOf(
         Props(new TransferOut(readablechannel, transferin, chunksize))
           .withDispatcher("transferout"))

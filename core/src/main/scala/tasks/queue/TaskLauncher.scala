@@ -47,6 +47,7 @@ import java.io.File
 import java.util.concurrent.{ScheduledFuture}
 
 import tasks.util._
+import tasks.util.config._
 import tasks.shared.monitor._
 import tasks.shared._
 import tasks.fileservice._
@@ -103,7 +104,7 @@ class TaskLauncher(
     actorMaterializer: Materializer,
     remoteStorage: RemoteFileStorage,
     managedStorage: Option[ManagedFileStorage]
-) extends Actor
+)(implicit config:TasksConfig) extends Actor
     with akka.actor.ActorLogging {
 
   private case object CheckQueue extends Serializable
@@ -143,7 +144,8 @@ class TaskLauncher(
         allocatedResource,
         sch.fileServicePrefix.append(sch.description.taskId.id),
         auxExecutionContext,
-        actorMaterializer
+        actorMaterializer,
+        config
       ).withDispatcher("task-worker-dispatcher")
     )
     log.debug("Actor constructed")

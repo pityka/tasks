@@ -40,6 +40,7 @@ import tasks.elastic._
 import tasks.deploy._
 import tasks.shared._
 import tasks.util._
+import tasks.util.config._
 import tasks.util.eq._
 import tasks.fileservice._
 
@@ -87,6 +88,8 @@ trait EC2Shutdown extends ShutdownNode {
 
 trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 
+  implicit def config : tasks.util.config.TasksConfig
+
   var counter = 0
 
   private def gzipBase64(str: String): String = {
@@ -121,18 +124,18 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     // Initializes a Spot Instance Request
     val requestRequest = new RequestSpotInstancesRequest();
 
-    if (config.global.spotPrice > 2.5)
+    if (config.spotPrice > 2.5)
       throw new RuntimeException(
-        "Spotprice too high:" + config.global.spotPrice)
+        "Spotprice too high:" + config.spotPrice)
 
-    requestRequest.setSpotPrice(config.global.spotPrice.toString);
+    requestRequest.setSpotPrice(config.spotPrice.toString);
     requestRequest.setInstanceCount(1);
     requestRequest.setType(SpotInstanceType.OneTime)
 
     val launchSpecification = new LaunchSpecification();
-    launchSpecification.setImageId(config.global.amiID);
+    launchSpecification.setImageId(config.amiID);
     launchSpecification.setInstanceType(selectedInstanceType._1);
-    launchSpecification.setKeyName(config.global.keyName)
+    launchSpecification.setKeyName(config.keyName)
 
     val blockDeviceMappingSDB = new BlockDeviceMapping();
     blockDeviceMappingSDB.setDeviceName("/dev/sdb");
@@ -144,13 +147,13 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     launchSpecification.setBlockDeviceMappings(
       List(blockDeviceMappingSDB, blockDeviceMappingSDC));
 
-    config.global.iamRole.foreach { iamRole =>
+    config.iamRole.foreach { iamRole =>
       val iamprofile = new IamInstanceProfileSpecification()
       iamprofile.setName(iamRole)
       launchSpecification.setIamInstanceProfile(iamprofile)
     }
 
-    config.global.placementGroup.foreach { string =>
+    config.placementGroup.foreach { string =>
       val placement = new SpotPlacement();
       placement.setGroupName(string);
       launchSpecification.setPlacement(placement);
@@ -169,7 +172,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     launchSpecification.setUserData(gzipBase64(userdata))
 
     val securitygroups =
-      (config.global.securityGroup +: config.global.securityGroups).distinct
+      (config.securityGroup +: config.securityGroups).distinct
         .filter(_.size > 0)
 
     launchSpecification.setAllSecurityGroups(securitygroups.map { x =>
@@ -178,7 +181,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
       g
     })
 
-    val subnetId = config.global.subnetId
+    val subnetId = config.subnetId
 
     launchSpecification.setSubnetId(subnetId)
 
@@ -211,7 +214,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 
     ec2.createTags(
       new CreateTagsRequest(List(node.name.value),
-                            config.global.instanceTags.map(t =>
+                            config.instanceTags.map(t =>
                               new Tag(t._1, t._2))))
 
     val ackil = context.actorOf(
@@ -226,24 +229,24 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 class EC2NodeKiller(
     val targetLauncherActor: ActorRef,
     val targetNode: Node
-) extends NodeKillerImpl
+)(implicit val config: TasksConfig) extends NodeKillerImpl
     with EC2Shutdown
     with akka.actor.ActorLogging {
   val ec2 = new AmazonEC2Client()
-  ec2.setEndpoint(config.global.endpoint)
+  ec2.setEndpoint(config.endpoint)
 }
 
 class EC2NodeRegistry(
     val masterAddress: InetSocketAddress,
     val targetQueue: ActorRef,
     override val unmanagedResource: CPUMemoryAvailable
-) extends EC2NodeRegistryImp
+)(implicit val config: TasksConfig) extends EC2NodeRegistryImp
     with NodeCreatorImpl
     with SimpleDecideNewNode
     with EC2Shutdown
     with akka.actor.ActorLogging {
   val ec2 = new AmazonEC2Client()
-  ec2.setEndpoint(config.global.endpoint)
+  ec2.setEndpoint(config.endpoint)
 }
 
 class EC2SelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
@@ -301,7 +304,7 @@ object EC2Grid extends ElasticSupport[EC2NodeRegistry, EC2SelfShutdown] {
 
   def apply(master: InetSocketAddress,
             balancerActor: ActorRef,
-            resource: CPUMemoryAvailable) = new Inner {
+            resource: CPUMemoryAvailable)(implicit config: TasksConfig) = new Inner {
     def getNodeName = EC2Operations.readMetadata("instance-id").head
     def createRegistry = new EC2NodeRegistry(master, balancerActor, resource)
     def createSelfShutdown =

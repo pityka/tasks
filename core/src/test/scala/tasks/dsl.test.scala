@@ -65,11 +65,11 @@ object Tests {
   }
 
   def run ={
-    val tmp = TempFile.createTempFile(".2leveldb")
+    val tmp = TempFile.createTempFile(".temp")
     tmp.delete
      withTaskSystem(
       Some(ConfigFactory.parseString(
-              s"tasks.cache.file=${tmp.getAbsolutePath}"
+              s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}"
           ))) { implicit ts =>
 
     (await(increment(IntWrapper(0))(CPUMemoryRequest(1, 500))))

@@ -39,8 +39,6 @@ class TasksConfig(val raw: Config) {
 
   val cacheEnabled = raw.getBoolean("tasks.cache.enabled")
 
-  val cachePath: String = raw.getString("tasks.cache.path")
-
   val cacheType = raw.getString("tasks.cache.store")
 
   val askInterval: FD = raw.getDuration("tasks.askInterval")
@@ -87,6 +85,7 @@ class TasksConfig(val raw: Config) {
 
   val storageURI =
     new java.net.URI(raw.getString("tasks.fileservice.storageURI"))
+    println(storageURI)
 
   val fileServiceExtendedFolders = raw
     .getStringList("tasks.fileservice.extendedFolders")

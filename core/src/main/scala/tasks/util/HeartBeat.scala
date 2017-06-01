@@ -41,10 +41,11 @@ import java.util.concurrent.{TimeUnit, ScheduledFuture}
 
 import tasks.util.eq._
 import tasks.util._
+import tasks.util.config._
 import tasks.queue._
 import tasks.wire._
 
-class HeartBeatActor(target: ActorRef)
+class HeartBeatActor(target: ActorRef)(implicit config: TasksConfig)
     extends Actor
     with akka.actor.ActorLogging {
 
@@ -53,7 +54,7 @@ class HeartBeatActor(target: ActorRef)
   private var scheduledHeartBeats: Cancellable = null
 
   private var failureDetector = new DeadlineFailureDetector(
-    config.global.acceptableHeartbeatPause)
+    config.acceptableHeartbeatPause)
 
   override def preStart {
     log.debug(
@@ -63,7 +64,7 @@ class HeartBeatActor(target: ActorRef)
 
     scheduledHeartBeats = context.system.scheduler.schedule(
       initialDelay = 0 seconds,
-      interval = config.global.launcherActorHeartBeatInterval,
+      interval = config.launcherActorHeartBeatInterval,
       receiver = self,
       message = CheckHeartBeat
     )

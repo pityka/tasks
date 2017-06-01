@@ -31,6 +31,7 @@ import tasks.caching.kvstore._
 import tasks.caching._
 import tasks.queue._
 import tasks.util._
+import tasks.util.config._
 import tasks.fileservice._
 import tasks._
 
@@ -61,15 +62,9 @@ trait HostConfiguration {
 
 }
 
-trait CacheHostConfiguration {
-
-  val cacheAddress: Option[InetSocketAddress]
-
-}
-
 trait MasterSlaveConfiguration
     extends HostConfiguration
-    with CacheHostConfiguration {
+     {
 
   lazy val master: InetSocketAddress =
     if (System.getProperty("hosts.master", "") != "") {
@@ -84,13 +79,6 @@ trait MasterSlaveConfiguration
       if (myAddress == master) MASTER else SLAVE
     }
 
-  lazy val cacheAddress: Option[InetSocketAddress] =
-    if (config.global.remoteCacheAddress != "none") {
-      val h = config.global.remoteCacheAddress.split(":")(0)
-      val p = config.global.remoteCacheAddress.split(":")(1).toInt
-      Some(new InetSocketAddress(h, p))
-    } else None
-
 }
 
 class LocalConfiguration(val myCardinality: Int, val availableMemory: Int)
@@ -103,8 +91,8 @@ class LocalConfiguration(val myCardinality: Int, val availableMemory: Int)
   val myAddress = master
 }
 
-object LocalConfigurationFromConfig
-    extends LocalConfiguration(config.global.hostNumCPU, config.global.hostRAM)
+class LocalConfigurationFromConfig(implicit config: TasksConfig)
+    extends LocalConfiguration(config.hostNumCPU, config.hostRAM)
 
 /**
   * Needs a hosts.master system property to infer master location and role
@@ -112,17 +100,17 @@ object LocalConfigurationFromConfig
   * Port is chosen automatically.
   * Cardinality is determined from hosts.numCPU config
   */
-object MasterSlaveFromConfig extends MasterSlaveConfiguration {
+class MasterSlaveFromConfig(implicit config: TasksConfig) extends MasterSlaveConfiguration {
 
   val myPort = chooseNetworkPort
 
-  val hostname = config.global.hostName
+  val hostname = config.hostName
 
   val myAddress = new java.net.InetSocketAddress(hostname, myPort)
 
-  val myCardinality = config.global.hostNumCPU
+  val myCardinality = config.hostNumCPU
 
-  val availableMemory = config.global.hostRAM
+  val availableMemory = config.hostRAM
 
 }
 
@@ -142,6 +130,8 @@ class ManualMasterSlaveConfiguration(
 
 trait EC2HostConfiguration extends HostConfiguration {
 
+  implicit def config: TasksConfig
+
   private val myPort = chooseNetworkPort
 
   private val myhostname = EC2Operations.readMetadata("local-hostname").head
@@ -156,6 +146,6 @@ trait EC2HostConfiguration extends HostConfiguration {
 
 }
 
-object EC2MasterSlave
+class EC2MasterSlave(implicit val config:TasksConfig)
     extends MasterSlaveConfiguration
     with EC2HostConfiguration

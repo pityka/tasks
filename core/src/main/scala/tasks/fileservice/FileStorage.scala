@@ -46,6 +46,7 @@ import java.util.concurrent.{TimeUnit, ScheduledFuture}
 import java.nio.channels.{WritableByteChannel, ReadableByteChannel}
 
 import tasks.util._
+import tasks.util.config.TasksConfig
 import tasks.util.eq._
 import tasks.caching._
 import tasks.queue._
@@ -64,7 +65,8 @@ object FileStorage {
 class RemoteFileStorage(implicit mat: Materializer,
                         ec: ExecutionContext,
                         streamHelper: StreamHelper,
-                        as: ActorSystem) {
+                        as: ActorSystem,
+                      config: TasksConfig) {
 
   val log = akka.event.Logging(as.eventStream, "remote-storage")
 
@@ -83,7 +85,7 @@ class RemoteFileStorage(implicit mat: Materializer,
     getSizeAndHash(path)
       .map {
         case (size1, hash1) =>
-          size1 === size && (tasks.util.config.global.skipContentHashVerificationAfterCache || hash === hash1)
+          size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1)
       }
       .recover {
         case e =>

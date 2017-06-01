@@ -44,6 +44,7 @@ import scala.util._
 import tasks.shared.monitor._
 import tasks.shared._
 import tasks.util._
+import tasks.util.config._
 import tasks.queue._
 import tasks.wire._
 
@@ -98,6 +99,8 @@ trait NodeRegistry {
 
 trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
 
+  implicit def config : TasksConfig
+
   def log: LoggingAdapter
 
   def requestOneNewJobFromGridScheduler(
@@ -129,8 +132,8 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
 
   def requestNewNodes(types: Map[CPUMemoryRequest, Int]) = {
     if (types.values.sum > 0) {
-      if (config.global.maxNodes > (jobregistry.size + pending.size) &&
-          allTime <= config.global.maxNodesCumulative) {
+      if (config.maxNodes > (jobregistry.size + pending.size) &&
+          allTime <= config.maxNodesCumulative) {
 
         log.info(
           "Request " + types.size + " node. One from each: " + types.keySet)
@@ -155,7 +158,7 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
 
       } else {
         log.info(
-          "New node request will not proceed: pending nodes or reached max nodes. max: " + config.global.maxNodes + ", pending: " + pending.size + ", running: " + jobregistry.size)
+          "New node request will not proceed: pending nodes or reached max nodes. max: " + config.maxNodes + ", pending: " + pending.size + ", running: " + jobregistry.size)
       }
     }
   }
@@ -204,6 +207,8 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
 
 trait SimpleDecideNewNode extends DecideNewNode {
 
+  implicit def config : TasksConfig
+
   def needNewNode(
       q: QueueStat,
       registeredNodes: Seq[CPUMemoryAvailable],
@@ -243,7 +248,7 @@ trait SimpleDecideNewNode extends DecideNewNode {
     // }
 
     if (!nonAllocatedResources.isEmpty
-        && (pendingNodes.size < config.global.maxPendingNodes)) {
+        && (pendingNodes.size < config.maxPendingNodes)) {
 
       nonAllocatedResources
 
@@ -259,6 +264,8 @@ trait NodeCreatorImpl
     with NodeRegistry
     with ShutdownNode {
 
+      implicit def config : TasksConfig
+
   def log: LoggingAdapter
 
   val targetQueue: ActorRef
@@ -271,8 +278,8 @@ trait NodeCreatorImpl
     import context.dispatcher
 
     scheduler = context.system.scheduler.schedule(
-      initialDelay = config.global.queueCheckInitialDelay,
-      interval = config.global.queueCheckInterval,
+      initialDelay = config.queueCheckInitialDelay,
+      interval = config.queueCheckInterval,
       receiver = self,
       message = MeasureTime
     )
@@ -306,7 +313,7 @@ trait NodeCreatorImpl
     }
 
     case m: QueueStat => {
-      if (config.global.logQueueStatus) {
+      if (config.logQueueStatus) {
         log.info(
           s"Queued tasks: ${m.queued.size}. Running tasks: ${m.running.size}. Pending nodes: ${pendingNodes.size} . Running nodes: ${allRegisteredNodes.size}. Largest request: ${m.queued
             .sortBy(_._2.cpu)
@@ -361,6 +368,8 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
 
   def log: LoggingAdapter
 
+  implicit def config : TasksConfig
+
   val targetLauncherActor: ActorRef
 
   val targetNode: Node
@@ -375,7 +384,7 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
 
     scheduler = context.system.scheduler.schedule(
       initialDelay = 0 seconds,
-      interval = config.global.nodeKillerMonitorInterval,
+      interval = config.nodeKillerMonitorInterval,
       receiver = self,
       message = MeasureTime
     )
@@ -409,7 +418,7 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
     case MeasureTime =>
       if (targetIsIdle &&
           (System
-            .nanoTime() - lastIdleSessionStart) >= config.global.idleNodeTimeout.toNanos) {
+            .nanoTime() - lastIdleSessionStart) >= config.idleNodeTimeout.toNanos) {
         try {
           log.info(
             "Target is idle. Start shutdown sequence. Send PrepareForShutdown to " + targetLauncherActor)
@@ -493,6 +502,6 @@ trait ElasticSupport[Registry <: NodeCreatorImpl, SS <: SelfShutdown] {
 
   def apply(master: InetSocketAddress,
             queueActor: ActorRef,
-            resource: CPUMemoryAvailable): Inner
+            resource: CPUMemoryAvailable)(implicit config: TasksConfig): Inner
 
 }

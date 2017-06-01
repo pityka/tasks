@@ -50,6 +50,7 @@ import tasks.caching._
 import tasks.queue._
 import tasks.fileservice._
 import tasks.util._
+import tasks.util.config.TasksConfig
 import tasks.deploy._
 import tasks.shared._
 import tasks.elastic.ec2._
@@ -72,6 +73,9 @@ package object tasks {
 
   implicit def tsc(implicit ts: TaskSystem): TaskSystemComponents =
     ts.components
+
+    implicit def tasksConfig(implicit component: TaskSystemComponents): TasksConfig =
+      component.tasksConfig
 
   implicit def fs(implicit component: TaskSystemComponents): FileServiceActor =
     component.fs
@@ -107,6 +111,12 @@ package object tasks {
   def withTaskSystem[T](f: TaskSystemComponents => T): Option[T] =
     withTaskSystem(None)(f)
 
+    def withTaskSystem[T](c:Config)(f: TaskSystemComponents => T): Option[T] =
+      withTaskSystem(Some(c))(f)
+
+      def withTaskSystem[T](s:String)(f: TaskSystemComponents => T): Option[T] =
+        withTaskSystem(Some(ConfigFactory.parseString(s)))(f)
+
   def withTaskSystem[T](c: Option[Config])(
       f: TaskSystemComponents => T): Option[T] = {
     val ts = defaultTaskSystem(c)
@@ -128,65 +138,66 @@ package object tasks {
 
   def defaultTaskSystem(extraConf: Option[Config]): TaskSystem = {
 
-    val hostConfig = MasterSlaveGridEngineChosenFromConfig
-
-    val configuration = {
-      val actorProvider = hostConfig match {
-        case x: LocalConfiguration => "akka.actor.LocalActorRefProvider"
-        case _ => "akka.remote.RemoteActorRefProvider"
-      }
-
-      val numberOfAkkaRemotingThreads =
-        if (hostConfig.myRole == MASTER) 6 else 2
-
-      val configSource = s"""
-          task-worker-dispatcher.fork-join-executor.parallelism-max = ${hostConfig.myCardinality}
-          task-worker-dispatcher.fork-join-executor.parallelism-min = ${hostConfig.myCardinality}
-          akka {
-            actor {
-              provider = "${actorProvider}"
-            }
-            remote {
-              enabled-transports = ["akka.remote.netty.tcp"]
-              netty.tcp {
-                hostname = "${hostConfig.myAddress.getHostName}"
-                port = ${hostConfig.myAddress.getPort.toString}
-                server-socket-worker-pool.pool-size-max = ${numberOfAkkaRemotingThreads}
-                client-socket-worker-pool.pool-size-max = ${numberOfAkkaRemotingThreads}
-              }
-           }
-          }
-            """ + (if (tasks.util.config.global.logToStandardOutput)
-                     """
-              akka.loggers = ["akka.event.Logging$DefaultLogger"]
-              """
-                   else "")
-
-      val customConf = ConfigFactory.parseString(configSource)
-
-      val akkaconf = ConfigFactory.parseResources("akkaoverrides.conf")
-
+    val configuration =
       extraConf.map { extraConf =>
         ConfigFactory.defaultOverrides
-          .withFallback(customConf)
           .withFallback(extraConf)
-          .withFallback(akkaconf)
           .withFallback(ConfigFactory.load)
-      } getOrElse (
-        ConfigFactory.defaultOverrides
-          .withFallback(customConf)
-          .withFallback(akkaconf)
-          .withFallback(ConfigFactory.load)
-        )
+      } getOrElse
+        ConfigFactory.load
 
+
+
+
+    implicit val tconfig = tasks.util.config.parse(configuration)
+
+    val hostConfig = MasterSlaveGridEngineChosenFromConfig
+
+
+    val akkaConfiguration = {
+
+
+    val actorProvider = hostConfig match {
+      case x: LocalConfiguration => "akka.actor.LocalActorRefProvider"
+      case _ => "akka.remote.RemoteActorRefProvider"
     }
 
-    val system = ActorSystem("tasks", configuration)
+    val numberOfAkkaRemotingThreads =
+      if (hostConfig.myRole == MASTER) 6 else 2
+
+    val configSource = s"""
+        task-worker-dispatcher.fork-join-executor.parallelism-max = ${hostConfig.myCardinality}
+        task-worker-dispatcher.fork-join-executor.parallelism-min = ${hostConfig.myCardinality}
+        akka {
+          actor {
+            provider = "${actorProvider}"
+          }
+          remote {
+            enabled-transports = ["akka.remote.netty.tcp"]
+            netty.tcp {
+              hostname = "${hostConfig.myAddress.getHostName}"
+              port = ${hostConfig.myAddress.getPort.toString}
+              server-socket-worker-pool.pool-size-max = ${numberOfAkkaRemotingThreads}
+              client-socket-worker-pool.pool-size-max = ${numberOfAkkaRemotingThreads}
+            }
+         }
+        }
+          """
+    val customConf = ConfigFactory.parseString(configSource)
+
+    val akkaconf = ConfigFactory.parseResources("akka.conf")
+
+    ConfigFactory.defaultOverrides.withFallback(customConf).withFallback(akkaconf).withFallback(configuration)
+
+}
+
+    val system = ActorSystem("tasks", akkaConfiguration)
+
     new TaskSystem(MasterSlaveGridEngineChosenFromConfig, system)
   }
 
-  def defaultTaskSystem(as: ActorSystem): TaskSystem =
-    new TaskSystem(MasterSlaveGridEngineChosenFromConfig, as)
+  def defaultTaskSystem(as: ActorSystem)(implicit tc:TasksConfig): TaskSystem =
+      new TaskSystem(MasterSlaveGridEngineChosenFromConfig, as)
 
   def customTaskSystem(hostConfig: MasterSlaveConfiguration,
                        extraConf: Config): TaskSystem = {
@@ -199,12 +210,14 @@ package object tasks {
 
     val system = ActorSystem("tasks", conf)
 
-    new TaskSystem(hostConfig, system)
+    val tconf = tasks.util.config.parse(conf)
+
+    new TaskSystem(hostConfig, system)(tconf)
   }
 
   def customTaskSystem(hostConfig: MasterSlaveConfiguration,
                        as: ActorSystem): TaskSystem =
-    new TaskSystem(hostConfig, as)
+    new TaskSystem(hostConfig, as)(tasks.util.config.parse(as))
 
   type CompFun[A, B] = A => ComputationEnvironment => B
 
@@ -213,13 +226,13 @@ package object tasks {
     macro Macros
       .asyncTaskDefinitionImpl[A, C]
 
-  def MasterSlaveGridEngineChosenFromConfig: MasterSlaveConfiguration = {
-    if (config.global.disableRemoting) LocalConfigurationFromConfig
+  def MasterSlaveGridEngineChosenFromConfig(implicit config:TasksConfig): MasterSlaveConfiguration = {
+    if (config.disableRemoting) new LocalConfigurationFromConfig
     else
-      config.global.gridEngine match {
-        case x if x == "EC2" => EC2MasterSlave
-        case x if x == "NOENGINE" => MasterSlaveFromConfig
-        case _ => MasterSlaveFromConfig
+      config.gridEngine match {
+        case x if x == "EC2" =>  new EC2MasterSlave
+        case x if x == "NOENGINE" => new MasterSlaveFromConfig
+        case _ => new MasterSlaveFromConfig
       }
   }
 
