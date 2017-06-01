@@ -100,7 +100,8 @@ trait SHNodeRegistryImp extends Actor with GridJobRegistry {
 class SHNodeKiller(
     val targetLauncherActor: ActorRef,
     val targetNode: Node
-)(implicit val config:TasksConfig) extends NodeKillerImpl
+)(implicit val config: TasksConfig)
+    extends NodeKillerImpl
     with SHShutdown
     with akka.actor.ActorLogging
 
@@ -108,7 +109,8 @@ class SHNodeRegistry(
     val masterAddress: InetSocketAddress,
     val targetQueue: ActorRef,
     override val unmanagedResource: CPUMemoryAvailable
-)(implicit val config:TasksConfig) extends SHNodeRegistryImp
+)(implicit val config: TasksConfig)
+    extends SHNodeRegistryImp
     with NodeCreatorImpl
     with SimpleDecideNewNode
     with SHShutdown
@@ -125,19 +127,20 @@ object SHGrid extends ElasticSupport[SHNodeRegistry, SHSelfShutdown] {
 
   def apply(master: InetSocketAddress,
             balancerActor: ActorRef,
-            resource: CPUMemoryAvailable)(implicit config:TasksConfig) = new Inner {
-    def getNodeName = {
-      val pid = java.lang.management.ManagementFactory
-        .getRuntimeMXBean()
-        .getName()
-        .split("@")
-        .head
-      pid
+            resource: CPUMemoryAvailable)(implicit config: TasksConfig) =
+    new Inner {
+      def getNodeName = {
+        val pid = java.lang.management.ManagementFactory
+          .getRuntimeMXBean()
+          .getName()
+          .split("@")
+          .head
+        pid
+      }
+      def createRegistry = new SHNodeRegistry(master, balancerActor, resource)
+      def createSelfShutdown =
+        new SHSelfShutdown(RunningJobId(getNodeName), balancerActor)
     }
-    def createRegistry = new SHNodeRegistry(master, balancerActor, resource)
-    def createSelfShutdown =
-      new SHSelfShutdown(RunningJobId(getNodeName), balancerActor)
-  }
 
   override def toString = "SH"
 

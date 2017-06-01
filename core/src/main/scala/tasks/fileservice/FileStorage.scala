@@ -66,7 +66,7 @@ class RemoteFileStorage(implicit mat: Materializer,
                         ec: ExecutionContext,
                         streamHelper: StreamHelper,
                         as: ActorSystem,
-                      config: TasksConfig) {
+                        config: TasksConfig) {
 
   val log = akka.event.Logging(as.eventStream, "remote-storage")
 

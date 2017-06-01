@@ -39,8 +39,8 @@ package object config {
   // def load = ConfigFactory.load
 
   // val global = new TasksConfig(load)
-  def parse(c:Config) = new TasksConfig(c)
+  def parse(c: Config) = new TasksConfig(c)
 
-  def parse(implicit as:ActorSystem) = new TasksConfig(as.settings.config)
+  def parse(implicit as: ActorSystem) = new TasksConfig(as.settings.config)
 
 }

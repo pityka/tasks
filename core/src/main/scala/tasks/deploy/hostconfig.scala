@@ -62,9 +62,7 @@ trait HostConfiguration {
 
 }
 
-trait MasterSlaveConfiguration
-    extends HostConfiguration
-     {
+trait MasterSlaveConfiguration extends HostConfiguration {
 
   lazy val master: InetSocketAddress =
     if (System.getProperty("hosts.master", "") != "") {
@@ -100,7 +98,8 @@ class LocalConfigurationFromConfig(implicit config: TasksConfig)
   * Port is chosen automatically.
   * Cardinality is determined from hosts.numCPU config
   */
-class MasterSlaveFromConfig(implicit config: TasksConfig) extends MasterSlaveConfiguration {
+class MasterSlaveFromConfig(implicit config: TasksConfig)
+    extends MasterSlaveConfiguration {
 
   val myPort = chooseNetworkPort
 
@@ -146,6 +145,6 @@ trait EC2HostConfiguration extends HostConfiguration {
 
 }
 
-class EC2MasterSlave(implicit val config:TasksConfig)
+class EC2MasterSlave(implicit val config: TasksConfig)
     extends MasterSlaveConfiguration
     with EC2HostConfiguration

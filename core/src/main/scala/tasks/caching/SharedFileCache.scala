@@ -50,7 +50,8 @@ import com.google.common.hash.Hashing
 private[tasks] class SharedFileCache(implicit fs: FileServiceActor,
                                      nlc: NodeLocalCacheActor,
                                      af: ActorRefFactory,
-                                     ec: ExecutionContext,config:TasksConfig)
+                                     ec: ExecutionContext,
+                                     config: TasksConfig)
     extends Cache
     with TaskSerializer {
 

@@ -77,7 +77,7 @@ package object util {
     }
   }
 
-  def chooseNetworkPort(implicit config:TasksConfig): Int =
+  def chooseNetworkPort(implicit config: TasksConfig): Int =
     Try(config.hostPort)
       .flatMap { p =>
         if (available(p)) Success(p) else Failure(new RuntimeException)

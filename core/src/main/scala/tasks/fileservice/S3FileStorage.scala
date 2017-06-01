@@ -63,7 +63,7 @@ class S3Storage(bucketName: String, folderPrefix: String, s3stream: S3Stream)(
     implicit mat: Materializer,
     as: ActorSystem,
     ec: ExecutionContext,
-  config:TasksConfig)
+    config: TasksConfig)
     extends ManagedFileStorage {
 
   val log = akka.event.Logging(as.eventStream, getClass)

@@ -74,8 +74,9 @@ package object tasks {
   implicit def tsc(implicit ts: TaskSystem): TaskSystemComponents =
     ts.components
 
-    implicit def tasksConfig(implicit component: TaskSystemComponents): TasksConfig =
-      component.tasksConfig
+  implicit def tasksConfig(
+      implicit component: TaskSystemComponents): TasksConfig =
+    component.tasksConfig
 
   implicit def fs(implicit component: TaskSystemComponents): FileServiceActor =
     component.fs
@@ -111,11 +112,11 @@ package object tasks {
   def withTaskSystem[T](f: TaskSystemComponents => T): Option[T] =
     withTaskSystem(None)(f)
 
-    def withTaskSystem[T](c:Config)(f: TaskSystemComponents => T): Option[T] =
-      withTaskSystem(Some(c))(f)
+  def withTaskSystem[T](c: Config)(f: TaskSystemComponents => T): Option[T] =
+    withTaskSystem(Some(c))(f)
 
-      def withTaskSystem[T](s:String)(f: TaskSystemComponents => T): Option[T] =
-        withTaskSystem(Some(ConfigFactory.parseString(s)))(f)
+  def withTaskSystem[T](s: String)(f: TaskSystemComponents => T): Option[T] =
+    withTaskSystem(Some(ConfigFactory.parseString(s)))(f)
 
   def withTaskSystem[T](c: Option[Config])(
       f: TaskSystemComponents => T): Option[T] = {
@@ -146,26 +147,21 @@ package object tasks {
       } getOrElse
         ConfigFactory.load
 
-
-
-
     implicit val tconfig = tasks.util.config.parse(configuration)
 
     val hostConfig = MasterSlaveGridEngineChosenFromConfig
 
-
     val akkaConfiguration = {
 
+      val actorProvider = hostConfig match {
+        case x: LocalConfiguration => "akka.actor.LocalActorRefProvider"
+        case _ => "akka.remote.RemoteActorRefProvider"
+      }
 
-    val actorProvider = hostConfig match {
-      case x: LocalConfiguration => "akka.actor.LocalActorRefProvider"
-      case _ => "akka.remote.RemoteActorRefProvider"
-    }
+      val numberOfAkkaRemotingThreads =
+        if (hostConfig.myRole == MASTER) 6 else 2
 
-    val numberOfAkkaRemotingThreads =
-      if (hostConfig.myRole == MASTER) 6 else 2
-
-    val configSource = s"""
+      val configSource = s"""
         task-worker-dispatcher.fork-join-executor.parallelism-max = ${hostConfig.myCardinality}
         task-worker-dispatcher.fork-join-executor.parallelism-min = ${hostConfig.myCardinality}
         akka {
@@ -183,21 +179,25 @@ package object tasks {
          }
         }
           """
-    val customConf = ConfigFactory.parseString(configSource)
+      val customConf = ConfigFactory.parseString(configSource)
 
-    val akkaconf = ConfigFactory.parseResources("akka.conf")
+      val akkaconf = ConfigFactory.parseResources("akka.conf")
 
-    ConfigFactory.defaultOverrides.withFallback(customConf).withFallback(akkaconf).withFallback(configuration)
+      ConfigFactory.defaultOverrides
+        .withFallback(customConf)
+        .withFallback(akkaconf)
+        .withFallback(configuration)
 
-}
+    }
 
     val system = ActorSystem("tasks", akkaConfiguration)
 
     new TaskSystem(MasterSlaveGridEngineChosenFromConfig, system)
   }
 
-  def defaultTaskSystem(as: ActorSystem)(implicit tc:TasksConfig): TaskSystem =
-      new TaskSystem(MasterSlaveGridEngineChosenFromConfig, as)
+  def defaultTaskSystem(as: ActorSystem)(
+      implicit tc: TasksConfig): TaskSystem =
+    new TaskSystem(MasterSlaveGridEngineChosenFromConfig, as)
 
   def customTaskSystem(hostConfig: MasterSlaveConfiguration,
                        extraConf: Config): TaskSystem = {
@@ -226,11 +226,12 @@ package object tasks {
     macro Macros
       .asyncTaskDefinitionImpl[A, C]
 
-  def MasterSlaveGridEngineChosenFromConfig(implicit config:TasksConfig): MasterSlaveConfiguration = {
+  def MasterSlaveGridEngineChosenFromConfig(
+      implicit config: TasksConfig): MasterSlaveConfiguration = {
     if (config.disableRemoting) new LocalConfigurationFromConfig
     else
       config.gridEngine match {
-        case x if x == "EC2" =>  new EC2MasterSlave
+        case x if x == "EC2" => new EC2MasterSlave
         case x if x == "NOENGINE" => new MasterSlaveFromConfig
         case _ => new MasterSlaveFromConfig
       }

@@ -62,7 +62,7 @@ class FolderFileStorage(val basePath: File,
                         val extendedPaths: List[File] = Nil)(
     implicit mat: Materializer,
     ec: ExecutionContext,
-  config:TasksConfig)
+    config: TasksConfig)
     extends ManagedFileStorage {
 
   if (basePath.exists && !basePath.isDirectory)

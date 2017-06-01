@@ -71,16 +71,16 @@ case class TaskSystemComponents(
     filePrefix: FileServicePrefix,
     executionContext: ExecutionContext,
     actorMaterializer: Materializer,
-    tasksConfig : TasksConfig
+    tasksConfig: TasksConfig
 ) {
 
   def childPrefix(name: String) =
     this.copy(filePrefix = this.filePrefix.append(name))
 }
 
-class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
-                                 val system: ActorSystem)(implicit
-                                  val config: TasksConfig) {
+class TaskSystem private[tasks] (
+    val hostConfig: MasterSlaveConfiguration,
+    val system: ActorSystem)(implicit val config: TasksConfig) {
 
   implicit val as = system
   implicit val mat = ActorMaterializer()
@@ -233,7 +233,7 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
   val nodeLocalCache = NodeLocalCacheActor(nodeLocalCacheActor)
 
   val cacherActor = try {
-    if (!isLauncherOnly ) {
+    if (!isLauncherOnly) {
 
       val cache: Cache = config.cacheEnabled match {
         case true => {
@@ -242,7 +242,8 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
               new SharedFileCache()(fileServiceActor,
                                     nodeLocalCache,
                                     system,
-                                    system.dispatcher,config)
+                                    system.dispatcher,
+                                    config)
             case other =>
               throw new RuntimeException("only sharedfile cache")
           }
@@ -257,10 +258,10 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
       reaperActor ! WatchMe(ac)
       ac
     } else {
-        val actorpath =
-          s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/cache"
-        Await.result(system.actorSelection(actorpath).resolveOne(600 seconds),
-                     atMost = 600 seconds)
+      val actorpath =
+        s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/cache"
+      Await.result(system.actorSelection(actorpath).resolveOne(600 seconds),
+                   atMost = 600 seconds)
 
     }
   } catch {
@@ -273,7 +274,8 @@ class TaskSystem private[tasks] (val hostConfig: MasterSlaveConfiguration,
   val queueActor = try {
     if (!isLauncherOnly) {
       val ac =
-        system.actorOf(Props(new TaskQueue).withDispatcher("taskqueue"), "queue")
+        system.actorOf(Props(new TaskQueue).withDispatcher("taskqueue"),
+                       "queue")
       reaperActor ! WatchMe(ac)
       ac
     } else {

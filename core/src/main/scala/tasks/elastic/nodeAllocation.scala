@@ -99,7 +99,7 @@ trait NodeRegistry {
 
 trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
 
-  implicit def config : TasksConfig
+  implicit def config: TasksConfig
 
   def log: LoggingAdapter
 
@@ -207,7 +207,7 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
 
 trait SimpleDecideNewNode extends DecideNewNode {
 
-  implicit def config : TasksConfig
+  implicit def config: TasksConfig
 
   def needNewNode(
       q: QueueStat,
@@ -264,7 +264,7 @@ trait NodeCreatorImpl
     with NodeRegistry
     with ShutdownNode {
 
-      implicit def config : TasksConfig
+  implicit def config: TasksConfig
 
   def log: LoggingAdapter
 
@@ -368,7 +368,7 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
 
   def log: LoggingAdapter
 
-  implicit def config : TasksConfig
+  implicit def config: TasksConfig
 
   val targetLauncherActor: ActorRef
 

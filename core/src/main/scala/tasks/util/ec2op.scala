@@ -77,9 +77,10 @@ object EC2Operations {
       .find(_._1 == readMetadata("instance-type").head)
       .getOrElse(instanceTypes.head)
 
-  def slaveInstanceType(implicit config: TasksConfig) = instanceTypes
-    .find(_._1 == config.slaveInstanceType)
-    .getOrElse(instanceTypes.head)
+  def slaveInstanceType(implicit config: TasksConfig) =
+    instanceTypes
+      .find(_._1 == config.slaveInstanceType)
+      .getOrElse(instanceTypes.head)
 
   def terminateInstance(ec2: AmazonEC2Client, instanceId: String): Unit = {
     retry(5) {

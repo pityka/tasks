@@ -51,7 +51,9 @@ import tasks.util.config._
 import tasks.wire._
 import tasks._
 
-class TaskQueue(implicit config:TasksConfig) extends Actor with akka.actor.ActorLogging {
+class TaskQueue(implicit config: TasksConfig)
+    extends Actor
+    with akka.actor.ActorLogging {
 
   // ActorRef here is the proxy of the task
   private val queuedTasks =

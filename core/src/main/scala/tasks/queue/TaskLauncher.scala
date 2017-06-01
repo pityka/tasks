@@ -104,7 +104,8 @@ class TaskLauncher(
     actorMaterializer: Materializer,
     remoteStorage: RemoteFileStorage,
     managedStorage: Option[ManagedFileStorage]
-)(implicit config:TasksConfig) extends Actor
+)(implicit config: TasksConfig)
+    extends Actor
     with akka.actor.ActorLogging {
 
   private case object CheckQueue extends Serializable

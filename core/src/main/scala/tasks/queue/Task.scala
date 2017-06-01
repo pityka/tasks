@@ -105,8 +105,7 @@ case class ComputationEnvironment(
 
 private[tasks] object ProxyTask {
 
-  def getBackResultFuture(actor: ActorRef,
-                          timeoutp: FiniteDuration)(
+  def getBackResultFuture(actor: ActorRef, timeoutp: FiniteDuration)(
       implicit ec: ExecutionContext): Future[Any] = {
 
     implicit val timout = Timeout(timeoutp)

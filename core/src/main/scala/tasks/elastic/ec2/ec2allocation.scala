@@ -88,7 +88,7 @@ trait EC2Shutdown extends ShutdownNode {
 
 trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 
-  implicit def config : tasks.util.config.TasksConfig
+  implicit def config: tasks.util.config.TasksConfig
 
   var counter = 0
 
@@ -125,8 +125,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     val requestRequest = new RequestSpotInstancesRequest();
 
     if (config.spotPrice > 2.5)
-      throw new RuntimeException(
-        "Spotprice too high:" + config.spotPrice)
+      throw new RuntimeException("Spotprice too high:" + config.spotPrice)
 
     requestRequest.setSpotPrice(config.spotPrice.toString);
     requestRequest.setInstanceCount(1);
@@ -214,8 +213,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 
     ec2.createTags(
       new CreateTagsRequest(List(node.name.value),
-                            config.instanceTags.map(t =>
-                              new Tag(t._1, t._2))))
+                            config.instanceTags.map(t => new Tag(t._1, t._2))))
 
     val ackil = context.actorOf(
       Props(new EC2NodeKiller(ac, node))
@@ -229,7 +227,8 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 class EC2NodeKiller(
     val targetLauncherActor: ActorRef,
     val targetNode: Node
-)(implicit val config: TasksConfig) extends NodeKillerImpl
+)(implicit val config: TasksConfig)
+    extends NodeKillerImpl
     with EC2Shutdown
     with akka.actor.ActorLogging {
   val ec2 = new AmazonEC2Client()
@@ -240,7 +239,8 @@ class EC2NodeRegistry(
     val masterAddress: InetSocketAddress,
     val targetQueue: ActorRef,
     override val unmanagedResource: CPUMemoryAvailable
-)(implicit val config: TasksConfig) extends EC2NodeRegistryImp
+)(implicit val config: TasksConfig)
+    extends EC2NodeRegistryImp
     with NodeCreatorImpl
     with SimpleDecideNewNode
     with EC2Shutdown
@@ -304,12 +304,13 @@ object EC2Grid extends ElasticSupport[EC2NodeRegistry, EC2SelfShutdown] {
 
   def apply(master: InetSocketAddress,
             balancerActor: ActorRef,
-            resource: CPUMemoryAvailable)(implicit config: TasksConfig) = new Inner {
-    def getNodeName = EC2Operations.readMetadata("instance-id").head
-    def createRegistry = new EC2NodeRegistry(master, balancerActor, resource)
-    def createSelfShutdown =
-      new EC2SelfShutdown(RunningJobId(getNodeName), balancerActor)
-  }
+            resource: CPUMemoryAvailable)(implicit config: TasksConfig) =
+    new Inner {
+      def getNodeName = EC2Operations.readMetadata("instance-id").head
+      def createRegistry = new EC2NodeRegistry(master, balancerActor, resource)
+      def createSelfShutdown =
+        new EC2SelfShutdown(RunningJobId(getNodeName), balancerActor)
+    }
 
   override def toString = "EC2"
 

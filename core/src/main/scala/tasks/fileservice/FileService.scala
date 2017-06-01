@@ -82,9 +82,10 @@ object ProposedManagedFilePath {
     deriveDecoder[ProposedManagedFilePath]
 }
 
-class FileService(storage: ManagedFileStorage,
-                  threadpoolsize: Int = 8,
-                  isLocal: File => Boolean = _.canRead)(implicit config: TasksConfig)
+class FileService(
+    storage: ManagedFileStorage,
+    threadpoolsize: Int = 8,
+    isLocal: File => Boolean = _.canRead)(implicit config: TasksConfig)
     extends Actor
     with akka.actor.ActorLogging {
 

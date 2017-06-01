@@ -43,7 +43,8 @@ import tasks.queue._
 import tasks.fileservice._
 import tasks.wire._
 
-class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)(implicit config: TasksConfig)
+class TaskResultCache(val cacheMap: Cache, fileService: FileServiceActor)(
+    implicit config: TasksConfig)
     extends Actor
     with akka.actor.ActorLogging
     with akka.actor.Stash {

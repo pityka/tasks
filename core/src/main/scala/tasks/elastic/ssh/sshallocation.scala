@@ -132,7 +132,7 @@ trait SSHShutdown extends ShutdownNode {
 
   def log: LoggingAdapter
 
-  def settings : SSHSettings
+  def settings: SSHSettings
 
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
     val hostname = nodeName.value.split(":")(0)
@@ -149,7 +149,7 @@ trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
 
   val masterAddress: InetSocketAddress
 
-  def settings : SSHSettings
+  def settings: SSHSettings
 
   def requestOneNewJobFromGridScheduler(requestSize: CPUMemoryRequest)
     : Try[Tuple2[PendingJobId, CPUMemoryAvailable]] =
@@ -210,23 +210,25 @@ trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
 class SSHNodeKiller(
     val targetLauncherActor: ActorRef,
     val targetNode: Node
-)(implicit val config: TasksConfig) extends NodeKillerImpl
+)(implicit val config: TasksConfig)
+    extends NodeKillerImpl
     with SSHShutdown
     with akka.actor.ActorLogging {
-      val settings = new SSHSettings
-    }
+  val settings = new SSHSettings
+}
 
 class SSHNodeRegistry(
     val masterAddress: InetSocketAddress,
     val targetQueue: ActorRef,
     override val unmanagedResource: CPUMemoryAvailable
-)(implicit val config: TasksConfig) extends SSHNodeRegistryImp
+)(implicit val config: TasksConfig)
+    extends SSHNodeRegistryImp
     with NodeCreatorImpl
     with SimpleDecideNewNode
     with SSHShutdown
     with akka.actor.ActorLogging {
-      val settings = new SSHSettings
-    }
+  val settings = new SSHSettings
+}
 
 class SSHSelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
     extends SelfShutdown {
@@ -239,20 +241,21 @@ object SSHGrid extends ElasticSupport[SSHNodeRegistry, SSHSelfShutdown] {
 
   def apply(master: InetSocketAddress,
             balancerActor: ActorRef,
-            resource: CPUMemoryAvailable)(implicit config: TasksConfig) = new Inner {
-    def getNodeName = {
-      val pid = java.lang.management.ManagementFactory
-        .getRuntimeMXBean()
-        .getName()
-        .split("@")
-        .head
-      val hostname = config.hostName
-      hostname + ":" + pid
+            resource: CPUMemoryAvailable)(implicit config: TasksConfig) =
+    new Inner {
+      def getNodeName = {
+        val pid = java.lang.management.ManagementFactory
+          .getRuntimeMXBean()
+          .getName()
+          .split("@")
+          .head
+        val hostname = config.hostName
+        hostname + ":" + pid
+      }
+      def createRegistry = new SSHNodeRegistry(master, balancerActor, resource)
+      def createSelfShutdown =
+        new SSHSelfShutdown(RunningJobId(getNodeName), balancerActor)
     }
-    def createRegistry = new SSHNodeRegistry(master, balancerActor, resource)
-    def createSelfShutdown =
-      new SSHSelfShutdown(RunningJobId(getNodeName), balancerActor)
-  }
 
   override def toString = "SSH"
 

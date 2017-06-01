@@ -189,7 +189,7 @@ private[tasks] object SharedFileHelper {
       ec: ExecutionContext,
       service: FileServiceActor,
       context: ActorRefFactory,
-    config: TasksConfig) =
+      config: TasksConfig) =
     if (service.storage.isDefined) {
       service.storage.get.importFile(file, prefix.propose(name)).map { f =>
         SharedFileHelper.create(f._1, f._2, f._4)
@@ -219,7 +219,7 @@ private[tasks] object SharedFileHelper {
       service: FileServiceActor,
       context: ActorRefFactory,
       mat: Materializer,
-    config: TasksConfig) =
+      config: TasksConfig) =
     if (service.storage.isDefined) {
       val proposedPath = prefix.propose(name)
       service.storage.get.importSource(source, proposedPath).map { x =>
