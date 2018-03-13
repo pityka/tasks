@@ -27,35 +27,14 @@
 
 package tasks
 
-import java.io.File
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import akka.stream._
-import scala.concurrent.Future
-import akka.event.LogSource
-import java.util.concurrent.TimeUnit.{MILLISECONDS, NANOSECONDS, SECONDS}
-
-import scala.concurrent.duration.Duration
-import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.ExecutionContext
 
-import scala.collection.JavaConversions._
-import scala.util.Try
-
-import akka.actor.{Props, ActorRefFactory, ActorContext}
-import com.typesafe.config.{Config, ConfigFactory}
-
-import scala.concurrent.duration._
 import scala.concurrent._
-import akka.pattern.ask
 
-import tasks.caching._
 import tasks.queue._
 import tasks.fileservice._
-import tasks.util._
-import tasks.deploy._
-import tasks.shared._
-import tasks.elastic.ec2._
-import tasks.elastic.ssh._
 import tasks.wire._
 
 private[tasks] object Implicits {

@@ -25,7 +25,6 @@
 
 package tasks
 
-import scala.io.Source
 import java.io.{
   PrintWriter,
   BufferedWriter,
@@ -33,24 +32,14 @@ import java.io.{
   FileInputStream,
   FileOutputStream,
   BufferedOutputStream,
-  LineNumberReader,
-  InputStream,
-  BufferedReader,
-  FileReader,
   BufferedInputStream,
   StringWriter,
-  File,
-  EOFException
+  File
 }
-import java.util.zip.GZIPInputStream
 
 import scala.sys.process._
 import scala.concurrent._
 import scala.concurrent.duration._
-import java.nio.charset.CodingErrorAction
-import scala.io.Codec
-import util.eq._
-import scala.collection.mutable.ArrayBuffer
 import scala.util._
 import tasks.util.config._
 
@@ -67,7 +56,7 @@ package object util {
 
       false
     } catch {
-      case e: Exception => true
+      case _: Exception => true
     } finally {
       if (s != null) {
 
@@ -128,6 +117,7 @@ package object util {
     */
   def useResource[A <: { def close(): Unit }, B](param: A)(f: A => B): B =
     try { f(param) } finally {
+      import scala.language.reflectiveCalls
       param.close()
     }
 
@@ -170,7 +160,7 @@ package object util {
     def hasNext = s != -1
 
     def next = {
-      var x = s.toByte; s = is.read; if (!hasNext) { is.close() }; x
+      val x = s.toByte; s = is.read; if (!hasNext) { is.close() }; x
     }
   }
 
@@ -293,6 +283,7 @@ package object util {
       atMost: Duration = Duration.Inf)(implicit log: {
     def info(s: String): Unit; def error(s: String): Unit
   }): (List[String], List[String], Boolean) = {
+    import scala.language.reflectiveCalls
     var ls: List[String] = Nil
     var lse: List[String] = Nil
     var boolean = true

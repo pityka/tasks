@@ -28,33 +28,19 @@
 
 package tasks.fileservice
 
-import akka.actor.{Actor, PoisonPill, ActorRef, Props, Cancellable}
 import scala.concurrent.duration._
-import java.util.concurrent.{TimeUnit, ScheduledFuture}
-import java.net.InetSocketAddress
-import akka.actor.Actor._
-import akka.event.LoggingAdapter
-import scala.util._
 
-import tasks.deploy._
-import tasks.shared._
 import tasks.util._
 import tasks.util.config._
 import tasks.util.eq._
-import tasks.fileservice._
 
-import com.amazonaws.AmazonServiceException
 
-import collection.JavaConversions._
-import java.io.{File, InputStream}
+import java.io.File
 
-import tasks.util.S3Helpers
 import akka.stream._
 import akka.actor._
 import akka.util._
-import akka.http.scaladsl.model._
 import com.bluelabs.s3stream._
-import com.bluelabs.akkaaws._
 import akka.stream.scaladsl._
 import scala.concurrent._
 import scala.concurrent.duration._
@@ -122,7 +108,7 @@ class S3Storage(bucketName: String, folderPrefix: String, s3stream: S3Stream)(
 
   def retryFuture[A](f: => Future[A], c: Int): Future[A] =
     if (c > 0) f.recoverWith {
-      case e =>
+      case _ =>
         akka.pattern.after(2 seconds, as.scheduler)(retryFuture(f, c - 1))
     } else f
 
@@ -161,7 +147,7 @@ class S3Storage(bucketName: String, folderPrefix: String, s3stream: S3Stream)(
     val f1 = s3stream.getData(s3loc).runWith(FileIO.toPath(file.toPath))
 
     f1.flatMap(_ => s3stream.getMetadata(s3loc)).map { metadata =>
-      val (size1, hash1) = getLengthAndHash(metadata)
+      val (size1, _) = getLengthAndHash(metadata)
       if (size1 !== file.length)
         throw new RuntimeException("S3: Downloaded file length != metadata")
 

@@ -7,9 +7,6 @@ import akka.actor._
 import io.circe.generic.semiauto._
 import io.circe._
 
-import cats.syntax.either._
-
-import tasks._
 import tasks.util._
 import tasks.shared._
 import tasks.fileservice._
@@ -186,5 +183,8 @@ object StaticMessage {
   implicit val encode: Encoder[StaticMessage] = deriveEncoder[StaticMessage]
   implicit def decoder(
       implicit as: ExtendedActorSystem): Decoder[StaticMessage] =
-    deriveDecoder[StaticMessage]
+    {
+        val _ = as // suppress unused warning
+        deriveDecoder[StaticMessage]
+        }
 }

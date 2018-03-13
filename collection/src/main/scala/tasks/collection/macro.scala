@@ -24,12 +24,9 @@
 
 package tasks.collection
 
-import tasks._
-import scala.concurrent.Future
 
 object Macros {
-  import scala.reflect.macros.Context
-  import scala.language.experimental.macros
+  import scala.reflect.macros.blackbox.Context
 
   def mapMacro[A: cxt.WeakTypeTag, B: cxt.WeakTypeTag](
       cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(

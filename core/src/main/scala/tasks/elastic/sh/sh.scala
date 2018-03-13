@@ -25,33 +25,24 @@
 
 package tasks.elastic.sh
 
-import akka.actor.{Actor, PoisonPill, ActorRef, Props, Cancellable}
-import scala.concurrent.duration._
-import java.util.concurrent.{TimeUnit, ScheduledFuture}
-import java.net.InetSocketAddress
-import akka.actor.Actor._
+import akka.actor.{Actor, ActorRef, Props}
+import java.net.InetSocketAddress 
 import akka.event.LoggingAdapter
 import scala.util._
 import scala.sys.process._
 
-import collection.JavaConversions._
-import java.io.File
-import com.typesafe.config.{Config, ConfigObject}
 
 import tasks.elastic._
-import tasks.deploy._
 import tasks.shared._
-import tasks.shared.monitor._
 import tasks.util._
 import tasks.util.config._
-import tasks.queue._
 
 trait SHShutdown extends ShutdownNode {
 
   def log: LoggingAdapter
 
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
-    execGetStreamsAndCode("kill ${nodeName.value}")
+    execGetStreamsAndCode(s"kill ${nodeName.value}")
   }
 
   def shutdownPendingNode(nodeName: PendingJobId): Unit = ()
@@ -74,7 +65,7 @@ trait SHNodeRegistryImp extends Actor with GridJobRegistry {
                                   "/")
     )
 
-    val (stdout, stderr, code) = execGetStreamsAndCode(
+    val (stdout, _, _) = execGetStreamsAndCode(
       Process(Seq("bash", "-c", script + "echo $!;exit;")))
 
     val pid = stdout.mkString("").trim.toInt
@@ -89,7 +80,7 @@ trait SHNodeRegistryImp extends Actor with GridJobRegistry {
   def initializeNode(node: Node): Unit = {
     val ac = node.launcherActor
 
-    val ackil = context.actorOf(
+    context.actorOf(
       Props(new SHNodeKiller(ac, node))
         .withDispatcher("my-pinned-dispatcher"),
       "nodekiller" + node.name.value.replace("://", "___"))

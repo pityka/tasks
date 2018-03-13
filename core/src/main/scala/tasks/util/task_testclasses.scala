@@ -27,18 +27,12 @@
 
 package tasks.simpletask
 
-import scala.io.Source
-import akka.actor.{Actor, PoisonPill, ActorRef, Props}
-import akka.actor.Actor._
 import scala.concurrent._
-import scala.concurrent.duration._
 
 import tasks._
 import tasks.queue._
-import tasks.caching._
-import tasks.fileservice._
 
-import io.circe.{Decoder, Encoder}
+import io.circe.Decoder
 import io.circe.syntax._
 import io.circe.generic.auto._
 

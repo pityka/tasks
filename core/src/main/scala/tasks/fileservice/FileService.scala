@@ -28,28 +28,14 @@
 package tasks.fileservice
 
 import akka.actor._
-import akka.pattern.ask
 import akka.pattern.pipe
-import akka.stream.scaladsl._
-import akka.stream._
-import akka.util._
-
-import com.google.common.hash._
-
-import scala.concurrent.duration._
 import scala.concurrent._
-import scala.util._
 
-import java.lang.Class
-import java.io.{File, InputStream, FileInputStream, BufferedInputStream}
-import java.util.concurrent.{TimeUnit, ScheduledFuture}
-import java.nio.channels.{WritableByteChannel, ReadableByteChannel}
+import java.io.File
+import java.nio.channels.{WritableByteChannel}
 
 import tasks.util._
 import tasks.util.config._
-import tasks.util.eq._
-import tasks.caching._
-import tasks.queue._
 import tasks.wire._
 
 import io.circe.generic.semiauto._
@@ -130,7 +116,7 @@ class FileService(
           storage
             .importFile(file, proposedPath)
             .flatMap {
-              case (length, hash, f, managedFilePath) =>
+              case (length, hash, _, managedFilePath) =>
                 create(length, hash, managedFilePath).recover {
                   case e =>
                     log.error(e,
@@ -191,7 +177,7 @@ class FileService(
 
     case filetransfermessages.CannotSaveFile(e) => {
       transferinactors.get(sender).foreach {
-        case (channel, file, filesender, proposedPath, _) =>
+        case (channel, _, filesender, _, _) =>
           channel.close
           log.error("CannotSaveFile(" + e + ")")
           filesender ! ErrorWhileAccessingStore(new RuntimeException(e))
@@ -200,12 +186,11 @@ class FileService(
     }
     case filetransfermessages.FileSaved() => {
       transferinactors.get(sender).foreach {
-        case (channel, file, filesender, proposedPath, ephemeral) =>
+        case (channel, file, filesender, proposedPath, _) =>
           channel.close
           try {
-
             storage.importFile(file, proposedPath).flatMap {
-              case (length, hash, f, managedFilePath) =>
+              case (length, hash, _, managedFilePath) =>
                 create(length, hash, managedFilePath).recover {
                   case e =>
                     log.error(e,

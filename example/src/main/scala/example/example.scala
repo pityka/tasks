@@ -58,7 +58,7 @@ object PiTasks {
   val batchCalc = AsyncTask[BatchInput, BatchResult]("batch", 1) {
 
     /* Input of task, does not need to be a pattern match */
-    case BatchInput(sizeFile: SharedFile, id: Int) =>
+    case BatchInput(sizeFile: SharedFile, _: Int) =>
       /** Implicit context
         *
         * - Provides available resources allocated to the task

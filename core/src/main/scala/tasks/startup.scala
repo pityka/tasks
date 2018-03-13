@@ -27,35 +27,25 @@
 
 package tasks
 
-import tasks.caching.kvstore._
 import tasks.caching._
 import tasks.queue._
 import tasks.deploy._
 import tasks.util._
 import tasks.util.config.TasksConfig
-import tasks.util.eq._
 import tasks.fileservice._
 import tasks.wire._
 import tasks.elastic._
 import tasks.elastic.ec2._
-import tasks.elastic.ssh._
 import tasks.shared._
-import tasks.shared.monitor._
 
 import akka.actor._
-import akka.util.Timeout
-import akka.io.IO
 import akka.pattern.ask
 import akka.stream._
 
 import java.net.InetSocketAddress
-import java.net.NetworkInterface
-import java.net.InetAddress
 import java.io.File
 
-import com.typesafe.config.{ConfigFactory, Config}
 import scala.concurrent.Await
-import collection.JavaConversions._
 
 import scala.concurrent.duration._
 import scala.concurrent._
@@ -107,10 +97,10 @@ class TaskSystem private[tasks] (
 
   tasksystemlog.info("Master node address is: " + hostConfig.master.toString)
 
-  def printQueueToLog {
+  def printQueueToLog() : Unit = {
     implicit val timeout = akka.util.Timeout(10 seconds)
     import system.dispatcher
-    (queueActor ? GetQueueInformation).onSuccess {
+    (queueActor ? GetQueueInformation).foreach {
       case queue: QueueInfo => tasksystemlog.info("Queue content: " + queue)
     }
 
@@ -159,6 +149,7 @@ class TaskSystem private[tasks] (
 
       if (s3bucket.isDefined) {
         val actorsystem = 1 // shade implicit conversion
+        val _ = actorsystem // suppress unused warning
         import as.dispatcher
         Some(new S3Storage(s3bucket.get._1, s3bucket.get._2, s3Stream.get))
       } else {
@@ -235,22 +226,14 @@ class TaskSystem private[tasks] (
   val cacherActor = try {
     if (!isLauncherOnly) {
 
-      val cache: Cache = config.cacheEnabled match {
-        case true => {
-          config.cacheType match {
-            case "sharedfile" =>
+      val cache: Cache = if (config.cacheEnabled)
               new SharedFileCache()(fileServiceActor,
                                     nodeLocalCache,
                                     system,
                                     system.dispatcher,
                                     config)
-            case other =>
-              throw new RuntimeException("only sharedfile cache")
-          }
-
-        }
-        case false => new DisabledCache
-      }
+              else new DisabledCache
+      
       val ac = system.actorOf(
         Props(new TaskResultCache(cache, fileServiceActor))
           .withDispatcher("my-pinned-dispatcher"),
@@ -326,7 +309,7 @@ class TaskSystem private[tasks] (
       val service = new PackageServerActor(pack)
 
       val actorsystem = 1 //shade implicit conversion
-
+      val _ = actorsystem // suppress unused warning
       val bindingFuture =
         Http().bindAndHandle(service.route, "0.0.0.0", host.getPort + 1)
 
@@ -384,7 +367,7 @@ class TaskSystem private[tasks] (
                               hostConfig.availableMemory),
            launcherActor.get))
 
-    val balancerHeartbeat = system.actorOf(
+    system.actorOf(
       Props(new HeartBeatActor(queueActor)).withDispatcher("heartbeat"),
       "heartbeatOf" + queueActor.path.address.toString
         .replace("://", "___") + queueActor.path.name
@@ -398,7 +381,7 @@ class TaskSystem private[tasks] (
     tasksystemlog.warning("Nodename/jobname is not defined.")
   }
 
-  private def initFailed {
+  private def initFailed() : Unit = {
     if (isLauncherOnly) {
       remotenoderegistry.foreach(_ ! InitFailed(PendingJobId(getNodeName)))
     }
@@ -406,7 +389,7 @@ class TaskSystem private[tasks] (
 
   var shuttingDown = false
 
-  def shutdown = synchronized {
+  def shutdown() : Unit = synchronized {
     if (hostConfig.myRole == MASTER) {
       if (!shuttingDown) {
         shuttingDown = true
@@ -436,7 +419,7 @@ class TaskSystem private[tasks] (
         auxFjp.shutdown
       }
     } else {
-      system.shutdown
+      system.terminate
     }
 
   }

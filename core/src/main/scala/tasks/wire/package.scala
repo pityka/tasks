@@ -1,6 +1,5 @@
 package tasks
 
-import io.circe.generic.semiauto._
 import io.circe._
 import cats.syntax.either._
 import akka.actor._

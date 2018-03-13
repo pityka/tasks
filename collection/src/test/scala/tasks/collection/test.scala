@@ -30,14 +30,12 @@ package tasks.collection
 import org.scalatest._
 
 import tasks._
-import tasks.collection._
 import tasks.circesupport._
 
 import scala.concurrent._
 import scala.concurrent.duration._
 import io.circe.generic.auto._
 
-import com.typesafe.config.ConfigFactory
 
 object Tests {
 

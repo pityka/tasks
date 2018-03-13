@@ -28,27 +28,15 @@
 package tasks.fileservice
 
 import akka.actor._
-import akka.pattern.ask
-import akka.pattern.pipe
 import akka.stream.scaladsl._
-import akka.stream._
 import akka.util._
 
-import com.google.common.hash._
-
-import scala.concurrent.duration._
-import scala.concurrent._
 import scala.util._
 
-import java.lang.Class
 import java.io.{File, InputStream, FileInputStream, BufferedInputStream}
-import java.util.concurrent.{TimeUnit, ScheduledFuture}
-import java.nio.channels.{WritableByteChannel, ReadableByteChannel}
+import java.nio.channels.WritableByteChannel
 
 import tasks.util._
-import tasks.util.eq._
-import tasks.caching._
-import tasks.queue._
 import tasks.wire._
 
 class FileUserStream(sf: ManagedFilePath,
@@ -60,7 +48,7 @@ class FileUserStream(sf: ManagedFilePath,
 
   private var writeableChannel: Option[WritableByteChannel] = None
 
-  def transfertome {
+  def transfertome() : Unit = {
     log.debug("Unreadable")
     val pipe = java.nio.channels.Pipe.open
     writeableChannel = Some(pipe.sink)
@@ -75,14 +63,14 @@ class FileUserStream(sf: ManagedFilePath,
     finish
   }
 
-  def finish {
+  def finish() : Unit = {
     if (listener.isDefined) {
       listener.get ! result.get
       self ! PoisonPill
     }
   }
 
-  def finishLocalFile(f: File) {
+  def finishLocalFile(f: File) : Unit = {
     log.debug("Readable")
     result = Some(Success(new BufferedInputStream(new FileInputStream(f))))
     finish
@@ -108,7 +96,7 @@ class FileUserSource(sf: ManagedFilePath,
 
   private var writeableChannel: Option[WritableByteChannel] = None
 
-  def transfertome {
+  def transfertome() : Unit  = {
     log.debug("Unreadable")
     val pipe = java.nio.channels.Pipe.open
     writeableChannel = Some(pipe.sink)
@@ -123,14 +111,14 @@ class FileUserSource(sf: ManagedFilePath,
     finish
   }
 
-  def finish {
+  def finish() : Unit  = {
     if (listener.isDefined) {
       listener.get ! result.get
       self ! PoisonPill
     }
   }
 
-  def finishLocalFile(f: File) {
+  def finishLocalFile(f: File) : Unit = {
     log.debug("Readable")
     result = Some(Success(FileIO.fromPath(f.toPath)))
     finish
@@ -200,7 +188,7 @@ abstract class AbstractFileUser[R](sf: ManagedFilePath,
     service ! GetPaths(sf, size, hash)
   }
 
-  protected def transfertome: Unit
+  protected def transfertome(): Unit
   protected def finishLocalFile(file: File): Unit
 
   private def fail(e: Throwable) {

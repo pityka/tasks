@@ -25,25 +25,18 @@
 
 package tasks.elastic.ssh
 
-import akka.actor.{Actor, PoisonPill, ActorRef, Props, Cancellable}
-import scala.concurrent.duration._
-import java.util.concurrent.{TimeUnit, ScheduledFuture}
+import akka.actor.{Actor, ActorRef, Props}
 import java.net.InetSocketAddress
-import akka.actor.Actor._
 import akka.event.LoggingAdapter
 import scala.util._
 
-import collection.JavaConversions._
+import scala.collection.JavaConverters._
 import java.io.File
 import com.typesafe.config.{Config, ConfigObject}
 
 import tasks.elastic._
-import tasks.deploy._
 import tasks.shared._
-import tasks.shared.monitor._
-import tasks.util._
 import tasks.util.config._
-import tasks.queue._
 
 object SSHSettings {
   case class Host(hostname: String,
@@ -70,8 +63,8 @@ class SSHSettings(implicit config: TasksConfig) {
   import SSHSettings._
 
   val hosts: collection.mutable.Map[String, (Host, Boolean)] =
-    collection.mutable.Map(config.sshHosts.map {
-      case (key, value) =>
+    collection.mutable.Map(config.sshHosts.asScala.map {
+      case (_, value) =>
         val host = Host.fromConfig(value.asInstanceOf[ConfigObject].toConfig)
         (host.hostname, (host, true))
     }.toList: _*)
@@ -199,7 +192,7 @@ trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
   def initializeNode(node: Node): Unit = {
     val ac = node.launcherActor //.revive
 
-    val ackil = context.actorOf(
+    context.actorOf(
       Props(new SSHNodeKiller(ac, node))
         .withDispatcher("my-pinned-dispatcher"),
       "nodekiller" + node.name.value.replace("://", "___"))

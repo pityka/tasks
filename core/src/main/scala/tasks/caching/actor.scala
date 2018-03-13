@@ -27,19 +27,13 @@
 
 package tasks.caching
 
-import akka.actor.{Actor, PoisonPill, ActorRef}
-import akka.actor.Actor._
+import akka.actor.{Actor, PoisonPill}
 import akka.pattern.pipe
 import scala.concurrent.Future
-import java.lang.Class
-import java.io.File
 
 import scala.util._
 
-import tasks.util._
 import tasks.util.config._
-import tasks.util.eq._
-import tasks.queue._
 import tasks.fileservice._
 import tasks.wire._
 

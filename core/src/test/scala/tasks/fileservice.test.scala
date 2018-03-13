@@ -32,27 +32,19 @@ import scala.concurrent.duration._
 import scala.concurrent._
 import akka.testkit.TestKit
 import akka.testkit.ImplicitSender
-import akka.actor.{Actor, PoisonPill, ActorRef, Props, ActorSystem}
+import akka.actor.{ Props, ActorSystem}
 import com.typesafe.config.ConfigFactory
 
 import java.io._
-import tasks.kvstore._
 
-import org.scalatest.FunSpec
 import org.scalatest.Matchers
 
 import akka.stream._
 import akka.actor._
 import tasks.queue._
-import tasks.caching._
-import tasks.caching.kvstore._
 import tasks.fileservice._
 import tasks.util._
-import tasks.shared._
-import tasks.simpletask._
 
-import com.bluelabs.akkaaws._
-import com.bluelabs.s3stream._
 
 object Conf {
   val str = """my-pinned-dispatcher {
@@ -68,7 +60,7 @@ class FileServiceSpec
         ActorSystem("testsystem",
                     ConfigFactory
                       .parseString(Conf.str)
-                      .withFallback(ConfigFactory.load("akkaoverrides.conf"))))
+                      .withFallback(ConfigFactory.load("akka.conf"))))
     with ImplicitSender
     with FunSpecLike
     with Matchers
@@ -81,11 +73,13 @@ class FileServiceSpec
   // implicit val s3stream = new S3StreamQueued(AWSCredentials("na", "na"), "na")
   implicit val sh = new StreamHelper(None)
 
+  implicit val tconfig = tasks.util.config.parse(ConfigFactory.load().withFallback(ConfigFactory.load("akka.conf")))
+
   val remoteStore = new RemoteFileStorage
 
   override def afterAll {
     Thread.sleep(1500)
-    system.shutdown
+    system.terminate()
 
   }
 
@@ -110,7 +104,7 @@ class FileServiceSpec
               )))
       implicit val serviceimpl =
         FileServiceActor(service, Some(fs), remoteStore)
-      val t = SharedFileHelper.createFromFile(input, "proba", false)
+      SharedFileHelper.createFromFile(input, "proba", false)
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
           data.deep)

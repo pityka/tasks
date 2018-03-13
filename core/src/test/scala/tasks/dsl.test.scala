@@ -29,16 +29,10 @@ package tasks
 
 import org.scalatest._
 
-import tasks._
-
-import org.scalatest.FunSpec
 import org.scalatest.Matchers
 import scala.concurrent._
 import scala.concurrent.duration._
 
-import tasks.queue._
-import tasks.caching._
-import tasks.fileservice._
 import tasks.util._
 import tasks.circesupport._
 

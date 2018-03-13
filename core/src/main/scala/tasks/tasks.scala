@@ -28,14 +28,8 @@
 package tasks
 
 import tasks.queue._
-import tasks.shared._
-import tasks.fileservice._
-
-import akka.actor._
 
 import scala.concurrent._
-
-import io.circe.{Encoder, Decoder}
 
 abstract class ResultWithSharedFiles(sf: SharedFile*) extends Product {
   def files = sf
@@ -53,6 +47,6 @@ class TaskDefinition[A: Serializer, B: Deserializer](val computation: CompFun2,
       implicit components: TaskSystemComponents): Future[B] =
     tasks.queue
       .newTask[B, A](a, resource, computation, taskId)
-      .?(components.actorsystem.dispatcher)
+      .?
 
 }

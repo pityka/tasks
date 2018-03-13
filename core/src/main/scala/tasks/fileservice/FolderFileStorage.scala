@@ -27,22 +27,11 @@
 
 package tasks.fileservice
 
-import akka.actor.{Actor, PoisonPill, ActorRef, Props, ActorRefFactory}
-import akka.actor.Actor._
-import akka.pattern.ask
-import akka.pattern.pipe
 import akka.stream._
 import scala.concurrent.{Future, ExecutionContext}
-import java.lang.Class
-import java.io.{File, InputStream, FileInputStream, BufferedInputStream}
-import scala.concurrent.duration._
-import java.util.concurrent.{TimeUnit, ScheduledFuture}
-import java.nio.channels.{WritableByteChannel, ReadableByteChannel}
+import java.io.File
 import tasks.util._
-import scala.util._
-import com.google.common.hash._
 import scala.concurrent._
-import scala.util._
 import tasks.util.eq._
 import tasks.util.config._
 import akka.stream.scaladsl._
@@ -60,7 +49,7 @@ object FolderFileStorage {
 
 class FolderFileStorage(val basePath: File,
                         val extendedPaths: List[File] = Nil)(
-    implicit mat: Materializer,
+    implicit 
     ec: ExecutionContext,
     config: TasksConfig)
     extends ManagedFileStorage {
@@ -194,17 +183,17 @@ class FolderFileStorage(val basePath: File,
   }
 
   def list(pattern: String): List[SharedFile] = {
-    import scala.collection.JavaConversions._
+    import scala.collection.JavaConverters._
     val stream =
       java.nio.file.Files.newDirectoryStream(basePath.toPath, pattern)
     try {
-      stream.toList.filter(_.toFile.isFile).map { path =>
+      stream.asScala.toList.filter(_.toFile.isFile).map { path =>
         val file = path.toFile
         val l = file.length
         val h = FolderFileStorage.getContentHash(file)
         new SharedFile(ManagedFilePath(
                          basePath.toPath
-                           .relativize(path)
+                           .relativize(path).asScala
                            .iterator
                            .map(_.toString)
                            .toVector),

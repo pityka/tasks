@@ -50,9 +50,9 @@ object EColl {
     implicit val ec = tsc.executionContext
     implicit val mat = tsc.actorMaterializer
 
-    def sinkToFlow[T, U](sink: Sink[T, U]): Flow[T, U, U] =
+    def sinkToFlow[I, U](sink: Sink[I, U]): Flow[I, U, U] =
       Flow.fromGraph(GraphDSL.create(sink) { implicit builder => sink =>
-        FlowShape.of(sink.in, builder.materializedValue)
+        FlowShape.of[I,U](sink.in, builder.materializedValue)
       })
 
     val shardFlow: Flow[T, Seq[File], NotUsed] = {

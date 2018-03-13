@@ -28,28 +28,19 @@
 package tasks.fileservice
 
 import akka.actor._
-import akka.pattern.ask
-import akka.pattern.pipe
 import akka.stream.scaladsl._
 import akka.stream._
 import akka.util._
 
 import com.google.common.hash._
 
-import scala.concurrent.duration._
 import scala.concurrent._
-import scala.util._
 
-import java.lang.Class
-import java.io.{File, InputStream, FileInputStream, BufferedInputStream}
-import java.util.concurrent.{TimeUnit, ScheduledFuture}
-import java.nio.channels.{WritableByteChannel, ReadableByteChannel}
+import java.io.{File, InputStream}
 
 import tasks.util._
 import tasks.util.config.TasksConfig
 import tasks.util.eq._
-import tasks.caching._
-import tasks.queue._
 
 object FileStorage {
   def getContentHash(is: InputStream): Int = {

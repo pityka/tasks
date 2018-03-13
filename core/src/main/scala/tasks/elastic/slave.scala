@@ -23,10 +23,8 @@
  */
 package tasks.elastic
 
-import tasks._
 import tasks.util._
 import tasks.util.config._
-import tasks.util.eq._
 
 import java.net._
 import java.io.File

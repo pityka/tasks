@@ -27,22 +27,14 @@
 
 package tasks.util
 
-import akka.actor.{Actor, PoisonPill, ActorRef, Cancellable, Props}
+import akka.actor.{Actor, PoisonPill, ActorRef, Cancellable}
 import akka.remote.DeadlineFailureDetector
-import akka.remote.FailureDetector.Clock
 import akka.remote.DisassociatedEvent
-import akka.pattern.ask
 
-import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.concurrent.duration.Duration
-import java.util.concurrent.TimeUnit.{SECONDS}
-import java.util.concurrent.{TimeUnit, ScheduledFuture}
 
 import tasks.util.eq._
-import tasks.util._
 import tasks.util.config._
-import tasks.queue._
 import tasks.wire._
 
 class HeartBeatActor(target: ActorRef)(implicit config: TasksConfig)
@@ -53,8 +45,8 @@ class HeartBeatActor(target: ActorRef)(implicit config: TasksConfig)
 
   private var scheduledHeartBeats: Cancellable = null
 
-  private var failureDetector = new DeadlineFailureDetector(
-    config.acceptableHeartbeatPause)
+  private val failureDetector = new DeadlineFailureDetector(
+    config.acceptableHeartbeatPause, config.acceptableHeartbeatPause)
 
   override def preStart {
     log.debug(
@@ -76,13 +68,13 @@ class HeartBeatActor(target: ActorRef)(implicit config: TasksConfig)
     log.info("HeartBeatActor stopped.")
   }
 
-  private def targetDown {
+  private def targetDown() : Unit = {
     context.system.eventStream.publish(HeartBeatStopped(target))
     self ! PoisonPill
   }
 
   def receive = {
-    case DisassociatedEvent(localAddress, remoteAddress, inbound)
+    case DisassociatedEvent(_, remoteAddress, _)
         if remoteAddress === target.path.address =>
       log.warning("DisassociatedEvent received. TargetDown.")
       targetDown

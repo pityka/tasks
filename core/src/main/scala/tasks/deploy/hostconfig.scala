@@ -27,26 +27,13 @@
 
 package tasks.deploy
 
-import tasks.caching.kvstore._
-import tasks.caching._
-import tasks.queue._
 import tasks.util._
 import tasks.util.config._
-import tasks.fileservice._
 import tasks._
 
-import akka.actor.Actor._
-import akka.pattern.ask
-import akka.util.Timeout
 
-import java.io.File
 import java.net.InetSocketAddress
-import java.net.NetworkInterface
-import java.net.InetAddress
 
-import scala.concurrent.duration._
-import scala.concurrent._
-import scala.collection.JavaConversions._
 
 sealed trait Role
 object MASTER extends Role

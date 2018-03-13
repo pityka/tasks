@@ -27,15 +27,9 @@
 
 package tasks.caching
 
-import java.io.File
-import java.io.FileInputStream
-import java.io.{ObjectOutputStream, ObjectInputStream, FileOutputStream}
-import scala.collection.immutable.ListMap
 import scala.concurrent._
 
-import kvstore._
 import tasks.queue._
-import tasks._
 
 import tasks.fileservice.FileServicePrefix
 
@@ -47,39 +41,7 @@ abstract class Cache {
   def set(x: TaskDescription, r: UntypedResult)(
       implicit p: FileServicePrefix): Future[Unit]
 
-  def shutDown: Unit
-
-}
-
-class KVCache(
-    kvstore: KVStore,
-    protected val serialization: akka.serialization.Serialization
-) extends Cache
-    with TaskSerializer {
-
-  override def toString = "KVCacheWith" + kvstore
-
-  def shutDown = kvstore.close
-
-  def get(x: TaskDescription)(implicit p: FileServicePrefix) =
-    Future.successful(kvstore.get(serializeTaskDescription(x)).flatMap { r =>
-      scala.util.Try(deserializeResult(r)).toOption
-    })
-
-  def set(x: TaskDescription, r: UntypedResult)(
-      implicit p: FileServicePrefix) = {
-    try {
-      val k: Array[Byte] = serializeTaskDescription(x)
-      val v: Array[Byte] = serializeResult(r)
-      kvstore.put(k, v)
-      Future.successful(())
-    } catch {
-      case e: Throwable => {
-        shutDown
-        throw e
-      }
-    }
-  }
+  def shutDown(): Unit
 
 }
 
@@ -91,7 +53,7 @@ class DisabledCache extends Cache {
   def set(x: TaskDescription, r: UntypedResult)(
       implicit p: FileServicePrefix) = Future.successful(())
 
-  def shutDown = {}
+  def shutDown() = {}
 
 }
 
@@ -108,6 +70,6 @@ class FakeCacheForTest extends Cache {
       implicit p: FileServicePrefix) =
     Future.successful(cacheMap.getOrElseUpdate(x, r))
 
-  def shutDown = {}
+  def shutDown() = {}
 
 }

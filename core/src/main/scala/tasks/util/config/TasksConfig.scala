@@ -27,19 +27,15 @@
 
 package tasks.util.config
 
-import com.typesafe.config.{Config, ConfigFactory}
-import scala.collection.JavaConversions._
-import scala.concurrent.duration._
+import com.typesafe.config.Config
+import scala.collection.JavaConverters._
 import java.io.File
-import tasks._
 
 class TasksConfig(val raw: Config) {
 
   val asString = raw.root.render
 
   val cacheEnabled = raw.getBoolean("tasks.cache.enabled")
-
-  val cacheType = raw.getString("tasks.cache.store")
 
   val askInterval: FD = raw.getDuration("tasks.askInterval")
 
@@ -60,7 +56,7 @@ class TasksConfig(val raw: Config) {
   val disableRemoting = raw.getBoolean("tasks.disableRemoting")
 
   val nonLocalFileSystems = raw
-    .getStringList("tasks.nonLocalFileSystems")
+    .getStringList("tasks.nonLocalFileSystems").asScala
     .map(f => new java.io.File(f))
 
   val skipContentHashVerificationAfterCache =
@@ -89,6 +85,7 @@ class TasksConfig(val raw: Config) {
 
   val fileServiceExtendedFolders = raw
     .getStringList("tasks.fileservice.extendedFolders")
+.asScala
     .map(x => new File(x))
     .toList
     .filter(_.isDirectory)
@@ -132,7 +129,7 @@ class TasksConfig(val raw: Config) {
   val securityGroup: String = raw.getString("tasks.elastic.aws.securityGroup")
 
   val securityGroups: List[String] =
-    raw.getStringList("tasks.elastic.aws.securityGroups").toList
+    raw.getStringList("tasks.elastic.aws.securityGroups").asScala.toList
 
   val subnetId = raw.getString("tasks.elastic.aws.subnetId")
 
@@ -157,16 +154,16 @@ class TasksConfig(val raw: Config) {
 
   val s3ServerSideEncryption = raw.getBoolean("tasks.s3.serverSideEncryption")
 
-  val s3CannedAcl = raw.getStringList("tasks.s3.cannedAcls").toList
+  val s3CannedAcl = raw.getStringList("tasks.s3.cannedAcls").asScala.toList
 
   val s3GrantFullControl = raw
-    .getStringList("tasks.s3.grantFullControl")
+    .getStringList("tasks.s3.grantFullControl").asScala
     .grouped(2)
     .map(x => x(0) -> x(1))
     .toList
 
   val instanceTags = raw
-    .getStringList("tasks.elastic.aws.tags")
+    .getStringList("tasks.elastic.aws.tags").asScala
     .grouped(2)
     .map(x => x(0) -> x(1))
     .toList

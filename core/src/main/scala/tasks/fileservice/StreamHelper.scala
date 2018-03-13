@@ -26,13 +26,11 @@ package tasks.fileservice
 
 import akka.actor._
 import akka.stream._
-import akka.stream.actor._
 import akka.stream.scaladsl._
-import akka.http.scaladsl.model.{HttpRequest, HttpResponse, headers}
-import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.{HttpRequest,  headers}
 import akka.util._
 import com.bluelabs.s3stream._
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future}
 import tasks.util.Uri
 
 class StreamHelper(s3stream: Option[S3Stream])(implicit as: ActorSystem,

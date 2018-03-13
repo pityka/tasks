@@ -26,10 +26,8 @@
 package tasks.util
 
 import akka.actor.{Actor, ActorRef, PoisonPill}
-import akka.util.ByteString
 import java.nio.channels.{WritableByteChannel, ReadableByteChannel}
 import java.nio.ByteBuffer
-import java.io.FileInputStream
 import scala.util.{Try, Failure, Success}
 import tasks.wire.filetransfermessages._
 
@@ -67,7 +65,7 @@ class TransferOut(file: ReadableByteChannel,
 
   var eof = false
 
-  private def readAhead {
+  private def readAhead() : Unit = {
     val count = file.read(buffer)
     buffer.position(0)
 
@@ -79,7 +77,7 @@ class TransferOut(file: ReadableByteChannel,
     }
   }
 
-  private def send {
+  private def send() : Unit = {
     readAhead
 
     if (eof) {
@@ -92,7 +90,7 @@ class TransferOut(file: ReadableByteChannel,
 
   }
 
-  override def preStart {
+  override def preStart() : Unit = {
     log.debug("FileTransferOut start")
     send
   }

@@ -27,7 +27,7 @@
 
 package tasks.queue
 
-import akka.actor.{Actor, PoisonPill, ActorRef, ActorContext, ActorRefFactory}
+import akka.actor.{Actor, PoisonPill, ActorRef}
 import akka.util.Timeout
 import akka.pattern.ask
 import akka.stream.Materializer
@@ -37,20 +37,14 @@ import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
 import scala.util._
 
-import java.io.File
-
 import tasks.fileservice._
-import tasks.util._
 import tasks.util.config._
 import tasks.shared._
 import tasks._
-import tasks.caching._
 import tasks.wire._
 
-import io.circe.{Decoder, Encoder, Json}
-import io.circe.parser.decode
+import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
-import io.circe.syntax._
 
 case class UntypedResult(files: Set[SharedFile], data: Base64Data)
 
@@ -105,8 +99,7 @@ case class ComputationEnvironment(
 
 private[tasks] object ProxyTask {
 
-  def getBackResultFuture(actor: ActorRef, timeoutp: FiniteDuration)(
-      implicit ec: ExecutionContext): Future[Any] = {
+  def getBackResultFuture(actor: ActorRef, timeoutp: FiniteDuration): Future[Any] = {
 
     implicit val timout = Timeout(timeoutp)
     (actor ? (GetBackResult))
@@ -253,7 +246,7 @@ class ProxyTask[MyPrerequisitive, MyResult](
 
   private var taskIsQueued = false
 
-  private def distributeResult: Unit = {
+  private def distributeResult(): Unit = {
     log.debug("Distributing result to targets: {}", _channels)
     result.foreach(r =>
       _channels.foreach { ch =>
@@ -264,12 +257,12 @@ class ProxyTask[MyPrerequisitive, MyResult](
   private def notifyListenersOnFailure(cause: Throwable): Unit =
     _channels.foreach(t => t ! akka.actor.Status.Failure(cause))
 
-  private def startTask: Unit = {
+  private def startTask(): Unit = {
     if (result.isEmpty) {
 
       val persisted: Option[MyPrerequisitive] = incomings match {
         case x: HasPersistent[MyPrerequisitive] => Some(x.persistent)
-        case x => None
+        case _ => None
       }
 
       val s = ScheduleTask(
@@ -330,7 +323,7 @@ class ProxyTask[MyPrerequisitive, MyResult](
         taskIsQueued = true
       }
 
-    case TaskFailedMessageToProxy(sch, cause) =>
+    case TaskFailedMessageToProxy(_, cause) =>
       log.error(cause, "Execution failed. ")
       notifyListenersOnFailure(cause)
       self ! PoisonPill

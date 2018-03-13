@@ -25,31 +25,10 @@
 
 package tasks.util
 
-import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2Client;
-import com.amazonaws.services.ec2.model.CancelSpotInstanceRequestsRequest;
-import com.amazonaws.services.ec2.model.CreateTagsRequest;
-import com.amazonaws.services.ec2.model.DescribeSpotInstanceRequestsRequest;
-import com.amazonaws.services.ec2.model.DescribeSpotInstanceRequestsResult;
-import com.amazonaws.services.ec2.model.LaunchSpecification;
-import com.amazonaws.services.ec2.model.RequestSpotInstancesRequest;
-import com.amazonaws.services.ec2.model.RequestSpotInstancesResult;
-import com.amazonaws.services.ec2.model.SpotInstanceRequest;
-import com.amazonaws.services.ec2.model.Tag;
 import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
-import com.amazonaws.auth.InstanceProfileCredentialsProvider
-import com.amazonaws.services.ec2.model.IamInstanceProfileSpecification
-import com.amazonaws.services.ec2.model.SpotInstanceType
-import com.amazonaws.services.ec2.model.BlockDeviceMapping
-import com.amazonaws.services.ec2.model.CancelSpotInstanceRequestsRequest
 
-import com.amazonaws.services.ec2.model.SpotPlacement
-import com.amazonaws.AmazonServiceException
-import java.net.URL
-
-import collection.JavaConversions._
-import scala.util._
-import java.io._
+import collection.JavaConverters._
 
 import tasks.shared._
 import tasks.util.config._
@@ -84,7 +63,7 @@ object EC2Operations {
 
   def terminateInstance(ec2: AmazonEC2Client, instanceId: String): Unit = {
     retry(5) {
-      val terminateRequest = new TerminateInstancesRequest(List(instanceId));
+      val terminateRequest = new TerminateInstancesRequest(List(instanceId).asJava);
       ec2.terminateInstances(terminateRequest);
     }
   }

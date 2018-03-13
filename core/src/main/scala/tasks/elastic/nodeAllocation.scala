@@ -29,23 +29,18 @@ import akka.actor.{
   Actor,
   PoisonPill,
   ActorRef,
-  Props,
   Cancellable,
   ExtendedActorSystem
 }
 import scala.concurrent.duration._
-import java.util.concurrent.{TimeUnit, ScheduledFuture}
 import java.net.InetSocketAddress
-import akka.actor.Actor._
 import akka.event.LoggingAdapter
-import scala.concurrent._
 import scala.util._
 
 import tasks.shared.monitor._
 import tasks.shared._
 import tasks.util._
 import tasks.util.config._
-import tasks.queue._
 import tasks.wire._
 
 import io.circe.{Encoder, Decoder}
@@ -58,7 +53,10 @@ case class Node(name: RunningJobId,
 object Node {
   implicit val enc: Encoder[Node] = deriveEncoder[Node]
   implicit def dec(implicit as: ExtendedActorSystem): Decoder[Node] =
-    deriveDecoder[Node]
+    {
+      val _ = as // suppressing unused warning
+      deriveDecoder[Node]
+      }
 }
 
 trait ShutdownNode {
@@ -139,7 +137,7 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
           "Request " + types.size + " node. One from each: " + types.keySet)
 
         types.foreach {
-          case (request, n) =>
+          case (request, _) =>
             val jobinfo = requestOneNewJobFromGridScheduler(request)
             allTime += 1
 
@@ -220,7 +218,7 @@ trait SimpleDecideNewNode extends DecideNewNode {
     val availableResources: List[CPUMemoryAvailable] =
       (registeredNodes ++ pendingNodes).toList
 
-    val (remainingResources, allocatedResources) =
+    val (_, allocatedResources) =
       resourceNeeded.foldLeft((availableResources, List[CPUMemoryRequest]())) {
         case ((available, allocated), request) =>
           val (prefix, suffix) =
@@ -404,7 +402,7 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
 
   var targetIsIdle = true
 
-  def shutdown {
+  def shutdown() {
     log.info(
       "Shutting down target node: name= " + targetNode.name + " , actor= " + targetLauncherActor)
     shutdownRunningNode(targetNode.name)
@@ -425,7 +423,7 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
           targetLauncherActor ! PrepareForShutdown
           log.info("PrepareForShutdown sent to " + targetLauncherActor)
         } catch {
-          case x: java.nio.channels.ClosedChannelException => shutdown
+          case _: java.nio.channels.ClosedChannelException => shutdown
         }
       } else {
         targetLauncherActor ! WhatAreYouDoing
@@ -454,7 +452,7 @@ trait SelfShutdown extends Actor with akka.actor.ActorLogging {
 
   def shutdownRunningNode(d: RunningJobId)
 
-  def shutdown {
+  def shutdown() = {
     shutdownRunningNode(id)
   }
 

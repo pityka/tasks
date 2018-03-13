@@ -28,26 +28,11 @@
 package tasks
 
 import org.scalatest._
-import akka.testkit.TestKit
-import akka.testkit.ImplicitSender
-import akka.testkit.EventFilter
-import scala.concurrent.duration._
 
-import scala.io.Source
-import tasks._
 import tasks.util.concurrent.await
-import tasks.simpletask._
-import akka.actor.{Actor, PoisonPill, ActorRef, Props, ActorSystem}
-import akka.actor.Actor._
 import scala.concurrent._
-import duration._
-import Duration._
 import com.typesafe.config.ConfigFactory
 
-import tasks.queue._
-import tasks.caching._
-import tasks.fileservice._
-import tasks.util._
 import tasks.deploy._
 import tasks.circesupport._
 
@@ -59,7 +44,7 @@ object Fib {
   def serial(n: Int): Int = n match {
     case 0 => 0
     case 1 => 1
-    case x => serial(n - 1) + serial(n - 2)
+    case _ => serial(n - 1) + serial(n - 2)
   }
 
   case class FibInput(n: Option[Int], tag: Option[List[Boolean]])
@@ -74,7 +59,7 @@ object Fib {
     AsyncTask[FibInput, FibOut]("fib", 1) {
 
       case FibInput(Some(n), Some(tag)) =>
-        implicit ce =>
+        {implicit ce =>
           n match {
             case 0 => Future.successful(FibOut(0))
             case 1 => Future.successful(FibOut(1))
@@ -90,7 +75,9 @@ object Fib {
               } yield FibOut(r1.n + r2.n)
             }
 
-          }
+          }}
+
+      case _ => ???
 
     }
 

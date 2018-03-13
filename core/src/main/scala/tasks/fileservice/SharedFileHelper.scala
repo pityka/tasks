@@ -27,26 +27,19 @@ package tasks.fileservice
 
 import akka.actor._
 import akka.pattern.ask
-import akka.pattern.pipe
 import akka.stream.scaladsl._
 import akka.stream._
 import akka.util._
 
-import com.google.common.hash._
 
 import scala.concurrent.duration._
 import scala.concurrent._
 import scala.util._
 
-import java.lang.Class
-import java.io.{File, InputStream, FileInputStream, BufferedInputStream}
-import java.util.concurrent.{TimeUnit, ScheduledFuture}
-import java.nio.channels.{WritableByteChannel, ReadableByteChannel}
+import java.io.File
 
 import tasks.util._
-import tasks.util.eq._
 import tasks.util.config._
-import tasks.caching._
 import tasks.queue._
 import tasks.wire._
 
@@ -153,8 +146,7 @@ private[tasks] object SharedFileHelper {
 
     }
 
-  def isAccessible(sf: SharedFile)(implicit service: FileServiceActor,
-                                   context: ActorRefFactory): Future[Boolean] =
+  def isAccessible(sf: SharedFile)(implicit service: FileServiceActor): Future[Boolean] =
     sf.path match {
       case x: RemoteFilePath =>
         service.remote.contains(x, sf.byteSize, sf.hash)
@@ -170,8 +162,8 @@ private[tasks] object SharedFileHelper {
 
     }
 
-  def getUri(sf: SharedFile)(implicit service: FileServiceActor,
-                             context: ActorRefFactory): Future[Uri] =
+  def getUri(sf: SharedFile)(implicit service: FileServiceActor
+                             ): Future[Uri] =
     sf.path match {
       case RemoteFilePath(path) => Future.successful(path)
       case path: ManagedFilePath => {

@@ -26,11 +26,6 @@
 package tasks.elastic
 
 import java.io.File
-import scala.concurrent.duration._
-import akka.actor._
-import akka.pattern.ask
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
 
 class PackageServerActor(pack: File) {

@@ -24,9 +24,7 @@
  */
 
 package tasks
-import tasks._
 
-import io.circe.{Decoder, Encoder, Json}
 import akka.actor._
 import scala.concurrent._
 

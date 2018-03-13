@@ -27,39 +27,17 @@
 
 package tasks.fileservice
 
-import akka.actor.{Actor, PoisonPill, ActorRef, Props, ActorRefFactory}
-import akka.actor.Actor._
-import akka.pattern.ask
-import akka.pattern.pipe
 import akka.stream.scaladsl._
-import akka.stream._
 import akka.util._
-import scala.concurrent.{Future, ExecutionContext}
-import java.lang.Class
-import java.io.{
-  File,
-  InputStream,
-  FileInputStream,
-  BufferedInputStream,
-  OutputStream
-}
-import scala.concurrent.duration._
-import java.util.concurrent.{TimeUnit, ScheduledFuture}
-import java.nio.channels.{WritableByteChannel, ReadableByteChannel}
+import scala.concurrent.Future
+import java.io.File
 import tasks.util._
-import scala.util.{Try, Failure, Success}
-import com.google.common.hash._
 import scala.concurrent._
-import scala.util._
-import tasks.util.config._
-import tasks.util.eq._
 import tasks.util.Uri
-import tasks.queue._
 import tasks.TaskSystemComponents
 import tasks.Implicits._
 
-import io.circe.{Json, Decoder, Encoder}
-import io.circe.syntax._
+import io.circe.{ Decoder, Encoder}
 import io.circe.generic.semiauto._
 
 sealed trait FilePath {

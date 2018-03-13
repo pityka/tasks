@@ -28,47 +28,31 @@
 
 package tasks.elastic.ec2
 
-import akka.actor.{Actor, PoisonPill, ActorRef, Props, Cancellable}
-import scala.concurrent.duration._
-import java.util.concurrent.{TimeUnit, ScheduledFuture}
+import akka.actor.{Actor, ActorRef, Props}
 import java.net.InetSocketAddress
-import akka.actor.Actor._
 import akka.event.LoggingAdapter
 import scala.util._
 
 import tasks.elastic._
-import tasks.deploy._
 import tasks.shared._
 import tasks.util._
 import tasks.util.config._
-import tasks.util.eq._
-import tasks.fileservice._
 
-import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2Client;
 import com.amazonaws.services.ec2.model.CancelSpotInstanceRequestsRequest;
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
-import com.amazonaws.services.ec2.model.DescribeSpotInstanceRequestsRequest;
-import com.amazonaws.services.ec2.model.DescribeSpotInstanceRequestsResult;
 import com.amazonaws.services.ec2.model.LaunchSpecification;
 import com.amazonaws.services.ec2.model.RequestSpotInstancesRequest;
-import com.amazonaws.services.ec2.model.RequestSpotInstancesResult;
-import com.amazonaws.services.ec2.model.SpotInstanceRequest;
 import com.amazonaws.services.ec2.model.GroupIdentifier
 import com.amazonaws.services.ec2.model.Tag;
-import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
-import com.amazonaws.auth.InstanceProfileCredentialsProvider
 import com.amazonaws.services.ec2.model.IamInstanceProfileSpecification
 import com.amazonaws.services.ec2.model.SpotInstanceType
 import com.amazonaws.services.ec2.model.BlockDeviceMapping
 import com.amazonaws.services.ec2.model.CancelSpotInstanceRequestsRequest
 import com.amazonaws.services.ec2.model.SpotPlacement
 import com.amazonaws.services.ec2.model.CreateTagsRequest
-import com.amazonaws.AmazonServiceException
-import java.net.URL
 
-import collection.JavaConversions._
-import java.io.{File, InputStream}
+import scala.collection.JavaConverters._
 
 trait EC2Shutdown extends ShutdownNode {
 
@@ -80,7 +64,7 @@ trait EC2Shutdown extends ShutdownNode {
     EC2Operations.terminateInstance(ec2, nodeName.value)
 
   def shutdownPendingNode(nodeName: PendingJobId): Unit = {
-    val request = new CancelSpotInstanceRequestsRequest(List(nodeName.value))
+    val request = new CancelSpotInstanceRequestsRequest(List(nodeName.value).asJava)
     ec2.cancelSpotInstanceRequests(request)
   }
 
@@ -110,14 +94,14 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     val describeResult = ec2.describeSpotInstanceRequests();
     val spotInstanceRequests = describeResult.getSpotInstanceRequests();
 
-    spotInstanceRequests.filter(_.getInstanceId == p.value).headOption.map {
+    spotInstanceRequests.asScala.filter(_.getInstanceId == p.value).headOption.map {
       x =>
         PendingJobId(x.getSpotInstanceRequestId)
     }
 
   }
 
-  private def requestSpotInstance(size: CPUMemoryRequest) = {
+  private def requestSpotInstance = {
     // size is ignored, instance specification is set in configuration
     val selectedInstanceType = EC2Operations.slaveInstanceType
 
@@ -144,7 +128,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     blockDeviceMappingSDC.setVirtualName("ephemeral1");
 
     launchSpecification.setBlockDeviceMappings(
-      List(blockDeviceMappingSDB, blockDeviceMappingSDC));
+      List(blockDeviceMappingSDB, blockDeviceMappingSDC).asJava)
 
     config.iamRole.foreach { iamRole =>
       val iamprofile = new IamInstanceProfileSpecification()
@@ -178,7 +162,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
       val g = new GroupIdentifier
       g.setGroupId(x)
       g
-    })
+    }.asJava)
 
     val subnetId = config.subnetId
 
@@ -190,7 +174,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     // Call the RequestSpotInstance API.
     val requestResult = ec2.requestSpotInstances(requestRequest)
 
-    (requestResult.getSpotInstanceRequests
+    (requestResult.getSpotInstanceRequests.asScala
        .map(_.getSpotInstanceRequestId)
        .head,
      selectedInstanceType)
@@ -199,7 +183,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 
   def requestOneNewJobFromGridScheduler(request: CPUMemoryRequest)
     : Try[Tuple2[PendingJobId, CPUMemoryAvailable]] = Try {
-    val (requestid, instancetype) = requestSpotInstance(request)
+    val (requestid, instancetype) = requestSpotInstance
     val jobid = PendingJobId(requestid)
     val size = CPUMemoryAvailable(
       cpu = instancetype._2.cpu,
@@ -212,10 +196,10 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     val ac = node.launcherActor
 
     ec2.createTags(
-      new CreateTagsRequest(List(node.name.value),
-                            config.instanceTags.map(t => new Tag(t._1, t._2))))
+      new CreateTagsRequest(List(node.name.value).asJava,
+                            config.instanceTags.map(t => new Tag(t._1, t._2)).asJava))
 
-    val ackil = context.actorOf(
+    context.actorOf(
       Props(new EC2NodeKiller(ac, node))
         .withDispatcher("my-pinned-dispatcher"),
       "nodekiller" + node.name.value.replace("://", "___"))
@@ -262,43 +246,15 @@ class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig) extend
   val ec2 = new AmazonEC2Client()
   ec2.setEndpoint(config.endpoint)
 
-  def allSoulsReaped(): Unit = ()
-  //   {
-  //   log.debug("All souls reaped. Calling system.shutdown.")
-  //
-  //   if (s3path.isDefined) {
-  //     import com.amazonaws.services.ec2.AmazonEC2Client
-  //     import com.amazonaws.auth.InstanceProfileCredentialsProvider
-  //
-  //     val tm = new TransferManager(s3Client);
-  //     try {
-  //       // Asynchronous call.
-  //       filesToSave.foreach { f =>
-  //         val putrequest =
-  //           new PutObjectRequest(s3path.get._1,
-  //                                s3path.get._2 + "/" + f.getName,
-  //                                f)
-  //
-  //         { // set server side encryption
-  //           val objectMetadata = new ObjectMetadata();
-  //           objectMetadata.setSSEAlgorithm(
-  //               ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
-  //           putrequest.setMetadata(objectMetadata);
-  //         }
-  //
-  //         val upload = tm.upload(putrequest);
-  //         upload.waitForCompletion
-  //       }
-  //     } finally {
-  //       tm.shutdownNow
-  //     }
-  //   }
-  //   if (terminateSelf) {
-  //     val nodename = EC2Operations.readMetadata("instance-id").head
-  //     EC2Operations.terminateInstance(ec2, nodename)
-  //   }
-  //   context.system.shutdown
-  // }
+  def allSoulsReaped(): Unit = 
+    {
+    log.debug("All souls reaped. Calling system.shutdown.")
+    if (terminateSelf) {
+      val nodename = EC2Operations.readMetadata("instance-id").head
+      EC2Operations.terminateInstance(ec2, nodename)
+    }
+    context.system.terminate()
+  }
 }
 
 object EC2Grid extends ElasticSupport[EC2NodeRegistry, EC2SelfShutdown] {

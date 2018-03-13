@@ -1,7 +1,6 @@
 package tasks.util
 
 import com.bluelabs.akkaaws._
-import com.bluelabs.s3stream._
 
 object S3Helpers {
 

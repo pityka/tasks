@@ -24,12 +24,10 @@
 
 package tasks.queue
 
-import tasks._
 import scala.concurrent.Future
 
 object Macros {
-  import scala.reflect.macros.Context
-  import scala.language.experimental.macros
+  import scala.reflect.macros.blackbox.Context
 
   def asyncTaskDefinitionImpl[A: cxt.WeakTypeTag, C: cxt.WeakTypeTag](
       cxt: Context)(
@@ -44,7 +42,7 @@ object Macros {
     val h = {
       // evaluates the tree. taskID should not depend on runtime values
       val taskIDEval =
-        cxt.eval(cxt.Expr[String](cxt.resetLocalAttrs(taskID.tree.duplicate)))
+        cxt.eval(cxt.Expr[String](cxt.untypecheck(taskID.tree.duplicate)))
       TypeName(taskIDEval)
     }
 

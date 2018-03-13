@@ -69,6 +69,6 @@ class ProductionReaper extends Reaper {
   // Shutdown
   def allSoulsReaped(): Unit = {
     log.info("All souls reaped. Calling system.shutdown.")
-    context.system.shutdown()
+    context.system.terminate()
   }
 }

@@ -33,26 +33,19 @@ import akka.actor.{
   ActorRef,
   Props,
   Cancellable,
-  ActorRefFactory,
   ExtendedActorSystem
 }
-import akka.actor.Actor._
 import akka.stream.Materializer
 
-import scala.concurrent.{Future, ExecutionContext}
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 import java.lang.Class
-import java.io.File
-import java.util.concurrent.{ScheduledFuture}
 
 import tasks.util._
 import tasks.util.config._
-import tasks.shared.monitor._
 import tasks.shared._
 import tasks.fileservice._
-import tasks.caching._
-import tasks.elastic._
 import tasks.wire._
 import tasks._
 
@@ -92,7 +85,9 @@ case class ScheduleTask(
 object ScheduleTask {
   implicit val encoder: Encoder[ScheduleTask] = deriveEncoder[ScheduleTask]
   implicit def decoder(implicit as: ExtendedActorSystem) =
+    {val _ = as
     deriveDecoder[ScheduleTask]
+    }
 }
 
 class TaskLauncher(
@@ -163,7 +158,7 @@ class TaskLauncher(
     allocatedResource
   }
 
-  def askForWork {
+  def askForWork() : Unit = {
     if (!availableResources.empty && !denyWorkBeforeShutdown) {
       // log.debug("send askForWork" + availableResources)
       taskQueue ! AskForWork(availableResources)

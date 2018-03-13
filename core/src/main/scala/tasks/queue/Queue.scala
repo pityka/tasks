@@ -27,25 +27,11 @@
 
 package tasks.queue
 
-import akka.actor.{Actor, PoisonPill, ActorRef, Cancellable, Props}
-import akka.remote.DeadlineFailureDetector
-import akka.remote.FailureDetector.Clock
-import akka.remote.DisassociatedEvent
-
-import scala.concurrent.Future
-import scala.concurrent.duration._
-import scala.concurrent.duration.Duration
-import java.util.concurrent.TimeUnit.{SECONDS}
-import java.util.concurrent.{TimeUnit, ScheduledFuture}
-
-import scala.collection.immutable.Seq
-import scala.collection.mutable.Queue
+import akka.actor.{Actor,  ActorRef, Props}
 
 import tasks.util.eq._
 import tasks.shared._
 import tasks.shared.monitor._
-import tasks.fileservice._
-import tasks.caching._
 import tasks.util._
 import tasks.util.config._
 import tasks.wire._
@@ -99,7 +85,7 @@ class TaskQueue(implicit config: TasksConfig)
   private def taskFailed(sch: ScheduleTask, cause: Throwable) {
     // Remove from the list of sent (running) messages
     routedMessages.get(sch).foreach {
-      case (launcher, allocation, proxies) =>
+      case (_, _, proxies) =>
         routedMessages.remove(sch)
         if (config.resubmitFailedTask) {
           log.error(
@@ -189,9 +175,6 @@ class TaskQueue(implicit config: TasksConfig)
 
       }
     }
-    // case NegotiationTimeout =>
-    //   log.debug("TaskLauncher did not Ack'd back on sending task. Requeueing.")
-    //   negotiation = None
 
     case AskForWork(resource) =>
       if (negotiation.isEmpty) {
@@ -209,7 +192,7 @@ class TaskQueue(implicit config: TasksConfig)
 
         queuedTasks
           .find {
-            case (k, v) => resource.canFulfillRequest(k.resource)
+            case (k, _) => resource.canFulfillRequest(k.resource)
           }
           .foreach { task =>
             negotiation = Some(launcher -> task._1)
@@ -226,12 +209,7 @@ class TaskQueue(implicit config: TasksConfig)
                 .subscribe(self, classOf[HeartBeatStopped])
             }
 
-            val resp = launcher ! ScheduleWithProxy(task._1, task._2)
-
-          // context.system.scheduler.scheduleOnce(
-          //     30 seconds,
-          //     self,
-          //     NegotiationTimeout)(context.dispatcher)
+            launcher ! ScheduleWithProxy(task._1, task._2)
 
           }
       } else {
@@ -251,7 +229,7 @@ class TaskQueue(implicit config: TasksConfig)
       val proxies = queuedTasks(task)
       queuedTasks.remove(task)
 
-      routedMessages += (task -> (sender, allocated, proxies))
+      routedMessages += ((task , (sender, allocated, proxies)))
     }
 
     case TaskDone(sch, result) =>

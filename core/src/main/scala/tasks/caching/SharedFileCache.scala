@@ -28,9 +28,6 @@
 package tasks.caching
 
 import java.io.File
-import java.io.FileInputStream
-import java.io.{ObjectOutputStream, ObjectInputStream, FileOutputStream}
-import scala.collection.immutable.ListMap
 import scala.util._
 import scala.concurrent._
 import akka.actor.ActorRefFactory
@@ -60,7 +57,7 @@ private[tasks] class SharedFileCache(implicit fs: FileServiceActor,
 
   override def toString = "SharedFileCache"
 
-  def shutDown = ()
+  def shutDown() = ()
 
   def get(x: TaskDescription)(
       implicit p: FileServicePrefix): Future[Option[UntypedResult]] = {
