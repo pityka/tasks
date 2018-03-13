@@ -33,9 +33,10 @@ import com.bluelabs.s3stream._
 import scala.concurrent.{ExecutionContext, Future}
 import tasks.util.Uri
 
-class StreamHelper(s3stream: Option[S3Stream])(implicit as: ActorSystem,
-                                               actorMaterializer: Materializer,
-                                               ec: ExecutionContext) {
+class StreamHelper(s3stream: Option[S3ClientSupport])(
+    implicit as: ActorSystem,
+    actorMaterializer: Materializer,
+    ec: ExecutionContext) {
 
   val queue = (rq: HttpRequest) => httpqueue.HttpQueue(as).queue(rq)
 
@@ -52,7 +53,7 @@ class StreamHelper(s3stream: Option[S3Stream])(implicit as: ActorSystem,
       .flatMapConcat(identity)
 
   private def createSourceS3(uri: Uri): Source[ByteString, _] =
-    s3stream.get.getData(s3Loc(uri))
+    s3stream.get.getData(s3Loc(uri), parallelism = 1)
 
   def createSource(uri: Uri) = uri.scheme match {
     case "http" | "https" => createSourceHttp(uri)

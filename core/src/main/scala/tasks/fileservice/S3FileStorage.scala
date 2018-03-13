@@ -44,11 +44,12 @@ import akka.stream.scaladsl._
 import scala.concurrent._
 import scala.concurrent.duration._
 
-class S3Storage(bucketName: String, folderPrefix: String, s3stream: S3Stream)(
-    implicit mat: Materializer,
-    as: ActorSystem,
-    ec: ExecutionContext,
-    config: TasksConfig)
+class S3Storage(bucketName: String,
+                folderPrefix: String,
+                s3stream: S3ClientSupport)(implicit mat: Materializer,
+                                           as: ActorSystem,
+                                           ec: ExecutionContext,
+                                           config: TasksConfig)
     extends ManagedFileStorage {
 
   val log = akka.event.Logging(as.eventStream, getClass)
@@ -137,13 +138,16 @@ class S3Storage(bucketName: String, folderPrefix: String, s3stream: S3Stream)(
   }
 
   def createSource(path: ManagedFilePath): Source[ByteString, _] =
-    s3stream.getData(S3Location(bucketName, assembleName(path)))
+    s3stream.getData(S3Location(bucketName, assembleName(path)),
+                     parallelism = 1)
 
   def exportFile(path: ManagedFilePath): Future[File] = {
     val file = TempFile.createTempFile("")
     val s3loc = S3Location(bucketName, assembleName(path))
 
-    val f1 = s3stream.getData(s3loc).runWith(FileIO.toPath(file.toPath))
+    val f1 = s3stream
+      .getData(s3loc, parallelism = 1)
+      .runWith(FileIO.toPath(file.toPath))
 
     f1.flatMap(_ => s3stream.getMetadata(s3loc)).map { metadata =>
       val (size1, _) = getLengthAndHash(metadata)

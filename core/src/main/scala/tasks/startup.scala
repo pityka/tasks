@@ -50,7 +50,7 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.concurrent._
 
-import com.bluelabs.s3stream.S3StreamQueued
+import com.bluelabs.s3stream.S3ClientQueued
 
 case class TaskSystemComponents(
     queue: QueueActor,
@@ -76,7 +76,7 @@ class TaskSystem private[tasks] (
   implicit val mat = ActorMaterializer()
   import as.dispatcher
   implicit val s3Stream = scala.util
-    .Try(new S3StreamQueued(S3Helpers.credentials, config.s3Region))
+    .Try(new S3ClientQueued(config.s3Region))
     .toOption
   implicit val sh = new StreamHelper(s3Stream)
 
