@@ -1,6 +1,6 @@
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.12.2",
+  scalaVersion := "2.12.4",
   version :="0.0.9-SNAPSHOT",
   parallelExecution in Test := false
   // scalacOptions ++= Seq("-Xlog-implicits")
