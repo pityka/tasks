@@ -250,16 +250,17 @@ class EC2NodeRegistry(
 }
 
 class EC2SelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
+  (implicit val config: TasksConfig)
     extends SelfShutdown
     with EC2Shutdown {
   val ec2 = new AmazonEC2Client()
-
+  ec2.setEndpoint(config.endpoint)
 }
 
-class EC2Reaper(terminateSelf: Boolean) extends Reaper with EC2Shutdown {
+class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig) extends Reaper with EC2Shutdown {
 
   val ec2 = new AmazonEC2Client()
-  // val s3Client = new AmazonS3Client();
+  ec2.setEndpoint(config.endpoint)
 
   def allSoulsReaped(): Unit = ()
   //   {
