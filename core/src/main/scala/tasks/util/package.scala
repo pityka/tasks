@@ -188,13 +188,13 @@ package object util {
     read(Nil).reverse.toArray
   }
 
-  /** Opens a buffered [[java.io.BufferedOutputStream]] on the file. Closes it after the block is executed. */
+  /** Opens a buffered java.io.BufferedOutputStream on the file. Closes it after the block is executed. */
   def openFileOutputStream[T](fileName: File, append: Boolean = false)(
       func: BufferedOutputStream => T) =
     useResource(
       new BufferedOutputStream(new FileOutputStream(fileName, append)))(func)
 
-  /** Opens a buffered [[java.io.BufferedInputStream]] on the file. Closes it after the block is executed. */
+  /** Opens a buffered java.io.BufferedInputStream on the file. Closes it after the block is executed. */
   def openFileInputStream[T](fileName: File)(func: BufferedInputStream => T) =
     useResource(new BufferedInputStream(new FileInputStream(fileName)))(func)
 
