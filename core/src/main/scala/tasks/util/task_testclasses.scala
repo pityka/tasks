@@ -62,9 +62,8 @@ object SimpleTask {
           // Logger.debug( "task implementation ended")
           // Logger.debug( rs.num.get)
 
-          UntypedResult(
-            Set(),
-            Base64Data((new IntResult(rs.num.get)).asJson.noSpaces))
+          UntypedResult(Set(),
+                        Base64Data((new IntResult(rs.num.get)).asJson.noSpaces))
         }
 
     }.flatMap(x => x)

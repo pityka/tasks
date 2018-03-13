@@ -52,7 +52,7 @@ object EColl {
 
     def sinkToFlow[I, U](sink: Sink[I, U]): Flow[I, U, U] =
       Flow.fromGraph(GraphDSL.create(sink) { implicit builder => sink =>
-        FlowShape.of[I,U](sink.in, builder.materializedValue)
+        FlowShape.of[I, U](sink.in, builder.materializedValue)
       })
 
     val shardFlow: Flow[T, Seq[File], NotUsed] = {
@@ -112,8 +112,7 @@ object EColl {
       .via(shardFlow)
       .mapAsync(1) { files =>
         Source(files.zipWithIndex.toList)
-          .mapAsync(1)(file =>
-            SharedFile(file._1, name = name + "." + file._2))
+          .mapAsync(1)(file => SharedFile(file._1, name = name + "." + file._2))
           .runWith(Sink.seq)
       }
       .map { sfs =>
@@ -163,11 +162,10 @@ object EColl {
     macro Macros
       .groupByMacro[A]
 
-  def outerJoinBy[A](
-      taskID: String,
-      taskVersion: Int)(parallelism: Int, fun: A => String): TaskDefinition[
-    List[EColl[A]],
-    EColl[Seq[Option[A]]]] = macro Macros.outerJoinByMacro[A]
+  def outerJoinBy[A](taskID: String, taskVersion: Int)(
+      parallelism: Int,
+      fun: A => String): TaskDefinition[List[EColl[A]], EColl[Seq[Option[A]]]] =
+    macro Macros.outerJoinByMacro[A]
 
   def foldLeft[A, B](taskID: String, taskVersion: Int)(
       zero: B,

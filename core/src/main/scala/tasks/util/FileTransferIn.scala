@@ -65,7 +65,7 @@ class TransferOut(file: ReadableByteChannel,
 
   var eof = false
 
-  private def readAhead() : Unit = {
+  private def readAhead(): Unit = {
     val count = file.read(buffer)
     buffer.position(0)
 
@@ -77,7 +77,7 @@ class TransferOut(file: ReadableByteChannel,
     }
   }
 
-  private def send() : Unit = {
+  private def send(): Unit = {
     readAhead
 
     if (eof) {
@@ -90,13 +90,13 @@ class TransferOut(file: ReadableByteChannel,
 
   }
 
-  override def preStart() : Unit = {
+  override def preStart(): Unit = {
     log.debug("FileTransferOut start")
     send
   }
 
   def receive = {
-    case Ack() => send
+    case Ack()             => send
     case CannotSaveFile(_) => self ! PoisonPill
   }
 }

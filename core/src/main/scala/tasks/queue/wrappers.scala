@@ -29,7 +29,7 @@ package tasks.queue
 
 import akka.actor._
 
-import scala.concurrent. Future
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 case class NodeLocalCacheActor(actor: ActorRef)

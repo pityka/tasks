@@ -37,7 +37,7 @@ import tasks.util.Uri
 import tasks.TaskSystemComponents
 import tasks.Implicits._
 
-import io.circe.{ Decoder, Encoder}
+import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
 
 sealed trait FilePath {

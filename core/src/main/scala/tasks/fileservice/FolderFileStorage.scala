@@ -47,9 +47,8 @@ object FolderFileStorage {
 
 }
 
-class FolderFileStorage(val basePath: File,
-                        val extendedPaths: List[File] = Nil)(
-    implicit 
+class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)(
+    implicit
     ec: ExecutionContext,
     config: TasksConfig)
     extends ManagedFileStorage {
@@ -193,7 +192,8 @@ class FolderFileStorage(val basePath: File,
         val h = FolderFileStorage.getContentHash(file)
         new SharedFile(ManagedFilePath(
                          basePath.toPath
-                           .relativize(path).asScala
+                           .relativize(path)
+                           .asScala
                            .iterator
                            .map(_.toString)
                            .toVector),

@@ -84,10 +84,10 @@ case class ScheduleTask(
 
 object ScheduleTask {
   implicit val encoder: Encoder[ScheduleTask] = deriveEncoder[ScheduleTask]
-  implicit def decoder(implicit as: ExtendedActorSystem) =
-    {val _ = as
+  implicit def decoder(implicit as: ExtendedActorSystem) = {
+    val _ = as
     deriveDecoder[ScheduleTask]
-    }
+  }
 }
 
 class TaskLauncher(
@@ -158,7 +158,7 @@ class TaskLauncher(
     allocatedResource
   }
 
-  def askForWork() : Unit = {
+  def askForWork(): Unit = {
     if (!availableResources.empty && !denyWorkBeforeShutdown) {
       // log.debug("send askForWork" + availableResources)
       taskQueue ! AskForWork(availableResources)
@@ -261,7 +261,7 @@ class TaskLauncher(
       askForWork
 
     case CheckQueue => askForWork
-    case Ping => sender ! Pong
+    case Ping       => sender ! Pong
     case PrepareForShutdown =>
       if (idle) {
         denyWorkBeforeShutdown = true

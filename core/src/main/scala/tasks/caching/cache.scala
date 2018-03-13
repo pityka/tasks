@@ -50,8 +50,8 @@ class DisabledCache extends Cache {
   def get(x: TaskDescription)(implicit p: FileServicePrefix) =
     Future.successful(None)
 
-  def set(x: TaskDescription, r: UntypedResult)(
-      implicit p: FileServicePrefix) = Future.successful(())
+  def set(x: TaskDescription, r: UntypedResult)(implicit p: FileServicePrefix) =
+    Future.successful(())
 
   def shutDown() = {}
 
@@ -66,8 +66,7 @@ class FakeCacheForTest extends Cache {
   def get(x: TaskDescription)(implicit p: FileServicePrefix) =
     Future.successful(cacheMap.get(x))
 
-  def set(x: TaskDescription, r: UntypedResult)(
-      implicit p: FileServicePrefix) =
+  def set(x: TaskDescription, r: UntypedResult)(implicit p: FileServicePrefix) =
     Future.successful(cacheMap.getOrElseUpdate(x, r))
 
   def shutDown() = {}

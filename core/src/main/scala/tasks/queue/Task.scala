@@ -60,7 +60,7 @@ object UntypedResult {
     case x: ResultWithSharedFiles =>
       x.files.toSet ++ x.productIterator.flatMap(x => fs(x)).toSet
     case x: SharedFile => Set(x)
-    case _ => Set()
+    case _             => Set()
   }
 
   def make[A](r: A)(implicit ser: Serializer[A]): UntypedResult =
@@ -99,7 +99,8 @@ case class ComputationEnvironment(
 
 private[tasks] object ProxyTask {
 
-  def getBackResultFuture(actor: ActorRef, timeoutp: FiniteDuration): Future[Any] = {
+  def getBackResultFuture(actor: ActorRef,
+                          timeoutp: FiniteDuration): Future[Any] = {
 
     implicit val timout = Timeout(timeoutp)
     (actor ? (GetBackResult))
@@ -160,9 +161,8 @@ private class Task(
           actorMaterializer,
           tasksConfig
         ),
-        akka.event.Logging(
-          context.system.eventStream,
-          "usertasks." + fileServicePrefix.list.mkString(".")),
+        akka.event.Logging(context.system.eventStream,
+                           "usertasks." + fileServicePrefix.list.mkString(".")),
         LauncherActor(launcherActor),
         executionContext,
         self
@@ -262,7 +262,7 @@ class ProxyTask[MyPrerequisitive, MyResult](
 
       val persisted: Option[MyPrerequisitive] = incomings match {
         case x: HasPersistent[MyPrerequisitive] => Some(x.persistent)
-        case _ => None
+        case _                                  => None
       }
 
       val s = ScheduleTask(

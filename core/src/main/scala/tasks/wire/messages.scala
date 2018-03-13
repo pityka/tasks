@@ -182,9 +182,8 @@ object StaticMessage {
   import io.circe.disjunctionCodecs._
   implicit val encode: Encoder[StaticMessage] = deriveEncoder[StaticMessage]
   implicit def decoder(
-      implicit as: ExtendedActorSystem): Decoder[StaticMessage] =
-    {
-        val _ = as // suppress unused warning
-        deriveDecoder[StaticMessage]
-        }
+      implicit as: ExtendedActorSystem): Decoder[StaticMessage] = {
+    val _ = as // suppress unused warning
+    deriveDecoder[StaticMessage]
+  }
 }

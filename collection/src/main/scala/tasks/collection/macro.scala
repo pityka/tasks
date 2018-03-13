@@ -24,7 +24,6 @@
 
 package tasks.collection
 
-
 object Macros {
   import scala.reflect.macros.blackbox.Context
 
@@ -55,8 +54,8 @@ object Macros {
     r
   }
 
-  def filterMacro[A: cxt.WeakTypeTag](
-      cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
+  def filterMacro[A: cxt.WeakTypeTag](cxt: Context)(taskID: cxt.Expr[String],
+                                                    taskVersion: cxt.Expr[Int])(
       fun: cxt.Expr[A => Boolean]
   ) = {
     import cxt.universe._
@@ -109,8 +108,8 @@ object Macros {
     r
   }
 
-  def sortByMacro[A: cxt.WeakTypeTag](
-      cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
+  def sortByMacro[A: cxt.WeakTypeTag](cxt: Context)(taskID: cxt.Expr[String],
+                                                    taskVersion: cxt.Expr[Int])(
       batchSize: cxt.Expr[Int],
       fun: cxt.Expr[A => String]) = {
     import cxt.universe._
@@ -225,8 +224,8 @@ object Macros {
     r
   }
 
-  def reduceMacro[A: cxt.WeakTypeTag](
-      cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
+  def reduceMacro[A: cxt.WeakTypeTag](cxt: Context)(taskID: cxt.Expr[String],
+                                                    taskVersion: cxt.Expr[Int])(
       fun: cxt.Expr[(A, A) => A]
   ) = {
     import cxt.universe._

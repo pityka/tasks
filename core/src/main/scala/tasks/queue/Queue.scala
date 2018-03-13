@@ -27,7 +27,7 @@
 
 package tasks.queue
 
-import akka.actor.{Actor,  ActorRef, Props}
+import akka.actor.{Actor, ActorRef, Props}
 
 import tasks.util.eq._
 import tasks.shared._
@@ -58,7 +58,7 @@ class TaskQueue(implicit config: TasksConfig)
   private def enQueue(sch: ScheduleTask, ac: List[ActorRef]) {
     if (!routedMessages.contains(sch)) {
       queuedTasks.get(sch) match {
-        case None => queuedTasks.update(sch, ac)
+        case None      => queuedTasks.update(sch, ac)
         case Some(acs) => queuedTasks.update(sch, (ac ::: acs).distinct)
       }
     } else addProxyToRoutedMessages(sch, ac)
@@ -229,7 +229,7 @@ class TaskQueue(implicit config: TasksConfig)
       val proxies = queuedTasks(task)
       queuedTasks.remove(task)
 
-      routedMessages += ((task , (sender, allocated, proxies)))
+      routedMessages += ((task, (sender, allocated, proxies)))
     }
 
     case TaskDone(sch, result) =>

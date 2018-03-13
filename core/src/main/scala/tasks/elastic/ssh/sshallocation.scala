@@ -192,10 +192,9 @@ trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
   def initializeNode(node: Node): Unit = {
     val ac = node.launcherActor //.revive
 
-    context.actorOf(
-      Props(new SSHNodeKiller(ac, node))
-        .withDispatcher("my-pinned-dispatcher"),
-      "nodekiller" + node.name.value.replace("://", "___"))
+    context.actorOf(Props(new SSHNodeKiller(ac, node))
+                      .withDispatcher("my-pinned-dispatcher"),
+                    "nodekiller" + node.name.value.replace("://", "___"))
   }
 
 }

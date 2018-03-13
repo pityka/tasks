@@ -48,7 +48,7 @@ class FileUserStream(sf: ManagedFilePath,
 
   private var writeableChannel: Option[WritableByteChannel] = None
 
-  def transfertome() : Unit = {
+  def transfertome(): Unit = {
     log.debug("Unreadable")
     val pipe = java.nio.channels.Pipe.open
     writeableChannel = Some(pipe.sink)
@@ -63,14 +63,14 @@ class FileUserStream(sf: ManagedFilePath,
     finish
   }
 
-  def finish() : Unit = {
+  def finish(): Unit = {
     if (listener.isDefined) {
       listener.get ! result.get
       self ! PoisonPill
     }
   }
 
-  def finishLocalFile(f: File) : Unit = {
+  def finishLocalFile(f: File): Unit = {
     log.debug("Readable")
     result = Some(Success(new BufferedInputStream(new FileInputStream(f))))
     finish
@@ -96,7 +96,7 @@ class FileUserSource(sf: ManagedFilePath,
 
   private var writeableChannel: Option[WritableByteChannel] = None
 
-  def transfertome() : Unit  = {
+  def transfertome(): Unit = {
     log.debug("Unreadable")
     val pipe = java.nio.channels.Pipe.open
     writeableChannel = Some(pipe.sink)
@@ -111,14 +111,14 @@ class FileUserSource(sf: ManagedFilePath,
     finish
   }
 
-  def finish() : Unit  = {
+  def finish(): Unit = {
     if (listener.isDefined) {
       listener.get ! result.get
       self ! PoisonPill
     }
   }
 
-  def finishLocalFile(f: File) : Unit = {
+  def finishLocalFile(f: File): Unit = {
     log.debug("Readable")
     result = Some(Success(FileIO.fromPath(f.toPath)))
     finish
@@ -145,8 +145,7 @@ class FileUser(sf: ManagedFilePath,
     log.debug("Unreadable")
     val fileToSave = TempFile.createFileInTempFolderIfPossibleWithName(sf.name)
     fileUnderTransfer = Some(fileToSave)
-    writeableChannel = Some(
-      new java.io.FileOutputStream(fileToSave).getChannel)
+    writeableChannel = Some(new java.io.FileOutputStream(fileToSave).getChannel)
     val transferinActor = context.actorOf(
       Props(new TransferIn(writeableChannel.get, self))
         .withDispatcher("transferin"))
@@ -222,7 +221,7 @@ abstract class AbstractFileUser[R](sf: ManagedFilePath,
       log.debug("KnownPaths:" + list)
       list.find(isLocal) match {
         case Some(file) => finishLocalFile(file)
-        case None => transfertome
+        case None       => transfertome
       }
     }
 

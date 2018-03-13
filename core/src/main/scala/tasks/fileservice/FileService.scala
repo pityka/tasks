@@ -130,8 +130,8 @@ class FileService(
 
         } else {
 
-          val savePath = TempFile.createFileInTempFolderIfPossibleWithName(
-            proposedPath.name)
+          val savePath =
+            TempFile.createFileInTempFolderIfPossibleWithName(proposedPath.name)
           val writeableChannel =
             new java.io.FileOutputStream(savePath).getChannel
           val transferinActor = context.actorOf(

@@ -56,7 +56,8 @@ class TasksConfig(val raw: Config) {
   val disableRemoting = raw.getBoolean("tasks.disableRemoting")
 
   val nonLocalFileSystems = raw
-    .getStringList("tasks.nonLocalFileSystems").asScala
+    .getStringList("tasks.nonLocalFileSystems")
+    .asScala
     .map(f => new java.io.File(f))
 
   val skipContentHashVerificationAfterCache =
@@ -85,7 +86,7 @@ class TasksConfig(val raw: Config) {
 
   val fileServiceExtendedFolders = raw
     .getStringList("tasks.fileservice.extendedFolders")
-.asScala
+    .asScala
     .map(x => new File(x))
     .toList
     .filter(_.isDirectory)
@@ -147,7 +148,7 @@ class TasksConfig(val raw: Config) {
   val placementGroup: Option[String] =
     raw.getString("tasks.elastic.aws.placementGroup") match {
       case x if x == "" => None
-      case x => Some(x)
+      case x            => Some(x)
     }
 
   val s3Region = raw.getString("tasks.s3.region")
@@ -157,13 +158,15 @@ class TasksConfig(val raw: Config) {
   val s3CannedAcl = raw.getStringList("tasks.s3.cannedAcls").asScala.toList
 
   val s3GrantFullControl = raw
-    .getStringList("tasks.s3.grantFullControl").asScala
+    .getStringList("tasks.s3.grantFullControl")
+    .asScala
     .grouped(2)
     .map(x => x(0) -> x(1))
     .toList
 
   val instanceTags = raw
-    .getStringList("tasks.elastic.aws.tags").asScala
+    .getStringList("tasks.elastic.aws.tags")
+    .asScala
     .grouped(2)
     .map(x => x(0) -> x(1))
     .toList

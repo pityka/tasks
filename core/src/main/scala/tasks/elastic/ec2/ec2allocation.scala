@@ -64,7 +64,8 @@ trait EC2Shutdown extends ShutdownNode {
     EC2Operations.terminateInstance(ec2, nodeName.value)
 
   def shutdownPendingNode(nodeName: PendingJobId): Unit = {
-    val request = new CancelSpotInstanceRequestsRequest(List(nodeName.value).asJava)
+    val request = new CancelSpotInstanceRequestsRequest(
+      List(nodeName.value).asJava)
     ec2.cancelSpotInstanceRequests(request)
   }
 
@@ -90,14 +91,17 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 
   val ec2: AmazonEC2Client
 
-  override def convertRunningToPending(p: RunningJobId): Option[PendingJobId] = {
+  override def convertRunningToPending(
+      p: RunningJobId): Option[PendingJobId] = {
     val describeResult = ec2.describeSpotInstanceRequests();
     val spotInstanceRequests = describeResult.getSpotInstanceRequests();
 
-    spotInstanceRequests.asScala.filter(_.getInstanceId == p.value).headOption.map {
-      x =>
+    spotInstanceRequests.asScala
+      .filter(_.getInstanceId == p.value)
+      .headOption
+      .map { x =>
         PendingJobId(x.getSpotInstanceRequestId)
-    }
+      }
 
   }
 
@@ -196,13 +200,13 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     val ac = node.launcherActor
 
     ec2.createTags(
-      new CreateTagsRequest(List(node.name.value).asJava,
-                            config.instanceTags.map(t => new Tag(t._1, t._2)).asJava))
+      new CreateTagsRequest(
+        List(node.name.value).asJava,
+        config.instanceTags.map(t => new Tag(t._1, t._2)).asJava))
 
-    context.actorOf(
-      Props(new EC2NodeKiller(ac, node))
-        .withDispatcher("my-pinned-dispatcher"),
-      "nodekiller" + node.name.value.replace("://", "___"))
+    context.actorOf(Props(new EC2NodeKiller(ac, node))
+                      .withDispatcher("my-pinned-dispatcher"),
+                    "nodekiller" + node.name.value.replace("://", "___"))
 
   }
 
@@ -233,21 +237,22 @@ class EC2NodeRegistry(
   ec2.setEndpoint(config.endpoint)
 }
 
-class EC2SelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
-  (implicit val config: TasksConfig)
+class EC2SelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)(
+    implicit val config: TasksConfig)
     extends SelfShutdown
     with EC2Shutdown {
   val ec2 = new AmazonEC2Client()
   ec2.setEndpoint(config.endpoint)
 }
 
-class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig) extends Reaper with EC2Shutdown {
+class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig)
+    extends Reaper
+    with EC2Shutdown {
 
   val ec2 = new AmazonEC2Client()
   ec2.setEndpoint(config.endpoint)
 
-  def allSoulsReaped(): Unit = 
-    {
+  def allSoulsReaped(): Unit = {
     log.debug("All souls reaped. Calling system.shutdown.")
     if (terminateSelf) {
       val nodename = EC2Operations.readMetadata("instance-id").head

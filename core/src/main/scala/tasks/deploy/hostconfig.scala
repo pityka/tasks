@@ -31,9 +31,7 @@ import tasks.util._
 import tasks.util.config._
 import tasks._
 
-
 import java.net.InetSocketAddress
-
 
 sealed trait Role
 object MASTER extends Role

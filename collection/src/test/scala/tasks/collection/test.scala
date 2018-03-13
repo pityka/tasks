@@ -36,12 +36,10 @@ import scala.concurrent._
 import scala.concurrent.duration._
 import io.circe.generic.auto._
 
-
 object Tests {
 
   val twice =
     EColl.map("twice", 1)((_: Int) * 3)
-
 
   val odd = EColl.filter("odd", 1)((_: Int) % 1 == 0)
 
@@ -54,32 +52,31 @@ object Tests {
   val count =
     EColl.foldLeft("count", 1)(0, (x: Int, y: Seq[Option[Int]]) => x + 1)
 
-  val sum = EColl.reduce("sum", 1)( (x: Int, y: Int) => x + y)
+  val sum = EColl.reduce("sum", 1)((x: Int, y: Int) => x + y)
 
-  def run(folder:String) ={
+  def run(folder: String) = {
 
     withTaskSystem(
-             s"tasks.fileservice.storageURI=$folder"
-         ) { implicit ts =>
+      s"tasks.fileservice.storageURI=$folder"
+    ) { implicit ts =>
       import scala.concurrent.ExecutionContext.Implicits.global
 
-    val mappedEColl = for {
-      e1 <- EColl.fromSource(akka.stream.scaladsl.Source(List(3, 2, 1)),
-                             name = "ecollint")
-      e2 <- twice(e1)(CPUMemoryRequest(1, 1))
-      e3 <- odd(e2)(CPUMemoryRequest(1, 1))
-      e4 <- sort(e3)(CPUMemoryRequest(1, 1))
-      e5 <- group(e4)(CPUMemoryRequest(1, 1))
-      e6 <- join(List(e1, e2, e3))(CPUMemoryRequest(1, 1))
-      e7 <- count(e6)(CPUMemoryRequest(1, 1))
-      e8 <- sum(e4)(CPUMemoryRequest(1, 1))
-    } yield e8
+      val mappedEColl = for {
+        e1 <- EColl.fromSource(akka.stream.scaladsl.Source(List(3, 2, 1)),
+                               name = "ecollint")
+        e2 <- twice(e1)(CPUMemoryRequest(1, 1))
+        e3 <- odd(e2)(CPUMemoryRequest(1, 1))
+        e4 <- sort(e3)(CPUMemoryRequest(1, 1))
+        e5 <- group(e4)(CPUMemoryRequest(1, 1))
+        e6 <- join(List(e1, e2, e3))(CPUMemoryRequest(1, 1))
+        e7 <- count(e6)(CPUMemoryRequest(1, 1))
+        e8 <- sum(e4)(CPUMemoryRequest(1, 1))
+      } yield e8
 
-    Await.result(mappedEColl, atMost = 10 minutes)
+      Await.result(mappedEColl, atMost = 10 minutes)
+    }
+
   }
-
-
-}
 
 }
 

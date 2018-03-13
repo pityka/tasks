@@ -63,7 +63,8 @@ object EC2Operations {
 
   def terminateInstance(ec2: AmazonEC2Client, instanceId: String): Unit = {
     retry(5) {
-      val terminateRequest = new TerminateInstancesRequest(List(instanceId).asJava);
+      val terminateRequest =
+        new TerminateInstancesRequest(List(instanceId).asJava);
       ec2.terminateInstances(terminateRequest);
     }
   }

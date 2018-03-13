@@ -105,8 +105,8 @@ package object util {
   def retry[T](n: Int)(fn: => T): Try[T] =
     Try(fn) match {
       case x: Success[T] => x
-      case _ if n > 1 => retry(n - 1)(fn)
-      case f => f
+      case _ if n > 1    => retry(n - 1)(fn)
+      case f             => f
     }
 
   /**
@@ -305,7 +305,7 @@ package object util {
       case (key, bval) =>
         val aval = a.get(key)
         val cval = aval match {
-          case None => bval
+          case None    => bval
           case Some(a) => fun((a), (bval))
         }
         (key, cval)
@@ -322,7 +322,7 @@ package object util {
       case (key, bval) =>
         val aval = a.get(key)
         val cval = aval match {
-          case None => bval
+          case None    => bval
           case Some(a) => fun((a), (bval))
         }
         (key, cval)

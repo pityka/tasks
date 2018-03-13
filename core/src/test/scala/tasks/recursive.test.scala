@@ -38,7 +38,6 @@ import tasks.circesupport._
 
 import io.circe.generic.auto._
 
-
 object Fib {
 
   def serial(n: Int): Int = n match {
@@ -58,36 +57,32 @@ object Fib {
   val fibtask: TaskDefinition[FibInput, FibOut] =
     AsyncTask[FibInput, FibOut]("fib", 1) {
 
-      case FibInput(Some(n), Some(tag)) =>
-        {implicit ce =>
-          n match {
-            case 0 => Future.successful(FibOut(0))
-            case 1 => Future.successful(FibOut(1))
-            case n => {
-              val f1 = fibtask(FibInput(Some(n - 1), Some(false :: tag)))(
-                  CPUMemoryRequest(1, 1))
-              val f2 = fibtask(FibInput(Some(n - 2), Some(true :: tag)))(
-                  CPUMemoryRequest(1, 1))
-              releaseResources
-              for {
-                r1 <- f1
-                r2 <- f2
-              } yield FibOut(r1.n + r2.n)
-            }
+      case FibInput(Some(n), Some(tag)) => { implicit ce =>
+        n match {
+          case 0 => Future.successful(FibOut(0))
+          case 1 => Future.successful(FibOut(1))
+          case n => {
+            val f1 = fibtask(FibInput(Some(n - 1), Some(false :: tag)))(
+              CPUMemoryRequest(1, 1))
+            val f2 = fibtask(FibInput(Some(n - 2), Some(true :: tag)))(
+              CPUMemoryRequest(1, 1))
+            releaseResources
+            for {
+              r1 <- f1
+              r2 <- f2
+            } yield FibOut(r1.n + r2.n)
+          }
 
-          }}
+        }
+      }
 
       case _ => ???
 
     }
 
-
 }
 
-class RecursiveTestSuite
-    extends FunSuite
-    with Matchers
-    with BeforeAndAfterAll {
+class RecursiveTestSuite extends FunSuite with Matchers with BeforeAndAfterAll {
   val string = """
 akka.loglevel = "INFO"
 tasks.cacheEnabled = false
@@ -96,8 +91,8 @@ tasks.disableRemoting = true
 """
 
   implicit val system: TaskSystem = customTaskSystem(
-      new LocalConfiguration(4, 1000),
-      ConfigFactory.parseString(string))
+    new LocalConfiguration(4, 1000),
+    ConfigFactory.parseString(string))
   import Fib._
 
   test("long") {

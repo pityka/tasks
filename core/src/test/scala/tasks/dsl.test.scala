@@ -46,30 +46,30 @@ object Tests {
 
   case class IntWrapper(i: Int)
   object IntWrapper {
-    implicit val enc : Encoder[IntWrapper] = deriveEncoder[IntWrapper]
-    implicit val dec : Decoder[IntWrapper] = deriveDecoder[IntWrapper]
+    implicit val enc: Encoder[IntWrapper] = deriveEncoder[IntWrapper]
+    implicit val dec: Decoder[IntWrapper] = deriveDecoder[IntWrapper]
   }
 
   val increment = AsyncTask[IntWrapper, Int]("incrementtask", 1) {
     case IntWrapper(c) =>
-    println(c)
+      println(c)
       implicit computationEnvironment =>
         println("increment")
         Future(c + 1)
   }
 
-  def run ={
+  def run = {
     val tmp = TempFile.createTempFile(".temp")
     tmp.delete
-     withTaskSystem(
-      Some(ConfigFactory.parseString(
-              s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}"
-          ))) { implicit ts =>
+    withTaskSystem(
+      Some(
+        ConfigFactory.parseString(
+          s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}"
+        ))) { implicit ts =>
+      (await(increment(IntWrapper(0))(CPUMemoryRequest(1, 500))))
 
-    (await(increment(IntWrapper(0))(CPUMemoryRequest(1, 500))))
-
+    }
   }
-}
 
 }
 

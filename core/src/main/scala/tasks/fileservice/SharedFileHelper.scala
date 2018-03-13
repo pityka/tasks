@@ -31,7 +31,6 @@ import akka.stream.scaladsl._
 import akka.stream._
 import akka.util._
 
-
 import scala.concurrent.duration._
 import scala.concurrent._
 import scala.util._
@@ -146,7 +145,8 @@ private[tasks] object SharedFileHelper {
 
     }
 
-  def isAccessible(sf: SharedFile)(implicit service: FileServiceActor): Future[Boolean] =
+  def isAccessible(sf: SharedFile)(
+      implicit service: FileServiceActor): Future[Boolean] =
     sf.path match {
       case x: RemoteFilePath =>
         service.remote.contains(x, sf.byteSize, sf.hash)
@@ -162,8 +162,7 @@ private[tasks] object SharedFileHelper {
 
     }
 
-  def getUri(sf: SharedFile)(implicit service: FileServiceActor
-                             ): Future[Uri] =
+  def getUri(sf: SharedFile)(implicit service: FileServiceActor): Future[Uri] =
     sf.path match {
       case RemoteFilePath(path) => Future.successful(path)
       case path: ManagedFilePath => {

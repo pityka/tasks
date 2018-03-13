@@ -32,7 +32,7 @@ import scala.concurrent.duration._
 import scala.concurrent._
 import akka.testkit.TestKit
 import akka.testkit.ImplicitSender
-import akka.actor.{ Props, ActorSystem}
+import akka.actor.{Props, ActorSystem}
 import com.typesafe.config.ConfigFactory
 
 import java.io._
@@ -45,7 +45,6 @@ import tasks.queue._
 import tasks.fileservice._
 import tasks.util._
 
-
 object Conf {
   val str = """my-pinned-dispatcher {
   executor = "thread-pool-executor"
@@ -57,10 +56,10 @@ akka.loglevel = "DEBUG" """
 
 class FileServiceSpec
     extends TestKit(
-        ActorSystem("testsystem",
-                    ConfigFactory
-                      .parseString(Conf.str)
-                      .withFallback(ConfigFactory.load("akka.conf"))))
+      ActorSystem("testsystem",
+                  ConfigFactory
+                    .parseString(Conf.str)
+                    .withFallback(ConfigFactory.load("akka.conf"))))
     with ImplicitSender
     with FunSpecLike
     with Matchers
@@ -73,7 +72,8 @@ class FileServiceSpec
   // implicit val s3stream = new S3StreamQueued(AWSCredentials("na", "na"), "na")
   implicit val sh = new StreamHelper(None)
 
-  implicit val tconfig = tasks.util.config.parse(ConfigFactory.load().withFallback(ConfigFactory.load("akka.conf")))
+  implicit val tconfig = tasks.util.config
+    .parse(ConfigFactory.load().withFallback(ConfigFactory.load("akka.conf")))
 
   val remoteStore = new RemoteFileStorage
 
@@ -99,15 +99,16 @@ class FileServiceSpec
       folder2.mkdir
       val fs = new FolderFileStorage(folder)
       val service = system.actorOf(
-          Props(new FileService(
-                  fs
-              )))
+        Props(
+          new FileService(
+            fs
+          )))
       implicit val serviceimpl =
         FileServiceActor(service, Some(fs), remoteStore)
       SharedFileHelper.createFromFile(input, "proba", false)
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
-          data.deep)
+        data.deep)
     }
 
     it("add new file and ask for it") {
@@ -123,9 +124,10 @@ class FileServiceSpec
       folder2.mkdir
       val fs = new FolderFileStorage(folder)
       val service = system.actorOf(
-          Props(new FileService(
-                  fs
-              )))
+        Props(
+          new FileService(
+            fs
+          )))
       implicit val serviceimpl =
         FileServiceActor(service, Some(fs), remoteStore)
       implicit val nlc =
@@ -135,12 +137,12 @@ class FileServiceSpec
                      50 seconds)
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
-          data.deep)
+        data.deep)
 
       val path = Await.result(SharedFileHelper.getPathToFile(t), 50 seconds)
       readBinaryFile(path.getCanonicalPath).deep should equal(data.deep)
 
-    }  
+    }
 
     it("after cache restart") {
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
@@ -161,15 +163,14 @@ class FileServiceSpec
         NodeLocalCacheActor(system.actorOf(Props[NodeLocalCache]))
 
       val t: SharedFile = SharedFileHelper.createForTesting(
-          "proba",
-          16,
-          com.google.common.hash.Hashing.crc32c.hashBytes(data).asInt)
+        "proba",
+        16,
+        com.google.common.hash.Hashing.crc32c.hashBytes(data).asInt)
 
       val path = Await.result(SharedFileHelper.getPathToFile(t), 50 seconds)
       readBinaryFile(path.getCanonicalPath).deep should equal(data.deep)
 
-      Await.result(SharedFileHelper.isAccessible(t), 30 seconds) should be(
-          true)
+      Await.result(SharedFileHelper.isAccessible(t), 30 seconds) should be(true)
 
     }
   }
@@ -196,9 +197,9 @@ class FileServiceSpec
         NodeLocalCacheActor(system.actorOf(Props[NodeLocalCache]))
 
       val t: SharedFile = SharedFileHelper.createForTesting(
-          "proba",
-          16,
-          com.google.common.hash.Hashing.crc32c.hashBytes(data).asInt)
+        "proba",
+        16,
+        com.google.common.hash.Hashing.crc32c.hashBytes(data).asInt)
 
       val path = Await.result(SharedFileHelper.getPathToFile(t), 30 seconds)
       readBinaryFile(path.getCanonicalPath).deep should equal(data.deep)

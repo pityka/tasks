@@ -36,11 +36,7 @@ import tasks.queue._
 import tasks._
 import tasks.util._
 import tasks.util.config._
-import tasks.fileservice.{
-  FileServiceActor,
-  FileServicePrefix,
-  SharedFileHelper
-}
+import tasks.fileservice.{FileServiceActor, FileServicePrefix, SharedFileHelper}
 
 import com.google.common.hash.Hashing
 
@@ -91,9 +87,7 @@ private[tasks] class SharedFileCache(implicit fs: FileServiceActor,
         .createFromFile(v, name = "__meta__result__" + kh, deleteFile = true)
         .flatMap { _ =>
           SharedFileHelper
-            .createFromFile(k,
-                            name = "__meta__input__" + kh,
-                            deleteFile = true)
+            .createFromFile(k, name = "__meta__input__" + kh, deleteFile = true)
             .map { _ =>
               ()
             }

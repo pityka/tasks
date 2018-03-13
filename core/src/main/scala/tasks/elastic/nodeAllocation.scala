@@ -52,11 +52,10 @@ case class Node(name: RunningJobId,
 
 object Node {
   implicit val enc: Encoder[Node] = deriveEncoder[Node]
-  implicit def dec(implicit as: ExtendedActorSystem): Decoder[Node] =
-    {
-      val _ = as // suppressing unused warning
-      deriveDecoder[Node]
-      }
+  implicit def dec(implicit as: ExtendedActorSystem): Decoder[Node] = {
+    val _ = as // suppressing unused warning
+    deriveDecoder[Node]
+  }
 }
 
 trait ShutdownNode {

@@ -34,7 +34,6 @@ import tasks.util._
 import tasks.util.config._
 import tasks.util.eq._
 
-
 import java.io.File
 
 import akka.stream._

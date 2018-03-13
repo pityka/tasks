@@ -139,7 +139,7 @@ package object tasks {
 
       val actorProvider = hostConfig match {
         case _: LocalConfiguration => "akka.actor.LocalActorRefProvider"
-        case _ => "akka.remote.RemoteActorRefProvider"
+        case _                     => "akka.remote.RemoteActorRefProvider"
       }
 
       val numberOfAkkaRemotingThreads =
@@ -179,8 +179,7 @@ package object tasks {
     new TaskSystem(MasterSlaveGridEngineChosenFromConfig, system)
   }
 
-  def defaultTaskSystem(as: ActorSystem)(
-      implicit tc: TasksConfig): TaskSystem =
+  def defaultTaskSystem(as: ActorSystem)(implicit tc: TasksConfig): TaskSystem =
     new TaskSystem(MasterSlaveGridEngineChosenFromConfig, as)
 
   def customTaskSystem(hostConfig: MasterSlaveConfiguration,
@@ -215,9 +214,9 @@ package object tasks {
     if (config.disableRemoting) new LocalConfigurationFromConfig
     else
       config.gridEngine match {
-        case x if x == "EC2" => new EC2MasterSlave
+        case x if x == "EC2"      => new EC2MasterSlave
         case x if x == "NOENGINE" => new MasterSlaveFromConfig
-        case _ => new MasterSlaveFromConfig
+        case _                    => new MasterSlaveFromConfig
       }
   }
 

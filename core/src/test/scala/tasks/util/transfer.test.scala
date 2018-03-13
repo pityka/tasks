@@ -4,9 +4,8 @@ import org.scalatest._
 import scala.concurrent.duration._
 import akka.testkit.TestKit
 import akka.testkit.ImplicitSender
-import akka.actor.{  Props, ActorSystem}
+import akka.actor.{Props, ActorSystem}
 import com.typesafe.config.ConfigFactory
-
 
 import org.scalatest.Matchers
 
@@ -23,10 +22,10 @@ akka.loglevel = "DEBUG" """
 
 class TransferSpec
     extends TestKit(
-        ActorSystem("testsystem",
-                    ConfigFactory
-                      .parseString(Conf.str)
-                      .withFallback(ConfigFactory.load("akkaoverrides.conf"))))
+      ActorSystem("testsystem",
+                  ConfigFactory
+                    .parseString(Conf.str)
+                    .withFallback(ConfigFactory.load("akkaoverrides.conf"))))
     with ImplicitSender
     with FunSpecLike
     with Matchers
@@ -52,8 +51,8 @@ class TransferSpec
 
       val transferin =
         system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
-       system.actorOf(
-          Props(new TransferOut(readablechannel, transferin, chunksize)))
+      system.actorOf(
+        Props(new TransferOut(readablechannel, transferin, chunksize)))
 
       expectMsg(1000 millis, FileSaved())
 
@@ -73,8 +72,8 @@ class TransferSpec
 
       val transferin =
         system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
-       system.actorOf(
-          Props(new TransferOut(readablechannel, transferin, chunksize)))
+      system.actorOf(
+        Props(new TransferOut(readablechannel, transferin, chunksize)))
 
       expectMsg(100 millis, FileSaved())
 
@@ -94,8 +93,8 @@ class TransferSpec
 
       val transferin =
         system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
-       system.actorOf(
-          Props(new TransferOut(readablechannel, transferin, chunksize)))
+      system.actorOf(
+        Props(new TransferOut(readablechannel, transferin, chunksize)))
 
       expectMsg(100 millis, FileSaved())
 
@@ -115,8 +114,8 @@ class TransferSpec
 
       val transferin =
         system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
-       system.actorOf(
-          Props(new TransferOut(readablechannel, transferin, chunksize)))
+      system.actorOf(
+        Props(new TransferOut(readablechannel, transferin, chunksize)))
 
       expectMsg(100 millis, FileSaved())
 
@@ -136,8 +135,8 @@ class TransferSpec
 
       val transferin =
         system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
-       system.actorOf(
-          Props(new TransferOut(readablechannel, transferin, chunksize)))
+      system.actorOf(
+        Props(new TransferOut(readablechannel, transferin, chunksize)))
 
       expectMsg(100 millis, FileSaved())
 
@@ -158,14 +157,14 @@ class TransferSpec
 
       val transferin =
         system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
-       system.actorOf(
-          Props(new TransferOut(readablechannel, transferin, chunksize)))
+      system.actorOf(
+        Props(new TransferOut(readablechannel, transferin, chunksize)))
 
       expectMsg(100 millis, FileSaved())
       writeablechannel.close
 
       readBinaryStream(java.nio.channels.Channels.newInputStream(pipe.source)).deep should equal(
-          data.deep)
+        data.deep)
 
     }
   }

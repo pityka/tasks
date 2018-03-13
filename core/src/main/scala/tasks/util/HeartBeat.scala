@@ -46,7 +46,8 @@ class HeartBeatActor(target: ActorRef)(implicit config: TasksConfig)
   private var scheduledHeartBeats: Cancellable = null
 
   private val failureDetector = new DeadlineFailureDetector(
-    config.acceptableHeartbeatPause, config.acceptableHeartbeatPause)
+    config.acceptableHeartbeatPause,
+    config.acceptableHeartbeatPause)
 
   override def preStart {
     log.debug(
@@ -68,7 +69,7 @@ class HeartBeatActor(target: ActorRef)(implicit config: TasksConfig)
     log.info("HeartBeatActor stopped.")
   }
 
-  private def targetDown() : Unit = {
+  private def targetDown(): Unit = {
     context.system.eventStream.publish(HeartBeatStopped(target))
     self ! PoisonPill
   }

@@ -27,7 +27,7 @@ package tasks.fileservice
 import akka.actor._
 import akka.stream._
 import akka.stream.scaladsl._
-import akka.http.scaladsl.model.{HttpRequest,  headers}
+import akka.http.scaladsl.model.{HttpRequest, headers}
 import akka.util._
 import com.bluelabs.s3stream._
 import scala.concurrent.{ExecutionContext, Future}
@@ -56,7 +56,7 @@ class StreamHelper(s3stream: Option[S3Stream])(implicit as: ActorSystem,
 
   def createSource(uri: Uri) = uri.scheme match {
     case "http" | "https" => createSourceHttp(uri)
-    case "s3" => createSourceS3(uri)
+    case "s3"             => createSourceS3(uri)
   }
 
   private def getContentLengthAndETagHttp(
@@ -75,7 +75,7 @@ class StreamHelper(s3stream: Option[S3Stream])(implicit as: ActorSystem,
   def getContentLengthAndETag(
       uri: Uri): Future[(Option[Long], Option[String])] = uri.scheme match {
     case "http" | "https" => getContentLengthAndETagHttp(uri)
-    case "s3" => getContentLengthAndETagS3(uri)
+    case "s3"             => getContentLengthAndETagS3(uri)
   }
 
 }

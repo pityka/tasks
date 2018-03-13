@@ -97,7 +97,7 @@ class TaskSystem private[tasks] (
 
   tasksystemlog.info("Master node address is: " + hostConfig.master.toString)
 
-  def printQueueToLog() : Unit = {
+  def printQueueToLog(): Unit = {
     implicit val timeout = akka.util.Timeout(10 seconds)
     import system.dispatcher
     (queueActor ? GetQueueInformation).foreach {
@@ -143,8 +143,7 @@ class TaskSystem private[tasks] (
       val s3bucket =
         if (config.storageURI.getScheme != null && config.storageURI.getScheme == "s3") {
           Some(
-            (config.storageURI.getAuthority,
-             config.storageURI.getPath.drop(1)))
+            (config.storageURI.getAuthority, config.storageURI.getPath.drop(1)))
         } else None
 
       if (s3bucket.isDefined) {
@@ -226,14 +225,15 @@ class TaskSystem private[tasks] (
   val cacherActor = try {
     if (!isLauncherOnly) {
 
-      val cache: Cache = if (config.cacheEnabled)
-              new SharedFileCache()(fileServiceActor,
-                                    nodeLocalCache,
-                                    system,
-                                    system.dispatcher,
-                                    config)
-              else new DisabledCache
-      
+      val cache: Cache =
+        if (config.cacheEnabled)
+          new SharedFileCache()(fileServiceActor,
+                                nodeLocalCache,
+                                system,
+                                system.dispatcher,
+                                config)
+        else new DisabledCache
+
       val ac = system.actorOf(
         Props(new TaskResultCache(cache, fileServiceActor))
           .withDispatcher("my-pinned-dispatcher"),
@@ -381,7 +381,7 @@ class TaskSystem private[tasks] (
     tasksystemlog.warning("Nodename/jobname is not defined.")
   }
 
-  private def initFailed() : Unit = {
+  private def initFailed(): Unit = {
     if (isLauncherOnly) {
       remotenoderegistry.foreach(_ ! InitFailed(PendingJobId(getNodeName)))
     }
@@ -389,7 +389,7 @@ class TaskSystem private[tasks] (
 
   var shuttingDown = false
 
-  def shutdown() : Unit = synchronized {
+  def shutdown(): Unit = synchronized {
     if (hostConfig.myRole == MASTER) {
       if (!shuttingDown) {
         shuttingDown = true

@@ -1,11 +1,11 @@
-  package tasks.wire
+package tasks.wire
 
 import akka.serialization.Serializer
 import akka.actor.ExtendedActorSystem
 import tasks.queue.ScheduleTask
 
 class StaticMessageSerializer(system: ExtendedActorSystem) extends Serializer {
-  import io.circe. Encoder
+  import io.circe.Encoder
 
   implicit val as = system
 

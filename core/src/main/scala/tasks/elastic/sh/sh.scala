@@ -26,11 +26,10 @@
 package tasks.elastic.sh
 
 import akka.actor.{Actor, ActorRef, Props}
-import java.net.InetSocketAddress 
+import java.net.InetSocketAddress
 import akka.event.LoggingAdapter
 import scala.util._
 import scala.sys.process._
-
 
 import tasks.elastic._
 import tasks.shared._
@@ -80,10 +79,9 @@ trait SHNodeRegistryImp extends Actor with GridJobRegistry {
   def initializeNode(node: Node): Unit = {
     val ac = node.launcherActor
 
-    context.actorOf(
-      Props(new SHNodeKiller(ac, node))
-        .withDispatcher("my-pinned-dispatcher"),
-      "nodekiller" + node.name.value.replace("://", "___"))
+    context.actorOf(Props(new SHNodeKiller(ac, node))
+                      .withDispatcher("my-pinned-dispatcher"),
+                    "nodekiller" + node.name.value.replace("://", "___"))
   }
 
 }

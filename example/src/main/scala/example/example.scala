@@ -170,11 +170,8 @@ object PiApp extends App {
   import PiTasks._
   import Fib._
 
-
-
   val twice =
     EColl.map("twice", 1)((_: Int) * 3)
-
 
   val odd = EColl.filter("odd", 1)((_: Int) % 1 == 0)
 
@@ -187,7 +184,7 @@ object PiApp extends App {
   val count =
     EColl.foldLeft("count", 1)(0, (x: Int, y: Seq[Option[Int]]) => x + 1)
 
-  val sum = EColl.reduce("sum", 1)( (x: Int, y: Int) => x + y)
+  val sum = EColl.reduce("sum", 1)((x: Int, y: Int) => x + y)
 
   // val count = MacroPlay.foldLeft
 
@@ -218,14 +215,13 @@ object PiApp extends App {
     val pi: Future[PiResult] = taskSize.flatMap { taskSize =>
       Future
         .sequence(
-            1 to numTasks map { i =>
-              batchCalc(BatchInput(taskSize, i))(CPUMemoryRequest(1, 1000))
-            }
+          1 to numTasks map { i =>
+            batchCalc(BatchInput(taskSize, i))(CPUMemoryRequest(1, 1000))
+          }
         )
         .flatMap { batches =>
-          piCalc(
-              PiInput(batches.map(_.inside).sum, batches.map(_.outside).sum))(
-              CPUMemoryRequest(1, 1000))
+          piCalc(PiInput(batches.map(_.inside).sum,
+                         batches.map(_.outside).sum))(CPUMemoryRequest(1, 1000))
         }
     }
 

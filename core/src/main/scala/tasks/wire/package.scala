@@ -21,9 +21,9 @@ package object wire {
 
   implicit val throwableEncoder: Encoder[Throwable] =
     Encoder.encodeString.contramap[Throwable](_.getMessage)
-  implicit val throwableDecoder
-    : Decoder[Throwable] = Decoder.decodeString.emap(str =>
-    Either.catchNonFatal(new RuntimeException(str)).leftMap(t => "Throwable"))
+  implicit val throwableDecoder: Decoder[Throwable] =
+    Decoder.decodeString.emap(str =>
+      Either.catchNonFatal(new RuntimeException(str)).leftMap(t => "Throwable"))
 
   implicit val fileEncoder: Encoder[File] =
     Encoder.encodeString.contramap[File](_.getAbsolutePath)
