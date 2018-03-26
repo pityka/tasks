@@ -69,7 +69,9 @@ class RemoteFileStorage(implicit mat: Materializer,
   def getSizeAndHash(path: RemoteFilePath): Future[(Long, Int)] =
     streamHelper.getContentLengthAndETag(uri(path)).map {
       case (size, etag) =>
-        (size.get, etag.map(_.hashCode).getOrElse(-1))
+        (size.getOrElse(
+           throw new RuntimeException(s"Size can't retrieved for $path")),
+         etag.map(_.hashCode).getOrElse(-1))
     }
 
   def contains(path: RemoteFilePath, size: Long, hash: Int): Future[Boolean] =

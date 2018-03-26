@@ -27,7 +27,7 @@ package tasks.fileservice
 import akka.actor._
 import akka.stream._
 import akka.stream.scaladsl._
-import akka.http.scaladsl.model.{HttpRequest, headers}
+import akka.http.scaladsl.model.{HttpRequest, headers, HttpMethods}
 import akka.util._
 import com.bluelabs.s3stream._
 import scala.concurrent.{ExecutionContext, Future}
@@ -62,10 +62,10 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
 
   private def getContentLengthAndETagHttp(
       uri: Uri): Future[(Option[Long], Option[String])] =
-    queue(HttpRequest(uri = uri.akka)).map(x => {
+    queue(HttpRequest(uri = uri.akka).withMethod(HttpMethods.HEAD)).map(x => {
       x.discardEntityBytes();
       val etag = x.header[headers.`ETag`].map(_.value)
-      val clength = x.header[headers.`Content-Length`].map(_.length)
+      val clength = x.entity.contentLengthOption
       (clength, etag)
     })
 
