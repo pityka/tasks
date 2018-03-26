@@ -12,4 +12,10 @@ package object circesupport {
       def apply(b: Array[Byte]) =
         io.circe.parser.decode[A](new String(b)).right.get
     }
+
+  implicit val sharedFileDecoder =
+    io.circe.generic.semiauto.deriveDecoder[tasks.fileservice.SharedFile]
+
+  implicit val sharedFileEncoder =
+    io.circe.generic.semiauto.deriveEncoder[tasks.fileservice.SharedFile]
 }
