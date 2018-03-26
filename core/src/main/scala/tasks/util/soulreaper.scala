@@ -47,17 +47,21 @@ abstract class Reaper extends Actor with akka.actor.ActorLogging {
   final def receive = {
     case Latch(l) =>
       latches += l
+      log.info("Latch received. Watched actor refs: " + watched)
     case WatchMe(ref) =>
-      log.debug("Watching: " + ref)
+      log.info("Watching: " + ref)
       context.watch(ref) // This ensures that the Terminated message will come
       watched += ref
       sender ! true
     case Terminated(ref) =>
       watched -= ref
+      log.info("Terminated: " + ref)
       if (watched.isEmpty) {
         allSoulsReaped()
         latches.foreach(_.countDown)
       }
+    case e =>
+      log.warning("Unhandled: " + e)
   }
 }
 
