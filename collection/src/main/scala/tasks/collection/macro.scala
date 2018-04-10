@@ -54,6 +54,38 @@ object Macros {
     r
   }
 
+  def collectMacro[A: cxt.WeakTypeTag, B: cxt.WeakTypeTag](
+      cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
+      fun: cxt.Expr[PartialFunction[A, B]]
+  ) = {
+    import cxt.universe._
+    val a = weakTypeOf[A]
+    val b = weakTypeOf[B]
+
+    val r = q"""
+         tasks.AsyncTask[EColl[$a], EColl[$b]]("map-"+$taskID, $taskVersion) { t => implicit ctx =>
+
+           val subtask = tasks.AsyncTask[(Int,EColl[$a]), EColl[$b]]("partition-"+$taskID, $taskVersion) { case (idx,t) => implicit ctx =>
+           val fun = $fun
+           val r = implicitly[tasks.queue.Deserializer[$a]]
+           val w = implicitly[tasks.queue.Serializer[$b]]
+            EColl.fromSource(t.source(idx)(r,ctx.components).collect(fun), (t.basename))(w,ctx.components)
+          }
+
+         releaseResources
+         scala.concurrent.Future.sequence(0 until t.partitions.size map { i =>
+           subtask(i -> t)(CPUMemoryRequest(resourceAllocated.cpu,resourceAllocated.memory))
+         }).map(_.reduce(_ ++ _))
+        }
+    """
+    r
+  }
+
+  def reduceSeqMacro[A: cxt.WeakTypeTag](
+      cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
+      fun: cxt.Expr[Seq[A] => A]
+  ) = mapMacro[Seq[A], A](cxt)(taskID, taskVersion)(fun)
+
   def filterMacro[A: cxt.WeakTypeTag](cxt: Context)(taskID: cxt.Expr[String],
                                                     taskVersion: cxt.Expr[Int])(
       fun: cxt.Expr[A => Boolean]
@@ -81,6 +113,41 @@ object Macros {
     r
   }
 
+  def mapSourceWithMacro[A: cxt.WeakTypeTag,
+                         B: cxt.WeakTypeTag,
+                         C: cxt.WeakTypeTag](
+      cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
+      fun: cxt.Expr[
+        (akka.stream.scaladsl.Source[A, _],
+         B) => tasks.queue.ComputationEnvironment => akka.stream.scaladsl.Source[
+          C,
+          _]]
+  ) = {
+    import cxt.universe._
+    val a = weakTypeOf[A]
+    val b = weakTypeOf[B]
+    val c = weakTypeOf[C]
+
+    val r = q"""
+    tasks.AsyncTask[(EColl[$a],$b), EColl[$c]]("mapSourceWith-"+$taskID, $taskVersion) { case (t,b) => implicit ctx =>
+
+      val subtask = tasks.AsyncTask[(Int,EColl[$a], $b), EColl[$c]]("partition-"+$taskID, $taskVersion) { case (idx,t,b) => implicit ctx =>
+        val fun = $fun
+        val r = implicitly[tasks.queue.Deserializer[$a]]
+        val w = implicitly[tasks.queue.Serializer[$c]]
+         EColl.fromSource(fun(t.source(idx)(r,ctx.components),b)(ctx), (t.basename))(w,ctx.components)
+      }
+
+    releaseResources
+    scala.concurrent.Future.sequence(0 until t.partitions.size map { i =>
+      subtask((i,t,b))(CPUMemoryRequest(1,resourceAllocated.memory))
+    }).map(_.reduce(_ ++ _))
+   }
+
+    """
+    r
+  }
+
   def mapConcatMacro[A: cxt.WeakTypeTag, B: cxt.WeakTypeTag](
       cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
       fun: cxt.Expr[A => Iterable[B]]
@@ -94,7 +161,7 @@ object Macros {
 
       val subtask = tasks.AsyncTask[(Int,EColl[$a]), EColl[$b]]("partition-"+$taskID, $taskVersion) { case (idx,t) => implicit ctx =>
         val fun = $fun
-        val r = implicitly[tasks.queue.Deserializer[$a]]
+      val r = implicitly[tasks.queue.Deserializer[$a]]
         val w = implicitly[tasks.queue.Serializer[$b]]
          EColl.fromSource(t.source(idx)(r,ctx.components).mapConcat(x => fun(x)), (t.basename))(w,ctx.components)
       }
@@ -197,6 +264,50 @@ object Macros {
           val catted = akka.stream.scaladsl.Source(ts.zipWithIndex).flatMapConcat(x => x._1.source.map(y =>x._2 -> y))
           val joinedSource = catted.via(flatjoin_akka.outerJoinByShards(ts.size,$parallelism))
            EColl.fromSource(joinedSource, (ts.map(_.basename).mkString(".x.")))(w,ctx.components)
+        }
+    """
+    r
+  }
+
+  def outerJoinBy2Macro[A: cxt.WeakTypeTag, B: cxt.WeakTypeTag](
+      cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
+      parallelism: cxt.Expr[Int],
+      funA: cxt.Expr[A => String],
+      funB: cxt.Expr[B => String]) = {
+    import cxt.universe._
+    val a = weakTypeOf[A]
+    val b = weakTypeOf[B]
+
+    val r = q"""
+        tasks.AsyncTask[(EColl[$a],EColl[$b]), EColl[(Option[$a],Option[$b])]]($taskID, $taskVersion) { case (as,bs) => implicit ctx =>
+          val funA = $funA
+          val funB = $funB
+          implicit val mat = ctx.components.actorMaterializer
+          implicit val rA = implicitly[tasks.queue.Deserializer[$a]]
+          implicit val rB = implicitly[tasks.queue.Deserializer[$b]]
+          
+          implicit val w = implicitly[tasks.queue.Serializer[(Option[$a],Option[$b])]]
+
+          implicit val r2 = implicitly[tasks.queue.Deserializer[(Int,Either[$a,$b])]]
+          implicit val w2 = implicitly[tasks.queue.Serializer[(Int,Either[$a,$b])]]
+
+          implicit val fmt = tasks.collection.EColl.flatJoinFormat[Either[$a,$b]]
+          implicit val fmt2 = tasks.collection.EColl.flatJoinFormat[(Int,Either[$a,$b])]
+
+          
+          implicit val sk = new flatjoin.StringKey[Either[$a,$b]] { def key(t:Either[$a,$b]) = t match {
+            case Left(a) => funA(a)
+            case Right(b) => funB(b)
+          }}
+       
+          val catted : akka.stream.scaladsl.Source[(Int,Either[$a,$b]),_] = as.source.map(a => 0 -> Left[$a,$b](a)) ++ bs.source.map(b => 1 -> Right[$a,$b](b))
+          val joinedSource = catted.via(flatjoin_akka.outerJoinByShards(2,$parallelism))
+          val unzippedSource = joinedSource.map{ seq =>
+            val a = seq(0)
+            val b = seq(1)
+            (a.map(_.left.get),b.map(_.right.get))
+          }
+           EColl.fromSource(unzippedSource, as.basename+".x."+bs.basename)(w,ctx.components)
         }
     """
     r

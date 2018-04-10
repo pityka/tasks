@@ -140,6 +140,19 @@ object EColl {
     macro Macros
       .mapMacro[A, B]
 
+  def collect[A, B](taskID: String, taskVersion: Int)(
+      fun: PartialFunction[A, B]): TaskDefinition[EColl[A], EColl[B]] =
+    macro Macros
+      .collectMacro[A, B]
+
+  def mapSourceWith[A, B, C](
+      taskID: String,
+      taskVersion: Int)(fun: (Source[A, _], B) => ComputationEnvironment => Source[
+                          C,
+                          _]): TaskDefinition[(EColl[A], B), EColl[C]] =
+    macro Macros
+      .mapSourceWithMacro[A, B, C]
+
   def filter[A](taskID: String, taskVersion: Int)(
       fun: A => Boolean): TaskDefinition[EColl[A], EColl[A]] =
     macro Macros
@@ -167,6 +180,13 @@ object EColl {
       fun: A => String): TaskDefinition[List[EColl[A]], EColl[Seq[Option[A]]]] =
     macro Macros.outerJoinByMacro[A]
 
+  def outerJoinBy2[A, B](taskID: String, taskVersion: Int)(
+      parallelism: Int,
+      funA: A => String,
+      funB: B => String): TaskDefinition[(EColl[A], EColl[B]),
+                                         EColl[(Option[A], Option[B])]] =
+    macro Macros.outerJoinBy2Macro[A, B]
+
   def foldLeft[A, B](taskID: String, taskVersion: Int)(
       zero: B,
       fun: (B, A) => B): TaskDefinition[EColl[A], B] =
@@ -177,6 +197,11 @@ object EColl {
       fun: (A, A) => A): TaskDefinition[EColl[A], A] =
     macro Macros
       .reduceMacro[A]
+
+  def reduceSeq[A](taskID: String, taskVersion: Int)(
+      fun: Seq[A] => A): TaskDefinition[EColl[Seq[A]], EColl[A]] =
+    macro Macros
+      .reduceSeqMacro[A]
 
   implicit def flatJoinFormat[T: Deserializer: Serializer] = new Format[T] {
     def toBytes(t: T): ByteBuffer =
