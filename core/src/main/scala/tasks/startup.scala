@@ -64,7 +64,7 @@ case class TaskSystemComponents(
     tasksConfig: TasksConfig
 ) {
 
-  def childPrefix(name: String) =
+  def withChildPrefix(name: String) =
     this.copy(filePrefix = this.filePrefix.append(name))
 }
 
