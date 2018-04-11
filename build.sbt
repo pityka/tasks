@@ -103,6 +103,16 @@ lazy val upicklesupport = project
   )
   .dependsOn(core)
 
+lazy val jsoniter = project
+  .in(file("jsoniter"))
+  .settings(commonSettings: _*)
+  .settings(
+    name := "tasks-jsoniter",
+    libraryDependencies +=
+      "com.github.plokhotnyuk.jsoniter-scala" %% "macros" % "0.23.0"
+  )
+  .dependsOn(core)
+
 lazy val collection = project
   .in(file("collection"))
   .settings(commonSettings: _*)
