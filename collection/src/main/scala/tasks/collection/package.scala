@@ -132,9 +132,13 @@ object EColl {
   def fromSource[T](source: Source[T, _], name: String)(
       implicit encoder: Serializer[T],
       tsc: TaskSystemComponents): Future[EColl[T]] = {
+    import scala.concurrent.duration._
+
     val s2 =
       source
-        .map(t => ByteString(encoder.apply(t)) ++ ByteString("\n"))
+        .map(t => ByteString(encoder.apply(t)) ++ eof)
+        .groupedWeightedWithin(131072, 5000 milliseconds)(_.size.toLong)
+        .map(_.foldLeft(ByteString())(_ ++ _))
         .via(Compression.gzip)
 
     SharedFile(s2, name + ".0")
