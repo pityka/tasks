@@ -15,7 +15,7 @@ case class EColl[T](partitions: List[SharedFile])
     extends ResultWithSharedFiles(partitions: _*) {
 
   def basename: String =
-    partitions.head.name.split("\\.").dropRight(1).mkString(".")
+    partitions.head.name.split(".part\\.").dropRight(1).mkString(".part.")
 
   def ++(that: EColl[T]): EColl[T] = EColl[T](partitions ++ that.partitions)
 
@@ -42,6 +42,8 @@ case class EColl[T](partitions: List[SharedFile])
 }
 
 object EColl {
+
+  private val eof = ByteString("\n")
 
   def partitionsFromSource[T: StringKey](source: Source[T, _],
                                          name: String,
@@ -70,18 +72,13 @@ object EColl {
           scala.util.hashing.MurmurHash3
             .stringHash(implicitly[StringKey[T]].key(t)) % partitions)
 
-      import scala.concurrent.duration._
-
-      val eof = ByteString("\n")
-
       val flows: List[(Int, Flow[(ByteString, Int), Seq[File], _])] =
         files.map {
           case (idx, file) =>
             idx -> sinkToFlow(
               Flow[(ByteString, Int)]
                 .map(_._1 ++ eof)
-                .groupedWeightedWithin(131072, 5000 milliseconds)(_.size.toLong)
-                .map(_.foldLeft(ByteString())(_ ++ _))
+                .batchWeighted(512 * 1024, _.size.toLong, identity)(_ ++ _)
                 .via(Compression.gzip)
                 .toMat(FileIO.toPath(file.toPath))(Keep.right)
                 .mapMaterializedValue(_.map(_ => file :: Nil)))
@@ -116,12 +113,26 @@ object EColl {
         .viaMat(shardFlow)(Keep.right)
     }
 
+    var count = 0L
+
     source
+      .map { x =>
+        count += 1
+        x
+      }
       .via(shardFlow)
       .mapAsync(1) { files =>
         Source(files.zipWithIndex.toList)
-          .mapAsync(1)(file => SharedFile(file._1, name = name + "." + file._2))
+          .mapAsync(1)(file =>
+            SharedFile(file._1,
+                       name = name + ".part." + file._2,
+                       deleteFile = true)(tsc.withChildPrefix(name + ".ecoll")))
           .runWith(Sink.seq)
+      }
+      .mapAsync(1) { sfs =>
+        SharedFile(Source.single(ByteString(count.toString)),
+                   name = name + ".length")(
+          tsc.withChildPrefix(name + ".ecoll")).map(_ => sfs)
       }
       .map { sfs =>
         EColl[T](sfs.toList)
@@ -129,20 +140,39 @@ object EColl {
       .runWith(Sink.head)
   }
 
-  def fromSource[T](source: Source[T, _], name: String)(
+  def fromSource[T](source: Source[T, _],
+                    name: String,
+                    asPartitionOf: Option[Int] = None)(
       implicit encoder: Serializer[T],
       tsc: TaskSystemComponents): Future[EColl[T]] = {
-    import scala.concurrent.duration._
-
+    var count = 0L
     val s2 =
       source
+        .map { x =>
+          count += 1
+          x
+        }
         .map(t => ByteString(encoder.apply(t)) ++ eof)
-        .groupedWeightedWithin(131072, 5000 milliseconds)(_.size.toLong)
-        .map(_.foldLeft(ByteString())(_ ++ _))
+        .batchWeighted(512 * 1024, _.size.toLong, identity)(_ ++ _)
         .via(Compression.gzip)
 
-    SharedFile(s2, name + ".0")
-      .map(sf => EColl[T](sf :: Nil))(tsc.executionContext)
+    val ecoll = asPartitionOf match {
+      case None =>
+        SharedFile(s2, name + ".part.0")(tsc.withChildPrefix(name + ".ecoll"))
+          .map(sf => EColl[T](sf :: Nil))(tsc.executionContext)
+      case Some(idx) =>
+        SharedFile(s2, name + ".part." + idx)(
+          tsc.withChildPrefix(name + ".ecoll"))
+          .map(sf => EColl[T](sf :: Nil))(tsc.executionContext)
+    }
+    import tsc.actorMaterializer.executionContext
+    ecoll.flatMap { ecoll =>
+      SharedFile(Source.single(ByteString(count.toString)),
+                 name = name + ".length")(tsc.withChildPrefix(name + ".ecoll"))
+        .map(_ => ecoll)
+
+    }
+
   }
 
   import scala.language.experimental.macros
@@ -191,6 +221,12 @@ object EColl {
       parallelism: Int,
       fun: A => String): TaskDefinition[List[EColl[A]], EColl[Seq[Option[A]]]] =
     macro Macros.outerJoinByMacro[A]
+
+  def innerJoinBy2[A, B](taskID: String, taskVersion: Int)(
+      parallelism: Int,
+      funA: A => String,
+      funB: B => String): TaskDefinition[(EColl[A], EColl[B]), EColl[(A, B)]] =
+    macro Macros.innerJoinBy2Macro[A, B]
 
   def outerJoinBy2[A, B](taskID: String, taskVersion: Int)(
       parallelism: Int,
