@@ -43,7 +43,9 @@ case class EColl[T](partitions: List[SharedFile])
 
 object EColl {
 
-  def partitionsFromSource[T: StringKey](source: Source[T, _], name: String)(
+  def partitionsFromSource[T: StringKey](source: Source[T, _],
+                                         name: String,
+                                         partitions: Int = 128)(
       implicit encoder: Serializer[T],
       tsc: TaskSystemComponents
   ) = {
@@ -57,7 +59,7 @@ object EColl {
 
     val shardFlow: Flow[T, Seq[File], NotUsed] = {
 
-      val files = 0 until 128 map { i =>
+      val files = 0 until partitions map { i =>
         val file = File.createTempFile("shard_" + i + "_", "shard")
         file.deleteOnExit
         (i, file)
@@ -66,7 +68,7 @@ object EColl {
       val hash = (t: T) =>
         math.abs(
           scala.util.hashing.MurmurHash3
-            .stringHash(implicitly[StringKey[T]].key(t)) % 128)
+            .stringHash(implicitly[StringKey[T]].key(t)) % partitions)
 
       import scala.concurrent.duration._
 
@@ -78,7 +80,7 @@ object EColl {
             idx -> sinkToFlow(
               Flow[(ByteString, Int)]
                 .map(_._1 ++ eof)
-                .groupedWeightedWithin(65536, 1000 milliseconds)(_.size.toLong)
+                .groupedWeightedWithin(131072, 5000 milliseconds)(_.size.toLong)
                 .map(_.foldLeft(ByteString())(_ ++ _))
                 .via(Compression.gzip)
                 .toMat(FileIO.toPath(file.toPath))(Keep.right)
