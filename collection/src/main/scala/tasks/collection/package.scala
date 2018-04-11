@@ -68,28 +68,34 @@ object EColl {
           scala.util.hashing.MurmurHash3
             .stringHash(implicitly[StringKey[T]].key(t)) % 128)
 
-      val flows: List[Flow[(ByteString, Int), Seq[File], _]] = files.map {
-        case (idx, file) =>
-          sinkToFlow(
-            Flow[(ByteString, Int)]
-              .filter(_._2 == idx) //todo
-              .map(_._1 ++ ByteString("\n"))
-              .via(Compression.gzip)
-              .toMat(FileIO.toPath(file.toPath))(Keep.right)
-              .mapMaterializedValue(_.map(_ => file :: Nil))).mapAsync(1)(x =>
-            x)
+      import scala.concurrent.duration._
 
-      }.toList
+      val eof = ByteString("\n")
+
+      val flows: List[(Int, Flow[(ByteString, Int), Seq[File], _])] =
+        files.map {
+          case (idx, file) =>
+            idx -> sinkToFlow(
+              Flow[(ByteString, Int)]
+                .map(_._1 ++ eof)
+                .groupedWeightedWithin(65536, 1000 milliseconds)(_.size.toLong)
+                .map(_.foldLeft(ByteString())(_ ++ _))
+                .via(Compression.gzip)
+                .toMat(FileIO.toPath(file.toPath))(Keep.right)
+                .mapMaterializedValue(_.map(_ => file :: Nil)))
+              .mapAsync(1)(x => x)
+
+        }.toList
 
       val shardFlow: Flow[(ByteString, Int), Seq[File], NotUsed] = Flow
         .fromGraph(
           GraphDSL.create() { implicit b =>
             import GraphDSL.Implicits._
-            // Use Partition instead
-            val broadcast = b.add(Broadcast[(ByteString, Int)](flows.size))
+            val broadcast =
+              b.add(Partition[(ByteString, Int)](flows.size, _._2))
             val merge = b.add(Merge[Seq[File]](flows.size))
-            flows.zipWithIndex.foreach {
-              case (f, i) =>
+            flows.foreach {
+              case (i, f) =>
                 val flowShape = b.add(f)
                 broadcast.out(i) ~> flowShape.in
                 flowShape.out ~> merge.in(i)
