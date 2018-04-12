@@ -129,6 +129,6 @@ lazy val root = (project in file("."))
   .settings(
     publishArtifact := false
   )
-  .aggregate(core, collection, upicklesupport)
+  .aggregate(core, collection, upicklesupport, jsoniter)
 
 scalafmtOnCompile in ThisBuild := true
