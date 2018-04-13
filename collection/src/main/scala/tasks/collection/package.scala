@@ -46,7 +46,7 @@ object EColl {
 
   def partitionsFromSource[T](source: Source[T, _],
                               name: String,
-                              partitionSize: Long = 1024 * 1024 * 100)(
+                              partitionSize: Long = 1024L * 1024 * 100)(
       implicit encoder: Serializer[T],
       tsc: TaskSystemComponents
   ): Future[EColl[T]] = {
