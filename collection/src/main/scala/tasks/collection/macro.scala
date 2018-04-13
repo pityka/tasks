@@ -27,6 +27,23 @@ package tasks.collection
 object Macros {
   import scala.reflect.macros.blackbox.Context
 
+  def repartitionMacro[A: cxt.WeakTypeTag](cxt: Context)(
+      taskID: cxt.Expr[String],
+      taskVersion: cxt.Expr[Int])(partitionSize: cxt.Expr[Long]) = {
+    import cxt.universe._
+    val a = weakTypeOf[A]
+
+    val r = q"""
+         tasks.AsyncTask[EColl[$a], EColl[$a]]($taskID, $taskVersion) { t => implicit ctx =>
+
+            val r = implicitly[tasks.queue.Deserializer[$a]]
+            val w = implicitly[tasks.queue.Serializer[$a]]
+            EColl.partitionsFromSource(t.source(r,ctx.components),t.basename+"."+$taskID, $partitionSize)(w,ctx.components)
+        }
+    """
+    r
+  }
+
   def mapMacro[A: cxt.WeakTypeTag, B: cxt.WeakTypeTag](
       cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
       fun: cxt.Expr[A => B]
@@ -182,6 +199,7 @@ object Macros {
 
   def sortByMacro[A: cxt.WeakTypeTag](cxt: Context)(taskID: cxt.Expr[String],
                                                     taskVersion: cxt.Expr[Int])(
+      partitionSize: cxt.Expr[Long],
       batchSize: cxt.Expr[Int],
       fun: cxt.Expr[A => String]) = {
     import cxt.universe._
@@ -217,7 +235,7 @@ object Macros {
 
             scala.concurrent.Future.sequence(partitions.map(_.partitions.head.file)).flatMap{ files =>
               val mergeFlow = flatjoin_akka.merge[$a]
-              EColl.fromSource(akka.stream.scaladsl.Source(files.toList).via(mergeFlow),t.basename+"."+$taskID)(w,ctx.components)
+              EColl.partitionsFromSource(akka.stream.scaladsl.Source(files.toList).via(mergeFlow),t.basename+"."+$taskID,$partitionSize)(w,ctx.components)
             }
           }
         }
@@ -228,6 +246,7 @@ object Macros {
 
   def groupByMacro[A: cxt.WeakTypeTag](
       cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
+      partitionSize: cxt.Expr[Long],
       parallelism: cxt.Expr[Int],
       fun: cxt.Expr[A => String]) = {
     import cxt.universe._
@@ -243,7 +262,7 @@ object Macros {
           implicit val fmt = tasks.collection.EColl.flatJoinFormat[$a]
           implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
           val groupedSource = t.source(r,ctx.components).via(flatjoin_akka.groupByShardsInMemory($parallelism))
-           EColl.fromSource(groupedSource, (t.basename+"."+$taskID))(w,ctx.components)
+           EColl.partitionsFromSource(groupedSource, (t.basename+"."+$taskID),$partitionSize)(w,ctx.components)
         }
     """
     r
@@ -251,6 +270,7 @@ object Macros {
 
   def outerJoinByMacro[A: cxt.WeakTypeTag](
       cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
+      partitionSize: cxt.Expr[Long],
       parallelism: cxt.Expr[Int],
       fun: cxt.Expr[A => String]) = {
     import cxt.universe._
@@ -271,7 +291,7 @@ object Macros {
 
           val catted = akka.stream.scaladsl.Source(ts.zipWithIndex).flatMapConcat(x => x._1.source.map(y =>x._2 -> y))
           val joinedSource = catted.via(flatjoin_akka.outerJoinByShards(ts.size,$parallelism))
-          EColl.fromSource(joinedSource, ($taskID+"."+ts.map(_.basename).mkString(".x.")))(w,ctx.components)
+          EColl.partitionsFromSource(joinedSource, ($taskID+"."+ts.map(_.basename).mkString(".x.")),$partitionSize)(w,ctx.components)
         }
     """
     r
@@ -279,6 +299,7 @@ object Macros {
 
   def outerJoinBy2Macro[A: cxt.WeakTypeTag, B: cxt.WeakTypeTag](
       cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
+      partitionSize: cxt.Expr[Long],
       parallelism: cxt.Expr[Int],
       funA: cxt.Expr[A => String],
       funB: cxt.Expr[B => String]) = {
@@ -316,7 +337,7 @@ object Macros {
             val b = seq(1)
             (a.map(_.left.get),b.map(_.right.get))
           }
-           EColl.fromSource(unzippedSource, $taskID+"."+as.basename+".x."+bs.basename)(w,ctx.components)
+           EColl.partitionsFromSource(unzippedSource, $taskID+"."+as.basename+".x."+bs.basename, $partitionSize)(w,ctx.components)
         }
     """
     r
@@ -324,6 +345,7 @@ object Macros {
 
   def innerJoinBy2Macro[A: cxt.WeakTypeTag, B: cxt.WeakTypeTag](
       cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
+      partitionSize: cxt.Expr[Long],
       parallelism: cxt.Expr[Int],
       funA: cxt.Expr[A => String],
       funB: cxt.Expr[B => String]) = {
@@ -363,7 +385,7 @@ object Macros {
           }.collect{
             case (Some(a),Some(b)) => (a,b)
           }
-           EColl.fromSource(unzippedSource, $taskID+"." +as.basename+".x."+bs.basename)(w,ctx.components)
+           EColl.partitionsFromSource(unzippedSource, $taskID+"." +as.basename+".x."+bs.basename,$partitionSize)(w,ctx.components)
         }
     """
     r

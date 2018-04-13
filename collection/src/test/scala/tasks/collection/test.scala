@@ -43,11 +43,12 @@ object Tests {
 
   val odd = EColl.filter("odd", 1)((_: Int) % 1 == 0)
 
-  val sort = EColl.sortBy("sortByToString", 1)(10, (_: Int).toString)
+  val sort = EColl.sortBy("sortByToString", 1)(4L, 10, (_: Int).toString)
 
-  val group = EColl.groupBy("groupByToConstant", 1)(10, (_: Int) => "a")
+  val group = EColl.groupBy("groupByToConstant", 1)(4L, 10, (_: Int) => "a")
 
-  val join = EColl.outerJoinBy("outerjoinByToString", 1)(10, (_: Int).toString)
+  val join =
+    EColl.outerJoinBy("outerjoinByToString", 1)(4L, 10, (_: Int).toString)
 
   val count =
     EColl.foldLeft("count", 1)(0, (x: Int, y: Seq[Option[Int]]) => x + 1)

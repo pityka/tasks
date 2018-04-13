@@ -4,12 +4,11 @@ import flatjoin._
 import tasks.queue._
 import tasks._
 import java.io.File
-import akka.NotUsed
-import akka.stream._
 import akka.stream.scaladsl._
 import akka.util.ByteString
 import scala.concurrent.Future
 import java.nio._
+import java.io._
 
 case class EColl[T](partitions: List[SharedFile])
     extends ResultWithSharedFiles(partitions: _*) {
@@ -45,99 +44,102 @@ object EColl {
 
   private val eof = ByteString("\n")
 
-  def partitionsFromSource[T: StringKey](source: Source[T, _],
-                                         name: String,
-                                         partitions: Int = 128)(
+  def partitionsFromSource[T](source: Source[T, _],
+                              name: String,
+                              partitionSize: Long = 1024 * 1024 * 100)(
       implicit encoder: Serializer[T],
       tsc: TaskSystemComponents
-  ) = {
-    implicit val ec = tsc.executionContext
+  ): Future[EColl[T]] = {
     implicit val mat = tsc.actorMaterializer
+    implicit val ec = mat.executionContext
 
-    def sinkToFlow[I, U](sink: Sink[I, U]): Flow[I, U, U] =
-      Flow.fromGraph(GraphDSL.create(sink) { implicit builder => sink =>
-        FlowShape.of[I, U](sink.in, builder.materializedValue)
-      })
+    def gzip(data: Array[Byte]) = {
+      val bos = new ByteArrayOutputStream(data.length)
+      val gzip = new java.util.zip.GZIPOutputStream(bos)
+      gzip.write(data);
+      gzip.close
+      val compressed = bos.toByteArray
+      bos.close()
+      compressed
+    }
 
-    val shardFlow: Flow[T, Seq[File], NotUsed] = {
+    val gzipFlow = Flow[ByteString].map(bs => ByteString(gzip(bs.toArray)))
 
-      val files = 0 until partitions map { i =>
-        val file = File.createTempFile("shard_" + i + "_", "shard")
-        file.deleteOnExit
-        (i, file)
-      } toMap
+    val sink = {
+      val dedicatedDispatcher =
+        tsc.actorsystem.dispatchers.lookup("task-dedicated-io")
 
-      val hash = (t: T) =>
-        math.abs(
-          scala.util.hashing.MurmurHash3
-            .stringHash(implicitly[StringKey[T]].key(t)) % partitions)
+      def createSharedFile(file: File, part: Int) =
+        SharedFile(file, name = name + ".part." + part, deleteFile = true)(
+          tsc.withChildPrefix(name + ".ecoll"))
 
-      val flows: List[(Int, Flow[(ByteString, Int), Seq[File], _])] =
-        files.map {
-          case (idx, file) =>
-            idx -> sinkToFlow(
-              Flow[(ByteString, Int)]
-                .map(_._1 ++ eof)
-                .batchWeighted(512 * 1024, _.size.toLong, identity)(_ ++ _)
-                .via(Compression.gzip)
-                .toMat(FileIO.toPath(file.toPath))(Keep.right)
-                .mapMaterializedValue(_.map(_ => file :: Nil)))
-              .mapAsync(1)(x => x)
+      def write(os: OutputStream, bs: ByteString): Future[Unit] =
+        Future {
+          val ba = bs.toArray
+          os.write(ba, 0, ba.size)
+        }(dedicatedDispatcher)
 
-        }.toList
+      val unbufferedSink = Sink
+        .foldAsync[(Long,
+                    Int,
+                    Option[(OutputStream, File)],
+                    List[Future[SharedFile]]),
+                   ByteString]((partitionSize, -1, None, Nil)) {
+          case ((counter, partCount, os, files), elem) =>
+            if (counter + elem.size > partitionSize) {
+              val f =
+                File.createTempFile("shard_" + (partCount + 1) + "_", "shard")
+              f.deleteOnExit
 
-      val shardFlow: Flow[(ByteString, Int), Seq[File], NotUsed] = Flow
-        .fromGraph(
-          GraphDSL.create() { implicit b =>
-            import GraphDSL.Implicits._
-            val broadcast =
-              b.add(Partition[(ByteString, Int)](flows.size, _._2))
-            val merge = b.add(Merge[Seq[File]](flows.size))
-            flows.foreach {
-              case (i, f) =>
-                val flowShape = b.add(f)
-                broadcast.out(i) ~> flowShape.in
-                flowShape.out ~> merge.in(i)
+              val currentOS = new java.io.FileOutputStream(f)
+              val closeFileAndStartUpload = Future(os.map {
+                case (os, file) =>
+                  os.close
+                  createSharedFile(file, partCount)
+              })(dedicatedDispatcher)
+
+              for {
+                sf <- closeFileAndStartUpload
+                _ <- write(currentOS, elem)
+              } yield {
+                (elem.size.toLong,
+                 partCount + 1,
+                 Some(currentOS -> f),
+                 sf.toList ::: files)
+              }
+            } else {
+              write(os.get._1, elem).map(_ =>
+                (elem.size.toLong + counter, partCount, os, files))
             }
-
-            new FlowShape(broadcast.in, merge.out)
-          }
-        )
-        .reduce(_ ++ _)
-
-      Flow[T]
-        .map {
-          case elem =>
-            ByteString(encoder.apply(elem)) -> hash(elem)
         }
-        .viaMat(shardFlow)(Keep.right)
+        .mapMaterializedValue(_.flatMap(r => Future.sequence(r._4)))
+
+      Flow[ByteString]
+        .batchWeighted(512 * 1024, _.size.toLong, identity)(_ ++ _)
+        .toMat(unbufferedSink)(Keep.right)
     }
 
     var count = 0L
-
     source
-      .map { x =>
-        count += 1
-        x
+      .map {
+        case elem =>
+          count += 1
+          ByteString(encoder.apply(elem) ++ eof)
       }
-      .via(shardFlow)
-      .mapAsync(1) { files =>
-        Source(files.zipWithIndex.toList)
-          .mapAsync(1)(file =>
-            SharedFile(file._1,
-                       name = name + ".part." + file._2,
-                       deleteFile = true)(tsc.withChildPrefix(name + ".ecoll")))
-          .runWith(Sink.seq)
-      }
-      .mapAsync(1) { sfs =>
-        SharedFile(Source.single(ByteString(count.toString)),
-                   name = name + ".length")(
-          tsc.withChildPrefix(name + ".ecoll")).map(_ => sfs)
-      }
-      .map { sfs =>
-        EColl[T](sfs.toList)
-      }
-      .runWith(Sink.head)
+      .batchWeighted(512 * 1024, _.size.toLong, identity)(_ ++ _)
+      .via(gzipFlow)
+      .runWith(
+        sink
+          .mapMaterializedValue(
+            _.flatMap { sfs =>
+              SharedFile(
+                Source.single(ByteString(count.toString)),
+                name = name + ".length")(tsc.withChildPrefix(name + ".ecoll"))
+                .map(_ => EColl[T](sfs.toList))
+            }
+          )
+      )
+
   }
 
   def fromSource[T](source: Source[T, _],
@@ -177,6 +179,11 @@ object EColl {
 
   import scala.language.experimental.macros
 
+  def repartition[A](taskID: String, taskVersion: Int)(
+      partitionSize: Long): TaskDefinition[EColl[A], EColl[A]] =
+    macro Macros
+      .repartitionMacro[A]
+
   def map[A, B](taskID: String, taskVersion: Int)(
       fun: A => B): TaskDefinition[EColl[A], EColl[B]] =
     macro Macros
@@ -206,29 +213,34 @@ object EColl {
       .mapConcatMacro[A, B]
 
   def sortBy[A](taskID: String, taskVersion: Int)(
+      partitionSize: Long,
       batchSize: Int,
       fun: A => String): TaskDefinition[EColl[A], EColl[A]] =
     macro Macros
       .sortByMacro[A]
 
   def groupBy[A](taskID: String, taskVersion: Int)(
+      partitionSize: Long,
       parallelism: Int,
       fun: A => String): TaskDefinition[EColl[A], EColl[Seq[A]]] =
     macro Macros
       .groupByMacro[A]
 
   def outerJoinBy[A](taskID: String, taskVersion: Int)(
+      partitionSize: Long,
       parallelism: Int,
       fun: A => String): TaskDefinition[List[EColl[A]], EColl[Seq[Option[A]]]] =
     macro Macros.outerJoinByMacro[A]
 
   def innerJoinBy2[A, B](taskID: String, taskVersion: Int)(
+      partitionSize: Long,
       parallelism: Int,
       funA: A => String,
       funB: B => String): TaskDefinition[(EColl[A], EColl[B]), EColl[(A, B)]] =
     macro Macros.innerJoinBy2Macro[A, B]
 
   def outerJoinBy2[A, B](taskID: String, taskVersion: Int)(
+      partitionSize: Long,
       parallelism: Int,
       funA: A => String,
       funB: B => String): TaskDefinition[(EColl[A], EColl[B]),
