@@ -221,27 +221,23 @@ object EColl {
 
   def groupBy[A](taskID: String, taskVersion: Int)(
       partitionSize: Long,
-      parallelism: Int,
       fun: A => String): TaskDefinition[EColl[A], EColl[Seq[A]]] =
     macro Macros
       .groupByMacro[A]
 
   def outerJoinBy[A](taskID: String, taskVersion: Int)(
       partitionSize: Long,
-      parallelism: Int,
       fun: A => String): TaskDefinition[List[EColl[A]], EColl[Seq[Option[A]]]] =
     macro Macros.outerJoinByMacro[A]
 
   def innerJoinBy2[A, B](taskID: String, taskVersion: Int)(
       partitionSize: Long,
-      parallelism: Int,
       funA: A => String,
       funB: B => String): TaskDefinition[(EColl[A], EColl[B]), EColl[(A, B)]] =
     macro Macros.innerJoinBy2Macro[A, B]
 
   def outerJoinBy2[A, B](taskID: String, taskVersion: Int)(
       partitionSize: Long,
-      parallelism: Int,
       funA: A => String,
       funB: B => String): TaskDefinition[(EColl[A], EColl[B]),
                                          EColl[(Option[A], Option[B])]] =
