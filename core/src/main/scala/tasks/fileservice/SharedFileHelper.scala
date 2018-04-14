@@ -183,6 +183,9 @@ private[tasks] object SharedFileHelper {
       config: TasksConfig) =
     if (service.storage.isDefined) {
       service.storage.get.importFile(file, prefix.propose(name)).map { f =>
+        if (deleteFile) {
+          file.delete
+        }
         SharedFileHelper.create(f._1, f._2, f._4)
       }
     } else {
