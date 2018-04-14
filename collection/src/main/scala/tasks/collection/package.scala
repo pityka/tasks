@@ -112,7 +112,16 @@ object EColl {
                 (elem.size.toLong + counter, partCount, os, files))
             }
         }
-        .mapMaterializedValue(_.flatMap(r => Future.sequence(r._4)))
+        .mapMaterializedValue(foldedFuture =>
+          for {
+            (_, partCount, os, files) <- foldedFuture
+            lastPartition <- Future(os.map {
+              case (os, file) =>
+                os.close
+                createSharedFile(file, partCount)
+            })(dedicatedDispatcher)
+            partitions <- Future.sequence(lastPartition.toList ::: files)
+          } yield partitions)
 
       Flow[ByteString]
         .batchWeighted(512 * 1024, _.size.toLong, identity)(_ ++ _)
