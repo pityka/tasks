@@ -3,6 +3,7 @@ package tasks.collection
 import flatjoin._
 import tasks.queue._
 import tasks._
+import tasks.util.AkkaStreamComponents
 import java.io.File
 import akka.stream.scaladsl._
 import akka.util.ByteString
@@ -88,7 +89,7 @@ object EColl {
           case ((counter, partCount, os, files), elem) =>
             if (counter + elem.size > partitionSize) {
               val f =
-                File.createTempFile("shard_" + (partCount + 1) + "_", "shard")
+                File.createTempFile("part_" + (partCount + 1) + "_", "part")
               f.deleteOnExit
 
               val currentOS = new java.io.FileOutputStream(f)
@@ -124,7 +125,9 @@ object EColl {
           } yield partitions)
 
       Flow[ByteString]
-        .batchWeighted(512 * 1024, _.size.toLong, identity)(_ ++ _)
+        .via(AkkaStreamComponents
+          .strictBatchWeighted[ByteString](512 * 1024, _.size.toLong)(_ ++ _))
+        .async
         .toMat(unbufferedSink)(Keep.right)
     }
 
@@ -135,7 +138,8 @@ object EColl {
           count += 1
           ByteString(encoder.apply(elem) ++ eof)
       }
-      .batchWeighted(512 * 1024, _.size.toLong, identity)(_ ++ _)
+      .via(AkkaStreamComponents
+        .strictBatchWeighted[ByteString](512 * 1024, _.size.toLong)(_ ++ _))
       .via(gzipFlow)
       .runWith(
         sink
@@ -164,7 +168,8 @@ object EColl {
           x
         }
         .map(t => ByteString(encoder.apply(t)) ++ eof)
-        .batchWeighted(512 * 1024, _.size.toLong, identity)(_ ++ _)
+        .via(AkkaStreamComponents
+          .strictBatchWeighted[ByteString](512 * 1024, _.size.toLong)(_ ++ _))
         .via(Compression.gzip)
 
     val ecoll = asPartitionOf match {
