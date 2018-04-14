@@ -11,13 +11,22 @@ import scala.concurrent.Future
 import java.nio._
 import java.io._
 
-case class EColl[T](partitions: List[SharedFile])
+case class EColl[T](partitions: List[SharedFile], length: Long)
     extends ResultWithSharedFiles(partitions: _*) {
 
   def basename: String =
     partitions.head.name.split(".part\\.").dropRight(1).mkString(".part.")
 
-  def ++(that: EColl[T]): EColl[T] = EColl[T](partitions ++ that.partitions)
+  def ++(that: EColl[T]): EColl[T] =
+    EColl[T](partitions ++ that.partitions, length + that.length)
+
+  def writeLength(name: String)(implicit tsc: TaskSystemComponents) = {
+    import tsc.actorMaterializer.executionContext
+
+    SharedFile(Source.single(ByteString(length.toString)),
+               name = name + ".length")(tsc.withChildPrefix(name + ".ecoll"))
+      .map(_ => this)
+  }
 
   def source(implicit decoder: Deserializer[T],
              tsc: TaskSystemComponents): Source[T, _] =
@@ -45,9 +54,9 @@ object EColl {
 
   private val eof = ByteString("\n")
 
-  def partitionsFromSource[T](source: Source[T, _],
-                              name: String,
-                              partitionSize: Long = 1024L * 1024 * 100)(
+  def fromSource[T](source: Source[T, _],
+                    name: String,
+                    partitionSize: Long = Long.MaxValue)(
       implicit encoder: Serializer[T],
       tsc: TaskSystemComponents
   ): Future[EColl[T]] = {
@@ -87,7 +96,7 @@ object EColl {
                     List[Future[SharedFile]]),
                    ByteString]((partitionSize, -1, None, Nil)) {
           case ((counter, partCount, os, files), elem) =>
-            if (counter + elem.size > partitionSize) {
+            if (elem.size >= partitionSize - counter) {
               val f =
                 File.createTempFile("part_" + (partCount + 1) + "_", "part")
               f.deleteOnExit
@@ -145,19 +154,14 @@ object EColl {
         sink
           .mapMaterializedValue(
             _.flatMap { sfs =>
-              SharedFile(
-                Source.single(ByteString(count.toString)),
-                name = name + ".length")(tsc.withChildPrefix(name + ".ecoll"))
-                .map(_ => EColl[T](sfs.toList))
+              EColl[T](sfs.toList, count).writeLength(name)
             }
           )
       )
 
   }
 
-  def fromSource[T](source: Source[T, _],
-                    name: String,
-                    asPartitionOf: Option[Int] = None)(
+  def fromSourceAsPartition[T](source: Source[T, _], name: String, idx: Int)(
       implicit encoder: Serializer[T],
       tsc: TaskSystemComponents): Future[EColl[T]] = {
     var count = 0L
@@ -172,22 +176,8 @@ object EColl {
           .strictBatchWeighted[ByteString](512 * 1024, _.size.toLong)(_ ++ _))
         .via(Compression.gzip)
 
-    val ecoll = asPartitionOf match {
-      case None =>
-        SharedFile(s2, name + ".part.0")(tsc.withChildPrefix(name + ".ecoll"))
-          .map(sf => EColl[T](sf :: Nil))(tsc.executionContext)
-      case Some(idx) =>
-        SharedFile(s2, name + ".part." + idx)(
-          tsc.withChildPrefix(name + ".ecoll"))
-          .map(sf => EColl[T](sf :: Nil))(tsc.executionContext)
-    }
-    import tsc.actorMaterializer.executionContext
-    ecoll.flatMap { ecoll =>
-      SharedFile(Source.single(ByteString(count.toString)),
-                 name = name + ".length")(tsc.withChildPrefix(name + ".ecoll"))
-        .map(_ => ecoll)
-
-    }
+    SharedFile(s2, name + ".part." + idx)(tsc.withChildPrefix(name + ".ecoll"))
+      .map(sf => EColl[T](sf :: Nil, count))(tsc.executionContext)
 
   }
 
