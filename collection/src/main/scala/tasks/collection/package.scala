@@ -33,19 +33,16 @@ case class EColl[T](partitions: List[SharedFile], length: Long)
     Source(partitions).flatMapConcat(
       _.source
         .via(Compression.gunzip())
-        .via(Framing.delimiter(ByteString("\n"),
-                               maximumFrameLength = Int.MaxValue,
-                               allowTruncation = false))
+        .via(AkkaStreamComponents.delimiter(EColl.eof.head,
+                                            maximumFrameLength = Int.MaxValue))
         .map(line => decoder(line.toArray)))
 
   def source(i: Int)(implicit decoder: Deserializer[T],
                      tsc: TaskSystemComponents): Source[T, _] =
     partitions(i).source
       .via(Compression.gunzip())
-      .via(
-        Framing.delimiter(ByteString("\n"),
-                          maximumFrameLength = Int.MaxValue,
-                          allowTruncation = false))
+      .via(AkkaStreamComponents.delimiter(EColl.eof.head,
+                                          maximumFrameLength = Int.MaxValue))
       .map(line => decoder.apply(line.toArray))
 
 }
@@ -56,12 +53,15 @@ object EColl {
 
   def fromSource[T](source: Source[T, _],
                     name: String,
-                    partitionSize: Long = Long.MaxValue)(
+                    partitionSize: Long = Long.MaxValue,
+                    parallelism: Int = 1)(
       implicit encoder: Serializer[T],
       tsc: TaskSystemComponents
   ): Future[EColl[T]] = {
     implicit val mat = tsc.actorMaterializer
     implicit val ec = mat.executionContext
+
+    val BufferSize = 1024L * 512
 
     def gzip(data: Array[Byte]) = {
       val bos = new ByteArrayOutputStream(data.length)
@@ -73,7 +73,15 @@ object EColl {
       compressed
     }
 
-    val gzipFlow = Flow[ByteString].map(bs => ByteString(gzip(bs.toArray)))
+    val gzipPar = if (parallelism == 1) 1 else parallelism / 2
+    val encoderPar = if (parallelism == 1) 1 else parallelism - gzipPar
+
+    val gzipFlow =
+      if (gzipPar == 1)
+        Flow[ByteString].map(bs => ByteString(gzip(bs.toArray)))
+      else
+        Flow[ByteString].mapAsync(gzipPar)(bs =>
+          Future(ByteString(gzip(bs.toArray))))
 
     val sink = {
       val dedicatedDispatcher =
@@ -135,20 +143,35 @@ object EColl {
 
       Flow[ByteString]
         .via(AkkaStreamComponents
-          .strictBatchWeighted[ByteString](512 * 1024, _.size.toLong)(_ ++ _))
+          .strictBatchWeighted[ByteString](BufferSize, _.size.toLong)(_ ++ _))
         .async
         .toMat(unbufferedSink)(Keep.right)
     }
+
+    val encoderFlow = if (encoderPar == 1) Flow[Seq[T]].map { elems =>
+      elems
+        .map(elem => ByteString(encoder.apply(elem)) ++ eof)
+        .foldLeft(ByteString.empty)(_ ++ _)
+    } else
+      Flow[Seq[T]].mapAsync(encoderPar) { elems =>
+        Future {
+          elems
+            .map(elem => ByteString(encoder.apply(elem)) ++ eof)
+            .foldLeft(ByteString.empty)(_ ++ _)
+        }
+      }
 
     var count = 0L
     source
       .map {
         case elem =>
           count += 1
-          ByteString(encoder.apply(elem) ++ eof)
+          elem
       }
+      .grouped(1000)
+      .via(encoderFlow)
       .via(AkkaStreamComponents
-        .strictBatchWeighted[ByteString](512 * 1024, _.size.toLong)(_ ++ _))
+        .strictBatchWeighted[ByteString](BufferSize, _.size.toLong)(_ ++ _))
       .via(gzipFlow)
       .runWith(
         sink
@@ -276,37 +299,3 @@ object EColl {
   }
 
 }
-// circe:
-// case class EColl[T](sf: SharedFile) {
-//   def source(implicit decoder: Decoder[T],
-//              tsc: TaskSystemComponents): Source[T, _] =
-//     sf.source
-//       .via(
-//           Framing.delimiter(ByteString("\n"),
-//                             maximumFrameLength = Int.MaxValue,
-//                             allowTruncation = false))
-//       .map(
-//           line =>
-//             io.circe.parser
-//               .parse(line.utf8String)
-//               .right
-//               .flatMap(decoder.decodeJson)
-//               .right
-//               .get)
-//
-//   def map[A](f: T => A)(
-//       implicit decoderT: Decoder[T],
-//       encoderA: Encoder[A]): TaskDefinition[EColl[T], EColl[A]] =
-//     AsyncTask[EColl[T], EColl[A]]("name1", 1) { t => implicit ctx =>
-//       EColl.fromSource[A](t.source.map(f), "filenam e")
-//     }
-// }
-//
-// object EColl {
-//   def fromSource[T](source: Source[T, _], name: String)(
-//       implicit encoder: Encoder[T],
-//       tsc: TaskSystemComponents): Future[EColl[T]] = {
-//     val s2 = source.map(t => ByteString(encoder.apply(t).noSpaces + "\n"))
-//     SharedFile(s2, name).map(sf => EColl[T](sf))(tsc.executionContext)
-//   }
-// }

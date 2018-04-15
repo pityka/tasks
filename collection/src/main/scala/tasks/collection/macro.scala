@@ -38,7 +38,7 @@ object Macros {
 
             val r = implicitly[tasks.queue.Deserializer[$a]]
             val w = implicitly[tasks.queue.Serializer[$a]]
-            EColl.fromSource(t.source(r,ctx.components),t.basename+"."+$taskID, $partitionSize)(w,ctx.components)
+            EColl.fromSource(t.source(r,ctx.components),t.basename+"."+$taskID, $partitionSize, resourceAllocated.cpu)(w,ctx.components)
         }
     """
     r
@@ -235,7 +235,7 @@ object Macros {
 
             scala.concurrent.Future.sequence(partitions.map(_.partitions.head.file)).flatMap{ files =>
               val mergeFlow = flatjoin_akka.merge[$a]
-              EColl.fromSource(akka.stream.scaladsl.Source(files.toList).via(mergeFlow),t.basename+"."+$taskID,$partitionSize)(w,ctx.components)
+              EColl.fromSource(akka.stream.scaladsl.Source(files.toList).via(mergeFlow),t.basename+"."+$taskID,$partitionSize, resourceAllocated.cpu)(w,ctx.components)
             }
           }
         }
@@ -261,7 +261,7 @@ object Macros {
           implicit val fmt = tasks.collection.EColl.flatJoinFormat[$a]
           implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
           val groupedSource = t.source(r,ctx.components).via(flatjoin_akka.groupByShardsInMemory(resourceAllocated.cpu))
-           EColl.fromSource(groupedSource, (t.basename+"."+$taskID),$partitionSize)(w,ctx.components)
+           EColl.fromSource(groupedSource, (t.basename+"."+$taskID),$partitionSize, resourceAllocated.cpu)(w,ctx.components)
         }
     """
     r
@@ -289,7 +289,7 @@ object Macros {
 
           val catted = akka.stream.scaladsl.Source(ts.zipWithIndex).flatMapConcat(x => x._1.source.map(y =>x._2 -> y))
           val joinedSource = catted.via(flatjoin_akka.outerJoinByShards(ts.size,resourceAllocated.cpu))
-          EColl.fromSource(joinedSource, ($taskID+"."+ts.map(_.basename).mkString(".x.")),$partitionSize)(w,ctx.components)
+          EColl.fromSource(joinedSource, ($taskID+"."+ts.map(_.basename).mkString(".x.")),$partitionSize, resourceAllocated.cpu)(w,ctx.components)
         }
     """
     r
@@ -334,7 +334,7 @@ object Macros {
             val b = seq(1)
             (a.map(_.left.get),b.map(_.right.get))
           }
-           EColl.fromSource(unzippedSource, $taskID+"."+as.basename+".x."+bs.basename, $partitionSize)(w,ctx.components)
+           EColl.fromSource(unzippedSource, $taskID+"."+as.basename+".x."+bs.basename, $partitionSize, resourceAllocated.cpu)(w,ctx.components)
         }
     """
     r
@@ -381,7 +381,7 @@ object Macros {
           }.collect{
             case (Some(a),Some(b)) => (a,b)
           }
-           EColl.fromSource(unzippedSource, $taskID+"." +as.basename+".x."+bs.basename,$partitionSize)(w,ctx.components)
+           EColl.fromSource(unzippedSource, $taskID+"." +as.basename+".x."+bs.basename,$partitionSize, resourceAllocated.cpu)(w,ctx.components)
         }
     """
     r
