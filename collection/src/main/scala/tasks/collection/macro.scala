@@ -38,7 +38,7 @@ object Macros {
 
             val r = implicitly[tasks.queue.Deserializer[$a]]
             val w = implicitly[tasks.queue.Serializer[$a]]
-            EColl.fromSource(t.source(r,ctx.components),t.basename+"."+$taskID, $partitionSize, resourceAllocated.cpu)(w,ctx.components)
+            EColl.fromSource(t.source(1)(r,ctx.components),t.basename+"."+$taskID, $partitionSize, resourceAllocated.cpu)(w,ctx.components)
         }
     """
     r
@@ -60,7 +60,7 @@ object Macros {
            log.info($taskID+"-"+idx)
            val r = implicitly[tasks.queue.Deserializer[$a]]
            val w = implicitly[tasks.queue.Serializer[$b]]
-            EColl.fromSourceAsPartition(t.source(idx)(r,ctx.components).map(x => fun(x)), t.basename+"."+$taskID, idx)(w,ctx.components)
+            EColl.fromSourceAsPartition(t.sourceOfPartition(idx)(r,ctx.components).map(x => fun(x)), t.basename+"."+$taskID, idx)(w,ctx.components)
           }
 
          releaseResources
@@ -88,7 +88,7 @@ object Macros {
            log.info($taskID+"-"+idx)
            val r = implicitly[tasks.queue.Deserializer[$a]]
            val w = implicitly[tasks.queue.Serializer[$b]]
-            EColl.fromSourceAsPartition(t.source(idx)(r,ctx.components).collect(fun), t.basename+"."+$taskID, idx)(w,ctx.components)
+            EColl.fromSourceAsPartition(t.sourceOfPartition(idx)(r,ctx.components).collect(fun), t.basename+"."+$taskID, idx)(w,ctx.components)
           }
 
          releaseResources
@@ -120,7 +120,7 @@ object Macros {
         log.info($taskID+"-"+idx)
         val r = implicitly[tasks.queue.Deserializer[$a]]
         val w = implicitly[tasks.queue.Serializer[$a]]
-         EColl.fromSourceAsPartition(t.source(idx)(r,ctx.components).filter(x => fun(x)), t.basename+"."+$taskID, idx)(w,ctx.components)
+         EColl.fromSourceAsPartition(t.sourceOfPartition(idx)(r,ctx.components).filter(x => fun(x)), t.basename+"."+$taskID, idx)(w,ctx.components)
       }
 
     releaseResources
@@ -156,7 +156,7 @@ object Macros {
         log.info($taskID+"-"+idx)
         val r = implicitly[tasks.queue.Deserializer[$a]]
         val w = implicitly[tasks.queue.Serializer[$c]]
-         EColl.fromSourceAsPartition(fun(t.source(idx)(r,ctx.components),b)(ctx), t.basename+"."+$taskID, idx)(w,ctx.components)
+         EColl.fromSourceAsPartition(fun(t.sourceOfPartition(idx)(r,ctx.components),b)(ctx), t.basename+"."+$taskID, idx)(w,ctx.components)
       }
 
     releaseResources
@@ -185,7 +185,7 @@ object Macros {
         log.info($taskID+"-"+idx)
         val r = implicitly[tasks.queue.Deserializer[$a]]
         val w = implicitly[tasks.queue.Serializer[$b]]
-         EColl.fromSourceAsPartition(t.source(idx)(r,ctx.components).mapConcat(x => fun(x)), t.basename+"."+$taskID, idx)(w,ctx.components)
+         EColl.fromSourceAsPartition(t.sourceOfPartition(idx)(r,ctx.components).mapConcat(x => fun(x)), t.basename+"."+$taskID, idx)(w,ctx.components)
       }
 
     releaseResources
@@ -216,7 +216,7 @@ object Macros {
             val w = implicitly[tasks.queue.Serializer[$a]]
             implicit val fmt = tasks.collection.EColl.flatJoinFormat[$a]
             implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
-            val sortedSource = t.source(idx)(r,ctx.components).via(flatjoin_akka.sort(batchSize))
+            val sortedSource = t.sourceOfPartition(idx)(r,ctx.components).via(flatjoin_akka.sort(batchSize))
              EColl.fromSourceAsPartition(sortedSource, t.basename+"."+$taskID, idx)(w,ctx.components)
           }
 
@@ -260,7 +260,7 @@ object Macros {
           val w = implicitly[tasks.queue.Serializer[Seq[$a]]]
           implicit val fmt = tasks.collection.EColl.flatJoinFormat[$a]
           implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
-          val groupedSource = t.source(r,ctx.components).via(flatjoin_akka.groupByShardsInMemory(resourceAllocated.cpu))
+          val groupedSource = t.source(resourceAllocated.cpu)(r,ctx.components).via(flatjoin_akka.groupByShardsInMemory(resourceAllocated.cpu))
            EColl.fromSource(groupedSource, (t.basename+"."+$taskID),$partitionSize, resourceAllocated.cpu)(w,ctx.components)
         }
     """
@@ -287,7 +287,7 @@ object Macros {
           implicit val fmt2 = tasks.collection.EColl.flatJoinFormat[(Int,$a)]
           implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
 
-          val catted = akka.stream.scaladsl.Source(ts.zipWithIndex).flatMapConcat(x => x._1.source.map(y =>x._2 -> y))
+          val catted = akka.stream.scaladsl.Source(ts.zipWithIndex).flatMapConcat(x => x._1.source(resourceAllocated.cpu).map(y =>x._2 -> y))
           val joinedSource = catted.via(flatjoin_akka.outerJoinByShards(ts.size,resourceAllocated.cpu))
           EColl.fromSource(joinedSource, ($taskID+"."+ts.map(_.basename).mkString(".x.")),$partitionSize, resourceAllocated.cpu)(w,ctx.components)
         }
@@ -327,7 +327,7 @@ object Macros {
             case Right(b) => funB(b)
           }}
        
-          val catted : akka.stream.scaladsl.Source[(Int,Either[$a,$b]),_] = as.source.map(a => 0 -> Left[$a,$b](a)) ++ bs.source.map(b => 1 -> Right[$a,$b](b))
+          val catted : akka.stream.scaladsl.Source[(Int,Either[$a,$b]),_] = as.source(resourceAllocated.cpu).map(a => 0 -> Left[$a,$b](a)) ++ bs.source(resourceAllocated.cpu).map(b => 1 -> Right[$a,$b](b))
           val joinedSource = catted.via(flatjoin_akka.outerJoinByShards(2,resourceAllocated.cpu))
           val unzippedSource = joinedSource.map{ seq =>
             val a = seq(0)
@@ -372,7 +372,7 @@ object Macros {
             case Right(b) => funB(b)
           }}
        
-          val catted : akka.stream.scaladsl.Source[(Int,Either[$a,$b]),_] = as.source.map(a => 0 -> Left[$a,$b](a)) ++ bs.source.map(b => 1 -> Right[$a,$b](b))
+          val catted : akka.stream.scaladsl.Source[(Int,Either[$a,$b]),_] = as.source(resourceAllocated.cpu).map(a => 0 -> Left[$a,$b](a)) ++ bs.source(resourceAllocated.cpu).map(b => 1 -> Right[$a,$b](b))
           val joinedSource = catted.via(flatjoin_akka.outerJoinByShards(2,resourceAllocated.cpu))
           val unzippedSource = joinedSource.map{ seq =>
             val a = seq(0)
@@ -404,7 +404,7 @@ object Macros {
           val z = $zero
           val r = implicitly[tasks.queue.Deserializer[$a]]
           val w = implicitly[tasks.queue.Serializer[$b]]
-           t.source(r,ctx.components).runFold(z)(fun)
+           t.source(resourceAllocated.cpu)(r,ctx.components).runFold(z)(fun)
         }
     """
     r
@@ -426,7 +426,7 @@ object Macros {
             val fun = $fun
             val r = implicitly[tasks.queue.Deserializer[$a]]
             val w = implicitly[tasks.queue.Serializer[$a]]
-             t.source(idx)(r,ctx.components).runReduce(fun)
+             t.sourceOfPartition(idx)(r,ctx.components).runReduce(fun)
           }
 
         releaseResources

@@ -28,17 +28,37 @@ case class EColl[T](partitions: List[SharedFile], length: Long)
       .map(_ => this)
   }
 
-  def source(implicit decoder: Deserializer[T],
-             tsc: TaskSystemComponents): Source[T, _] =
-    Source(partitions).flatMapConcat(
-      _.source
-        .via(Compression.gunzip())
-        .via(AkkaStreamComponents.delimiter(EColl.eof.head,
-                                            maximumFrameLength = Int.MaxValue))
-        .map(line => decoder(line.toArray)))
+  def source(parallelism: Int)(implicit decoder: Deserializer[T],
+                               tsc: TaskSystemComponents): Source[T, _] = {
+    val decoderFlow =
+      if (parallelism == 1)
+        Flow[ByteString].map(line => decoder(line.toArray))
+      else
+        Flow[ByteString]
+          .grouped(EColl.ElemBufferSize)
+          .mapAsync(parallelism) { lines =>
+            Future {
+              lines.map(line => decoder(line.toArray))
+            }(tsc.actorMaterializer.executionContext)
+          }
+          .mapConcat(identity)
 
-  def source(i: Int)(implicit decoder: Deserializer[T],
-                     tsc: TaskSystemComponents): Source[T, _] =
+    Source(partitions)
+      .flatMapConcat(
+        _.source
+          .via(
+            AkkaStreamComponents.strictBatchWeighted[ByteString](
+              EColl.BufferSize,
+              _.size.toLong)(_ ++ _))
+          .via(Compression.gunzip())
+          .via(AkkaStreamComponents
+            .delimiter(EColl.eof.head, maximumFrameLength = Int.MaxValue))
+          .via(decoderFlow)
+      )
+  }
+
+  def sourceOfPartition(i: Int)(implicit decoder: Deserializer[T],
+                                tsc: TaskSystemComponents): Source[T, _] =
     partitions(i).source
       .via(Compression.gunzip())
       .via(AkkaStreamComponents.delimiter(EColl.eof.head,
@@ -48,7 +68,8 @@ case class EColl[T](partitions: List[SharedFile], length: Long)
 }
 
 object EColl {
-
+  val ElemBufferSize = 4096
+  val BufferSize = 1024L * 512
   private val eof = ByteString("\n")
 
   def fromSource[T](source: Source[T, _],
@@ -60,8 +81,6 @@ object EColl {
   ): Future[EColl[T]] = {
     implicit val mat = tsc.actorMaterializer
     implicit val ec = mat.executionContext
-
-    val BufferSize = 1024L * 512
 
     def gzip(data: Array[Byte]) = {
       val bos = new ByteArrayOutputStream(data.length)
@@ -168,7 +187,7 @@ object EColl {
           count += 1
           elem
       }
-      .grouped(1000)
+      .grouped(EColl.ElemBufferSize)
       .via(encoderFlow)
       .via(AkkaStreamComponents
         .strictBatchWeighted[ByteString](BufferSize, _.size.toLong)(_ ++ _))
