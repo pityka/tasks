@@ -33,7 +33,7 @@ case class EColl[T](partitions: List[SharedFile], length: Long)
     val decoderFlow =
       AkkaStreamComponents
         .parallelize[ByteString, T](parallelism, EColl.ElemBufferSize)(line =>
-          decoder(line.toArray))(tsc.actorMaterializer.executionContext)
+          List(decoder(line.toArray)))(tsc.actorMaterializer.executionContext)
 
     Source(partitions)
       .flatMapConcat(
@@ -162,7 +162,7 @@ object EColl {
     val encoderFlow =
       AkkaStreamComponents
         .parallelize[T, ByteString](encoderPar, EColl.ElemBufferSize)(elem =>
-          ByteString(encoder.apply(elem)) ++ eof)
+          List(ByteString(encoder.apply(elem)) ++ eof))
 
     var count = 0L
     source
