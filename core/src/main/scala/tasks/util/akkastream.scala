@@ -3,8 +3,24 @@ package tasks.util
 import akka.stream.scaladsl.Flow
 import akka.util.ByteString
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 
 object AkkaStreamComponents {
+
+  def parallelize[T, K](parallelism: Int, bufferSize: Int = 1000)(f: T => K)(
+      ec: ExecutionContext): Flow[T, K, _] =
+    if (parallelism == 1)
+      Flow[T].map(f)
+    else
+      Flow[T]
+        .grouped(bufferSize)
+        .mapAsync(parallelism) { lines =>
+          Future {
+            lines.map(f)
+          }(ec)
+        }
+        .mapConcat(identity)
+
   def strictBatchWeighted[T](
       maxWeight: Long,
       cost: T => Long,
