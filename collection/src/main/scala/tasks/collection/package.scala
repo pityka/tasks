@@ -31,17 +31,9 @@ case class EColl[T](partitions: List[SharedFile], length: Long)
   def source(parallelism: Int)(implicit decoder: Deserializer[T],
                                tsc: TaskSystemComponents): Source[T, _] = {
     val decoderFlow =
-      if (parallelism == 1)
-        Flow[ByteString].map(line => decoder(line.toArray))
-      else
-        Flow[ByteString]
-          .grouped(EColl.ElemBufferSize)
-          .mapAsync(parallelism) { lines =>
-            Future {
-              lines.map(line => decoder(line.toArray))
-            }(tsc.actorMaterializer.executionContext)
-          }
-          .mapConcat(identity)
+      AkkaStreamComponents
+        .parallelize[ByteString, T](parallelism, EColl.ElemBufferSize)(line =>
+          decoder(line.toArray))(tsc.actorMaterializer.executionContext)
 
     Source(partitions)
       .flatMapConcat(
@@ -167,18 +159,10 @@ object EColl {
         .toMat(unbufferedSink)(Keep.right)
     }
 
-    val encoderFlow = if (encoderPar == 1) Flow[Seq[T]].map { elems =>
-      elems
-        .map(elem => ByteString(encoder.apply(elem)) ++ eof)
-        .foldLeft(ByteString.empty)(_ ++ _)
-    } else
-      Flow[Seq[T]].mapAsync(encoderPar) { elems =>
-        Future {
-          elems
-            .map(elem => ByteString(encoder.apply(elem)) ++ eof)
-            .foldLeft(ByteString.empty)(_ ++ _)
-        }
-      }
+    val encoderFlow =
+      AkkaStreamComponents
+        .parallelize[T, ByteString](encoderPar, EColl.ElemBufferSize)(elem =>
+          ByteString(encoder.apply(elem)) ++ eof)
 
     var count = 0L
     source
@@ -187,7 +171,6 @@ object EColl {
           count += 1
           elem
       }
-      .grouped(EColl.ElemBufferSize)
       .via(encoderFlow)
       .via(AkkaStreamComponents
         .strictBatchWeighted[ByteString](BufferSize, _.size.toLong)(_ ++ _))
