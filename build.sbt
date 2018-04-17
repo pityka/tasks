@@ -72,7 +72,7 @@ lazy val core = project
       "com.typesafe.akka" %% "akka-actor" % "2.5.11",
       "com.typesafe.akka" %% "akka-remote" % "2.5.11",
       "com.typesafe.akka" %% "akka-testkit" % "2.5.11",
-      "com.typesafe.akka" %% "akka-http-core" % "10.1.0",
+      "com.typesafe.akka" %% "akka-http-core" % "10.1.1",
       "com.typesafe" % "config" % "1.3.3",
       "io.github.pityka" %% "selfpackage" % "1.0.1",
       "io.github.pityka" %% "s3-stream-fork" % "0.0.3",
