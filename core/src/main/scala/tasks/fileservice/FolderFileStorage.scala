@@ -88,7 +88,7 @@ class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)
     }
 
   def createSource(path: ManagedFilePath): Source[ByteString, _] =
-    FileIO.fromPath(assemblePath(path).toPath)
+    FileIO.fromPath(assemblePath(path).toPath, chunkSize = 65536)
 
   def exportFile(path: ManagedFilePath): Future[File] =
     Future.successful(assemblePath(path))
