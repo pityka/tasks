@@ -74,7 +74,7 @@ lazy val core = project
       "com.typesafe.akka" %% "akka-testkit" % "2.5.11",
       "com.typesafe.akka" %% "akka-http-core" % "10.1.0",
       "com.typesafe" % "config" % "1.3.3",
-      "io.github.pityka" %% "selfpackage" % "0.0.1",
+      "io.github.pityka" %% "selfpackage" % "1.0.1",
       "io.github.pityka" %% "s3-stream-fork" % "0.0.3",
       "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24",
       "ch.ethz.ganymed" % "ganymed-ssh2" % "261",
