@@ -254,10 +254,21 @@ object EColl {
     macro Macros
       .groupByMacro[A]
 
+  def groupBySorted[A](taskID: String, taskVersion: Int)(
+      partitionSize: Long,
+      fun: A => String): TaskDefinition[EColl[A], EColl[Seq[A]]] =
+    macro Macros
+      .groupBySortedMacro[A]
+
   def outerJoinBy[A](taskID: String, taskVersion: Int)(
       partitionSize: Long,
       fun: A => String): TaskDefinition[List[EColl[A]], EColl[Seq[Option[A]]]] =
     macro Macros.outerJoinByMacro[A]
+
+  def outerJoinBySorted[A](taskID: String, taskVersion: Int)(
+      partitionSize: Long,
+      fun: A => String): TaskDefinition[List[EColl[A]], EColl[Seq[Option[A]]]] =
+    macro Macros.outerJoinBySortedMacro[A]
 
   def innerJoinBy2[A, B](taskID: String, taskVersion: Int)(
       partitionSize: Long,
@@ -271,6 +282,13 @@ object EColl {
       funB: B => String): TaskDefinition[(EColl[A], EColl[B]),
                                          EColl[(Option[A], Option[B])]] =
     macro Macros.outerJoinBy2Macro[A, B]
+
+  def outerJoinBy2Sorted[A, B](taskID: String, taskVersion: Int)(
+      partitionSize: Long,
+      funA: A => String,
+      funB: B => String): TaskDefinition[(EColl[A], EColl[B]),
+                                         EColl[(Option[A], Option[B])]] =
+    macro Macros.outerJoinBy2SortedMacro[A, B]
 
   def foldLeft[A, B](taskID: String, taskVersion: Int)(
       zero: B,
