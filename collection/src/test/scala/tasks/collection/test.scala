@@ -45,10 +45,11 @@ object Tests {
 
   val sort = EColl.sortBy("sortByToString", 1)(4L, 10, (_: Int).toString)
 
-  val group = EColl.groupBy("groupByToConstant", 1)(4L, (_: Int) => "a")
+  val group =
+    EColl.groupBy("groupByToConstant", 1)(4L, (_: Int) => "a", Some(3))
 
   val join =
-    EColl.outerJoinBy("outerjoinByToString", 1)(4L, (_: Int).toString)
+    EColl.outerJoinBy("outerjoinByToString", 1)(4L, (_: Int).toString, Some(3))
 
   val count =
     EColl.foldLeft("count", 1)(0, (x: Int, y: Seq[Option[Int]]) => x + 1)

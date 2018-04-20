@@ -247,7 +247,8 @@ object Macros {
   def groupByMacro[A: cxt.WeakTypeTag](
       cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
       partitionSize: cxt.Expr[Long],
-      fun: cxt.Expr[A => String]) = {
+      fun: cxt.Expr[A => String],
+      maxParallelJoins: cxt.Expr[Option[Int]]) = {
     import cxt.universe._
     val a = weakTypeOf[A]
 
@@ -260,7 +261,8 @@ object Macros {
           val w = implicitly[tasks.queue.Serializer[Seq[$a]]]
           implicit val fmt = tasks.collection.EColl.flatJoinFormat[$a]
           implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
-          val groupedSource = t.source(resourceAllocated.cpu)(r,ctx.components).via(flatjoin_akka.groupByShardsInMemory(resourceAllocated.cpu))
+          val parallelismOfJoin = math.min(resourceAllocated.cpu,$maxParallelJoins.getOrElse(resourceAllocated.cpu))
+          val groupedSource = t.source(resourceAllocated.cpu)(r,ctx.components).via(flatjoin_akka.groupByShardsInMemory(resourceAllocated.cpu,parallelismOfJoin))
            EColl.fromSource(groupedSource, (t.basename+"."+$taskID),$partitionSize, resourceAllocated.cpu)(w,ctx.components)
         }
     """
@@ -293,7 +295,8 @@ object Macros {
   def outerJoinByMacro[A: cxt.WeakTypeTag](
       cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
       partitionSize: cxt.Expr[Long],
-      fun: cxt.Expr[A => String]) = {
+      fun: cxt.Expr[A => String],
+      maxParallelJoins: cxt.Expr[Option[Int]]) = {
     import cxt.universe._
     val a = weakTypeOf[A]
 
@@ -309,9 +312,9 @@ object Macros {
           implicit val fmt = tasks.collection.EColl.flatJoinFormat[$a]
           implicit val fmt2 = tasks.collection.EColl.flatJoinFormat[(Int,$a)]
           implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
-
+          val parallelismOfJoin = math.min(resourceAllocated.cpu,$maxParallelJoins.getOrElse(resourceAllocated.cpu))
           val catted = akka.stream.scaladsl.Source(ts.zipWithIndex).flatMapConcat(x => x._1.source(resourceAllocated.cpu).map(y =>x._2 -> y))
-          val joinedSource = catted.via(flatjoin_akka.outerJoinByShards(ts.size,resourceAllocated.cpu))
+          val joinedSource = catted.via(flatjoin_akka.outerJoinByShards(ts.size,resourceAllocated.cpu,parallelismOfJoin))
           EColl.fromSource(joinedSource, ($taskID+"."+ts.map(_.basename).mkString(".x.")),$partitionSize, resourceAllocated.cpu)(w,ctx.components)
         }
     """
@@ -337,7 +340,7 @@ object Macros {
           implicit val fmt = tasks.collection.EColl.flatJoinFormat[$a]
           implicit val fmt2 = tasks.collection.EColl.flatJoinFormat[(Int,$a)]
           implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
-
+                    
           val catted = akka.stream.scaladsl.Source(ts.zipWithIndex).flatMapConcat(x => x._1.source(resourceAllocated.cpu).map(y =>x._2 -> y))
           val joinedSource = catted.via(flatjoin_akka.outerJoinSorted(ts.size))
           EColl.fromSource(joinedSource, ($taskID+"."+ts.map(_.basename).mkString(".x.")),$partitionSize, resourceAllocated.cpu)(w,ctx.components)
@@ -350,7 +353,8 @@ object Macros {
       cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
       partitionSize: cxt.Expr[Long],
       funA: cxt.Expr[A => String],
-      funB: cxt.Expr[B => String]) = {
+      funB: cxt.Expr[B => String],
+      maxParallelJoins: cxt.Expr[Option[Int]]) = {
     import cxt.universe._
     val a = weakTypeOf[A]
     val b = weakTypeOf[B]
@@ -372,14 +376,15 @@ object Macros {
           implicit val fmt = tasks.collection.EColl.flatJoinFormat[Either[$a,$b]]
           implicit val fmt2 = tasks.collection.EColl.flatJoinFormat[(Int,Either[$a,$b])]
 
-          
+          val parallelismOfJoin = math.min(resourceAllocated.cpu,$maxParallelJoins.getOrElse(resourceAllocated.cpu))
+
           implicit val sk = new flatjoin.StringKey[Either[$a,$b]] { def key(t:Either[$a,$b]) = t match {
             case Left(a) => funA(a)
             case Right(b) => funB(b)
           }}
        
           val catted : akka.stream.scaladsl.Source[(Int,Either[$a,$b]),_] = as.source(resourceAllocated.cpu).map(a => 0 -> Left[$a,$b](a)) ++ bs.source(resourceAllocated.cpu).map(b => 1 -> Right[$a,$b](b))
-          val joinedSource = catted.via(flatjoin_akka.outerJoinByShards(2,resourceAllocated.cpu))
+          val joinedSource = catted.via(flatjoin_akka.outerJoinByShards(2,resourceAllocated.cpu,parallelismOfJoin))
           val unzippedSource = joinedSource.map{ seq =>
             val a = seq(0)
             val b = seq(1)
@@ -440,7 +445,8 @@ object Macros {
       cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
       partitionSize: cxt.Expr[Long],
       funA: cxt.Expr[A => String],
-      funB: cxt.Expr[B => String]) = {
+      funB: cxt.Expr[B => String],
+      maxParallelJoins: cxt.Expr[Option[Int]]) = {
     import cxt.universe._
     val a = weakTypeOf[A]
     val b = weakTypeOf[B]
@@ -462,14 +468,15 @@ object Macros {
           implicit val fmt = tasks.collection.EColl.flatJoinFormat[Either[$a,$b]]
           implicit val fmt2 = tasks.collection.EColl.flatJoinFormat[(Int,Either[$a,$b])]
 
-          
+          val parallelismOfJoin = math.min(resourceAllocated.cpu,$maxParallelJoins.getOrElse(resourceAllocated.cpu))
+
           implicit val sk = new flatjoin.StringKey[Either[$a,$b]] { def key(t:Either[$a,$b]) = t match {
             case Left(a) => funA(a)
             case Right(b) => funB(b)
           }}
        
           val catted : akka.stream.scaladsl.Source[(Int,Either[$a,$b]),_] = as.source(resourceAllocated.cpu).map(a => 0 -> Left[$a,$b](a)) ++ bs.source(resourceAllocated.cpu).map(b => 1 -> Right[$a,$b](b))
-          val joinedSource = catted.via(flatjoin_akka.outerJoinByShards(2,resourceAllocated.cpu))
+          val joinedSource = catted.via(flatjoin_akka.outerJoinByShards(2,resourceAllocated.cpu,parallelismOfJoin))
           val unzippedSource = joinedSource.map{ seq =>
             val a = seq(0)
             val b = seq(1)

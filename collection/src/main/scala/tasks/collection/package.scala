@@ -250,7 +250,8 @@ object EColl {
 
   def groupBy[A](taskID: String, taskVersion: Int)(
       partitionSize: Long,
-      fun: A => String): TaskDefinition[EColl[A], EColl[Seq[A]]] =
+      fun: A => String,
+      maxParallelJoins: Option[Int]): TaskDefinition[EColl[A], EColl[Seq[A]]] =
     macro Macros
       .groupByMacro[A]
 
@@ -262,7 +263,9 @@ object EColl {
 
   def outerJoinBy[A](taskID: String, taskVersion: Int)(
       partitionSize: Long,
-      fun: A => String): TaskDefinition[List[EColl[A]], EColl[Seq[Option[A]]]] =
+      fun: A => String,
+      maxParallelJoins: Option[Int]): TaskDefinition[List[EColl[A]],
+                                                     EColl[Seq[Option[A]]]] =
     macro Macros.outerJoinByMacro[A]
 
   def outerJoinBySorted[A](taskID: String, taskVersion: Int)(
@@ -273,14 +276,18 @@ object EColl {
   def innerJoinBy2[A, B](taskID: String, taskVersion: Int)(
       partitionSize: Long,
       funA: A => String,
-      funB: B => String): TaskDefinition[(EColl[A], EColl[B]), EColl[(A, B)]] =
+      funB: B => String,
+      maxParallelJoins: Option[Int]): TaskDefinition[(EColl[A], EColl[B]),
+                                                     EColl[(A, B)]] =
     macro Macros.innerJoinBy2Macro[A, B]
 
   def outerJoinBy2[A, B](taskID: String, taskVersion: Int)(
       partitionSize: Long,
       funA: A => String,
-      funB: B => String): TaskDefinition[(EColl[A], EColl[B]),
-                                         EColl[(Option[A], Option[B])]] =
+      funB: B => String,
+      maxParallelJoins: Option[Int]): TaskDefinition[(EColl[A], EColl[B]),
+                                                     EColl[(Option[A],
+                                                            Option[B])]] =
     macro Macros.outerJoinBy2Macro[A, B]
 
   def outerJoinBy2Sorted[A, B](taskID: String, taskVersion: Int)(
