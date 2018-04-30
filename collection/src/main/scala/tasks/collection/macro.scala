@@ -169,6 +169,46 @@ object Macros {
     r
   }
 
+  def mapElemWithMacro[A: cxt.WeakTypeTag,
+                       B: cxt.WeakTypeTag,
+                       C: cxt.WeakTypeTag,
+                       D: cxt.WeakTypeTag](
+      cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
+      fun1: cxt.Expr[
+        B => tasks.queue.ComputationEnvironment => scala.concurrent.Future[C]]
+  )(fun2: cxt.Expr[(A, C) => D]) = {
+    import cxt.universe._
+    val a = weakTypeOf[A]
+    val b = weakTypeOf[B]
+    val c = weakTypeOf[C]
+    val d = weakTypeOf[D]
+
+    val r = q"""
+    tasks.AsyncTask[(EColl[$a],$b), EColl[$d]]($taskID, $taskVersion) { case (t,b) => implicit ctx =>
+
+      val subtask = tasks.AsyncTask[(Int,EColl[$a], $b), EColl[$d]]("sub-"+$taskID, $taskVersion) { case (idx,t,b) => implicit ctx =>
+        val fun1 = $fun1
+        val fun2 = $fun2
+        log.info($taskID+"-"+idx)
+        val r = implicitly[tasks.queue.Deserializer[$a]]
+        val w = implicitly[tasks.queue.Serializer[$c]]
+        val futureC = fun1(b)(ctx)
+        futureC.flatMap{ c =>
+          EColl.fromSourceAsPartition(t.sourceOfPartition(idx)(r,ctx.components).map(t => fun2((t,c))), t.basename+"."+$taskID, idx)(w,ctx.components)
+        }
+         
+      }
+
+    releaseResources
+    scala.concurrent.Future.sequence(0 until t.partitions.size map { i =>
+      subtask((i,t,b))(CPUMemoryRequest(1,resourceAllocated.memory))
+    }).map(_.reduce(_ ++ _)).flatMap(_.writeLength(t.basename+"."+$taskID))
+   }
+
+    """
+    r
+  }
+
   def mapConcatMacro[A: cxt.WeakTypeTag, B: cxt.WeakTypeTag](
       cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
       fun: cxt.Expr[A => Iterable[B]]
@@ -200,7 +240,6 @@ object Macros {
   def sortByMacro[A: cxt.WeakTypeTag](cxt: Context)(taskID: cxt.Expr[String],
                                                     taskVersion: cxt.Expr[Int])(
       partitionSize: cxt.Expr[Long],
-      batchSize: cxt.Expr[Int],
       fun: cxt.Expr[A => String]) = {
     import cxt.universe._
     val a = weakTypeOf[A]
@@ -208,7 +247,7 @@ object Macros {
     val r = q"""
         tasks.AsyncTask[EColl[$a], EColl[$a]]($taskID, $taskVersion) { t => implicit ctx =>
 
-          val subtask = tasks.AsyncTask[(Int,Int,EColl[$a]), EColl[$a]]("sub-"+$taskID, $taskVersion) { case (idx,batchSize,t) => implicit ctx =>
+          val subtask = tasks.AsyncTask[(Int,EColl[$a]), EColl[$a]]("sub-"+$taskID, $taskVersion) { case (idx,t) => implicit ctx =>
             val fun = $fun
             log.info($taskID+"-"+idx)
             implicit val mat = ctx.components.actorMaterializer
@@ -216,13 +255,13 @@ object Macros {
             val w = implicitly[tasks.queue.Serializer[$a]]
             implicit val fmt = tasks.collection.EColl.flatJoinFormat[$a]
             implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
-            val sortedSource = t.sourceOfPartition(idx)(r,ctx.components).via(flatjoin_akka.sort(batchSize))
+            val sortedSource = t.sourceOfPartition(idx)(r,ctx.components).via(flatjoin_akka.sort)
              EColl.fromSourceAsPartition(sortedSource, t.basename+"."+$taskID, idx)(w,ctx.components)
           }
 
         releaseResources
         scala.concurrent.Future.sequence(0 until t.partitions.size map { i =>
-          subtask((i,$batchSize, t))(CPUMemoryRequest(1,resourceAllocated.memory))
+          subtask((i, t))(CPUMemoryRequest(1,resourceAllocated.memory))
         }).flatMap{ partitions =>
           if (partitions.size == 1) scala.concurrent.Future.successful(partitions.head)
           else {
@@ -233,8 +272,10 @@ object Macros {
             implicit val fmt = tasks.collection.EColl.flatJoinFormat[$a]
             implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
 
+            val fileReader = (f:java.io.File) => tasks.collection.EColl.decodeFileForFlatJoin(r,sk,resourceAllocated.cpu)(f)(ctx.components.actorMaterializer.executionContext)
+
             scala.concurrent.Future.sequence(partitions.map(_.partitions.head.file)).flatMap{ files =>
-              val mergeFlow = flatjoin_akka.merge[$a]
+              val mergeFlow = flatjoin_akka.merge[$a](fileReader)
               EColl.fromSource(akka.stream.scaladsl.Source(files.toList).via(mergeFlow),t.basename+"."+$taskID,$partitionSize, resourceAllocated.cpu)(w,ctx.components)
             }
           }

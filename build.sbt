@@ -1,6 +1,6 @@
 lazy val commonSettings = Seq(
   scalaVersion := "2.12.4",
-  version := "0.0.13-SNAPSHOT",
+  version := "0.0.14-SNAPSHOT",
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -119,7 +119,7 @@ lazy val collection = project
   .settings(
     name := "tasks-collection",
     libraryDependencies ++= Seq(
-      "io.github.pityka" %% "flatjoin-akka-stream" % "0.0.8",
+      "io.github.pityka" %% "flatjoin-akka-stream" % "0.0.9",
       "org.scalatest" %% "scalatest" % "3.0.0" % "test")
   )
   .dependsOn(core)

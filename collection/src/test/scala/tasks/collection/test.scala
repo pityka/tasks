@@ -43,7 +43,7 @@ object Tests {
 
   val odd = EColl.filter("odd", 1)((_: Int) % 1 == 0)
 
-  val sort = EColl.sortBy("sortByToString", 1)(4L, 10, (_: Int).toString)
+  val sort = EColl.sortBy("sortByToString", 1)(4L, (_: Int).toString)
 
   val group =
     EColl.groupBy("groupByToConstant", 1)(4L, (_: Int) => "a", Some(3))

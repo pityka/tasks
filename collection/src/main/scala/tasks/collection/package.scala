@@ -7,7 +7,7 @@ import tasks.util.AkkaStreamComponents
 import java.io.File
 import akka.stream.scaladsl._
 import akka.util.ByteString
-import scala.concurrent.Future
+import scala.concurrent.{Future, ExecutionContext}
 import java.nio._
 import java.io._
 
@@ -38,13 +38,7 @@ case class EColl[T](partitions: List[SharedFile], length: Long)
     Source(partitions)
       .flatMapConcat(
         _.source
-          .via(
-            AkkaStreamComponents.strictBatchWeighted[ByteString](
-              EColl.BufferSize,
-              _.size.toLong)(_ ++ _))
-          .via(Compression.gunzip())
-          .via(AkkaStreamComponents
-            .delimiter(EColl.eof.head, maximumFrameLength = Int.MaxValue))
+          .via(EColl.decodeFrame)
           .via(decoderFlow)
       )
   }
@@ -52,17 +46,39 @@ case class EColl[T](partitions: List[SharedFile], length: Long)
   def sourceOfPartition(i: Int)(implicit decoder: Deserializer[T],
                                 tsc: TaskSystemComponents): Source[T, _] =
     partitions(i).source
-      .via(Compression.gunzip())
-      .via(AkkaStreamComponents.delimiter(EColl.eof.head,
-                                          maximumFrameLength = Int.MaxValue))
+      .via(EColl.decodeFrame)
       .map(line => decoder.apply(line.toArray))
 
 }
 
 object EColl {
-  val ElemBufferSize = 4096
+  val ElemBufferSize = 256
   val BufferSize = 1024L * 512
   private val eof = ByteString("\n")
+
+  val decodeFrame = Flow[ByteString]
+    .via(AkkaStreamComponents
+      .strictBatchWeighted[ByteString](EColl.BufferSize, _.size.toLong)(_ ++ _))
+    .via(Compression.gunzip())
+    .via(AkkaStreamComponents.delimiter(EColl.eof.head,
+                                        maximumFrameLength = Int.MaxValue))
+
+  def decodeFileForFlatJoin[T](decoder: Deserializer[T],
+                               stringKey: flatjoin.StringKey[T],
+                               parallelism: Int)(file: java.io.File)(
+      implicit ec: ExecutionContext): Source[(String, ByteString), _] =
+    FileIO
+      .fromPath(file.toPath)
+      .via(decodeFrame)
+      .via(
+        AkkaStreamComponents
+          .parallelize[ByteString, (String, ByteString)](parallelism,
+                                                         EColl.ElemBufferSize) {
+            line =>
+              val t = decoder.apply(line.toArray)
+              val k = stringKey.key(t)
+              List((k, line))
+          })
 
   def fromSource[T](source: Source[T, _],
                     name: String,
@@ -100,7 +116,7 @@ object EColl {
 
       def createSharedFile(file: File, part: Int) =
         SharedFile(file, name = name + ".part." + part, deleteFile = true)(
-          tsc.withChildPrefix(name + ".ecoll"))
+          tsc.withChildPrefix(name + ".ecoll")).map(f => part -> f)
 
       def write(os: OutputStream, bs: ByteString): Future[Unit] =
         Future {
@@ -112,7 +128,7 @@ object EColl {
         .foldAsync[(Long,
                     Int,
                     Option[(OutputStream, File)],
-                    List[Future[SharedFile]]),
+                    List[Future[(Int, SharedFile)]]),
                    ByteString]((partitionSize, -1, None, Nil)) {
           case ((counter, partCount, os, files), elem) =>
             if (elem.size >= partitionSize - counter) {
@@ -149,7 +165,9 @@ object EColl {
                 os.close
                 createSharedFile(file, partCount)
             })(dedicatedDispatcher)
-            partitions <- Future.sequence(lastPartition.toList ::: files)
+            partitions <- (Future
+              .sequence(lastPartition.toList ::: files))
+              .map(_.sortBy(_._1).map(_._2))
           } yield partitions)
 
       Flow[ByteString]
@@ -231,6 +249,12 @@ object EColl {
     macro Macros
       .mapSourceWithMacro[A, B, C]
 
+  def mapElemWith[A, B, C, D](taskID: String, taskVersion: Int)(
+      fun1: B => ComputationEnvironment => Future[C])(
+      fun2: (A, C) => D): TaskDefinition[(EColl[A], B), EColl[D]] =
+    macro Macros
+      .mapElemWithMacro[A, B, C, D]
+
   def filter[A](taskID: String, taskVersion: Int)(
       fun: A => Boolean): TaskDefinition[EColl[A], EColl[A]] =
     macro Macros
@@ -243,7 +267,6 @@ object EColl {
 
   def sortBy[A](taskID: String, taskVersion: Int)(
       partitionSize: Long,
-      batchSize: Int,
       fun: A => String): TaskDefinition[EColl[A], EColl[A]] =
     macro Macros
       .sortByMacro[A]

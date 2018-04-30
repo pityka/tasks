@@ -1,11 +1,22 @@
 package tasks.util
 
-import akka.stream.scaladsl.Flow
+import akka.stream.scaladsl.{Flow, FileIO, Compression, Sink, Keep}
 import akka.util.ByteString
+import java.io.File
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 
 object AkkaStreamComponents {
+
+  def zippedTemporaryFileSink(
+      implicit ec: ExecutionContext): Sink[ByteString, Future[File]] = {
+    val f = TempFile.createTempFile("tmp")
+    Flow[ByteString]
+      .via(strictBatchWeighted[ByteString](1024 * 512, _.size.toLong)(_ ++ _))
+      .via(Compression.gzip)
+      .toMat(FileIO.toPath(f.toPath))(Keep.right)
+      .mapMaterializedValue(_.map(_ => f))
+  }
 
   def parallelize[T, K](parallelism: Int, bufferSize: Int = 1000)(
       f: T => scala.collection.immutable.Iterable[K])(
