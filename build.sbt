@@ -42,6 +42,25 @@ lazy val commonSettings = Seq(
     "-Ywarn-unused:patvars", // Warn if a variable bound in a pattern is unused.
     "-Ywarn-unused:privates" // Warn if a private member is unused.
   )
+) ++ Seq(
+  organization := "io.github.pityka",
+  licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
+  publishTo := sonatypePublishTo.value,
+  pomExtra in Global := {
+    <url>https://pityka.github.io/tasks/</url>
+      <scm>
+        <connection>scm:git:github.com/pityka/tasks</connection>
+        <developerConnection>scm:git:git@github.com:pityka/tasks</developerConnection>
+        <url>github.com/pityka/tasks</url>
+      </scm>
+      <developers>
+        <developer>
+          <id>pityka</id>
+          <name>Istvan Bartha</name>
+          <url>https://pityka.github.io/tasks/</url>
+        </developer>
+      </developers>
+  }
 )
 
 lazy val shared = project
