@@ -329,4 +329,12 @@ package object util {
     }
   }
 
+  def retryFuture[A](f: => Future[A], c: Int)(
+      implicit as: akka.actor.ActorSystem,
+      ec: ExecutionContext): Future[A] =
+    if (c > 0) f.recoverWith {
+      case _ =>
+        akka.pattern.after(2 seconds, as.scheduler)(retryFuture(f, c - 1))
+    } else f
+
 }
