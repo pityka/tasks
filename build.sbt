@@ -95,6 +95,7 @@ lazy val core = project
       "com.typesafe" % "config" % "1.3.3",
       "io.github.pityka" %% "selfpackage" % "1.0.1",
       "io.github.pityka" %% "s3-stream-fork" % "0.0.3",
+      "io.github.pityka" %% "akka-http-unboundedqueue" % "1.2.0",
       "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24",
       "ch.ethz.ganymed" % "ganymed-ssh2" % "261",
       "org.scalatest" %% "scalatest" % "3.0.0" % "test",
