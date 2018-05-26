@@ -329,12 +329,16 @@ package object util {
     }
   }
 
-  def retryFuture[A](f: => Future[A], c: Int)(
+  def retryFuture[A](tag: String)(f: => Future[A], c: Int)(
       implicit as: akka.actor.ActorSystem,
-      ec: ExecutionContext): Future[A] =
+      ec: ExecutionContext,
+      log: akka.event.LoggingAdapter): Future[A] =
     if (c > 0) f.recoverWith {
-      case _ =>
-        akka.pattern.after(2 seconds, as.scheduler)(retryFuture(f, c - 1))
+      case e =>
+        log.error(e, s"Failed $tag. Retry $c more times.")
+        akka.pattern.after(2 seconds, as.scheduler)(retryFuture(tag)({
+          log.debug(s"Retrying $tag"); f
+        }, c - 1))
     } else f
 
 }

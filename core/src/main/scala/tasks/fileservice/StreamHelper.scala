@@ -27,7 +27,7 @@ package tasks.fileservice
 import akka.actor._
 import akka.stream._
 import akka.stream.scaladsl._
-import akka.http.scaladsl.model.{HttpRequest, headers, HttpMethods}
+import akka.http.scaladsl.model.{HttpRequest, headers, HttpMethods, StatusCodes}
 import akka.util._
 import com.bluelabs.s3stream._
 import scala.concurrent.{ExecutionContext, Future}
@@ -38,7 +38,12 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
     actorMaterializer: Materializer,
     ec: ExecutionContext) {
 
-  val queue = (rq: HttpRequest) => httpqueue.HttpQueue(as).queue(rq)
+  implicit val log = akka.event.Logging(as.eventStream, getClass)
+
+  val queue = (rq: HttpRequest) => {
+    log.debug("Queueing: " + rq)
+    httpqueue.HttpQueue(as).queue(rq)
+  }
 
   def s3Loc(uri: Uri) = {
     val bucket = uri.authority.toString
@@ -46,11 +51,113 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
     S3Location(bucket, key)
   }
 
-  private def createSourceHttp(uri: Uri): Source[ByteString, _] =
+  private def createSourceHttp(uri: Uri): Source[ByteString, _] = {
+
+    val partSize = 5242880L * 10L
+    val retries = 3
+    val parallelism = 4
+
+    def bySingleRequest =
+      Source
+        .lazilyAsync(() => queue(HttpRequest(uri = uri.akka)))
+        .map(_.entity.dataBytes)
+        .flatMapConcat(identity)
+
+    def getRangeOnce(range: headers.ByteRange) =
+      Source
+        .lazilyAsync(() =>
+          queue(HttpRequest(uri = uri.akka).addHeader(headers.`Range`(range))))
+        .map(_.entity.dataBytes)
+        .flatMapConcat(identity)
+
+    def serverIndicatesAcceptRanges =
+      queue(HttpRequest(uri = uri.akka).withMethod(HttpMethods.HEAD)).map {
+        response =>
+          response.discardEntityBytes();
+          val clength = response.entity.contentLengthOption
+          val acceptsRanges = response
+            .header[headers.`Accept-Ranges`]
+            .filter(_.value == "bytes")
+            .isDefined
+          (clength, acceptsRanges)
+      }
+
+    def serverRespondsWithCorrectPartialContent(contentLength: Long) =
+      if (contentLength < 10L) Future.successful(true)
+      else {
+        val max = contentLength - 1
+        val min = contentLength - 10
+        val rq = HttpRequest(uri = uri.akka)
+          .addHeader(headers.`Range`(headers.ByteRange(min, max)))
+        queue(rq).map { response =>
+          response.discardEntityBytes();
+          log.debug(
+            s"Probed content range capabilities of server. $rq responds with $response.")
+          response.status == StatusCodes.PartialContent
+        }
+      }
+
+    def getHeader = serverIndicatesAcceptRanges.flatMap {
+      case d @ (Some(contentLength), true) =>
+        serverRespondsWithCorrectPartialContent(contentLength).map {
+          case true => d
+          case false =>
+            log.debug(
+              s"$uri returned `Accept-Ranges` but did not respond with 206 on probing request.")
+            (Some(contentLength), false)
+        }
+      case other => Future.successful(other)
+    }
+
+    def makeParts(contentLength: Long) = {
+
+      val intervals = 0L until contentLength by partSize map (s =>
+        (s, math.min(contentLength, s + partSize)))
+
+      intervals
+        .map {
+          case (startIdx, openEndIdx) =>
+            () =>
+              {
+                val rangeHeader = headers.ByteRange(startIdx, openEndIdx - 1)
+                tasks.util.retryFuture(s"$uri @($startIdx-${openEndIdx - 1})")(
+                  getRangeOnce(rangeHeader)
+                    .runFold(ByteString())(_ ++ _)
+                    .map { data =>
+                      val expectedLength = openEndIdx - startIdx
+                      if (data.size != expectedLength)
+                        throw new RuntimeException(
+                          s"Expected download length does not match. Got ${data.size} for header $rangeHeader.")
+
+                      data
+                    },
+                  retries
+                )
+              }
+        }
+    }
+
+    def byPartsWithRetry(contentLength: Long) =
+      Source
+        .apply(makeParts(contentLength))
+        .mapAsync(parallelism) { fetchPart =>
+          fetchPart()
+        }
+        .async
+
     Source
-      .fromFuture(queue(HttpRequest(uri = uri.akka)))
-      .map(_.entity.dataBytes)
+      .lazilyAsync(() =>
+        getHeader.map {
+          case (Some(contentLength), true) =>
+            log.debug(s"Fetching $uri by parts.")
+            byPartsWithRetry(contentLength)
+          case _ =>
+            log.debug(s"Fetching $uri by one request.")
+            bySingleRequest
+      })
       .flatMapConcat(identity)
+
+  }
 
   private def createSourceS3(uri: Uri): Source[ByteString, _] =
     s3stream.get.getData(s3Loc(uri), parallelism = 1)

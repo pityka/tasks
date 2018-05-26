@@ -49,7 +49,7 @@ class S3Storage(bucketName: String,
                                            config: TasksConfig)
     extends ManagedFileStorage {
 
-  val log = akka.event.Logging(as.eventStream, getClass)
+  implicit val log = akka.event.Logging(as.eventStream, getClass)
 
   val putObjectParams = {
     val sse = config.s3ServerSideEncryption
@@ -105,7 +105,7 @@ class S3Storage(bucketName: String,
 
   def importFile(f: File, path: ProposedManagedFilePath)
     : Future[(Long, Int, File, ManagedFilePath)] =
-    tasks.util.retryFuture(importFile1(f, path), 4)
+    tasks.util.retryFuture(s"upload to $path")(importFile1(f, path), 4)
 
   def importFile1(f: File, path: ProposedManagedFilePath)
     : Future[(Long, Int, File, ManagedFilePath)] = {
