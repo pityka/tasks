@@ -135,8 +135,9 @@ object Macros {
 
   def mapSourceWithMacro[A: cxt.WeakTypeTag,
                          B: cxt.WeakTypeTag,
-                         C: cxt.WeakTypeTag](
-      cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
+                         C: cxt.WeakTypeTag](cxt: Context)(
+      taskID: cxt.Expr[String],
+      taskVersion: cxt.Expr[Int])(nameFun: cxt.Expr[B => String])(
       fun: cxt.Expr[
         (akka.stream.scaladsl.Source[A, _],
          B) => tasks.queue.ComputationEnvironment => akka.stream.scaladsl.Source[
@@ -153,16 +154,21 @@ object Macros {
 
       val subtask = tasks.AsyncTask[(Int,EColl[$a], $b), EColl[$c]]("sub-"+$taskID, $taskVersion) { case (idx,t,b) => implicit ctx =>
         val fun = $fun
+        val nameFun = $nameFun
+        val dataDependentName = nameFun(b)
         log.info($taskID+"-"+idx)
         val r = implicitly[tasks.queue.Deserializer[$a]]
         val w = implicitly[tasks.queue.Serializer[$c]]
-         EColl.fromSourceAsPartition(fun(t.sourceOfPartition(idx)(r,ctx.components),b)(ctx), t.basename+"."+$taskID, idx)(w,ctx.components)
+         EColl.fromSourceAsPartition(fun(t.sourceOfPartition(idx)(r,ctx.components),b)(ctx), t.basename+"."+$taskID+"."+dataDependentName, idx)(w,ctx.components)
       }
+
+    val nameFun = $nameFun
+    val dataDependentName = nameFun(b)
 
     releaseResources
     scala.concurrent.Future.sequence(0 until t.partitions.size map { i =>
       subtask((i,t,b))(CPUMemoryRequest(1,resourceAllocated.memory))
-    }).map(_.reduce(_ ++ _)).flatMap(_.writeLength(t.basename+"."+$taskID))
+    }).map(_.reduce(_ ++ _)).flatMap(_.writeLength(t.basename+"."+$taskID+"."+dataDependentName))
    }
 
     """

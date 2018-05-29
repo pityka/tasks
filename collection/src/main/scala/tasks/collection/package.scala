@@ -241,11 +241,10 @@ object EColl {
     macro Macros
       .collectMacro[A, B]
 
-  def mapSourceWith[A, B, C](
-      taskID: String,
-      taskVersion: Int)(fun: (Source[A, _], B) => ComputationEnvironment => Source[
-                          C,
-                          _]): TaskDefinition[(EColl[A], B), EColl[C]] =
+  def mapSourceWith[A, B, C](taskID: String, taskVersion: Int)(
+      nameFun: B => String)(fun: (Source[A, _], B) => ComputationEnvironment => Source[
+                              C,
+                              _]): TaskDefinition[(EColl[A], B), EColl[C]] =
     macro Macros
       .mapSourceWithMacro[A, B, C]
 
