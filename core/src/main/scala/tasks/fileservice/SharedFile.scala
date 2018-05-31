@@ -37,7 +37,7 @@ import tasks.util.Uri
 import tasks.TaskSystemComponents
 import tasks.Implicits._
 
-import io.circe.{Decoder, Encoder}
+import io.circe.{Decoder, Encoder, DecodingFailure}
 import io.circe.generic.semiauto._
 
 sealed trait FilePath {
@@ -57,10 +57,12 @@ case class RemoteFilePath(uri: Uri) extends FilePath {
 case class SharedFile(
     path: FilePath,
     byteSize: Long,
-    hash: Int
+    hash: Int,
+    history: Option[History]
 ) {
 
-  override def toString = s"SharedFile($path)"
+  override def toString =
+    s"SharedFile($path, size=$byteSize, hash=$hash, history=$history)"
 
   def file(implicit tsc: TaskSystemComponents) =
     SharedFileHelper.getPathToFile(this)
@@ -80,12 +82,28 @@ case class SharedFile(
 object SharedFile {
 
   implicit val encoder: Encoder[SharedFile] = //deriveEncoder[SharedFile]
-    Encoder.forProduct3("path", "byteSize", "hash")(sf =>
-      (sf.path, sf.byteSize, sf.hash))
+    Encoder.forProduct4("path", "byteSize", "hash", "history")(sf =>
+      (sf.path, sf.byteSize, sf.hash, sf.history))
 
   implicit val decoder: Decoder[SharedFile] = //deriveDecoder[SharedFile]
-    Decoder.forProduct3("path", "byteSize", "hash")(
-      (a: FilePath, b: Long, c: Int) => new SharedFile(a, b, c))
+    Decoder.instance { cursor =>
+      cursor.focus.flatMap(_.asObject) match {
+        case None => Left(DecodingFailure("not object", Nil))
+        case Some(json) =>
+          if (json.size == 3)
+            Decoder
+              .forProduct4("path", "byteSize", "hash", "history")(
+                (a: FilePath, b: Long, c: Int, h: History) =>
+                  new SharedFile(a, b, c, Some(h)))
+              .apply(cursor)
+          else
+            Decoder
+              .forProduct3("path", "byteSize", "hash")(
+                (a: FilePath, b: Long, c: Int) => new SharedFile(a, b, c, None))
+              .apply(cursor)
+
+      }
+    }
 
   def apply(uri: Uri)(implicit tsc: TaskSystemComponents): Future[SharedFile] =
     SharedFileHelper.create(RemoteFilePath(uri), tsc.fs.remote)

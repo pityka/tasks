@@ -50,26 +50,29 @@ private[tasks] object SharedFileHelper {
       nlc: NodeLocalCacheActor,
       prefix: FileServicePrefix,
       ec: ExecutionContext): Future[SharedFile] = {
-    getPathToFile(new SharedFile(prefix.propose(name).toManaged, -1L, 0)).map {
-      f =>
-        new SharedFile(prefix.propose(name).toManaged, -1L, 0)
-    }
+    getPathToFile(new SharedFile(prefix.propose(name).toManaged, -1L, 0, None))
+      .map { f =>
+        new SharedFile(prefix.propose(name).toManaged, -1L, 0, None)
+      }
 
   }
 
   def createForTesting(name: String) =
-    new SharedFile(ManagedFilePath(Vector(name)), 0, 0)
+    new SharedFile(ManagedFilePath(Vector(name)), 0, 0, None)
   def createForTesting(name: String, size: Long, hash: Int) =
-    new SharedFile(ManagedFilePath(Vector(name)), size, hash)
+    new SharedFile(ManagedFilePath(Vector(name)), size, hash, None)
 
-  def create(size: Long, hash: Int, path: ManagedFilePath): SharedFile =
-    new SharedFile(path, size, hash)
+  def create(size: Long,
+             hash: Int,
+             path: ManagedFilePath,
+             history: Option[History]): SharedFile =
+    new SharedFile(path, size, hash, history)
 
   def create(path: RemoteFilePath, storage: RemoteFileStorage)(
       implicit ec: ExecutionContext): Future[SharedFile] =
     storage.getSizeAndHash(path).map {
       case (size, hash) =>
-        new SharedFile(path, size, hash)
+        new SharedFile(path, size, hash, None)
     }
 
   val isLocal = (f: File) => f.canRead
@@ -182,11 +185,12 @@ private[tasks] object SharedFileHelper {
       context: ActorRefFactory,
       config: TasksConfig) =
     if (service.storage.isDefined) {
-      service.storage.get.importFile(file, prefix.propose(name)).map { f =>
+      val proposedPath = prefix.propose(name)
+      service.storage.get.importFile(file, proposedPath).map { f =>
         if (deleteFile) {
           file.delete
         }
-        SharedFileHelper.create(f._1, f._2, f._4)
+        SharedFileHelper.create(f._1, f._2, f._4, proposedPath.history)
       }
     } else {
       val serviceactor = service.actor
@@ -217,7 +221,7 @@ private[tasks] object SharedFileHelper {
     if (service.storage.isDefined) {
       val proposedPath = prefix.propose(name)
       service.storage.get.importSource(source, proposedPath).map { x =>
-        SharedFileHelper.create(x._1, x._2, x._3)
+        SharedFileHelper.create(x._1, x._2, x._3, proposedPath.history)
       }
     } else {
 

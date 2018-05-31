@@ -11,3 +11,4 @@ cache.dump
 tmp
 run.log
 GITCOMMITHASH
+fib/

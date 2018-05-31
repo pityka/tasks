@@ -328,7 +328,7 @@ class TaskSystem private[tasks] (
     actorsystem = system,
     cache = CacheActor(cacherActor),
     nodeLocalCache = nodeLocalCache,
-    filePrefix = FileServicePrefix(Vector()),
+    filePrefix = FileServicePrefix(Vector(), None),
     executionContext = auxExecutionContext,
     actorMaterializer = mat,
     tasksConfig = config

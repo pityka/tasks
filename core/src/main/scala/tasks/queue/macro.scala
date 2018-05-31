@@ -54,7 +54,11 @@ object Macros {
       private[this] val w = implicitly[tasks.queue.Serializer[$c]]
       private[this] val c = $comp
       def apply(j:tasks.queue.Base64Data) =
-          (ce:tasks.queue.ComputationEnvironment) => (c(r(j.bytes))(ce)).map(x => tasks.queue.UntypedResult.make(x)(w))(ce.executionContext)
+          (ce:tasks.queue.ComputationEnvironment) => {
+            val deserializedInputData = r(j.bytes)
+            val ceWithUpdatedHistory = tasks.queue.updateHistoryOfComputationEnvironment(ce,deserializedInputData, $taskID, $taskVersion)
+            (c(deserializedInputData)(ceWithUpdatedHistory)).map(x => tasks.queue.UntypedResult.make(x)(w))(ce.executionContext)
+          }
 
     }
     new TaskDefinition[$a,$c](new $h,tasks.queue.TaskId($taskID,$taskVersion))

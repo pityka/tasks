@@ -13,6 +13,14 @@ package object upicklesupport {
       def apply(b: Array[Byte]) = upickle.default.read[A](new String(b))
     }
 
+  implicit val instantRW =
+    upickle.default.ReadWriter[java.time.Instant](
+      instant => upickle.Js.Num(instant.toEpochMilli.toDouble), {
+        case upickle.Js.Num(num) =>
+          java.time.Instant.ofEpochMilli(num.toLong)
+      }
+    )
+
   implicit val sharedFileRW =
     upickle.default.macroRW[tasks.fileservice.SharedFile]
 

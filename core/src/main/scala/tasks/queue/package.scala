@@ -30,6 +30,26 @@ import scala.concurrent._
 
 package object queue {
 
+  def updateHistoryOfComputationEnvironment[T](
+      ce: ComputationEnvironment,
+      deserializedInputData: T,
+      taskID: String,
+      taskVersion: Int
+  ): ComputationEnvironment = deserializedInputData match {
+    case t: ResultWithSharedFiles =>
+      val newHistory = fileservice.History(
+        dependencies = t.files.toList,
+        task = fileservice.History.TaskVersion(taskID, taskVersion),
+        timestamp = java.time.Instant.now,
+        codeVersion = ce.components.tasksConfig.codeVersion
+      )
+
+      ce.copy(
+        components = ce.components.copy(
+          filePrefix = ce.components.filePrefix.withHistory(newHistory)))
+    case _ => ce
+  }
+
   type CompFun2 = Base64Data => ComputationEnvironment => Future[UntypedResult]
 
   def newTask[A, B](

@@ -45,9 +45,10 @@ case class FileServiceActor(actor: ActorRef,
                             storage: Option[ManagedFileStorage],
                             remote: RemoteFileStorage)
 
-case class FileServicePrefix(list: Vector[String]) {
-  def append(n: String) = FileServicePrefix(list :+ n)
-  def propose(name: String) = ProposedManagedFilePath(list :+ name)
+case class FileServicePrefix(list: Vector[String], history: Option[History]) {
+  def append(n: String) = FileServicePrefix(list :+ n, history)
+  def propose(name: String) = ProposedManagedFilePath(list :+ name, history)
+  def withHistory(history: History) = copy(history = Some(history))
 }
 object FileServicePrefix {
   implicit val encoder: Encoder[FileServicePrefix] =
@@ -56,7 +57,8 @@ object FileServicePrefix {
     deriveDecoder[FileServicePrefix]
 }
 
-case class ProposedManagedFilePath(list: Vector[String]) {
+case class ProposedManagedFilePath(list: Vector[String],
+                                   history: Option[History]) {
   def name = list.last
   def toManaged = ManagedFilePath(list)
 }
@@ -102,9 +104,10 @@ class FileService(
 
   private def create(length: Long,
                      hash: Int,
-                     path: ManagedFilePath): Future[SharedFile] = {
+                     path: ManagedFilePath,
+                     history: Option[History]): Future[SharedFile] = {
     Future {
-      ((SharedFileHelper.create(length, hash, path)))
+      ((SharedFileHelper.create(length, hash, path, history)))
     }(ec)
   }
 
@@ -117,14 +120,15 @@ class FileService(
             .importFile(file, proposedPath)
             .flatMap {
               case (length, hash, _, managedFilePath) =>
-                create(length, hash, managedFilePath).recover {
-                  case e =>
-                    log.error(e,
-                              "Error in creation of SharedFile {} {}",
-                              file,
-                              proposedPath)
-                    throw e
-                }
+                create(length, hash, managedFilePath, proposedPath.history)
+                  .recover {
+                    case e =>
+                      log.error(e,
+                                "Error in creation of SharedFile {} {}",
+                                file,
+                                proposedPath)
+                      throw e
+                  }
             }
             .pipeTo(sender)
 
@@ -191,14 +195,15 @@ class FileService(
           try {
             storage.importFile(file, proposedPath).flatMap {
               case (length, hash, _, managedFilePath) =>
-                create(length, hash, managedFilePath).recover {
-                  case e =>
-                    log.error(e,
-                              "Error in creation of SharedFile {} {}",
-                              file,
-                              proposedPath)
-                    throw e
-                }
+                create(length, hash, managedFilePath, proposedPath.history)
+                  .recover {
+                    case e =>
+                      log.error(e,
+                                "Error in creation of SharedFile {} {}",
+                                file,
+                                proposedPath)
+                      throw e
+                  }
 
             } pipeTo filesender
 

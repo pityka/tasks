@@ -39,7 +39,7 @@ import akka.util._
 
 object FolderFileStorage {
 
-  private def getContentHash(file: File): Int = {
+  private[tasks] def getContentHash(file: File): Int = {
     openFileInputStream(file) { is =>
       FileStorage.getContentHash(is)
     }
@@ -180,6 +180,7 @@ class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)
             .move(finalFile, assemblePath(managed, ".old.0"))
 
           copyFile(file, finalFile)
+          writeHistory(proposed.history, finalFile)
           (size, hash, finalFile, managed)
         }
 
@@ -188,6 +189,14 @@ class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)
         (size, hash, assemblePath(managed), managed)
       }
     })
+
+  private def writeHistory(history: Option[History], filePath: File): Unit =
+    history.foreach { history =>
+      val path =
+        new java.io.File(filePath.getParent,
+                         "." + filePath.getName + ".history")
+      writeBinaryToFile(path, history.toString.getBytes("UTF-8"))
+    }
 
   def uri(mp: ManagedFilePath) = {
     // throw new RuntimeException("URI not supported")
@@ -212,7 +221,8 @@ class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)
                            .map(_.toString)
                            .toVector),
                        l,
-                       h)
+                       h,
+                       None)
       }
     } catch {
       case x: Throwable => throw x

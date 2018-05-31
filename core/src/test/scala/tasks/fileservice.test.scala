@@ -83,7 +83,7 @@ class FileServiceSpec
 
   }
 
-  implicit val prefix = FileServicePrefix(Vector())
+  implicit val prefix = FileServicePrefix(Vector(), None)
 
   describe("fileservice new file folderstorage ") {
     it("add new file") {
