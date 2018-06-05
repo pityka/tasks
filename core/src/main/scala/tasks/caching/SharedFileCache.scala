@@ -30,7 +30,7 @@ package tasks.caching
 import java.io.File
 import scala.util._
 import scala.concurrent._
-import akka.actor.ActorRefFactory
+import akka.actor.ActorSystem
 
 import tasks.queue._
 import tasks._
@@ -42,7 +42,7 @@ import com.google.common.hash.Hashing
 
 private[tasks] class SharedFileCache(implicit fs: FileServiceActor,
                                      nlc: NodeLocalCacheActor,
-                                     af: ActorRefFactory,
+                                     as: ActorSystem,
                                      ec: ExecutionContext,
                                      config: TasksConfig)
     extends Cache
@@ -50,6 +50,8 @@ private[tasks] class SharedFileCache(implicit fs: FileServiceActor,
 
   def getHash(a: Array[Byte]): String =
     Hashing.murmur3_128.hashBytes(a).toString
+
+  private val logger = akka.event.Logging(as, getClass)
 
   override def toString = "SharedFileCache"
 
@@ -59,7 +61,6 @@ private[tasks] class SharedFileCache(implicit fs: FileServiceActor,
       implicit p: FileServicePrefix): Future[Option[UntypedResult]] = {
     val tdBytes = serializeTaskDescription(x)
     val hash = getHash(tdBytes)
-
     SharedFileHelper
       .getByNameUnchecked("__meta__result__" + hash)
       .flatMap(sf => SharedFileHelper.getPathToFile(sf))
@@ -71,6 +72,7 @@ private[tasks] class SharedFileCache(implicit fs: FileServiceActor,
       }
       .map { f =>
         f.flatMap { f =>
+          logger.debug("Reading result " + f)
           Try(deserializeResult(readBinaryFile(f))).toOption
         }
       }
