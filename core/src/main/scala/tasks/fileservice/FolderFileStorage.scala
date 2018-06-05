@@ -50,7 +50,8 @@ object FolderFileStorage {
 class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)(
     implicit
     ec: ExecutionContext,
-    config: TasksConfig)
+    config: TasksConfig,
+    as: akka.actor.ActorSystem)
     extends ManagedFileStorage {
 
   if (basePath.exists && !basePath.isDirectory)
@@ -59,6 +60,8 @@ class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)
 
   if (!basePath.isDirectory)
     throw new RuntimeException(s"Could not create $basePath")
+
+  val logger = akka.event.Logging(as, getClass)
 
   override def toString =
     s"FolderFileStorage(basePath=$basePath, extendedPaths=$extendedPaths)"
@@ -83,8 +86,19 @@ class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)
   def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean] =
     Future.successful {
       val f = assemblePath(path)
-      f.canRead && (size < 0 || (f.length === size && (config.skipContentHashVerificationAfterCache || FolderFileStorage
-        .getContentHash(f) === hash)))
+      val canRead = f.canRead
+      val sizeOnDiskNow = f.length
+      val sizeMatch = sizeOnDiskNow === size
+      val contentMatch = (config.skipContentHashVerificationAfterCache || FolderFileStorage
+        .getContentHash(f) === hash)
+      val pass = canRead && (size < 0 || (sizeMatch && contentMatch))
+
+      if (!pass) {
+        logger.debug(
+          s"$this does not contain $path due to: canRead:$canRead, sizeMatch:$sizeMatch   ($sizeOnDiskNow vs $size), contentMatch:$contentMatch ")
+      }
+
+      pass
     }
 
   def createSource(path: ManagedFilePath): Source[ByteString, _] =
