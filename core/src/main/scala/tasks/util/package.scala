@@ -176,16 +176,18 @@ package object util {
 
   /** Reads file contents into a bytearray. */
   def readBinaryStream(f: java.io.InputStream): Array[Byte] = {
-    def read(x: List[Byte]): List[Byte] = {
-      val raw = f.read
-      val ch: Byte = raw.toByte
-      if (raw != -1) {
-        read(ch :: x)
-      } else {
-        x
+    val BufferSize = 8196
+    var byteString = akka.util.ByteString()
+    val buffer = Array.ofDim[Byte](BufferSize)
+    var c = 0
+    while (c >= 0) {
+      c = f.read(buffer)
+      if (c >= 0) {
+        val bs = akka.util.ByteString.fromArray(buffer, 0, c)
+        byteString ++= bs
       }
     }
-    read(Nil).reverse.toArray
+    byteString.toArray
   }
 
   /** Opens a buffered java.io.BufferedOutputStream on the file. Closes it after the block is executed. */
