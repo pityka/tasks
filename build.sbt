@@ -1,6 +1,6 @@
 lazy val commonSettings = Seq(
   scalaVersion := "2.12.4",
-  version := "0.0.17-SNAPSHOT",
+  version := "0.0.17",
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
