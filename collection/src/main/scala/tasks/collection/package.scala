@@ -248,6 +248,14 @@ object EColl {
     macro Macros
       .mapSourceWithMacro[A, B, C]
 
+  def mapFullSourceWith[A, B, C](taskID: String, taskVersion: Int)(
+      nameFun: B => String)(partitionSize: Long,
+                            fun: (Source[A, _], B) => ComputationEnvironment => Source[
+                              C,
+                              _]): TaskDefinition[(EColl[A], B), EColl[C]] =
+    macro Macros
+      .mapFullSourceWithMacro[A, B, C]
+
   def mapElemWith[A, B, C, D](taskID: String, taskVersion: Int)(
       fun1: B => ComputationEnvironment => Future[C])(
       fun2: (A, C) => D): TaskDefinition[(EColl[A], B), EColl[D]] =
@@ -324,6 +332,25 @@ object EColl {
       fun: (B, A) => B): TaskDefinition[EColl[A], B] =
     macro Macros
       .foldLeftMacro[A, B]
+
+  def foldLeftWith[A, B, C, D](taskID: String, taskVersion: Int)(
+      zero: B,
+      fun1: C => ComputationEnvironment => Future[D],
+      fun2: (B, A, D) => B): TaskDefinition[(EColl[A], C), EColl[B]] =
+    macro Macros
+      .foldLeftWithMacro[A, B, C, D]
+
+  def take[A](taskID: String, taskVersion: Int)(
+      partitionSize: Long): TaskDefinition[(EColl[A], Int), EColl[A]] =
+    macro Macros.takeMacro[A]
+
+  def uniqueSorted[A](taskID: String, taskVersion: Int)(
+      partitionSize: Long): TaskDefinition[EColl[A], EColl[A]] =
+    macro Macros.uniqueSortedMacro[A]
+
+  def toSeq[A](taskID: String,
+               taskVersion: Int): TaskDefinition[EColl[A], Seq[A]] =
+    macro Macros.toSeqMacro[A]
 
   def reduce[A](taskID: String, taskVersion: Int)(
       fun: (A, A) => A): TaskDefinition[EColl[A], A] =

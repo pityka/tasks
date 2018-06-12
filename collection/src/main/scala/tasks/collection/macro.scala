@@ -175,6 +175,40 @@ object Macros {
     r
   }
 
+  def mapFullSourceWithMacro[A: cxt.WeakTypeTag,
+                             B: cxt.WeakTypeTag,
+                             C: cxt.WeakTypeTag](cxt: Context)(
+      taskID: cxt.Expr[String],
+      taskVersion: cxt.Expr[Int])(nameFun: cxt.Expr[B => String])(
+      partitionSize: cxt.Expr[Long],
+      fun: cxt.Expr[
+        (akka.stream.scaladsl.Source[A, _],
+         B) => tasks.queue.ComputationEnvironment => akka.stream.scaladsl.Source[
+          C,
+          _]]
+  ) = {
+    import cxt.universe._
+    val a = weakTypeOf[A]
+    val b = weakTypeOf[B]
+    val c = weakTypeOf[C]
+
+    val r = q"""
+    tasks.AsyncTask[(EColl[$a],$b), EColl[$c]]($taskID, $taskVersion) { case (t,b) => implicit ctx =>
+
+      val nameFun = $nameFun
+      val dataDependentName = nameFun(b)
+      val fun = $fun
+      log.info($taskID)
+      val r = implicitly[tasks.queue.Deserializer[$a]]
+      val w = implicitly[tasks.queue.Serializer[$c]]
+
+      EColl.fromSource(fun(t.source(resourceAllocated.cpu)(r,ctx.components),b)(ctx), t.basename+"."+$taskID+"."+dataDependentName, $partitionSize, resourceAllocated.cpu)(w,ctx.components)
+    }
+
+    """
+    r
+  }
+
   def mapElemWithMacro[A: cxt.WeakTypeTag,
                        B: cxt.WeakTypeTag,
                        C: cxt.WeakTypeTag,
@@ -186,7 +220,6 @@ object Macros {
     import cxt.universe._
     val a = weakTypeOf[A]
     val b = weakTypeOf[B]
-    val c = weakTypeOf[C]
     val d = weakTypeOf[D]
 
     val r = q"""
@@ -197,7 +230,7 @@ object Macros {
         val fun2 = $fun2
         log.info($taskID+"-"+idx)
         val r = implicitly[tasks.queue.Deserializer[$a]]
-        val w = implicitly[tasks.queue.Serializer[$c]]
+        val w = implicitly[tasks.queue.Serializer[$d]]
         val futureC = fun1(b)(ctx)
         futureC.flatMap{ c =>
           EColl.fromSourceAsPartition(t.sourceOfPartition(idx)(r,ctx.components).map(t => fun2((t,c))), t.basename+"."+$taskID, idx)(w,ctx.components)
@@ -531,7 +564,7 @@ object Macros {
           }.collect{
             case (Some(a),Some(b)) => (a,b)
           }
-           EColl.fromSource(unzippedSource, $taskID+"." +as.basename+".x."+bs.basename,$partitionSize, resourceAllocated.cpu)(w,ctx.components)
+           EColl.fromSource(unzippedSource, $taskID+"." +as.basename.take(10)+as.basename.hashCode+".x."+bs.basename.take(10)+bs.basename.hashCode,$partitionSize, resourceAllocated.cpu)(w,ctx.components)
         }
     """
     r
@@ -555,6 +588,100 @@ object Macros {
           val r = implicitly[tasks.queue.Deserializer[$a]]
           val w = implicitly[tasks.queue.Serializer[$b]]
            t.source(resourceAllocated.cpu)(r,ctx.components).runFold(z)(fun)
+        }
+    """
+    r
+  }
+
+  def foldLeftWithMacro[A: cxt.WeakTypeTag,
+                        B: cxt.WeakTypeTag,
+                        C: cxt.WeakTypeTag,
+                        D: cxt.WeakTypeTag](
+      cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
+      zero: cxt.Expr[B],
+      fun1: cxt.Expr[
+        C => tasks.queue.ComputationEnvironment => scala.concurrent.Future[D]],
+      fun2: cxt.Expr[(B, A, D) => B]) = {
+    import cxt.universe._
+    val a = weakTypeOf[A]
+    val b = weakTypeOf[B]
+    val c = weakTypeOf[C]
+
+    val r = q"""
+        tasks.AsyncTask[(EColl[$a],$c), $b]($taskID, $taskVersion) { case (t,c) => implicit ctx =>
+          implicit val mat = ctx.components.actorMaterializer
+          log.info($taskID)
+          val fun1 = $fun1
+          val fun2 = $fun2
+          val z = $zero
+          val r = implicitly[tasks.queue.Deserializer[$a]]
+          val w = implicitly[tasks.queue.Serializer[$b]]
+          val futureC = fun1(c)(ctx)
+          futureC.flatMap{ d =>
+            t.source(resourceAllocated.cpu)(r,ctx.components).runFold(z)(fun2(_,_,d))
+          }
+           
+        }
+    """
+    r
+  }
+
+  def takeMacro[A: cxt.WeakTypeTag](cxt: Context)(
+      taskID: cxt.Expr[String],
+      taskVersion: cxt.Expr[Int])(partitionSize: cxt.Expr[Long]) = {
+    import cxt.universe._
+    val a = weakTypeOf[A]
+    val r = q"""
+        tasks.AsyncTask[(EColl[$a],Int), Ecoll[$a]]($taskID, $taskVersion) { case (t,n) => implicit ctx =>
+          implicit val mat = ctx.components.actorMaterializer
+          log.info($taskID)
+          val r = implicitly[tasks.queue.Deserializer[$a]]
+          val w = implicitly[tasks.queue.Serializer[$a]]
+
+          EColl.fromSource(t.source(resourceAllocated.cpu)(r,ctx.components).take(n),$taskID+"." +t.basename+".take."+n,$partitionSize, resourceAllocated.cpu)(w,ctx.components)
+        }
+    """
+    r
+  }
+
+  def uniqueSortedMacro[A: cxt.WeakTypeTag](cxt: Context)(
+      taskID: cxt.Expr[String],
+      taskVersion: cxt.Expr[Int])(partitionSize: cxt.Expr[Long]) = {
+    import cxt.universe._
+    val a = weakTypeOf[A]
+    val r = q"""
+        tasks.AsyncTask[EColl[$a], EColl[$a]]($taskID, $taskVersion) { case t=> implicit ctx =>
+          implicit val mat = ctx.components.actorMaterializer
+          log.info($taskID)
+          val r = implicitly[tasks.queue.Deserializer[$a]]
+          val w = implicitly[tasks.queue.Serializer[$a]]
+
+          EColl.fromSource(t.source(resourceAllocated.cpu)(r,ctx.components).statefulMapConcat(() => {
+            var last : Option[$a] = None
+            (elem:$a) => {
+              if (last.isDefined && elem == last.get) Nil
+              else {
+                last = Some(elem)
+                List(elem)
+              }
+            }
+          }),$taskID+"." +t.basename+".unique",$partitionSize, resourceAllocated.cpu)(w,ctx.components)
+        }
+    """
+    r
+  }
+
+  def toSeqMacro[A: cxt.WeakTypeTag](
+      cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int]) = {
+    import cxt.universe._
+    val a = weakTypeOf[A]
+    val r = q"""
+        tasks.AsyncTask[EColl[$a], Seq[$a]]($taskID, $taskVersion) { case t => implicit ctx =>
+          implicit val mat = ctx.components.actorMaterializer
+          log.info($taskID)
+          val r = implicitly[tasks.queue.Deserializer[$a]]
+
+          t.source(resourceAllocated.cpu)(r,ctx.components).runWith(akka.stream.scaladsl.Sink.seq)
         }
     """
     r
