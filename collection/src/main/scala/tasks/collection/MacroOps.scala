@@ -116,18 +116,11 @@ trait MacroOps {
                                          EColl[(Option[A], Option[B])]] =
     macro Macros.outerJoinBy2SortedMacro[A, B]
 
-  def foldLeft[A, B](taskID: String, taskVersion: Int)(
-      zero: B,
-      fun: (B, A) => B): TaskDefinition[EColl[A], B] =
+  def fold[A, B, C](taskID: String, taskVersion: Int)(nameFun: B => String)(
+      prepareB: B => ComputationEnvironment => Future[C],
+      fun: (C, A) => C): TaskDefinition[(EColl[A], B), EValue[B]] =
     macro Macros
-      .foldLeftMacro[A, B]
-
-  def foldLeftWith[A, B, C, D](taskID: String, taskVersion: Int)(
-      zero: B,
-      fun1: C => ComputationEnvironment => Future[D],
-      fun2: (B, A, D) => B): TaskDefinition[(EColl[A], C), EColl[B]] =
-    macro Macros
-      .foldLeftWithMacro[A, B, C, D]
+      .foldMacro[A, B, C]
 
   def take[A](taskID: String, taskVersion: Int)(
       partitionSize: Long): TaskDefinition[(EColl[A], Int), EColl[A]] =
@@ -138,11 +131,11 @@ trait MacroOps {
     macro Macros.uniqueSortedMacro[A]
 
   def toSeq[A](taskID: String,
-               taskVersion: Int): TaskDefinition[EColl[A], Seq[A]] =
+               taskVersion: Int): TaskDefinition[EColl[A], EValue[Seq[A]]] =
     macro Macros.toSeqMacro[A]
 
   def reduce[A](taskID: String, taskVersion: Int)(
-      fun: (A, A) => A): TaskDefinition[EColl[A], A] =
+      fun: (A, A) => A): TaskDefinition[EColl[A], EValue[A]] =
     macro Macros
       .reduceMacro[A]
 
@@ -150,4 +143,5 @@ trait MacroOps {
       fun: Seq[A] => A): TaskDefinition[EColl[Seq[A]], EColl[A]] =
     macro Macros
       .reduceSeqMacro[A]
+
 }

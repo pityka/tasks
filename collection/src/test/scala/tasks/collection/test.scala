@@ -52,7 +52,9 @@ object Tests {
     EColl.outerJoinBy("outerjoinByToString", 1)(4L, (_: Int).toString, Some(3))
 
   val count =
-    EColl.foldLeft("count", 1)(0, (x: Int, y: Seq[Option[Int]]) => x + 1)
+    EColl.fold("count", 1)((_: Int) => "fold")(
+      (b: Int) => ctx => Future.successful(b),
+      (x: Int, y: Seq[Option[Int]]) => x + 1)
 
   val scan = {
     EColl.scan("scan", 1)((_: Int) => "scan")(
@@ -60,6 +62,8 @@ object Tests {
       (b: Int) => ctx => Future.successful(b),
       (_: Int) + (_: Int))
   }
+
+  val toSeq = EColl.toSeq[Int]("toseq", 1)
 
   val sum = EColl.reduce("sum", 1)((x: Int, y: Int) => x + y)
 
@@ -78,11 +82,13 @@ object Tests {
         e4 <- sort(e3)(CPUMemoryRequest(1, 1))
         e5 <- group(e4)(CPUMemoryRequest(1, 1))
         e6 <- join(List(e1, e2, e3))(CPUMemoryRequest(1, 1))
-        e7 <- count(e6)(CPUMemoryRequest(1, 1))
+        e7 <- count(e6 -> 0)(CPUMemoryRequest(1, 1))
         e8 <- sum(e4)(CPUMemoryRequest(1, 1))
         e9 <- scan((e1, 1))(CPUMemoryRequest(1, 1))
-        e10 <- EColl.toSeq("toseq", 1)(e9)(CPUMemoryRequest(1, 1))
-      } yield (e8, e10)
+        e10 <- toSeq(e9)(CPUMemoryRequest(1, 1))
+        v8 <- e8.get
+        v10 <- e10.get
+      } yield (v8, v10)
 
       Await.result(mappedEColl, atMost = 10 minutes)
     }
