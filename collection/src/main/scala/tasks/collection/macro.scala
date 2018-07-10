@@ -209,6 +209,41 @@ object Macros {
     r
   }
 
+  def scanMacro[A: cxt.WeakTypeTag, B: cxt.WeakTypeTag, C: cxt.WeakTypeTag](
+      cxt: Context)(taskID: cxt.Expr[String], taskVersion: cxt.Expr[Int])(
+      nameFun: cxt.Expr[B => String])(
+      partitionSize: cxt.Expr[Long],
+      prepareB: cxt.Expr[
+        B => tasks.queue.ComputationEnvironment => scala.concurrent.Future[C]],
+      fun: cxt.Expr[(A, C) => C]
+  ) = {
+    import cxt.universe._
+    val a = weakTypeOf[A]
+    val b = weakTypeOf[B]
+    val c = weakTypeOf[C]
+
+    val r = q"""
+    tasks.AsyncTask[(EColl[$a],$b), EColl[$c]]($taskID, $taskVersion) { case (t,b) => implicit ctx =>
+
+      val nameFun = $nameFun
+      val dataDependentName = nameFun(b)
+      val scanFun = $fun
+      val prepareFun = $prepareB
+      log.info($taskID)
+      val r = implicitly[tasks.queue.Deserializer[$a]]
+      val w = implicitly[tasks.queue.Serializer[$c]]
+      val zeroCFuture = prepareFun(b)(ctx)
+      zeroCFuture.flatMap{ zeroC =>
+        val scanned = t.source(resourceAllocated.cpu)(r,ctx.components).scan(zeroC)(scanFun)
+        EColl.fromSource(scanned,t.basename+"."+$taskID+"."+dataDependentName, $partitionSize, resourceAllocated.cpu)(w,ctx.components)
+      }(scala.concurrent.ExecutionContext.Implicits.global)
+     
+    }
+
+    """
+    r
+  }
+
   def mapElemWithMacro[A: cxt.WeakTypeTag,
                        B: cxt.WeakTypeTag,
                        C: cxt.WeakTypeTag,

@@ -54,6 +54,13 @@ object Tests {
   val count =
     EColl.foldLeft("count", 1)(0, (x: Int, y: Seq[Option[Int]]) => x + 1)
 
+  val scan = {
+    EColl.scan("scan", 1)((_: Int) => "scan")(
+      4L,
+      (b: Int) => ctx => Future.successful(b),
+      (_: Int) + (_: Int))
+  }
+
   val sum = EColl.reduce("sum", 1)((x: Int, y: Int) => x + y)
 
   def run(folder: String) = {
@@ -73,7 +80,9 @@ object Tests {
         e6 <- join(List(e1, e2, e3))(CPUMemoryRequest(1, 1))
         e7 <- count(e6)(CPUMemoryRequest(1, 1))
         e8 <- sum(e4)(CPUMemoryRequest(1, 1))
-      } yield e8
+        e9 <- scan((e1, 1))(CPUMemoryRequest(1, 1))
+        e10 <- EColl.toSeq("toseq", 1)(e9)(CPUMemoryRequest(1, 1))
+      } yield (e8, e10)
 
       Await.result(mappedEColl, atMost = 10 minutes)
     }
@@ -88,8 +97,8 @@ class TaskCollectionTestSuite extends FunSuite with Matchers {
     val tmp = tasks.util.TempFile.createTempFile(".temp")
     tmp.delete
     println(tmp)
-    Tests.run(tmp.getAbsolutePath).get should equal(18)
-    Tests.run(tmp.getAbsolutePath).get should equal(18)
+    Tests.run(tmp.getAbsolutePath).get should equal((18, Vector(1, 4, 6, 7)))
+    Tests.run(tmp.getAbsolutePath).get should equal((18, Vector(1, 4, 6, 7)))
   }
 
 }

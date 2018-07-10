@@ -241,6 +241,13 @@ object EColl {
     macro Macros
       .collectMacro[A, B]
 
+  def scan[A, B, C](taskID: String, taskVersion: Int)(nameFun: B => String)(
+      partitionSize: Long,
+      prepareB: B => ComputationEnvironment => Future[C],
+      fun: (C, A) => C): TaskDefinition[(EColl[A], B), EColl[C]] =
+    macro Macros
+      .scanMacro[A, B, C]
+
   def mapSourceWith[A, B, C](taskID: String, taskVersion: Int)(
       nameFun: B => String)(fun: (Source[A, _], B) => ComputationEnvironment => Source[
                               C,
