@@ -400,11 +400,9 @@ class TaskSystem private[tasks] (
         reaperActor ! Latch(latch)
         val cacheReaper = system.actorOf(Props(new CallbackReaper({
           fileActor ! PoisonPill
-          system.actorSelection("/user/fileservice_*") ! PoisonPill
         })))
         (cacheReaper ? WatchMe(cacherActor)).foreach { _ =>
           cacherActor ! PoisonPillToCacheActor
-          system.actorSelection("/user/cache_*") ! PoisonPillToCacheActor
         }
         queueActor ! PoisonPill
 
