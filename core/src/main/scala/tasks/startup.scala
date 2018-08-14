@@ -42,7 +42,6 @@ import akka.actor._
 import akka.pattern.ask
 import akka.stream._
 
-import java.net.InetSocketAddress
 import java.io.File
 
 import scala.concurrent.Await
@@ -69,7 +68,7 @@ case class TaskSystemComponents(
 }
 
 class TaskSystem private[tasks] (
-    val hostConfig: MasterSlaveConfiguration,
+    val hostConfig: MasterSlaveConfiguration with HostConfiguration,
     val system: ActorSystem)(implicit val config: TasksConfig) {
 
   implicit val as = system
@@ -85,7 +84,7 @@ class TaskSystem private[tasks] (
   tasksystemlog.info("Listening on: " + hostConfig.myAddress.toString)
   tasksystemlog.info("CPU: " + hostConfig.myCardinality.toString)
   tasksystemlog.info("RAM: " + hostConfig.availableMemory.toString)
-  tasksystemlog.info("Role: " + hostConfig.myRole.toString)
+  tasksystemlog.info("Roles: " + hostConfig.myRoles.mkString(", "))
   tasksystemlog.info("Elastic: " + tasks.elastic.elasticSupport)
 
   if (hostConfig.myCardinality > Runtime.getRuntime().availableProcessors()) {
@@ -110,11 +109,7 @@ class TaskSystem private[tasks] (
 
   private val availableMemory: Int = hostConfig.availableMemory
 
-  private val host: InetSocketAddress = hostConfig.myAddress
-
   private lazy val masterAddress = hostConfig.master
-
-  private val isLauncherOnly = hostConfig.myRole == SLAVE
 
   val reaperActor = elastic.elasticSupport match {
     case Some(EC2Grid) =>
@@ -125,7 +120,7 @@ class TaskSystem private[tasks] (
   }
 
   val remotenoderegistry =
-    if (isLauncherOnly && elastic.elasticSupport.isDefined) {
+    if (!hostConfig.isApp && hostConfig.isWorker && elastic.elasticSupport.isDefined) {
       val remotepath =
         s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/noderegistry"
       val noderegistry = Await.result(
@@ -184,7 +179,7 @@ class TaskSystem private[tasks] (
   tasksystemlog.info("FileStore: " + managedFileStorage)
 
   val fileActor = try {
-    if (!isLauncherOnly) {
+    if (hostConfig.isQueue) {
 
       val threadpoolsize = config.fileServiceThreadPoolSize
 
@@ -223,7 +218,7 @@ class TaskSystem private[tasks] (
   val nodeLocalCache = NodeLocalCacheActor(nodeLocalCacheActor)
 
   val cacherActor = try {
-    if (!isLauncherOnly) {
+    if (hostConfig.isQueue) {
 
       val cache: Cache =
         if (config.cacheEnabled)
@@ -255,7 +250,7 @@ class TaskSystem private[tasks] (
   }
 
   val queueActor = try {
-    if (!isLauncherOnly) {
+    if (hostConfig.isQueue) {
       val ac =
         system.actorOf(Props(new TaskQueue).withDispatcher("taskqueue"),
                        "queue")
@@ -277,16 +272,23 @@ class TaskSystem private[tasks] (
     }
   }
 
-  val elasticSupportFactory = elastic.elasticSupport.map(
-    es =>
-      es(master = hostConfig.master,
-         queueActor = queueActor,
-         resource = CPUMemoryAvailable(cpu = hostConfig.myCardinality,
-                                       memory = hostConfig.availableMemory)))
+  val elasticSupportFactory =
+    if (hostConfig.isApp || hostConfig.isWorker)
+      elastic.elasticSupport.map(
+        es =>
+          es(
+            masterAddress = hostConfig.master,
+            queueActor = queueActor,
+            resource = CPUMemoryAvailable(cpu = hostConfig.myCardinality,
+                                          memory = hostConfig.availableMemory),
+            codeAddress =
+              elastic.CodeAddress(hostConfig.codeAddress, config.codeVersion)
+        ))
+    else None
 
   // start up noderegistry
   val noderegistry: Option[ActorRef] =
-    if (!isLauncherOnly && elasticSupportFactory.isDefined) {
+    if (hostConfig.isApp && elasticSupportFactory.isDefined) {
 
       val props = Props(elasticSupportFactory.get.createRegistry)
 
@@ -299,7 +301,7 @@ class TaskSystem private[tasks] (
     } else None
 
   val packageServer =
-    if (!isLauncherOnly && elasticSupportFactory.isDefined) {
+    if (hostConfig.isApp && elasticSupportFactory.isDefined) {
       import akka.http.scaladsl.Http
 
       val pack = Deployment.pack
@@ -311,7 +313,9 @@ class TaskSystem private[tasks] (
       val actorsystem = 1 //shade implicit conversion
       val _ = actorsystem // suppress unused warning
       val bindingFuture =
-        Http().bindAndHandle(service.route, "0.0.0.0", host.getPort + 1)
+        Http().bindAndHandle(service.route,
+                             "0.0.0.0",
+                             hostConfig.codeAddress.getPort)
 
       Some(bindingFuture)
 
@@ -334,14 +338,16 @@ class TaskSystem private[tasks] (
     tasksConfig = config
   )
 
-  private val launcherActor = if (numberOfCores > 0) {
+  private val launcherActor = if (numberOfCores > 0 && hostConfig.isWorker) {
     val refresh = config.askInterval
     val ac = system.actorOf(
       Props(
         new TaskLauncher(
           queueActor,
           nodeLocalCacheActor,
-          CPUMemoryAvailable(cpu = numberOfCores, memory = availableMemory),
+          VersionedCPUMemoryAvailable(
+            config.codeVersion,
+            CPUMemoryAvailable(cpu = numberOfCores, memory = availableMemory)),
           refreshRate = refresh,
           auxExecutionContext = auxExecutionContext,
           actorMaterializer = mat,
@@ -355,7 +361,7 @@ class TaskSystem private[tasks] (
     Some(ac)
   } else None
 
-  if (isLauncherOnly && elasticSupportFactory.isDefined && launcherActor.isDefined) {
+  if (!hostConfig.isApp && hostConfig.isWorker && elasticSupportFactory.isDefined && launcherActor.isDefined) {
     val nodeName = getNodeName
 
     tasksystemlog.info(
@@ -382,7 +388,7 @@ class TaskSystem private[tasks] (
   }
 
   private def initFailed(): Unit = {
-    if (isLauncherOnly) {
+    if (!hostConfig.isApp && hostConfig.isWorker) {
       remotenoderegistry.foreach(_ ! InitFailed(PendingJobId(getNodeName)))
     }
   }
@@ -390,7 +396,7 @@ class TaskSystem private[tasks] (
   var shuttingDown = false
 
   def shutdown(): Unit = synchronized {
-    if (hostConfig.myRole == MASTER) {
+    if (hostConfig.isApp || hostConfig.isQueue) {
       if (!shuttingDown) {
         shuttingDown = true
         implicit val timeout = akka.util.Timeout(10 seconds)
@@ -398,16 +404,18 @@ class TaskSystem private[tasks] (
 
         val latch = new java.util.concurrent.CountDownLatch(1)
         reaperActor ! Latch(latch)
-        val cacheReaper = system.actorOf(Props(new CallbackReaper({
-          fileActor ! PoisonPill
-        })))
-        (cacheReaper ? WatchMe(cacherActor)).foreach { _ =>
-          cacherActor ! PoisonPillToCacheActor
-        }
-        queueActor ! PoisonPill
 
+        if (hostConfig.isQueue) {
+          val cacheReaper = system.actorOf(Props(new CallbackReaper({
+            fileActor ! PoisonPill
+          })))
+          (cacheReaper ? WatchMe(cacherActor)).foreach { _ =>
+            cacherActor ! PoisonPillToCacheActor
+          }
+          queueActor ! PoisonPill
+        }
         launcherActor.foreach(_ ! PoisonPill)
-        if (!isLauncherOnly) {
+        if (hostConfig.isApp) {
           noderegistry.foreach(_ ! PoisonPill)
         }
         nodeLocalCacheActor ! PoisonPill

@@ -48,12 +48,16 @@ package object tasks {
 
   type SharedFile = tasks.fileservice.SharedFile
 
-  type CPUMemoryRequest = tasks.shared.CPUMemoryRequest
+  type CPUMemoryRequest = tasks.shared.VersionedCPUMemoryRequest
 
-  def CPUMemoryRequest(cpu: (Int, Int), memory: Int) =
-    tasks.shared.CPUMemoryRequest(cpu, memory)
-  def CPUMemoryRequest(cpu: Int, memory: Int) =
-    tasks.shared.CPUMemoryRequest(cpu, memory)
+  def CPUMemoryRequest(codeVersion: String, cpu: (Int, Int), memory: Int) =
+    tasks.shared.VersionedCPUMemoryRequest(
+      codeVersion,
+      tasks.shared.CPUMemoryRequest(cpu, memory))
+  def CPUMemoryRequest(codeVersion: String, cpu: Int, memory: Int) =
+    tasks.shared.VersionedCPUMemoryRequest(
+      codeVersion,
+      tasks.shared.CPUMemoryRequest(cpu, memory))
 
   implicit def tsc(implicit ts: TaskSystem): TaskSystemComponents =
     ts.components
@@ -105,7 +109,7 @@ package object tasks {
   def withTaskSystem[T](c: Option[Config])(
       f: TaskSystemComponents => T): Option[T] = {
     val ts = defaultTaskSystem(c)
-    if (ts.hostConfig.myRole == MASTER) {
+    if (ts.hostConfig.myRoles.contains(App)) {
       try {
         Some(f(ts.components))
       } finally {
@@ -143,7 +147,7 @@ package object tasks {
       }
 
       val numberOfAkkaRemotingThreads =
-        if (hostConfig.myRole == MASTER) 6 else 2
+        if (hostConfig.myRoles.contains(Queue)) 6 else 2
 
       val configSource = s"""
         task-worker-dispatcher.fork-join-executor.parallelism-max = ${hostConfig.myCardinality}
@@ -182,8 +186,9 @@ package object tasks {
   def defaultTaskSystem(as: ActorSystem)(implicit tc: TasksConfig): TaskSystem =
     new TaskSystem(MasterSlaveGridEngineChosenFromConfig, as)
 
-  def customTaskSystem(hostConfig: MasterSlaveConfiguration,
-                       extraConf: Config): TaskSystem = {
+  def customTaskSystem(
+      hostConfig: MasterSlaveConfiguration with HostConfiguration,
+      extraConf: Config): TaskSystem = {
     val akkaconf = ConfigFactory.parseResources("akka.conf")
 
     val conf = ConfigFactory.defaultOverrides
@@ -198,8 +203,9 @@ package object tasks {
     new TaskSystem(hostConfig, system)(tconf)
   }
 
-  def customTaskSystem(hostConfig: MasterSlaveConfiguration,
-                       as: ActorSystem): TaskSystem =
+  def customTaskSystem(
+      hostConfig: MasterSlaveConfiguration with HostConfiguration,
+      as: ActorSystem): TaskSystem =
     new TaskSystem(hostConfig, as)(tasks.util.config.parse(as))
 
   type CompFun[A, B] = A => ComputationEnvironment => B
@@ -209,8 +215,8 @@ package object tasks {
     macro Macros
       .asyncTaskDefinitionImpl[A, C]
 
-  def MasterSlaveGridEngineChosenFromConfig(
-      implicit config: TasksConfig): MasterSlaveConfiguration = {
+  def MasterSlaveGridEngineChosenFromConfig(implicit config: TasksConfig)
+    : MasterSlaveConfiguration with HostConfiguration = {
     if (config.disableRemoting) new LocalConfigurationFromConfig
     else
       config.gridEngine match {

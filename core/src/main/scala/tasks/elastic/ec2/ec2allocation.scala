@@ -87,9 +87,11 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
     javax.xml.bind.DatatypeConverter.printBase64Binary(bytes)
   }
 
-  val masterAddress: InetSocketAddress
+  def masterAddress: InetSocketAddress
 
-  val ec2: AmazonEC2Client
+  def codeAddress: CodeAddress
+
+  def ec2: AmazonEC2Client
 
   override def convertRunningToPending(
       p: RunningJobId): Option[PendingJobId] = {
@@ -151,8 +153,8 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
       gridEngine = EC2Grid,
       masterAddress = masterAddress,
       download = new java.net.URL("http",
-                                  masterAddress.getHostName,
-                                  masterAddress.getPort + 1,
+                                  codeAddress.address.getHostName,
+                                  codeAddress.address.getPort,
                                   "/")
     )
 
@@ -226,7 +228,8 @@ class EC2NodeKiller(
 class EC2NodeRegistry(
     val masterAddress: InetSocketAddress,
     val targetQueue: ActorRef,
-    override val unmanagedResource: CPUMemoryAvailable
+    override val unmanagedResource: CPUMemoryAvailable,
+    val codeAddress: CodeAddress
 )(implicit val config: TasksConfig)
     extends EC2NodeRegistryImp
     with NodeCreatorImpl
@@ -235,6 +238,7 @@ class EC2NodeRegistry(
     with akka.actor.ActorLogging {
   val ec2 = new AmazonEC2Client()
   ec2.setEndpoint(config.endpoint)
+  def codeVersion = codeAddress.codeVersion
 }
 
 class EC2SelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)(
@@ -264,12 +268,15 @@ class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig)
 
 object EC2Grid extends ElasticSupport[EC2NodeRegistry, EC2SelfShutdown] {
 
-  def apply(master: InetSocketAddress,
+  def apply(masterAddress: InetSocketAddress,
             balancerActor: ActorRef,
-            resource: CPUMemoryAvailable)(implicit config: TasksConfig) =
+            resource: CPUMemoryAvailable,
+            codeAddress: CodeAddress)(implicit config: TasksConfig) =
     new Inner {
+
       def getNodeName = EC2Operations.readMetadata("instance-id").head
-      def createRegistry = new EC2NodeRegistry(master, balancerActor, resource)
+      def createRegistry =
+        new EC2NodeRegistry(masterAddress, balancerActor, resource, codeAddress)
       def createSelfShutdown =
         new EC2SelfShutdown(RunningJobId(getNodeName), balancerActor)
     }

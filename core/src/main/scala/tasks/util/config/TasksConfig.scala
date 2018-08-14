@@ -80,6 +80,15 @@ class TasksConfig(val raw: Config) {
 
   val hostPort = raw.getInt("hosts.port")
 
+  val masterAddress =
+    if (raw.hasPath("hosts.master")) {
+      val h = raw.getString("hosts.master").split(":")(0)
+      val p = raw.getString("hosts.master").split(":")(1).toInt
+      Some(new java.net.InetSocketAddress(h, p))
+    } else None
+
+  val startApp = raw.getBoolean("hosts.app")
+
   val auxThreads = raw.getInt("tasks.auxThreads")
 
   val storageURI =

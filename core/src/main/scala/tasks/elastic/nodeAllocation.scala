@@ -206,13 +206,17 @@ trait SimpleDecideNewNode extends DecideNewNode {
 
   implicit def config: TasksConfig
 
+  def codeVersion: String
+
   def needNewNode(
       q: QueueStat,
       registeredNodes: Seq[CPUMemoryAvailable],
       pendingNodes: Seq[CPUMemoryAvailable]): Map[CPUMemoryRequest, Int] = {
     // QueueStat(queued: List[(String, CPUMemoryRequest)], running: List[(String,CPUMemoryAllocated)]
 
-    val resourceNeeded: List[CPUMemoryRequest] = q.queued.map(_._2)
+    val resourceNeeded: List[CPUMemoryRequest] = q.queued.map(_._2).collect {
+      case VersionedCPUMemoryRequest(v, request) if v == codeVersion => request
+    }
 
     val availableResources: List[CPUMemoryAvailable] =
       (registeredNodes ++ pendingNodes).toList
@@ -497,8 +501,11 @@ trait ElasticSupport[Registry <: NodeCreatorImpl, SS <: SelfShutdown] {
     def getNodeName: String
   }
 
-  def apply(master: InetSocketAddress,
+  def apply(masterAddress: InetSocketAddress,
             queueActor: ActorRef,
-            resource: CPUMemoryAvailable)(implicit config: TasksConfig): Inner
+            resource: CPUMemoryAvailable,
+            codeAddress: CodeAddress)(implicit config: TasksConfig): Inner
 
 }
+
+case class CodeAddress(address: InetSocketAddress, codeVersion: String)

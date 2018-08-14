@@ -50,7 +50,8 @@ trait SHShutdown extends ShutdownNode {
 
 trait SHNodeRegistryImp extends Actor with GridJobRegistry {
 
-  val masterAddress: InetSocketAddress
+  def masterAddress: InetSocketAddress
+  def codeAddress: CodeAddress
 
   def requestOneNewJobFromGridScheduler(requestSize: CPUMemoryRequest)
     : Try[Tuple2[PendingJobId, CPUMemoryAvailable]] = {
@@ -59,8 +60,8 @@ trait SHNodeRegistryImp extends Actor with GridJobRegistry {
       gridEngine = SHGrid,
       masterAddress = masterAddress,
       download = new java.net.URL("http",
-                                  masterAddress.getHostName,
-                                  masterAddress.getPort + 1,
+                                  codeAddress.address.getHostName,
+                                  codeAddress.address.getPort,
                                   "/")
     )
 
@@ -97,13 +98,16 @@ class SHNodeKiller(
 class SHNodeRegistry(
     val masterAddress: InetSocketAddress,
     val targetQueue: ActorRef,
-    override val unmanagedResource: CPUMemoryAvailable
+    override val unmanagedResource: CPUMemoryAvailable,
+    val codeAddress: CodeAddress
 )(implicit val config: TasksConfig)
     extends SHNodeRegistryImp
     with NodeCreatorImpl
     with SimpleDecideNewNode
     with SHShutdown
-    with akka.actor.ActorLogging
+    with akka.actor.ActorLogging {
+  def codeVersion = codeAddress.codeVersion
+}
 
 class SHSelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
     extends SelfShutdown {
@@ -114,9 +118,10 @@ class SHSelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
 
 object SHGrid extends ElasticSupport[SHNodeRegistry, SHSelfShutdown] {
 
-  def apply(master: InetSocketAddress,
+  def apply(masterAddress: InetSocketAddress,
             balancerActor: ActorRef,
-            resource: CPUMemoryAvailable)(implicit config: TasksConfig) =
+            resource: CPUMemoryAvailable,
+            codeAddress: CodeAddress)(implicit config: TasksConfig) =
     new Inner {
       def getNodeName = {
         val pid = java.lang.management.ManagementFactory
@@ -126,7 +131,8 @@ object SHGrid extends ElasticSupport[SHNodeRegistry, SHSelfShutdown] {
           .head
         pid
       }
-      def createRegistry = new SHNodeRegistry(master, balancerActor, resource)
+      def createRegistry =
+        new SHNodeRegistry(masterAddress, balancerActor, resource, codeAddress)
       def createSelfShutdown =
         new SHSelfShutdown(RunningJobId(getNodeName), balancerActor)
     }

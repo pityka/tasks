@@ -232,7 +232,7 @@ class ProxyTask[MyPrerequisitive, MyResult](
     incomings: MyPrerequisitive,
     writer: Serializer[MyPrerequisitive],
     reader: Deserializer[MyResult],
-    resourceConsumed: CPUMemoryRequest,
+    resourceConsumed: VersionedCPUMemoryRequest,
     starter: ActorRef,
     fileServiceActor: FileServiceActor,
     fileServicePrefix: FileServicePrefix,

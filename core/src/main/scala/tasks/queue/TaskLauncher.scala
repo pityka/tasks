@@ -47,7 +47,6 @@ import tasks.util.config._
 import tasks.shared._
 import tasks.fileservice._
 import tasks.wire._
-import tasks._
 
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
@@ -75,7 +74,7 @@ object TaskDescription {
 case class ScheduleTask(
     description: TaskDescription,
     taskImplementation: String,
-    resource: CPUMemoryRequest,
+    resource: VersionedCPUMemoryRequest,
     balancerActor: ActorRef,
     fileServiceActor: ActorRef,
     fileServicePrefix: FileServicePrefix,
@@ -93,8 +92,8 @@ object ScheduleTask {
 class TaskLauncher(
     taskQueue: ActorRef,
     nodeLocalCache: ActorRef,
-    slots: CPUMemoryAvailable = CPUMemoryAvailable(cpu = 1, memory = 2000),
-    refreshRate: FiniteDuration = 100 milliseconds,
+    slots: VersionedCPUMemoryAvailable,
+    refreshRate: FiniteDuration,
     auxExecutionContext: ExecutionContext,
     actorMaterializer: Materializer,
     remoteStorage: RemoteFileStorage,
@@ -105,15 +104,16 @@ class TaskLauncher(
 
   private case object CheckQueue extends Serializable
 
-  val maxResources: CPUMemoryAvailable = slots
-  var availableResources: CPUMemoryAvailable = maxResources
+  val maxResources: VersionedCPUMemoryAvailable = slots
+  var availableResources: VersionedCPUMemoryAvailable = maxResources
 
   def idle = maxResources == availableResources
   var idleState: Long = 0L
 
   var denyWorkBeforeShutdown = false
 
-  var startedTasks: List[(ActorRef, ScheduleTask, CPUMemoryAllocated)] = Nil
+  var startedTasks
+    : List[(ActorRef, ScheduleTask, VersionedCPUMemoryAllocated)] = Nil
 
   var freed = Set[ActorRef]()
 
@@ -281,8 +281,7 @@ class TaskLauncher(
       val allocated = startedTasks.find(_._1 == taskActor).map(_._3)
       if (allocated.isEmpty) log.error("Can't find actor ")
       else {
-        availableResources = availableResources.addBack(
-          CPUMemoryAllocated(allocated.get.cpu, allocated.get.memory))
+        availableResources = availableResources.addBack(allocated.get)
         freed = freed + taskActor
       }
       askForWork

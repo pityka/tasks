@@ -47,7 +47,8 @@ class TaskQueue(implicit config: TasksConfig)
 
   // Map(task -> (launcher,allocated,list of proxies))
   private val routedMessages = scala.collection.mutable
-    .Map[ScheduleTask, (ActorRef, CPUMemoryAllocated, List[ActorRef])]()
+    .Map[ScheduleTask,
+         (ActorRef, VersionedCPUMemoryAllocated, List[ActorRef])]()
 
   // This is non empty while waiting for response from the tasklauncher
   // during that, no other tasks are started

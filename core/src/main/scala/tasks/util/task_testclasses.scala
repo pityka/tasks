@@ -76,7 +76,7 @@ object SimpleTask {
       reader2: Deserializer[IntResult]) =
     newTask[IntResult, MyResultSet](
       prerequisitives = MyResultSet(Some(counter), Some(id)),
-      resource = CPUMemoryRequest(cpu = 1, memory = 500),
+      resource = CPUMemoryRequest(codeVersion = "test", cpu = 1, memory = 500),
       f = runTask,
       taskId = TaskId(runTask.getClass.getName, 1)
     ).actor

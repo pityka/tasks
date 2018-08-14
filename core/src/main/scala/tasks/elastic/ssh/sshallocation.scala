@@ -140,7 +140,9 @@ trait SSHShutdown extends ShutdownNode {
 
 trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
 
-  val masterAddress: InetSocketAddress
+  def masterAddress: InetSocketAddress
+
+  def codeAddress: CodeAddress
 
   def settings: SSHSettings
 
@@ -158,11 +160,10 @@ trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
             gridEngine = SSHGrid,
             masterAddress = masterAddress,
             download = new java.net.URL("http",
-                                        masterAddress.getHostName,
-                                        masterAddress.getPort + 1,
+                                        codeAddress.address.getHostName,
+                                        codeAddress.address.getPort,
                                         "/")
           )
-          // Try(
           SSHOperations.openSession(host) { session =>
             val command =
               "source .bash_profile; " + script + "echo $!;exit;"
@@ -190,7 +191,7 @@ trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
       .getOrElse(Failure(new RuntimeException("No enabled/working hosts")))
 
   def initializeNode(node: Node): Unit = {
-    val ac = node.launcherActor //.revive
+    val ac = node.launcherActor
 
     context.actorOf(Props(new SSHNodeKiller(ac, node))
                       .withDispatcher("my-pinned-dispatcher"),
@@ -212,7 +213,8 @@ class SSHNodeKiller(
 class SSHNodeRegistry(
     val masterAddress: InetSocketAddress,
     val targetQueue: ActorRef,
-    override val unmanagedResource: CPUMemoryAvailable
+    override val unmanagedResource: CPUMemoryAvailable,
+    val codeAddress: CodeAddress
 )(implicit val config: TasksConfig)
     extends SSHNodeRegistryImp
     with NodeCreatorImpl
@@ -220,6 +222,7 @@ class SSHNodeRegistry(
     with SSHShutdown
     with akka.actor.ActorLogging {
   val settings = new SSHSettings
+  def codeVersion = codeAddress.codeVersion
 }
 
 class SSHSelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
@@ -233,7 +236,8 @@ object SSHGrid extends ElasticSupport[SSHNodeRegistry, SSHSelfShutdown] {
 
   def apply(master: InetSocketAddress,
             balancerActor: ActorRef,
-            resource: CPUMemoryAvailable)(implicit config: TasksConfig) =
+            resource: CPUMemoryAvailable,
+            codeAddress: CodeAddress)(implicit config: TasksConfig) =
     new Inner {
       def getNodeName = {
         val pid = java.lang.management.ManagementFactory
@@ -244,7 +248,8 @@ object SSHGrid extends ElasticSupport[SSHNodeRegistry, SSHSelfShutdown] {
         val hostname = config.hostName
         hostname + ":" + pid
       }
-      def createRegistry = new SSHNodeRegistry(master, balancerActor, resource)
+      def createRegistry =
+        new SSHNodeRegistry(master, balancerActor, resource, codeAddress)
       def createSelfShutdown =
         new SSHSelfShutdown(RunningJobId(getNodeName), balancerActor)
     }
