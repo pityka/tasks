@@ -137,7 +137,7 @@ class TaskLauncher(
         FileServiceActor(sch.fileServiceActor, managedStorage, remoteStorage),
         sch.cacheActor,
         nodeLocalCache,
-        allocatedResource,
+        allocatedResource.cpuMemoryAllocated,
         sch.fileServicePrefix.append(sch.description.taskId.id),
         auxExecutionContext,
         actorMaterializer,
