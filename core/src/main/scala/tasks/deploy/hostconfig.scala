@@ -51,7 +51,6 @@ trait HostConfiguration {
 trait MasterSlaveConfiguration {
 
   def master: InetSocketAddress
-  def codeAddress: InetSocketAddress
 
   def myRoles: Set[Role]
 
@@ -82,9 +81,6 @@ trait MasterSlaveConfigurationFromConfig extends MasterSlaveConfiguration {
 
   lazy val master: InetSocketAddress = config.masterAddress.getOrElse(myAddress)
 
-  lazy val codeAddress: InetSocketAddress =
-    new InetSocketAddress(myAddress.getHostName, myAddress.getPort + 1)
-
   private lazy val startApp = config.startApp
 
   lazy val myRoles: Set[Role] =
@@ -102,7 +98,6 @@ class LocalConfiguration(val myCardinality: Int, val availableMemory: Int)
   override lazy val myRoles = Set(App, Queue, Worker)
 
   override lazy val master = new InetSocketAddress("localhost", 0)
-  override lazy val codeAddress = new InetSocketAddress("localhost", 0)
 
   val myAddress = master
 }

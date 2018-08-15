@@ -121,7 +121,7 @@ object SHGrid extends ElasticSupport[SHNodeRegistry, SHSelfShutdown] {
   def apply(masterAddress: InetSocketAddress,
             balancerActor: ActorRef,
             resource: CPUMemoryAvailable,
-            codeAddress: CodeAddress)(implicit config: TasksConfig) =
+            codeAddress: Option[CodeAddress])(implicit config: TasksConfig) =
     new Inner {
       def getNodeName = {
         val pid = java.lang.management.ManagementFactory
@@ -132,7 +132,12 @@ object SHGrid extends ElasticSupport[SHNodeRegistry, SHSelfShutdown] {
         pid
       }
       def createRegistry =
-        new SHNodeRegistry(masterAddress, balancerActor, resource, codeAddress)
+        codeAddress.map(
+          codeAddress =>
+            new SHNodeRegistry(masterAddress,
+                               balancerActor,
+                               resource,
+                               codeAddress))
       def createSelfShutdown =
         new SHSelfShutdown(RunningJobId(getNodeName), balancerActor)
     }

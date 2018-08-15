@@ -237,7 +237,7 @@ object SSHGrid extends ElasticSupport[SSHNodeRegistry, SSHSelfShutdown] {
   def apply(master: InetSocketAddress,
             balancerActor: ActorRef,
             resource: CPUMemoryAvailable,
-            codeAddress: CodeAddress)(implicit config: TasksConfig) =
+            codeAddress: Option[CodeAddress])(implicit config: TasksConfig) =
     new Inner {
       def getNodeName = {
         val pid = java.lang.management.ManagementFactory
@@ -249,7 +249,8 @@ object SSHGrid extends ElasticSupport[SSHNodeRegistry, SSHSelfShutdown] {
         hostname + ":" + pid
       }
       def createRegistry =
-        new SSHNodeRegistry(master, balancerActor, resource, codeAddress)
+        codeAddress.map(codeAddress =>
+          new SSHNodeRegistry(master, balancerActor, resource, codeAddress))
       def createSelfShutdown =
         new SSHSelfShutdown(RunningJobId(getNodeName), balancerActor)
     }

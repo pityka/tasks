@@ -496,15 +496,16 @@ trait ShutdownReaper extends Reaper {
 trait ElasticSupport[Registry <: NodeCreatorImpl, SS <: SelfShutdown] {
 
   trait Inner {
-    def createRegistry: Registry
+    def createRegistry: Option[Registry]
     def createSelfShutdown: SS
     def getNodeName: String
   }
 
-  def apply(masterAddress: InetSocketAddress,
-            queueActor: ActorRef,
-            resource: CPUMemoryAvailable,
-            codeAddress: CodeAddress)(implicit config: TasksConfig): Inner
+  def apply(
+      masterAddress: InetSocketAddress,
+      queueActor: ActorRef,
+      resource: CPUMemoryAvailable,
+      codeAddress: Option[CodeAddress])(implicit config: TasksConfig): Inner
 
 }
 

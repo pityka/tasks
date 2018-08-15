@@ -273,7 +273,16 @@ class TaskSystem private[tasks] (
   }
 
   val elasticSupportFactory =
-    if (hostConfig.isApp || hostConfig.isWorker)
+    if (hostConfig.isApp || hostConfig.isWorker) {
+      val codeAddress =
+        if (hostConfig.isApp)
+          Some(
+            elastic.CodeAddress(
+              new java.net.InetSocketAddress(hostConfig.myAddress.getHostName,
+                                             hostConfig.myAddress.getPort + 1),
+              config.codeVersion))
+        else None
+
       elastic.elasticSupport.map(
         es =>
           es(
@@ -281,16 +290,15 @@ class TaskSystem private[tasks] (
             queueActor = queueActor,
             resource = CPUMemoryAvailable(cpu = hostConfig.myCardinality,
                                           memory = hostConfig.availableMemory),
-            codeAddress =
-              elastic.CodeAddress(hostConfig.codeAddress, config.codeVersion)
+            codeAddress = codeAddress
         ))
-    else None
+    } else None
 
   // start up noderegistry
   val noderegistry: Option[ActorRef] =
     if (hostConfig.isApp && elasticSupportFactory.isDefined) {
 
-      val props = Props(elasticSupportFactory.get.createRegistry)
+      val props = Props(elasticSupportFactory.get.createRegistry.get)
 
       val ac = system
         .actorOf(props.withDispatcher("my-pinned-dispatcher"), "noderegistry")
@@ -315,7 +323,7 @@ class TaskSystem private[tasks] (
       val bindingFuture =
         Http().bindAndHandle(service.route,
                              "0.0.0.0",
-                             hostConfig.codeAddress.getPort)
+                             hostConfig.myAddress.getPort + 1)
 
       Some(bindingFuture)
 

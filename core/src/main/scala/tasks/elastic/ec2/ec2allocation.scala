@@ -271,12 +271,17 @@ object EC2Grid extends ElasticSupport[EC2NodeRegistry, EC2SelfShutdown] {
   def apply(masterAddress: InetSocketAddress,
             balancerActor: ActorRef,
             resource: CPUMemoryAvailable,
-            codeAddress: CodeAddress)(implicit config: TasksConfig) =
+            codeAddress: Option[CodeAddress])(implicit config: TasksConfig) =
     new Inner {
 
       def getNodeName = EC2Operations.readMetadata("instance-id").head
       def createRegistry =
-        new EC2NodeRegistry(masterAddress, balancerActor, resource, codeAddress)
+        codeAddress.map(
+          codeAddress =>
+            new EC2NodeRegistry(masterAddress,
+                                balancerActor,
+                                resource,
+                                codeAddress))
       def createSelfShutdown =
         new EC2SelfShutdown(RunningJobId(getNodeName), balancerActor)
     }
