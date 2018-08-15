@@ -48,13 +48,18 @@ package object tasks {
 
   type SharedFile = tasks.fileservice.SharedFile
 
+  type CodeVersion = tasks.shared.CodeVersion
+  val CodeVersion = tasks.shared.CodeVersion _
+
   type CPUMemoryRequest = tasks.shared.VersionedCPUMemoryRequest
 
-  def CPUMemoryRequest(codeVersion: String, cpu: (Int, Int), memory: Int) =
+  def CPUMemoryRequest(cpu: (Int, Int), memory: Int)(
+      implicit codeVersion: CodeVersion) =
     tasks.shared.VersionedCPUMemoryRequest(
       codeVersion,
       tasks.shared.CPUMemoryRequest(cpu, memory))
-  def CPUMemoryRequest(codeVersion: String, cpu: Int, memory: Int) =
+  def CPUMemoryRequest(cpu: Int, memory: Int)(
+      implicit codeVersion: CodeVersion) =
     tasks.shared.VersionedCPUMemoryRequest(
       codeVersion,
       tasks.shared.CPUMemoryRequest(cpu, memory))
@@ -65,6 +70,9 @@ package object tasks {
   implicit def tasksConfig(
       implicit component: TaskSystemComponents): TasksConfig =
     component.tasksConfig
+
+  implicit def codeVersionFromTasksConfig(
+      implicit c: TasksConfig): CodeVersion = c.codeVersion
 
   implicit def fs(implicit component: TaskSystemComponents): FileServiceActor =
     component.fs

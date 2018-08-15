@@ -106,7 +106,7 @@ object CPUMemoryAvailable {
     deriveEncoder[CPUMemoryAvailable]
 }
 
-case class VersionedCPUMemoryRequest(codeVersion: String,
+case class VersionedCPUMemoryRequest(codeVersion: CodeVersion,
                                      cpuMemoryRequest: CPUMemoryRequest)
     extends ResourceRequest {
   def cpu = cpuMemoryRequest.cpu
@@ -114,7 +114,7 @@ case class VersionedCPUMemoryRequest(codeVersion: String,
 }
 
 object VersionedCPUMemoryRequest {
-  def apply(codeVersion: String,
+  def apply(codeVersion: CodeVersion,
             cpu: Int,
             memory: Int): VersionedCPUMemoryRequest =
     VersionedCPUMemoryRequest(codeVersion, CPUMemoryRequest((cpu, cpu), memory))
@@ -125,7 +125,7 @@ object VersionedCPUMemoryRequest {
     deriveEncoder[VersionedCPUMemoryRequest]
 }
 
-case class VersionedCPUMemoryAllocated(codeVersion: String,
+case class VersionedCPUMemoryAllocated(codeVersion: CodeVersion,
                                        cpuMemoryAllocated: CPUMemoryAllocated)
     extends ResourceAllocated[VersionedCPUMemoryRequest] {
   def cpu = cpuMemoryAllocated.cpu
@@ -139,7 +139,7 @@ object VersionedCPUMemoryAllocated {
     deriveEncoder[VersionedCPUMemoryAllocated]
 }
 
-case class VersionedCPUMemoryAvailable(codeVersion: String,
+case class VersionedCPUMemoryAvailable(codeVersion: CodeVersion,
                                        cpuMemoryAvailable: CPUMemoryAvailable)
     extends ResourceAvailable[VersionedCPUMemoryRequest,
                               VersionedCPUMemoryAllocated] {

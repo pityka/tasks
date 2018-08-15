@@ -35,7 +35,7 @@ class TasksConfig(val raw: Config) {
 
   val asString = raw.root.render
 
-  val codeVersion = raw.getString("tasks.codeVersion")
+  val codeVersion = tasks.shared.CodeVersion(raw.getString("tasks.codeVersion"))
 
   val cacheEnabled = raw.getBoolean("tasks.cache.enabled")
 
