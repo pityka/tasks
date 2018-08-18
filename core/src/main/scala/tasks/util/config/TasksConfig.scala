@@ -93,7 +93,6 @@ class TasksConfig(val raw: Config) {
 
   val storageURI =
     new java.net.URI(raw.getString("tasks.fileservice.storageURI"))
-  println(storageURI)
 
   val fileServiceExtendedFolders = raw
     .getStringList("tasks.fileservice.extendedFolders")
