@@ -38,7 +38,7 @@ import tasks.circesupport._
 
 import io.circe.generic.auto._
 
-object Fib {
+object RercursiveTasksTest {
 
   def serial(n: Int): Int = n match {
     case 0 => 0
@@ -82,7 +82,10 @@ object Fib {
 
 }
 
-class RecursiveTestSuite extends FunSuite with Matchers with BeforeAndAfterAll {
+class RecursiveTaskTestSuite
+    extends FunSuite
+    with Matchers
+    with BeforeAndAfterAll {
   val string = """
 akka.loglevel = "INFO"
 tasks.cacheEnabled = false
@@ -93,9 +96,9 @@ tasks.disableRemoting = true
   implicit val system: TaskSystem = customTaskSystem(
     new LocalConfiguration(4, 1000),
     ConfigFactory.parseString(string))
-  import Fib._
+  import RercursiveTasksTest._
 
-  test("long") {
+  test("recursive fibonacci") {
     val n = 16
     val r = await(fibtask(FibInput(n))(CPUMemoryRequest(1, 1))).n
     assertResult(r)(serial(n))

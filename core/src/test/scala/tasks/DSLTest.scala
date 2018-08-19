@@ -31,30 +31,17 @@ import org.scalatest._
 
 import org.scalatest.Matchers
 import scala.concurrent._
-import scala.concurrent.duration._
 
 import tasks.util._
 import tasks.circesupport._
 
 import com.typesafe.config.ConfigFactory
-import io.circe._
-import io.circe.generic.semiauto._
 
-object Tests {
+object DSLTest extends TestHelpers {
 
-  def await[T](f: Future[T]) = Await.result(f, atMost = Duration.Inf)
-
-  case class IntWrapper(i: Int)
-  object IntWrapper {
-    implicit val enc: Encoder[IntWrapper] = deriveEncoder[IntWrapper]
-    implicit val dec: Decoder[IntWrapper] = deriveDecoder[IntWrapper]
-  }
-
-  val increment = AsyncTask[IntWrapper, Int]("incrementtask", 1) {
-    case IntWrapper(c) =>
-      println(c)
+  val increment = AsyncTask[Input, Int]("dsltest", 1) {
+    case Input(c) =>
       implicit computationEnvironment =>
-        println("increment")
         Future(c + 1)
   }
 
@@ -66,7 +53,7 @@ object Tests {
         ConfigFactory.parseString(
           s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}"
         ))) { implicit ts =>
-      (await(increment(IntWrapper(0))(CPUMemoryRequest(1, 500))))
+      (await(increment(Input(0))(CPUMemoryRequest(1, 500))))
 
     }
   }
@@ -76,7 +63,7 @@ object Tests {
 class TaskDSLTestSuite extends FunSuite with Matchers {
 
   test("chains should work") {
-    Tests.run.get should equal(1)
+    DSLTest.run.get should equal(1)
   }
 
 }
