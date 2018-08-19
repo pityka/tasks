@@ -216,7 +216,6 @@ private class Task(
       log.debug("StartTask, from taskactor")
       startdat = Some(bd.value)
       startTask(bd)
-    // startTask(io.circe.parser.parse(msg).right.get)
 
     case RegisterForNotification(ac) =>
       log.debug("Received: " + ac.toString)
@@ -296,11 +295,6 @@ class ProxyTask[MyPrerequisitive, MyResult](
   def receive = {
     case MessageFromTask(incomingResultRaw) =>
       val incomingResult: MyResult = reader(incomingResultRaw.data.bytes)
-      // reader
-      //   .decodeJson(
-      //     io.circe.parser.parse(incomingResultJs.data.value).right.get)
-      //   .right
-      //   .get
       log.debug("MessageFromTask received from: {}, {}, {},{}",
                 sender,
                 incomingResultRaw,
@@ -314,7 +308,7 @@ class ProxyTask[MyPrerequisitive, MyResult](
     case GetBackResult =>
       log.debug(
         "GetBackResult message received. Registering for notification: " + sender.toString)
-      _channels = _channels + sender //.asInstanceOf[Channel[Result]]
+      _channels = _channels + sender
       distributeResult
 
     case ATaskWasForwarded =>
