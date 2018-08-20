@@ -343,4 +343,15 @@ package object util {
         }, c - 1))
     } else f
 
+  def reflectivelyInstantiateObject[A](fqcn: String): A = {
+    import scala.reflect.runtime.universe
+
+    val runtimeMirror = universe.runtimeMirror(getClass.getClassLoader)
+    val module = runtimeMirror.staticModule(fqcn)
+    val obj = runtimeMirror.reflectModule(module)
+
+    obj.instance.asInstanceOf[A]
+
+  }
+
 }

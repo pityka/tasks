@@ -62,7 +62,8 @@ trait SHNodeRegistryImp extends Actor with GridJobRegistry {
       download = new java.net.URL("http",
                                   codeAddress.address.getHostName,
                                   codeAddress.address.getPort,
-                                  "/")
+                                  "/"),
+      slaveHostname = None
     )
 
     val (stdout, _, _) = execGetStreamsAndCode(

@@ -41,12 +41,18 @@ object Deployment {
       memory: Int,
       gridEngine: ElasticSupport[_, _],
       masterAddress: InetSocketAddress,
-      download: URL
+      download: URL,
+      slaveHostname: Option[String]
   )(implicit config: TasksConfig): String = {
     val downloadScript = s"curl -m 60 $download > package && chmod u+x package"
 
+    val hostnameString = slaveHostname match {
+      case None       => ""
+      case Some(host) => s"-Dhosts.hostname=$host"
+    }
+
     val edited =
-      "./package -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dtasks.fileservice.storageURI={STORAGE}"
+      s"./package -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} $hostnameString"
         .replaceAllLiterally(
           "{RAM}",
           math

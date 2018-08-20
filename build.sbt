@@ -86,6 +86,7 @@ lazy val core = project
     PB.targets in Compile := Seq(
       scalapb.gen() -> (sourceManaged in Compile).value
     ),
+    fork := true,
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "22.0",
       "com.typesafe.akka" %% "akka-actor" % "2.5.11",

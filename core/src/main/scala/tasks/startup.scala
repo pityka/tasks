@@ -48,6 +48,7 @@ import scala.concurrent.Await
 
 import scala.concurrent.duration._
 import scala.concurrent._
+import scala.util._
 
 import com.bluelabs.s3stream.S3ClientQueued
 
@@ -124,8 +125,8 @@ class TaskSystem private[tasks] (
       val remotepath =
         s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/noderegistry"
       val noderegistry = Await.result(
-        system.actorSelection(remotepath).resolveOne(600 seconds),
-        atMost = 600 seconds)
+        system.actorSelection(remotepath).resolveOne(60 seconds),
+        atMost = 60 seconds)
       tasksystemlog.info("NodeRegistry: " + noderegistry)
       Some(noderegistry)
     } else None
@@ -312,20 +313,25 @@ class TaskSystem private[tasks] (
     if (hostConfig.isApp && elasticSupportFactory.isDefined) {
       import akka.http.scaladsl.Http
 
-      val pack = Deployment.pack
-      tasksystemlog
-        .info("Written executable package to: {}", pack.getAbsolutePath)
+      Try(Deployment.pack) match {
+        case Success(pack) =>
+          tasksystemlog
+            .info("Written executable package to: {}", pack.getAbsolutePath)
 
-      val service = new PackageServerActor(pack)
+          val service = new PackageServerActor(pack)
 
-      val actorsystem = 1 //shade implicit conversion
-      val _ = actorsystem // suppress unused warning
-      val bindingFuture =
-        Http().bindAndHandle(service.route,
-                             "0.0.0.0",
-                             hostConfig.myAddress.getPort + 1)
+          val actorsystem = 1 //shade implicit conversion
+          val _ = actorsystem // suppress unused warning
+          val bindingFuture =
+            Http().bindAndHandle(service.route,
+                                 "0.0.0.0",
+                                 hostConfig.myAddress.getPort + 1)
 
-      Some(bindingFuture)
+          Some(bindingFuture)
+        case Failure(_) =>
+          tasksystemlog.error(
+            "Packaging self failed. Main thread exited? Skip starting package server.")
+      }
 
     } else None
 
@@ -438,11 +444,14 @@ class TaskSystem private[tasks] (
 
   }
 
-  scala.sys.addShutdownHook {
-    tasksystemlog.warning(
-      "JVM is shutting down - will call tasksystem shutdown.")
-    shutdown
-    tasksystemlog.warning("JVM is shutting down - called tasksystem shutdown.")
+  if (config.addShutdownHook) {
+    scala.sys.addShutdownHook {
+      tasksystemlog.warning(
+        "JVM is shutting down - will call tasksystem shutdown.")
+      shutdown
+      tasksystemlog.warning(
+        "JVM is shutting down - called tasksystem shutdown.")
+    }
   }
 
   private def getNodeName: String = elasticSupportFactory.get.getNodeName

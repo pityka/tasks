@@ -155,7 +155,8 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
       download = new java.net.URL("http",
                                   codeAddress.address.getHostName,
                                   codeAddress.address.getPort,
-                                  "/")
+                                  "/"),
+      slaveHostname = None
     )
 
     launchSpecification.setUserData(gzipBase64(userdata))

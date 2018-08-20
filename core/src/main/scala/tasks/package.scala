@@ -157,7 +157,7 @@ package object tasks {
       val numberOfAkkaRemotingThreads =
         if (hostConfig.myRoles.contains(Queue)) 6 else 2
 
-      val configSource = s"""
+      val customConf = ConfigFactory.parseString(s"""
         task-worker-dispatcher.fork-join-executor.parallelism-max = ${hostConfig.myCardinality}
         task-worker-dispatcher.fork-join-executor.parallelism-min = ${hostConfig.myCardinality}
         akka {
@@ -174,8 +174,7 @@ package object tasks {
             }
          }
         }
-          """
-      val customConf = ConfigFactory.parseString(configSource)
+          """)
 
       val akkaconf = ConfigFactory.parseResources("akka.conf")
 
@@ -186,9 +185,9 @@ package object tasks {
 
     }
 
-    val system = ActorSystem("tasks", akkaConfiguration)
+    val system = ActorSystem(tconfig.actorSystemName, akkaConfiguration)
 
-    new TaskSystem(MasterSlaveGridEngineChosenFromConfig, system)
+    new TaskSystem(hostConfig, system)
   }
 
   def defaultTaskSystem(as: ActorSystem)(implicit tc: TasksConfig): TaskSystem =

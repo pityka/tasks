@@ -162,7 +162,8 @@ trait SSHNodeRegistryImp extends Actor with GridJobRegistry {
             download = new java.net.URL("http",
                                         codeAddress.address.getHostName,
                                         codeAddress.address.getPort,
-                                        "/")
+                                        "/"),
+            slaveHostname = Some(host.hostname)
           )
           SSHOperations.openSession(host) { session =>
             val command =

@@ -63,15 +63,15 @@ trait HostConfigurationFromConfig extends HostConfiguration {
 
   implicit def config: TasksConfig
 
-  val myPort = chooseNetworkPort
+  lazy val myPort = chooseNetworkPort
 
-  val hostname = config.hostName
+  lazy val hostname = config.hostName
 
-  val myAddress = new java.net.InetSocketAddress(hostname, myPort)
+  lazy val myAddress = new java.net.InetSocketAddress(hostname, myPort)
 
-  val myCardinality = config.hostNumCPU
+  lazy val myCardinality = config.hostNumCPU
 
-  val availableMemory = config.hostRAM
+  lazy val availableMemory = config.hostRAM
 }
 
 trait MasterSlaveConfigurationFromConfig extends MasterSlaveConfiguration {
@@ -112,8 +112,8 @@ class LocalConfigurationFromConfig(implicit config: TasksConfig)
   * Cardinality is determined from hosts.numCPU config
   */
 class MasterSlaveFromConfig(implicit val config: TasksConfig)
-    extends MasterSlaveConfigurationFromConfig
-    with HostConfigurationFromConfig
+    extends HostConfigurationFromConfig
+    with MasterSlaveConfigurationFromConfig
 
 /**
   * A master slave configuration for full manual setup.

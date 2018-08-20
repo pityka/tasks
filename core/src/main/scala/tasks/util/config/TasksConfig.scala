@@ -183,4 +183,8 @@ class TasksConfig(val raw: Config) {
 
   val terminateMaster = raw.getBoolean("tasks.elastic.aws.terminateMaster")
 
+  val actorSystemName = raw.getString("tasks.akka.actorsystem.name")
+
+  val addShutdownHook = raw.getBoolean("tasks.addShutdownHook")
+
 }
