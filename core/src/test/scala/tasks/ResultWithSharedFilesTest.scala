@@ -1,10 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
- * Group Fellay
- * Modified work, Copyright (c) 2016 Istvan Bartha
-
+ * Copyright (c) 2018 Istvan Bartha
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the "Software"),
