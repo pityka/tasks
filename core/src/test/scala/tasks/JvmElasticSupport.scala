@@ -24,7 +24,7 @@
 
 package tasks
 
-import akka.actor.{Actor, ActorRef, Props}
+import akka.actor.{Actor, ActorRef, Props, ActorSystem}
 import java.net.InetSocketAddress
 import akka.event.LoggingAdapter
 import scala.util._
@@ -128,6 +128,10 @@ object JvmElasticSupport {
   }
 
   object JvmGrid extends ElasticSupport[NodeRegistry, SelfShutdown] {
+
+    def hostConfig(implicit config: TasksConfig) = None
+
+    def reaper(implicit config: TasksConfig, system: ActorSystem) = None
 
     def apply(masterAddress: InetSocketAddress,
               balancerActor: ActorRef,

@@ -28,7 +28,7 @@
 
 package tasks.elastic.ec2
 
-import akka.actor.{Actor, ActorRef, Props}
+import akka.actor.{Actor, ActorRef, Props, ActorSystem}
 import java.net.InetSocketAddress
 import akka.event.LoggingAdapter
 import scala.util._
@@ -268,6 +268,14 @@ class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig)
 }
 
 object EC2Grid extends ElasticSupport[EC2NodeRegistry, EC2SelfShutdown] {
+
+  def hostConfig(implicit config: TasksConfig) = Some(new EC2MasterSlave)
+
+  def reaper(implicit config: TasksConfig,
+             system: ActorSystem): Option[ActorRef] =
+    Some(
+      system.actorOf(Props(new EC2Reaper(config.terminateMaster)),
+                     name = "reaper"))
 
   def apply(masterAddress: InetSocketAddress,
             balancerActor: ActorRef,

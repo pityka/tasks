@@ -97,13 +97,33 @@ lazy val core = project
       "io.github.pityka" %% "selfpackage" % "1.0.1",
       "io.github.pityka" %% "s3-stream-fork" % "0.0.3",
       "io.github.pityka" %% "akka-http-unboundedqueue" % "1.2.0",
-      "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24",
-      "ch.ethz.ganymed" % "ganymed-ssh2" % "261",
       "org.scalatest" %% "scalatest" % "3.0.0" % "test",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value
     )
   )
   .dependsOn(shared)
+
+lazy val ec2 = project
+  .in(file("ec2"))
+  .settings(commonSettings: _*)
+  .settings(
+    name := "tasks-ec2",
+    libraryDependencies ++= Seq(
+      "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24"
+    )
+  )
+  .dependsOn(core)
+
+lazy val ssh = project
+  .in(file("ssh"))
+  .settings(commonSettings: _*)
+  .settings(
+    name := "tasks-ssh",
+    libraryDependencies ++= Seq(
+      "ch.ethz.ganymed" % "ganymed-ssh2" % "261"
+    )
+  )
+  .dependsOn(core)
 
 lazy val example = project
   .in(file("example"))

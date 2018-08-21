@@ -145,7 +145,11 @@ package object tasks {
 
     implicit val tconfig = tasks.util.config.parse(configuration)
 
-    val hostConfig = MasterSlaveGridEngineChosenFromConfig
+    val elasticSupport = elastic.makeElasticSupport
+
+    val hostConfig = elasticSupport
+      .flatMap(_.hostConfig)
+      .getOrElse(MasterSlaveGridEngineChosenFromConfig)
 
     val akkaConfiguration = {
 
@@ -187,33 +191,33 @@ package object tasks {
 
     val system = ActorSystem(tconfig.actorSystemName, akkaConfiguration)
 
-    new TaskSystem(hostConfig, system)
+    new TaskSystem(hostConfig, system, elasticSupport)
   }
 
-  def defaultTaskSystem(as: ActorSystem)(implicit tc: TasksConfig): TaskSystem =
-    new TaskSystem(MasterSlaveGridEngineChosenFromConfig, as)
+  // def defaultTaskSystem(as: ActorSystem)(implicit tc: TasksConfig): TaskSystem =
+  //   new TaskSystem(MasterSlaveGridEngineChosenFromConfig, as)
 
-  def customTaskSystem(
-      hostConfig: MasterSlaveConfiguration with HostConfiguration,
-      extraConf: Config): TaskSystem = {
-    val akkaconf = ConfigFactory.parseResources("akka.conf")
+  // def customTaskSystem(
+  //     hostConfig: MasterSlaveConfiguration with HostConfiguration,
+  //     extraConf: Config): TaskSystem = {
+  //   val akkaconf = ConfigFactory.parseResources("akka.conf")
 
-    val conf = ConfigFactory.defaultOverrides
-      .withFallback(extraConf)
-      .withFallback(akkaconf)
-      .withFallback(ConfigFactory.defaultReference)
+  //   val conf = ConfigFactory.defaultOverrides
+  //     .withFallback(extraConf)
+  //     .withFallback(akkaconf)
+  //     .withFallback(ConfigFactory.defaultReference)
 
-    val system = ActorSystem("tasks", conf)
+  //   val system = ActorSystem("tasks", conf)
 
-    val tconf = tasks.util.config.parse(conf)
+  //   val tconf = tasks.util.config.parse(conf)
 
-    new TaskSystem(hostConfig, system)(tconf)
-  }
+  //   new TaskSystem(hostConfig, system)(tconf)
+  // }
 
-  def customTaskSystem(
-      hostConfig: MasterSlaveConfiguration with HostConfiguration,
-      as: ActorSystem): TaskSystem =
-    new TaskSystem(hostConfig, as)(tasks.util.config.parse(as))
+  // def customTaskSystem(
+  //     hostConfig: MasterSlaveConfiguration with HostConfiguration,
+  //     as: ActorSystem): TaskSystem =
+  //   new TaskSystem(hostConfig, as)(tasks.util.config.parse(as))
 
   type CompFun[A, B] = A => ComputationEnvironment => B
 
@@ -225,12 +229,12 @@ package object tasks {
   def MasterSlaveGridEngineChosenFromConfig(implicit config: TasksConfig)
     : MasterSlaveConfiguration with HostConfiguration = {
     if (config.disableRemoting) new LocalConfigurationFromConfig
-    else
-      config.gridEngine match {
-        case x if x == "EC2"      => new EC2MasterSlave
-        case x if x == "NOENGINE" => new MasterSlaveFromConfig
-        case _                    => new MasterSlaveFromConfig
-      }
+    else new MasterSlaveFromConfig
+    // config.gridEngine match {
+    //   case x if x == "EC2"      => new EC2MasterSlave
+    //   case x if x == "NOENGINE" =>
+    //   case _                    => new MasterSlaveFromConfig
+    // }
   }
 
 }

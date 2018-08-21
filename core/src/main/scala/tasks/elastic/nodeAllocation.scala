@@ -30,7 +30,8 @@ import akka.actor.{
   PoisonPill,
   ActorRef,
   Cancellable,
-  ExtendedActorSystem
+  ExtendedActorSystem,
+  ActorSystem
 }
 import scala.concurrent.duration._
 import java.net.InetSocketAddress
@@ -42,6 +43,7 @@ import tasks.shared._
 import tasks.util._
 import tasks.util.config._
 import tasks.wire._
+import tasks.deploy._
 
 import io.circe.{Encoder, Decoder}
 import io.circe.generic.semiauto._
@@ -494,6 +496,12 @@ trait ShutdownReaper extends Reaper {
 }
 
 trait ElasticSupport[Registry <: NodeCreatorImpl, SS <: SelfShutdown] {
+
+  def hostConfig(implicit config: TasksConfig)
+    : Option[HostConfiguration with MasterSlaveConfigurationFromConfig]
+
+  def reaper(implicit config: TasksConfig,
+             system: ActorSystem): Option[ActorRef]
 
   trait Inner {
     def createRegistry: Option[Registry]

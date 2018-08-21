@@ -35,7 +35,6 @@ import tasks.util.config.TasksConfig
 import tasks.fileservice._
 import tasks.wire._
 import tasks.elastic._
-import tasks.elastic.ec2._
 import tasks.shared._
 
 import akka.actor._
@@ -70,7 +69,10 @@ case class TaskSystemComponents(
 
 class TaskSystem private[tasks] (
     val hostConfig: MasterSlaveConfiguration with HostConfiguration,
-    val system: ActorSystem)(implicit val config: TasksConfig) {
+    val system: ActorSystem,
+    val elasticSupport: Option[
+      ElasticSupport[_ <: NodeCreatorImpl, _ <: SelfShutdown]])(
+    implicit val config: TasksConfig) {
 
   implicit val as = system
   implicit val mat = ActorMaterializer()
@@ -86,7 +88,7 @@ class TaskSystem private[tasks] (
   tasksystemlog.info("CPU: " + hostConfig.myCardinality.toString)
   tasksystemlog.info("RAM: " + hostConfig.availableMemory.toString)
   tasksystemlog.info("Roles: " + hostConfig.myRoles.mkString(", "))
-  tasksystemlog.info("Elastic: " + tasks.elastic.elasticSupport)
+  tasksystemlog.info("Elastic: " + elasticSupport)
 
   if (hostConfig.myCardinality > Runtime.getRuntime().availableProcessors()) {
     tasksystemlog.warning(
@@ -112,16 +114,14 @@ class TaskSystem private[tasks] (
 
   private lazy val masterAddress = hostConfig.master
 
-  val reaperActor = elastic.elasticSupport match {
-    case Some(EC2Grid) =>
-      system.actorOf(Props(new EC2Reaper(config.terminateMaster)),
-                     name = "reaper")
-    case _ =>
+  val reaperActor = elasticSupport.flatMap(_.reaper) match {
+    case None =>
       system.actorOf(Props[ProductionReaper], name = "reaper")
+    case Some(reaper) => reaper
   }
 
   val remotenoderegistry =
-    if (!hostConfig.isApp && hostConfig.isWorker && elastic.elasticSupport.isDefined) {
+    if (!hostConfig.isApp && hostConfig.isWorker && elasticSupport.isDefined) {
       val remotepath =
         s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/noderegistry"
       val noderegistry = Await.result(
@@ -284,7 +284,7 @@ class TaskSystem private[tasks] (
               config.codeVersion))
         else None
 
-      elastic.elasticSupport.map(
+      elasticSupport.map(
         es =>
           es(
             masterAddress = hostConfig.master,

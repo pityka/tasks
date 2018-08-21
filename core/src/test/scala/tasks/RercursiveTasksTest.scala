@@ -30,7 +30,6 @@ import tasks.util.concurrent.await
 import scala.concurrent._
 import com.typesafe.config.ConfigFactory
 
-import tasks.deploy._
 import tasks.circesupport._
 
 import io.circe.generic.auto._
@@ -83,16 +82,22 @@ class RecursiveTaskTestSuite
     extends FunSuite
     with Matchers
     with BeforeAndAfterAll {
-  val string = """
-akka.loglevel = "INFO"
+
+  val testConfig = {
+    val tmp = tasks.util.TempFile.createTempFile(".temp")
+    tmp.delete
+    ConfigFactory.parseString(
+      s"""
+      akka.loglevel = "INFO"
 tasks.cacheEnabled = false
 tasks.disableRemoting = true
+hosts.numCPU=4
+      tasks.fileservice.storageURI=${tmp.getAbsolutePath}
+      """
+    )
+  }
 
-"""
-
-  implicit val system: TaskSystem = customTaskSystem(
-    new LocalConfiguration(4, 1000),
-    ConfigFactory.parseString(string))
+  implicit val system: TaskSystem = defaultTaskSystem(Some(testConfig))
   import RercursiveTasksTest._
 
   test("recursive fibonacci") {

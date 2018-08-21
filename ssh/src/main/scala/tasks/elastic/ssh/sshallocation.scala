@@ -25,7 +25,7 @@
 
 package tasks.elastic.ssh
 
-import akka.actor.{Actor, ActorRef, Props}
+import akka.actor.{Actor, ActorRef, Props, ActorSystem}
 import java.net.InetSocketAddress
 import akka.event.LoggingAdapter
 import scala.util._
@@ -234,6 +234,11 @@ class SSHSelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
 }
 
 object SSHGrid extends ElasticSupport[SSHNodeRegistry, SSHSelfShutdown] {
+
+  def hostConfig(implicit config: TasksConfig) = None
+
+  def reaper(implicit config: TasksConfig,
+             system: ActorSystem): Option[ActorRef] = None
 
   def apply(master: InetSocketAddress,
             balancerActor: ActorRef,
