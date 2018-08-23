@@ -53,12 +53,12 @@ object JvmElasticSupport {
 
   }
 
-  trait NodeRegistryImp extends Actor with GridJobRegistry {
+  trait NodeRegistryImp extends Actor with JobRegistry {
 
     def masterAddress: InetSocketAddress
     def codeAddress: CodeAddress
 
-    def requestOneNewJobFromGridScheduler(
+    def requestOneNewJobFromJobScheduler(
         requestSize: tasks.shared.CPUMemoryRequest)
       : Try[Tuple2[PendingJobId, CPUMemoryAvailable]] = {
 
@@ -128,6 +128,8 @@ object JvmElasticSupport {
   }
 
   object JvmGrid extends ElasticSupport[NodeRegistry, SelfShutdown] {
+
+    def fqcn = "tasks.JmvGrid"
 
     def hostConfig(implicit config: TasksConfig) = None
 
