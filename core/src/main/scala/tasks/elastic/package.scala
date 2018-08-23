@@ -4,7 +4,7 @@ import tasks.util.config.TasksConfig
 
 package object elastic {
   def makeElasticSupport(implicit config: TasksConfig) =
-    config.gridEngine match {
+    config.elasticSupport match {
       case ""         => None
       case "NOENGINE" => None
       case reflective =>

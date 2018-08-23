@@ -48,16 +48,16 @@ trait SHShutdown extends ShutdownNode {
 
 }
 
-trait SHNodeRegistryImp extends Actor with GridJobRegistry {
+trait SHNodeRegistryImp extends Actor with JobRegistry {
 
   def masterAddress: InetSocketAddress
   def codeAddress: CodeAddress
 
-  def requestOneNewJobFromGridScheduler(requestSize: CPUMemoryRequest)
+  def requestOneNewJobFromJobScheduler(requestSize: CPUMemoryRequest)
     : Try[Tuple2[PendingJobId, CPUMemoryAvailable]] = {
     val script = Deployment.script(
       memory = requestSize.memory,
-      gridEngine = SHGrid,
+      elasticSupport = SHElasticSupport,
       masterAddress = masterAddress,
       download = new java.net.URL("http",
                                   codeAddress.address.getHostName,
@@ -117,7 +117,9 @@ class SHSelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
   }
 }
 
-object SHGrid extends ElasticSupport[SHNodeRegistry, SHSelfShutdown] {
+object SHElasticSupport extends ElasticSupport[SHNodeRegistry, SHSelfShutdown] {
+
+  def fqcn = "tasks.elastic.sh.SHElasticSupport"
 
   def hostConfig(implicit config: TasksConfig) = None
 

@@ -39,7 +39,7 @@ object Deployment {
 
   def script(
       memory: Int,
-      gridEngine: ElasticSupport[_, _],
+      elasticSupport: ElasticSupport[_, _],
       masterAddress: InetSocketAddress,
       download: URL,
       slaveHostname: Option[String]
@@ -62,7 +62,7 @@ object Deployment {
         .replaceAllLiterally(
           "{MASTER}",
           masterAddress.getHostName + ":" + masterAddress.getPort)
-        .replaceAllLiterally("{GRID}", gridEngine.toString)
+        .replaceAllLiterally("{GRID}", elasticSupport.fqcn)
         .replaceAllLiterally("{STORAGE}", config.storageURI.toString)
 
     s"""

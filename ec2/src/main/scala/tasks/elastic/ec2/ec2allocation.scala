@@ -71,7 +71,7 @@ trait EC2Shutdown extends ShutdownNode {
 
 }
 
-trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
+trait EC2NodeRegistryImp extends Actor with JobRegistry {
 
   implicit def config: tasks.util.config.TasksConfig
 
@@ -150,7 +150,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 
     val userdata = "#!/usr/bin/env bash\n" + Deployment.script(
       memory = selectedInstanceType._2.memory,
-      gridEngine = EC2Grid,
+      elasticSupport = EC2ElasticSupport,
       masterAddress = masterAddress,
       download = new java.net.URL("http",
                                   codeAddress.address.getHostName,
@@ -188,7 +188,7 @@ trait EC2NodeRegistryImp extends Actor with GridJobRegistry {
 
   }
 
-  def requestOneNewJobFromGridScheduler(request: CPUMemoryRequest)
+  def requestOneNewJobFromJobScheduler(request: CPUMemoryRequest)
     : Try[Tuple2[PendingJobId, CPUMemoryAvailable]] = Try {
     val (requestid, instancetype) = requestSpotInstance
     val jobid = PendingJobId(requestid)
@@ -267,7 +267,10 @@ class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig)
   }
 }
 
-object EC2Grid extends ElasticSupport[EC2NodeRegistry, EC2SelfShutdown] {
+object EC2ElasticSupport
+    extends ElasticSupport[EC2NodeRegistry, EC2SelfShutdown] {
+
+  def fqcn = "tasks.elastic.ec2.EC2ElasticSupport"
 
   def hostConfig(implicit config: TasksConfig) = Some(new EC2MasterSlave)
 

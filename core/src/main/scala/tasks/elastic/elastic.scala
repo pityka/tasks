@@ -90,19 +90,19 @@ trait NodeRegistry {
 
   def deregisterNode(n: Node): Unit
 
-  val unmanagedResource: CPUMemoryAvailable
+  def unmanagedResource: CPUMemoryAvailable
 
   def initfailed(n: PendingJobId): Unit
 
 }
 
-trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
+trait JobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
 
   implicit def config: TasksConfig
 
   def log: LoggingAdapter
 
-  def requestOneNewJobFromGridScheduler(
+  def requestOneNewJobFromJobScheduler(
       k: CPUMemoryRequest): Try[Tuple2[PendingJobId, CPUMemoryAvailable]]
 
   def initializeNode(n: Node): Unit
@@ -139,7 +139,7 @@ trait GridJobRegistry extends NodeRegistry with CreateNode with ShutdownNode {
 
         types.foreach {
           case (request, _) =>
-            val jobinfo = requestOneNewJobFromGridScheduler(request)
+            val jobinfo = requestOneNewJobFromJobScheduler(request)
             allTime += 1
 
             jobinfo match {
@@ -214,7 +214,6 @@ trait SimpleDecideNewNode extends DecideNewNode {
       q: QueueStat,
       registeredNodes: Seq[CPUMemoryAvailable],
       pendingNodes: Seq[CPUMemoryAvailable]): Map[CPUMemoryRequest, Int] = {
-    // QueueStat(queued: List[(String, CPUMemoryRequest)], running: List[(String,CPUMemoryAllocated)]
 
     val resourceNeeded: List[CPUMemoryRequest] = q.queued.map(_._2).collect {
       case VersionedCPUMemoryRequest(v, request) if v == codeVersion => request
@@ -244,11 +243,6 @@ trait SimpleDecideNewNode extends DecideNewNode {
       (addMaps(map1, map2)(_ - _)).filter(x => { assert(x._2 >= 0); x._2 > 0 })
 
     }
-
-    // val allJobsEventuallyAllocatable = {
-    //   val availdistinct = available.distinct
-    //   resourceNeeded.distinct.forall(request => availdistinct.exists(resource => resource.canFulfillRequest(request._1)))
-    // }
 
     if (!nonAllocatedResources.isEmpty
         && (pendingNodes.size < config.maxPendingNodes)) {
@@ -496,6 +490,8 @@ trait ShutdownReaper extends Reaper {
 }
 
 trait ElasticSupport[Registry <: NodeCreatorImpl, SS <: SelfShutdown] {
+
+  def fqcn: String
 
   def hostConfig(implicit config: TasksConfig): Option[HostConfiguration]
 

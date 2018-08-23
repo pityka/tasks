@@ -97,7 +97,7 @@ class TasksConfig(val raw: Config) {
 
   val sshHosts = raw.getObject("tasks.elastic.ssh.hosts")
 
-  val gridEngine = raw.getString("tasks.elastic.engine")
+  val elasticSupport = raw.getString("tasks.elastic.engine")
 
   val idleNodeTimeout: FD = raw.getDuration("tasks.elastic.idleNodeTimeout")
 
