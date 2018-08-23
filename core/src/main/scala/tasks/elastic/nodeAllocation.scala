@@ -497,8 +497,7 @@ trait ShutdownReaper extends Reaper {
 
 trait ElasticSupport[Registry <: NodeCreatorImpl, SS <: SelfShutdown] {
 
-  def hostConfig(implicit config: TasksConfig)
-    : Option[HostConfiguration with MasterSlaveConfigurationFromConfig]
+  def hostConfig(implicit config: TasksConfig): Option[HostConfiguration]
 
   def reaper(implicit config: TasksConfig,
              system: ActorSystem): Option[ActorRef]

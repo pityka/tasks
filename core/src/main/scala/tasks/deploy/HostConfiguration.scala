@@ -42,13 +42,9 @@ trait HostConfiguration {
 
   def myAddress: InetSocketAddress
 
-  def myCardinality: Int
+  def availableCPU: Int
 
   def availableMemory: Int
-
-}
-
-trait MasterSlaveConfiguration {
 
   def master: InetSocketAddress
 
@@ -65,23 +61,17 @@ trait HostConfigurationFromConfig extends HostConfiguration {
 
   lazy val myPort = chooseNetworkPort
 
-  lazy val hostname = config.hostName
+  private def myHostname = config.hostName
 
-  lazy val myAddress = new java.net.InetSocketAddress(hostname, myPort)
+  lazy val myAddress = new java.net.InetSocketAddress(myHostname, myPort)
 
-  lazy val myCardinality = config.hostNumCPU
+  lazy val availableCPU = config.hostNumCPU
 
   lazy val availableMemory = config.hostRAM
-}
-
-trait MasterSlaveConfigurationFromConfig extends MasterSlaveConfiguration {
-  self: HostConfiguration =>
-
-  def config: TasksConfig
 
   lazy val master: InetSocketAddress = config.masterAddress.getOrElse(myAddress)
 
-  private lazy val startApp = config.startApp
+  private def startApp = config.startApp
 
   lazy val myRoles: Set[Role] =
     if (config.masterAddress.isDefined && !startApp) Set(Worker)
@@ -91,9 +81,8 @@ trait MasterSlaveConfigurationFromConfig extends MasterSlaveConfiguration {
 
 }
 
-class LocalConfiguration(val myCardinality: Int, val availableMemory: Int)
-    extends MasterSlaveConfiguration
-    with HostConfiguration {
+class LocalConfiguration(val availableCPU: Int, val availableMemory: Int)
+    extends HostConfiguration {
 
   override lazy val myRoles = Set(App, Queue, Worker)
 
@@ -105,27 +94,5 @@ class LocalConfiguration(val myCardinality: Int, val availableMemory: Int)
 class LocalConfigurationFromConfig(implicit config: TasksConfig)
     extends LocalConfiguration(config.hostNumCPU, config.hostRAM)
 
-/**
-  * Needs a hosts.master system property to infer master location and role
-  * Self address is bind to the hosts.hostname config.global.
-  * Port is chosen automatically.
-  * Cardinality is determined from hosts.numCPU config
-  */
 class MasterSlaveFromConfig(implicit val config: TasksConfig)
     extends HostConfigurationFromConfig
-    with MasterSlaveConfigurationFromConfig
-
-/**
-  * A master slave configuration for full manual setup.
-  */
-class ManualMasterSlaveConfiguration(
-    val myCardinality: Int,
-    val availableMemory: Int,
-    roles: Set[Role],
-    masterAddress: InetSocketAddress,
-    val myAddress: InetSocketAddress,
-    val codeAddress: InetSocketAddress
-) extends MasterSlaveConfiguration {
-  override lazy val myRoles = roles
-  override lazy val master = masterAddress
-}

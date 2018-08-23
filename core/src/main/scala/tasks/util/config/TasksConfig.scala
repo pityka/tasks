@@ -69,8 +69,6 @@ class TasksConfig(val raw: Config) {
 
   val hostName = raw.getString("hosts.hostname")
 
-  val hostReservedCPU = raw.getInt("hosts.reservedCPU")
-
   val hostPort = raw.getInt("hosts.port")
 
   val masterAddress =

@@ -155,8 +155,8 @@ package object tasks {
         if (hostConfig.myRoles.contains(Queue)) 6 else 2
 
       val akkaProgrammaticalConfiguration = ConfigFactory.parseString(s"""
-        task-worker-dispatcher.fork-join-executor.parallelism-max = ${hostConfig.myCardinality}
-        task-worker-dispatcher.fork-join-executor.parallelism-min = ${hostConfig.myCardinality}
+        task-worker-dispatcher.fork-join-executor.parallelism-max = ${hostConfig.availableCPU}
+        task-worker-dispatcher.fork-join-executor.parallelism-min = ${hostConfig.availableCPU}
         akka {
           actor {
             provider = "${actorProvider}"
@@ -192,8 +192,8 @@ package object tasks {
     macro Macros
       .asyncTaskDefinitionImpl[A, C]
 
-  def MasterSlaveGridEngineChosenFromConfig(implicit config: TasksConfig)
-    : MasterSlaveConfiguration with HostConfiguration =
+  def MasterSlaveGridEngineChosenFromConfig(
+      implicit config: TasksConfig): HostConfiguration =
     if (config.disableRemoting) new LocalConfigurationFromConfig
     else new MasterSlaveFromConfig
 

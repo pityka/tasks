@@ -68,7 +68,7 @@ case class TaskSystemComponents(
 }
 
 class TaskSystem private[tasks] (
-    val hostConfig: MasterSlaveConfiguration with HostConfiguration,
+    val hostConfig: HostConfiguration,
     val system: ActorSystem,
     val elasticSupport: Option[
       ElasticSupport[_ <: NodeCreatorImpl, _ <: SelfShutdown]])(
@@ -85,12 +85,12 @@ class TaskSystem private[tasks] (
   private val tasksystemlog = akka.event.Logging(AS, "TaskSystem")
 
   tasksystemlog.info("Listening on: " + hostConfig.myAddress.toString)
-  tasksystemlog.info("CPU: " + hostConfig.myCardinality.toString)
+  tasksystemlog.info("CPU: " + hostConfig.availableCPU.toString)
   tasksystemlog.info("RAM: " + hostConfig.availableMemory.toString)
   tasksystemlog.info("Roles: " + hostConfig.myRoles.mkString(", "))
   tasksystemlog.info("Elastic: " + elasticSupport)
 
-  if (hostConfig.myCardinality > Runtime.getRuntime().availableProcessors()) {
+  if (hostConfig.availableCPU > Runtime.getRuntime().availableProcessors()) {
     tasksystemlog.warning(
       "Number of CPUs in the machine is " + Runtime
         .getRuntime()
@@ -107,7 +107,7 @@ class TaskSystem private[tasks] (
     }
   }
 
-  private val numberOfCores: Int = hostConfig.myCardinality
+  private val numberOfCores: Int = hostConfig.availableCPU
 
   private val availableMemory: Int = hostConfig.availableMemory
 
@@ -291,7 +291,7 @@ class TaskSystem private[tasks] (
           es(
             masterAddress = hostConfig.master,
             queueActor = queueActor,
-            resource = CPUMemoryAvailable(cpu = hostConfig.myCardinality,
+            resource = CPUMemoryAvailable(cpu = hostConfig.availableCPU,
                                           memory = hostConfig.availableMemory),
             codeAddress = codeAddress
         ))
@@ -381,7 +381,7 @@ class TaskSystem private[tasks] (
 
     remoteNodeRegistry.get ! NodeComingUp(
       Node(RunningJobId(nodeName),
-           CPUMemoryAvailable(hostConfig.myCardinality,
+           CPUMemoryAvailable(hostConfig.availableCPU,
                               hostConfig.availableMemory),
            launcherActor.get))
 
