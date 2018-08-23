@@ -131,8 +131,8 @@ package object util {
   /** Writes text data to file. */
   def writeToFile(file: File, data: String): Unit =
     writeToFile(file.getAbsolutePath, data)
-  //
-  //   /** Writes binary data to file. */
+
+  /** Writes binary data to file. */
   def writeBinaryToFile(fileName: String, data: Array[Byte]): Unit =
     useResource(new BufferedOutputStream(new FileOutputStream(fileName))) {
       writer =>

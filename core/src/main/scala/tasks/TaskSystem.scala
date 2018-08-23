@@ -115,7 +115,7 @@ class TaskSystem private[tasks] (
 
   val reaperActor = elasticSupport.flatMap(_.reaper) match {
     case None =>
-      system.actorOf(Props[ProductionReaper], name = "reaper")
+      system.actorOf(Props[ShutdownActorSystemReaper], name = "reaper")
     case Some(reaper) => reaper
   }
 
@@ -431,7 +431,6 @@ class TaskSystem private[tasks] (
           "Shutting down tasksystem. Blocking until all actors have terminated.")
         latch.await
         auxFjp.shutdown
-        AS.terminate
       }
     } else {
       AS.terminate

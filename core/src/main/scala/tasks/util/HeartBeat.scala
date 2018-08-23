@@ -66,7 +66,7 @@ class HeartBeatActor(target: ActorRef)(implicit config: TasksConfig)
     config.acceptableHeartbeatPause,
     config.acceptableHeartbeatPause)
 
-  override def preStart {
+  override def preStart = {
     log.debug(
       "HeartBeatActor start for: " + target + " " + failureDetector.acceptableHeartbeatPause)
 
@@ -81,7 +81,7 @@ class HeartBeatActor(target: ActorRef)(implicit config: TasksConfig)
 
   }
 
-  override def postStop {
+  override def postStop = {
     scheduledHeartBeats.cancel
     log.info("HeartBeatActor stopped.")
   }

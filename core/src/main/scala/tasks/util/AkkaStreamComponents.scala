@@ -10,12 +10,12 @@ object AkkaStreamComponents {
 
   def zippedTemporaryFileSink(
       implicit ec: ExecutionContext): Sink[ByteString, Future[File]] = {
-    val f = TempFile.createTempFile("tmp")
+    val tempFile = TempFile.createTempFile("tmp")
     Flow[ByteString]
       .via(strictBatchWeighted[ByteString](1024 * 512, _.size.toLong)(_ ++ _))
       .via(Compression.gzip)
-      .toMat(FileIO.toPath(f.toPath))(Keep.right)
-      .mapMaterializedValue(_.map(_ => f))
+      .toMat(FileIO.toPath(tempFile.toPath))(Keep.right)
+      .mapMaterializedValue(_.map(_ => tempFile))
   }
 
   def parallelize[T, K](parallelism: Int, bufferSize: Int = 1000)(
