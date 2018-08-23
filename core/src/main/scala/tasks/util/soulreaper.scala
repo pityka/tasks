@@ -30,7 +30,7 @@ import akka.actor.{Actor, ActorRef, Terminated}
 import scala.collection.mutable.ArrayBuffer
 
 // Used by others to register an Actor for watching
-case class WatchMe(ref: ActorRef)
+case class WatchMe(ref: ActorRef, answer: Boolean = false)
 case class Latch(c: CountDownLatch)
 
 abstract class Reaper extends Actor with akka.actor.ActorLogging {
@@ -48,11 +48,13 @@ abstract class Reaper extends Actor with akka.actor.ActorLogging {
     case Latch(l) =>
       latches += l
       log.info("Latch received. Watched actor refs: " + watched)
-    case WatchMe(ref) =>
+    case WatchMe(ref, answer) =>
       log.info("Watching: " + ref)
       context.watch(ref) // This ensures that the Terminated message will come
       watched += ref
-      sender ! true
+      if (answer) {
+        sender ! true
+      }
     case Terminated(ref) =>
       watched -= ref
       log.info("Terminated: " + ref)

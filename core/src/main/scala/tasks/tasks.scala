@@ -35,7 +35,6 @@ abstract class ResultWithSharedFiles(sf: SharedFile*) extends Product {
   def files = sf
 }
 
-// This is the prerequisitives of a task
 trait HasPersistent[+A] extends Serializable { self: A =>
   def persistent: A
 }

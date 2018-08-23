@@ -27,7 +27,14 @@
 
 package tasks.util
 
-import akka.actor.{Actor, PoisonPill, ActorRef, Cancellable}
+import akka.actor.{
+  Actor,
+  PoisonPill,
+  ActorRef,
+  Cancellable,
+  ActorRefFactory,
+  Props
+}
 import akka.remote.DeadlineFailureDetector
 import akka.remote.DisassociatedEvent
 
@@ -36,6 +43,16 @@ import scala.concurrent.duration._
 import tasks.util.eq._
 import tasks.util.config._
 import tasks.wire._
+
+object HeartBeatActor {
+  def watch(target: ActorRef)(implicit AS: ActorRefFactory,
+                              config: TasksConfig) =
+    AS.actorOf(
+      Props(new HeartBeatActor(target)).withDispatcher("heartbeat"),
+      "heartbeatOf" + target.path.address.toString
+        .replace("://", "___") + target.path.name
+    )
+}
 
 class HeartBeatActor(target: ActorRef)(implicit config: TasksConfig)
     extends Actor

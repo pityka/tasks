@@ -26,7 +26,6 @@
  */
 
 import akka.actor.ActorSystem
-import akka.actor.ActorContext
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
 
@@ -58,6 +57,7 @@ package object tasks {
     tasks.shared.VersionedCPUMemoryRequest(
       codeVersion,
       tasks.shared.CPUMemoryRequest(cpu, memory))
+
   def CPUMemoryRequest(cpu: Int, memory: Int)(
       implicit codeVersion: CodeVersion) =
     tasks.shared.VersionedCPUMemoryRequest(
@@ -74,7 +74,8 @@ package object tasks {
   implicit def codeVersionFromTasksConfig(
       implicit c: TasksConfig): CodeVersion = c.codeVersion
 
-  implicit def fs(implicit component: TaskSystemComponents): FileServiceActor =
+  implicit def fs(
+      implicit component: TaskSystemComponents): FileServiceComponent =
     component.fs
 
   implicit def executionContext(
@@ -96,14 +97,6 @@ package object tasks {
     component.resourceAllocated
 
   implicit def log(implicit component: ComputationEnvironment) = component.log
-
-  def remoteCacheAddress(implicit t: QueueActor, s: ActorContext): String =
-    if (t.actor.path.address.host.isDefined && t.actor.path.address.port.isDefined)
-      t.actor.path.address.host.get + ":" + t.actor.path.address.port.get
-    else
-      s.system.settings.config
-        .getString("akka.remote.netty.tcp.hostname") + ":" + s.system.settings.config
-        .getString("akka.remote.netty.tcp.port")
 
   def withTaskSystem[T](f: TaskSystemComponents => T): Option[T] =
     withTaskSystem(None)(f)
@@ -151,7 +144,7 @@ package object tasks {
       .flatMap(_.hostConfig)
       .getOrElse(MasterSlaveGridEngineChosenFromConfig)
 
-    val akkaConfiguration = {
+    val finalAkkaConfiguration = {
 
       val actorProvider = hostConfig match {
         case _: LocalConfiguration => "akka.actor.LocalActorRefProvider"
@@ -161,7 +154,7 @@ package object tasks {
       val numberOfAkkaRemotingThreads =
         if (hostConfig.myRoles.contains(Queue)) 6 else 2
 
-      val customConf = ConfigFactory.parseString(s"""
+      val akkaProgrammaticalConfiguration = ConfigFactory.parseString(s"""
         task-worker-dispatcher.fork-join-executor.parallelism-max = ${hostConfig.myCardinality}
         task-worker-dispatcher.fork-join-executor.parallelism-min = ${hostConfig.myCardinality}
         akka {
@@ -180,44 +173,17 @@ package object tasks {
         }
           """)
 
-      val akkaconf = ConfigFactory.parseResources("akka.conf")
-
       ConfigFactory.defaultOverrides
-        .withFallback(customConf)
-        .withFallback(akkaconf)
+        .withFallback(akkaProgrammaticalConfiguration)
+        .withFallback(ConfigFactory.parseResources("akka.conf"))
         .withFallback(configuration)
 
     }
 
-    val system = ActorSystem(tconfig.actorSystemName, akkaConfiguration)
+    val system = ActorSystem(tconfig.actorSystemName, finalAkkaConfiguration)
 
     new TaskSystem(hostConfig, system, elasticSupport)
   }
-
-  // def defaultTaskSystem(as: ActorSystem)(implicit tc: TasksConfig): TaskSystem =
-  //   new TaskSystem(MasterSlaveGridEngineChosenFromConfig, as)
-
-  // def customTaskSystem(
-  //     hostConfig: MasterSlaveConfiguration with HostConfiguration,
-  //     extraConf: Config): TaskSystem = {
-  //   val akkaconf = ConfigFactory.parseResources("akka.conf")
-
-  //   val conf = ConfigFactory.defaultOverrides
-  //     .withFallback(extraConf)
-  //     .withFallback(akkaconf)
-  //     .withFallback(ConfigFactory.defaultReference)
-
-  //   val system = ActorSystem("tasks", conf)
-
-  //   val tconf = tasks.util.config.parse(conf)
-
-  //   new TaskSystem(hostConfig, system)(tconf)
-  // }
-
-  // def customTaskSystem(
-  //     hostConfig: MasterSlaveConfiguration with HostConfiguration,
-  //     as: ActorSystem): TaskSystem =
-  //   new TaskSystem(hostConfig, as)(tasks.util.config.parse(as))
 
   type CompFun[A, B] = A => ComputationEnvironment => B
 
@@ -227,14 +193,8 @@ package object tasks {
       .asyncTaskDefinitionImpl[A, C]
 
   def MasterSlaveGridEngineChosenFromConfig(implicit config: TasksConfig)
-    : MasterSlaveConfiguration with HostConfiguration = {
+    : MasterSlaveConfiguration with HostConfiguration =
     if (config.disableRemoting) new LocalConfigurationFromConfig
     else new MasterSlaveFromConfig
-    // config.gridEngine match {
-    //   case x if x == "EC2"      => new EC2MasterSlave
-    //   case x if x == "NOENGINE" =>
-    //   case _                    => new MasterSlaveFromConfig
-    // }
-  }
 
 }

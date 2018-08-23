@@ -83,33 +83,3 @@ object SimpleTask {
     ).actor
 
 }
-
-// class SimpleTask(
-//     var counter: Int,
-//     id: Int = 0
-// )(implicit queue: QueueActor,
-//   fileService: FileServiceActor,
-//   prefix: FileServicePrefix,
-//   cache: CacheActor)
-//     extends ProxyTask(queue.actor, fileService.actor, prefix, cache.actor) {
-//   import SimpleTask._
-//
-//   type MyPrerequisitive = SimpleTask.MyResultSet
-//
-//   type MyResult = IntResult
-//
-//   val runTaskClass = SimpleTask.runTask.getClass
-//
-//   val incomings = MyResultSet(Some(counter), Some(id))
-//
-//   val taskId = TaskId(runTaskClass.getName, 1)
-//
-//   val writer = implicitly[Writer[MyPrerequisitive]]
-//
-//   val reader = implicitly[Reader[MyResult]]
-//
-//   def emptyResultSet =
-//     if (counter > 0) MyResultSet(Some(counter), Some(id))
-//     else MyResultSet(None, Some(id)).asInstanceOf[MyResultSet]
-//
-// }

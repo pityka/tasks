@@ -104,7 +104,7 @@ class FileServiceSpec
             fs
           )))
       implicit val serviceimpl =
-        FileServiceActor(service, Some(fs), remoteStore)
+        FileServiceComponent(service, Some(fs), remoteStore)
       SharedFileHelper.createFromFile(input, "proba", false)
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
@@ -129,7 +129,7 @@ class FileServiceSpec
             fs
           )))
       implicit val serviceimpl =
-        FileServiceActor(service, Some(fs), remoteStore)
+        FileServiceComponent(service, Some(fs), remoteStore)
       implicit val nlc =
         NodeLocalCacheActor(system.actorOf(Props[NodeLocalCache]))
       val t: SharedFile =
@@ -158,7 +158,7 @@ class FileServiceSpec
       val fs = new FolderFileStorage(folder)
       val service = system.actorOf(Props(new FileService(fs)))
       implicit val serviceimpl =
-        FileServiceActor(service, Some(fs), remoteStore)
+        FileServiceComponent(service, Some(fs), remoteStore)
       implicit val nlc =
         NodeLocalCacheActor(system.actorOf(Props[NodeLocalCache]))
 
@@ -192,7 +192,7 @@ class FileServiceSpec
       val service =
         system.actorOf(Props(new FileService(fs, 8, (_: File) => false)))
       implicit val serviceimpl =
-        FileServiceActor(service, Some(fs), remoteStore)
+        FileServiceComponent(service, Some(fs), remoteStore)
       implicit val nlc =
         NodeLocalCacheActor(system.actorOf(Props[NodeLocalCache]))
 

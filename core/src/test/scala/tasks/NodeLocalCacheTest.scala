@@ -44,7 +44,9 @@ object NodeLocalCacheTest extends TestHelpers {
 
   val testTask = AsyncTask[Input, Int]("nodelocalcachetest", 1) {
     input => implicit computationEnvironment =>
-      sideEffect += "execution of task"
+      synchronized {
+        sideEffect += "execution of task"
+      }
       tasks.queue.NodeLocalCache
         .getItem("key" + input.i % 2) {
           cachedFunction((input.i % 2).toString)

@@ -36,11 +36,15 @@ import tasks.queue._
 import tasks._
 import tasks.util._
 import tasks.util.config._
-import tasks.fileservice.{FileServiceActor, FileServicePrefix, SharedFileHelper}
+import tasks.fileservice.{
+  FileServiceComponent,
+  FileServicePrefix,
+  SharedFileHelper
+}
 
 import com.google.common.hash.Hashing
 
-private[tasks] class SharedFileCache(implicit fs: FileServiceActor,
+private[tasks] class SharedFileCache(implicit fs: FileServiceComponent,
                                      nlc: NodeLocalCacheActor,
                                      as: ActorSystem,
                                      ec: ExecutionContext,

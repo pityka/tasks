@@ -45,7 +45,7 @@ import tasks.wire._
 private[tasks] object SharedFileHelper {
 
   def getByNameUnchecked(name: String)(
-      implicit service: FileServiceActor,
+      implicit service: FileServiceComponent,
       context: ActorRefFactory,
       nlc: NodeLocalCacheActor,
       prefix: FileServicePrefix,
@@ -78,7 +78,7 @@ private[tasks] object SharedFileHelper {
   val isLocal = (f: File) => f.canRead
 
   def getSourceToFile(sf: SharedFile)(
-      implicit service: FileServiceActor,
+      implicit service: FileServiceComponent,
       context: ActorRefFactory,
       ec: ExecutionContext): Source[ByteString, _] =
     sf.path match {
@@ -115,7 +115,7 @@ private[tasks] object SharedFileHelper {
         }
     }
 
-  def getPathToFile(sf: SharedFile)(implicit service: FileServiceActor,
+  def getPathToFile(sf: SharedFile)(implicit service: FileServiceComponent,
                                     context: ActorRefFactory,
                                     nlc: NodeLocalCacheActor,
                                     ec: ExecutionContext): Future[File] =
@@ -149,7 +149,7 @@ private[tasks] object SharedFileHelper {
     }
 
   def isAccessible(sf: SharedFile)(
-      implicit service: FileServiceActor): Future[Boolean] =
+      implicit service: FileServiceComponent): Future[Boolean] =
     sf.path match {
       case x: RemoteFilePath =>
         service.remote.contains(x, sf.byteSize, sf.hash)
@@ -165,7 +165,8 @@ private[tasks] object SharedFileHelper {
 
     }
 
-  def getUri(sf: SharedFile)(implicit service: FileServiceActor): Future[Uri] =
+  def getUri(sf: SharedFile)(
+      implicit service: FileServiceComponent): Future[Uri] =
     sf.path match {
       case RemoteFilePath(path) => Future.successful(path)
       case path: ManagedFilePath => {
@@ -181,7 +182,7 @@ private[tasks] object SharedFileHelper {
   def createFromFile(file: File, name: String, deleteFile: Boolean)(
       implicit prefix: FileServicePrefix,
       ec: ExecutionContext,
-      service: FileServiceActor,
+      service: FileServiceComponent,
       context: ActorRefFactory,
       config: TasksConfig) =
     if (service.storage.isDefined) {
@@ -214,7 +215,7 @@ private[tasks] object SharedFileHelper {
   def createFromSource(source: Source[ByteString, _], name: String)(
       implicit prefix: FileServicePrefix,
       ec: ExecutionContext,
-      service: FileServiceActor,
+      service: FileServiceComponent,
       context: ActorRefFactory,
       mat: Materializer,
       config: TasksConfig) =

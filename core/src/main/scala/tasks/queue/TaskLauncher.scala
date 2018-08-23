@@ -93,7 +93,7 @@ class TaskLauncher(
     taskQueue: ActorRef,
     nodeLocalCache: ActorRef,
     slots: VersionedCPUMemoryAvailable,
-    refreshRate: FiniteDuration,
+    refreshInterval: FiniteDuration,
     auxExecutionContext: ExecutionContext,
     actorMaterializer: Materializer,
     remoteStorage: RemoteFileStorage,
@@ -134,7 +134,9 @@ class TaskLauncher(
           .newInstance(),
         self,
         sch.balancerActor,
-        FileServiceActor(sch.fileServiceActor, managedStorage, remoteStorage),
+        FileServiceComponent(sch.fileServiceActor,
+                             managedStorage,
+                             remoteStorage),
         sch.cacheActor,
         nodeLocalCache,
         allocatedResource.cpuMemoryAllocated,
@@ -174,7 +176,7 @@ class TaskLauncher(
 
     scheduler = context.system.scheduler.schedule(
       initialDelay = 0 seconds,
-      interval = refreshRate,
+      interval = refreshInterval,
       receiver = self,
       message = CheckQueue
     )

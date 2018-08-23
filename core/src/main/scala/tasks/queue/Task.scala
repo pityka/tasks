@@ -80,7 +80,7 @@ case class ComputationEnvironment(
     val taskActor: ActorRef
 ) {
 
-  implicit def fs: FileServiceActor = components.fs
+  implicit def fs: FileServiceComponent = components.fs
 
   implicit def actorsystem: akka.actor.ActorSystem = components.actorsystem
 
@@ -113,7 +113,7 @@ private class Task(
     runTask: CompFun2,
     launcherActor: ActorRef,
     balancerActor: ActorRef,
-    fileServiceActor: FileServiceActor,
+    fileServiceComponent: FileServiceComponent,
     globalCacheActor: ActorRef,
     nodeLocalCache: ActorRef,
     resourceAllocated: CPUMemoryAllocated,
@@ -152,7 +152,7 @@ private class Task(
         resourceAllocated,
         TaskSystemComponents(
           QueueActor(balancerActor),
-          fileServiceActor,
+          fileServiceComponent,
           context.system,
           CacheActor(globalCacheActor),
           NodeLocalCacheActor(nodeLocalCache),
@@ -233,7 +233,7 @@ class ProxyTask[MyPrerequisitive, MyResult](
     reader: Deserializer[MyResult],
     resourceConsumed: VersionedCPUMemoryRequest,
     starter: ActorRef,
-    fileServiceActor: FileServiceActor,
+    fileServiceComponent: FileServiceComponent,
     fileServicePrefix: FileServicePrefix,
     cacheActor: ActorRef
 ) extends Actor
@@ -271,7 +271,7 @@ class ProxyTask[MyPrerequisitive, MyResult](
         runTaskClass.getName,
         resourceConsumed,
         starter,
-        fileServiceActor.actor,
+        fileServiceComponent.actor,
         fileServicePrefix,
         cacheActor
       )

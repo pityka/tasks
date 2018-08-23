@@ -41,9 +41,9 @@ import tasks.wire._
 import io.circe.generic.semiauto._
 import io.circe.{Encoder, Decoder}
 
-case class FileServiceActor(actor: ActorRef,
-                            storage: Option[ManagedFileStorage],
-                            remote: RemoteFileStorage)
+case class FileServiceComponent(actor: ActorRef,
+                                storage: Option[ManagedFileStorage],
+                                remote: RemoteFileStorage)
 
 case class FileServicePrefix(list: Vector[String], history: Option[History]) {
   def append(n: String) = FileServicePrefix(list :+ n, history)

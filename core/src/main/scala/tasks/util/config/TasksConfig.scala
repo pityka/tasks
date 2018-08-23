@@ -41,17 +41,12 @@ class TasksConfig(val raw: Config) {
 
   val askInterval: FD = raw.getDuration("tasks.askInterval")
 
-  val proxyTaskGetBackResult: FD =
-    raw.getDuration("tasks.proxytaskGetBackResultTimeout")
-
   val launcherActorHeartBeatInterval: FD =
     raw.getDuration("tasks.failuredetector.heartbeat-interval")
 
   val fileSendChunkSize = raw.getBytes("tasks.fileSendChunkSize").toInt
 
   val resubmitFailedTask = raw.getBoolean("tasks.resubmitFailedTask")
-
-  val logToStandardOutput = raw.getBoolean("tasks.stdout")
 
   val verifySharedFileInCache = raw.getBoolean("tasks.verifySharedFileInCache")
 
@@ -67,8 +62,6 @@ class TasksConfig(val raw: Config) {
 
   val acceptableHeartbeatPause: FD =
     raw.getDuration("tasks.failuredetector.acceptable-heartbeat-pause")
-
-  val remoteCacheAddress = raw.getString("hosts.remoteCacheAddress")
 
   val hostNumCPU = raw.getInt("hosts.numCPU")
 

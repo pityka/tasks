@@ -53,7 +53,7 @@ import com.bluelabs.s3stream.S3ClientQueued
 
 case class TaskSystemComponents(
     queue: QueueActor,
-    fs: FileServiceActor,
+    fs: FileServiceComponent,
     actorsystem: ActorSystem,
     cache: CacheActor,
     nodeLocalCache: NodeLocalCacheActor,
@@ -74,15 +74,15 @@ class TaskSystem private[tasks] (
       ElasticSupport[_ <: NodeCreatorImpl, _ <: SelfShutdown]])(
     implicit val config: TasksConfig) {
 
-  implicit val as = system
-  implicit val mat = ActorMaterializer()
-  import as.dispatcher
+  implicit val AS = system
+  implicit val AM = ActorMaterializer()
+  import AS.dispatcher
   implicit val s3Stream = scala.util
     .Try(new S3ClientQueued(config.s3Region))
     .toOption
-  implicit val sh = new StreamHelper(s3Stream)
+  implicit val streamHelper = new StreamHelper(s3Stream)
 
-  private val tasksystemlog = akka.event.Logging(as, "TaskSystem")
+  private val tasksystemlog = akka.event.Logging(AS, "TaskSystem")
 
   tasksystemlog.info("Listening on: " + hostConfig.myAddress.toString)
   tasksystemlog.info("CPU: " + hostConfig.myCardinality.toString)
@@ -105,7 +105,6 @@ class TaskSystem private[tasks] (
     (queueActor ? GetQueueInformation).foreach {
       case queue: QueueInfo => tasksystemlog.info("Queue content: " + queue)
     }
-
   }
 
   private val numberOfCores: Int = hostConfig.myCardinality
@@ -120,14 +119,14 @@ class TaskSystem private[tasks] (
     case Some(reaper) => reaper
   }
 
-  val remotenoderegistry =
+  val remoteNodeRegistry =
     if (!hostConfig.isApp && hostConfig.isWorker && elasticSupport.isDefined) {
-      val remotepath =
+      val remoteActorPath =
         s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/noderegistry"
       val noderegistry = Await.result(
-        system.actorSelection(remotepath).resolveOne(60 seconds),
+        system.actorSelection(remoteActorPath).resolveOne(60 seconds),
         atMost = 60 seconds)
-      tasksystemlog.info("NodeRegistry: " + noderegistry)
+      tasksystemlog.info("Remote node registry: " + noderegistry)
       Some(noderegistry)
     } else None
 
@@ -145,10 +144,9 @@ class TaskSystem private[tasks] (
       if (s3bucket.isDefined) {
         val actorsystem = 1 // shade implicit conversion
         val _ = actorsystem // suppress unused warning
-        import as.dispatcher
         Some(new S3Storage(s3bucket.get._1, s3bucket.get._2, s3Stream.get))
       } else {
-        val folder1Path =
+        val storageFolderPath =
           if (config.storageURI.getScheme == null)
             config.storageURI.getPath
           else if (config.storageURI.getScheme == "file")
@@ -156,49 +154,45 @@ class TaskSystem private[tasks] (
           else {
             tasksystemlog.error(
               s"${config.storageURI} unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative")
-            System.exit(1)
-            throw new RuntimeException("dsf")
+            throw new RuntimeException(
+              s"${config.storageURI} unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative")
           }
-        val folder1 = new File(folder1Path).getCanonicalFile
-        if (folder1.isFile) {
-          tasksystemlog.error(s"$folder1 is a file. Calling System.exit(1)")
-          System.exit(1)
+        val storageFolder = new File(storageFolderPath).getCanonicalFile
+        if (storageFolder.isFile) {
+          tasksystemlog.error(s"$storageFolder is a file. Abort.")
+          throw new RuntimeException(s"$storageFolder is a file. Abort.")
         }
-        if (!folder1.isDirectory) {
-          tasksystemlog.warning(s"Folder $folder1 does not exists. mkdir ")
-          folder1.mkdirs
-        }
-        val folders2 = config.fileServiceExtendedFolders
-        if (folder1.list.size != 0) {
+        if (!storageFolder.isDirectory) {
           tasksystemlog.warning(
-            s"fileServiceBaseFolder (${folder1.getCanonicalPath}) is not empty. This is only safe if you restart a pipeline. ")
+            s"Folder $storageFolder does not exists. Try to create it. ")
+          storageFolder.mkdirs
         }
-        Some(new FolderFileStorage(folder1, folders2))
+        val extendedFolder = config.fileServiceExtendedFolders
+        Some(new FolderFileStorage(storageFolder, extendedFolder))
       }
     }
 
-  tasksystemlog.info("FileStore: " + managedFileStorage)
+  tasksystemlog.info("File store: " + managedFileStorage)
 
   val fileActor = try {
     if (hostConfig.isQueue) {
 
       val threadpoolsize = config.fileServiceThreadPoolSize
 
-      val ac = system.actorOf(
+      val localFileServiceActor = system.actorOf(
         Props(new FileService(managedFileStorage.get, threadpoolsize))
           .withDispatcher("my-pinned-dispatcher"),
         "fileservice")
-      reaperActor ! WatchMe(ac)
-      ac
+      reaperActor ! WatchMe(localFileServiceActor)
+      localFileServiceActor
     } else {
-      val actorpath =
+      val actorPath =
         s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/fileservice"
-      val globalFileService = Await.result(
-        system.actorSelection(actorpath).resolveOne(600 seconds),
+      val remoteFileServieActor = Await.result(
+        system.actorSelection(actorPath).resolveOne(600 seconds),
         atMost = 600 seconds)
 
-      tasksystemlog.info("FileService: " + globalFileService)
-      globalFileService
+      remoteFileServieActor
     }
   } catch {
     case e: Throwable => {
@@ -207,39 +201,43 @@ class TaskSystem private[tasks] (
     }
   }
 
-  val fileServiceActor =
-    FileServiceActor(fileActor, managedFileStorage, remoteFileStorage)
+  tasksystemlog.info("File service actor: " + fileActor)
 
-  val nodeLocalCacheActor = system.actorOf(
-    Props[NodeLocalCache].withDispatcher("my-pinned-dispatcher"),
-    name = "nodeLocalCache")
+  val fileServiceComponent =
+    FileServiceComponent(fileActor, managedFileStorage, remoteFileStorage)
 
-  reaperActor ! WatchMe(nodeLocalCacheActor)
+  val nodeLocalCache = {
+    val nodeLocalCacheActor = system.actorOf(
+      Props[NodeLocalCache].withDispatcher("my-pinned-dispatcher"),
+      name = "nodeLocalCache")
 
-  val nodeLocalCache = NodeLocalCacheActor(nodeLocalCacheActor)
+    reaperActor ! WatchMe(nodeLocalCacheActor)
 
-  val cacherActor = try {
+    NodeLocalCacheActor(nodeLocalCacheActor)
+  }
+
+  val cacheActor = try {
     if (hostConfig.isQueue) {
 
       val cache: Cache =
         if (config.cacheEnabled)
-          new SharedFileCache()(fileServiceActor,
+          new SharedFileCache()(fileServiceComponent,
                                 nodeLocalCache,
                                 system,
                                 system.dispatcher,
                                 config)
         else new DisabledCache
 
-      val ac = system.actorOf(
-        Props(new TaskResultCache(cache, fileServiceActor))
+      val localCacheActor = system.actorOf(
+        Props(new TaskResultCache(cache, fileServiceComponent))
           .withDispatcher("my-pinned-dispatcher"),
         "cache")
-      reaperActor ! WatchMe(ac)
-      ac
+      reaperActor ! WatchMe(localCacheActor)
+      localCacheActor
     } else {
-      val actorpath =
+      val actorPath =
         s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/cache"
-      Await.result(system.actorSelection(actorpath).resolveOne(600 seconds),
+      Await.result(system.actorSelection(actorPath).resolveOne(600 seconds),
                    atMost = 600 seconds)
 
     }
@@ -252,19 +250,19 @@ class TaskSystem private[tasks] (
 
   val queueActor = try {
     if (hostConfig.isQueue) {
-      val ac =
+      val localActor =
         system.actorOf(Props(new TaskQueue).withDispatcher("taskqueue"),
                        "queue")
-      reaperActor ! WatchMe(ac)
-      ac
+      reaperActor ! WatchMe(localActor)
+      localActor
     } else {
-      val actorpath =
+      val actorPath =
         s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/queue"
-      val ac = Await.result(
-        system.actorSelection(actorpath).resolveOne(600 seconds),
+      val remoteActor = Await.result(
+        system.actorSelection(actorPath).resolveOne(600 seconds),
         atMost = 600 seconds)
-      tasksystemlog.info("Queue: " + ac)
-      ac
+
+      remoteActor
     }
   } catch {
     case e: Throwable => {
@@ -273,6 +271,10 @@ class TaskSystem private[tasks] (
     }
   }
 
+  tasksystemlog.info("Queue: " + queueActor)
+
+  val packageServerPort = hostConfig.myAddress.getPort + 1
+
   val elasticSupportFactory =
     if (hostConfig.isApp || hostConfig.isWorker) {
       val codeAddress =
@@ -280,7 +282,7 @@ class TaskSystem private[tasks] (
           Some(
             elastic.CodeAddress(
               new java.net.InetSocketAddress(hostConfig.myAddress.getHostName,
-                                             hostConfig.myAddress.getPort + 1),
+                                             packageServerPort),
               config.codeVersion))
         else None
 
@@ -295,18 +297,17 @@ class TaskSystem private[tasks] (
         ))
     } else None
 
-  // start up noderegistry
-  val noderegistry: Option[ActorRef] =
+  val localNodeRegistry: Option[ActorRef] =
     if (hostConfig.isApp && elasticSupportFactory.isDefined) {
 
       val props = Props(elasticSupportFactory.get.createRegistry.get)
 
-      val ac = system
+      val localActor = system
         .actorOf(props.withDispatcher("my-pinned-dispatcher"), "noderegistry")
 
-      reaperActor ! WatchMe(ac)
+      reaperActor ! WatchMe(localActor)
 
-      Some(ac)
+      Some(localActor)
     } else None
 
   val packageServer =
@@ -323,9 +324,7 @@ class TaskSystem private[tasks] (
           val actorsystem = 1 //shade implicit conversion
           val _ = actorsystem // suppress unused warning
           val bindingFuture =
-            Http().bindAndHandle(service.route,
-                                 "0.0.0.0",
-                                 hostConfig.myAddress.getPort + 1)
+            Http().bindAndHandle(service.route, "0.0.0.0", packageServerPort)
 
           Some(bindingFuture)
         case Failure(_) =>
@@ -342,79 +341,76 @@ class TaskSystem private[tasks] (
 
   val components = TaskSystemComponents(
     queue = QueueActor(queueActor),
-    fs = fileServiceActor,
+    fs = fileServiceComponent,
     actorsystem = system,
-    cache = CacheActor(cacherActor),
+    cache = CacheActor(cacheActor),
     nodeLocalCache = nodeLocalCache,
     filePrefix = FileServicePrefix(Vector(), None),
     executionContext = auxExecutionContext,
-    actorMaterializer = mat,
+    actorMaterializer = AM,
     tasksConfig = config
   )
 
   private val launcherActor = if (numberOfCores > 0 && hostConfig.isWorker) {
-    val refresh = config.askInterval
-    val ac = system.actorOf(
+    val refreshInterval = config.askInterval
+    val localActor = system.actorOf(
       Props(
         new TaskLauncher(
           queueActor,
-          nodeLocalCacheActor,
+          nodeLocalCache.actor,
           VersionedCPUMemoryAvailable(
             config.codeVersion,
             CPUMemoryAvailable(cpu = numberOfCores, memory = availableMemory)),
-          refreshRate = refresh,
+          refreshInterval = refreshInterval,
           auxExecutionContext = auxExecutionContext,
-          actorMaterializer = mat,
+          actorMaterializer = AM,
           remoteStorage = remoteFileStorage,
           managedStorage = managedFileStorage
         ))
         .withDispatcher("launcher"),
       "launcher"
     )
-    reaperActor ! WatchMe(ac)
-    Some(ac)
+    Some(localActor)
   } else None
 
   if (!hostConfig.isApp && hostConfig.isWorker && elasticSupportFactory.isDefined && launcherActor.isDefined) {
     val nodeName = getNodeName
 
     tasksystemlog.info(
-      "This is a worker node. ElasticNodeAllocation is enabled. Node name: " + nodeName)
+      "This is a worker node. ElasticNodeAllocation is enabled. Notifying remote node registry about this node. Node name: " + nodeName)
 
-    remotenoderegistry.get ! NodeComingUp(
+    remoteNodeRegistry.get ! NodeComingUp(
       Node(RunningJobId(nodeName),
            CPUMemoryAvailable(hostConfig.myCardinality,
                               hostConfig.availableMemory),
            launcherActor.get))
 
-    system.actorOf(
-      Props(new HeartBeatActor(queueActor)).withDispatcher("heartbeat"),
-      "heartbeatOf" + queueActor.path.address.toString
-        .replace("://", "___") + queueActor.path.name
-    )
+    HeartBeatActor.watch(queueActor)
 
     system.actorOf(
       Props(elasticSupportFactory.get.createSelfShutdown)
         .withDispatcher("my-pinned-dispatcher"))
 
   } else {
-    tasksystemlog.warning("Nodename/jobname is not defined.")
+    tasksystemlog.info("This is not a slave node.")
   }
 
   private def initFailed(): Unit = {
     if (!hostConfig.isApp && hostConfig.isWorker) {
-      remotenoderegistry.foreach(_ ! InitFailed(PendingJobId(getNodeName)))
+      tasksystemlog.error(
+        "Initialization failed. This is a slave node, notifying remote node registry.")
+      remoteNodeRegistry.foreach(_ ! InitFailed(PendingJobId(getNodeName)))
     }
   }
 
-  var shuttingDown = false
+  @volatile
+  private var shuttingDown = false
 
-  def shutdown(): Unit = synchronized {
+  private def shutdownImpl(): Unit = synchronized {
     if (hostConfig.isApp || hostConfig.isQueue) {
       if (!shuttingDown) {
         shuttingDown = true
         implicit val timeout = akka.util.Timeout(10 seconds)
-        import system.dispatcher
 
         val latch = new java.util.concurrent.CountDownLatch(1)
         reaperActor ! Latch(latch)
@@ -423,35 +419,39 @@ class TaskSystem private[tasks] (
           val cacheReaper = system.actorOf(Props(new CallbackReaper({
             fileActor ! PoisonPill
           })))
-          (cacheReaper ? WatchMe(cacherActor)).foreach { _ =>
-            cacherActor ! PoisonPillToCacheActor
+          (cacheReaper ? WatchMe(cacheActor, answer = true)).foreach { _ =>
+            cacheActor ! PoisonPillToCacheActor
           }
           queueActor ! PoisonPill
         }
-        launcherActor.foreach(_ ! PoisonPill)
-        if (hostConfig.isApp) {
-          noderegistry.foreach(_ ! PoisonPill)
-        }
-        nodeLocalCacheActor ! PoisonPill
+        localNodeRegistry.foreach(_ ! PoisonPill)
+        nodeLocalCache.actor ! PoisonPill
 
-        tasksystemlog.info("Shutting down tasksystem. Waiting for the latch.")
+        tasksystemlog.info(
+          "Shutting down tasksystem. Blocking until all actors have terminated.")
         latch.await
         auxFjp.shutdown
+        AS.terminate
       }
     } else {
-      system.terminate
+      AS.terminate
     }
 
   }
 
-  if (config.addShutdownHook) {
-    scala.sys.addShutdownHook {
+  val shutdownHook = if (config.addShutdownHook) {
+    Some(scala.sys.addShutdownHook {
       tasksystemlog.warning(
         "JVM is shutting down - will call tasksystem shutdown.")
-      shutdown
+      shutdownImpl
       tasksystemlog.warning(
         "JVM is shutting down - called tasksystem shutdown.")
-    }
+    })
+  } else None
+
+  def shutdown(): Unit = {
+    shutdownImpl()
+    shutdownHook.foreach(_.remove)
   }
 
   private def getNodeName: String = elasticSupportFactory.get.getNodeName
