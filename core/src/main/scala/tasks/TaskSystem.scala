@@ -229,7 +229,7 @@ class TaskSystem private[tasks] (
         else new DisabledCache
 
       val localCacheActor = system.actorOf(
-        Props(new TaskResultCache(cache, fileServiceComponent))
+        Props(new TaskResultCacheActor(cache, fileServiceComponent))
           .withDispatcher("my-pinned-dispatcher"),
         "cache")
       reaperActor ! WatchMe(localCacheActor)
