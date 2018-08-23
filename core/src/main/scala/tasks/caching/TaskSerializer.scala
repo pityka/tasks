@@ -33,9 +33,10 @@ import io.circe._
 
 trait TaskSerializer {
   def serializeTaskDescription(original: TaskDescription): Array[Byte] = {
-    val x = original.persistent.getOrElse(original.startData).value
+    val base64TaskDescription =
+      original.persistent.getOrElse(original.startData).value
 
-    (original.taskId + "\n" + x).getBytes("UTF8")
+    (original.taskId + "\n" + base64TaskDescription).getBytes("UTF8")
   }
 
   def serializeResult(original: UntypedResult): Array[Byte] = {
@@ -45,11 +46,19 @@ trait TaskSerializer {
     js.noSpaces.getBytes("UTF8")
   }
 
-  def deserializeResult(ab: Array[Byte]): UntypedResult = {
-    val m = io.circe.parser.parse(new String(ab)).right.get.asObject.get
+  def deserializeResult(byteArray: Array[Byte]): UntypedResult = {
+    val map = io.circe.parser
+      .parse(new String(byteArray, "UTF8"))
+      .right
+      .get
+      .asObject
+      .get
 
     val files =
-      implicitly[Decoder[Set[SharedFile]]].decodeJson(m("files").get).right.get
-    UntypedResult(files, Base64Data(m("data").get.asString.get))
+      implicitly[Decoder[Set[SharedFile]]]
+        .decodeJson(map("files").get)
+        .right
+        .get
+    UntypedResult(files, Base64Data(map("data").get.asString.get))
   }
 }

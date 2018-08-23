@@ -56,19 +56,3 @@ class DisabledCache extends Cache {
   def shutDown() = {}
 
 }
-
-class FakeCacheForTest extends Cache {
-
-  var cacheMap
-    : scala.collection.mutable.ListMap[TaskDescription, UntypedResult] =
-    scala.collection.mutable.ListMap[TaskDescription, UntypedResult]()
-
-  def get(x: TaskDescription)(implicit p: FileServicePrefix) =
-    Future.successful(cacheMap.get(x))
-
-  def set(x: TaskDescription, r: UntypedResult)(implicit p: FileServicePrefix) =
-    Future.successful(cacheMap.getOrElseUpdate(x, r))
-
-  def shutDown() = {}
-
-}

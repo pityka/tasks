@@ -44,60 +44,64 @@ import tasks.fileservice.{
 
 import com.google.common.hash.Hashing
 
-private[tasks] class SharedFileCache(implicit fs: FileServiceComponent,
-                                     nlc: NodeLocalCacheActor,
-                                     as: ActorSystem,
-                                     ec: ExecutionContext,
-                                     config: TasksConfig)
+private[tasks] class SharedFileCache(
+    implicit fileServiceComponent: FileServiceComponent,
+    nodeLocalCacheActor: NodeLocalCacheActor,
+    AS: ActorSystem,
+    EC: ExecutionContext,
+    config: TasksConfig)
     extends Cache
     with TaskSerializer {
 
-  def getHash(a: Array[Byte]): String =
+  private def getHash(a: Array[Byte]): String =
     Hashing.murmur3_128.hashBytes(a).toString
 
-  private val logger = akka.event.Logging(as, getClass)
+  private val logger = akka.event.Logging(AS, getClass)
 
   override def toString = "SharedFileCache"
 
   def shutDown() = ()
 
-  def get(x: TaskDescription)(
-      implicit p: FileServicePrefix): Future[Option[UntypedResult]] = {
-    val tdBytes = serializeTaskDescription(x)
-    val hash = getHash(tdBytes)
+  def get(taskDescription: TaskDescription)(
+      implicit prefix: FileServicePrefix): Future[Option[UntypedResult]] = {
+    val taskDescriptionBytes = serializeTaskDescription(taskDescription)
+    val hash = getHash(taskDescriptionBytes)
+    val fileName = "__meta__result__" + hash
     SharedFileHelper
-      .getByNameUnchecked("__meta__result__" + hash)
+      .getByNameUnchecked(fileName)
       .flatMap(sf => SharedFileHelper.getPathToFile(sf))
       .map(x => Some(x))
       .recover {
         case e =>
-          println(e)
+          logger.error(e, s"Failed to locate cached result file: $fileName")
           None
       }
-      .map { f =>
-        f.flatMap { f =>
-          logger.debug("Reading result " + f)
-          Try(deserializeResult(readBinaryFile(f))).toOption
+      .map { file =>
+        file.flatMap { file =>
+          logger.debug(s"Reading result $file")
+          Try(deserializeResult(readBinaryFile(file))).toOption
         }
       }
   }
 
-  def set(x: TaskDescription, r: UntypedResult)(
+  def set(taskDescription: TaskDescription, untypedResult: UntypedResult)(
       implicit p: FileServicePrefix) = {
     try {
-      val std = serializeTaskDescription(x)
-      val kh = getHash(std)
-      val v: File = writeBinaryToFile(serializeResult(r))
-      val k: File = writeBinaryToFile(std)
-      SharedFileHelper
-        .createFromFile(v, name = "__meta__result__" + kh, deleteFile = true)
-        .flatMap { _ =>
-          SharedFileHelper
-            .createFromFile(k, name = "__meta__input__" + kh, deleteFile = true)
-            .map { _ =>
-              ()
-            }
-        }
+      val serializedTaskDescription = serializeTaskDescription(taskDescription)
+      val hash = getHash(serializedTaskDescription)
+      val value: File = writeBinaryToFile(serializeResult(untypedResult))
+      val key: File = writeBinaryToFile(serializedTaskDescription)
+      for {
+        _ <- SharedFileHelper
+          .createFromFile(value,
+                          name = "__meta__result__" + hash,
+                          deleteFile = true)
+        _ <- SharedFileHelper
+          .createFromFile(key,
+                          name = "__meta__input__" + hash,
+                          deleteFile = true)
+      } yield ()
+
     } catch {
       case e: Throwable => {
         shutDown

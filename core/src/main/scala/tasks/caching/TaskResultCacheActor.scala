@@ -27,7 +27,7 @@
 
 package tasks.caching
 
-import akka.actor.{Actor, PoisonPill}
+import akka.actor.{Actor, PoisonPill, ActorLogging, Stash}
 import akka.pattern.pipe
 import scala.concurrent.Future
 
@@ -36,46 +36,48 @@ import scala.util._
 import tasks.util.config._
 import tasks.fileservice._
 import tasks.wire._
+import tasks.queue.TaskId
 
 class TaskResultCacheActor(
     val cacheMap: Cache,
     fileService: FileServiceComponent)(implicit config: TasksConfig)
     extends Actor
-    with akka.actor.ActorLogging
-    with akka.actor.Stash {
+    with ActorLogging
+    with Stash {
 
-  implicit def fs: FileServiceComponent = fileService
+  implicit def FS: FileServiceComponent = fileService
 
   import context.dispatcher
 
-  case object SetDone
+  private case object SetDone
 
   override def preStart = {
     log.info(
       "Cache service starting. " + cacheMap.toString + s". config.verifySharedFileInCache: ${config.verifySharedFileInCache}. config.skipContentHashVerificationAfterCache: ${config.skipContentHashVerificationAfterCache}.")
   }
 
-  override def postStop {
+  override def postStop = {
     cacheMap.shutDown
     log.info("TaskResultCacheActor stopped.")
+  }
+
+  private def waitUntilSavingIsDone(taskId: TaskId): Receive = {
+    case SetDone =>
+      log.debug("Save done " + taskId)
+      unstashAll()
+      context.unbecome()
+    case _ => stash()
   }
 
   def receive = {
     case PoisonPillToCacheActor => self ! PoisonPill
     case SaveResult(description, result, prefix) =>
       log.debug("SavingResult")
-      context.become({
-        case SetDone =>
-          log.debug("Save done " + description.taskId)
-          unstashAll()
-          context.unbecome()
-        case _ => stash()
-      }, discardOld = false)
+      context.become(waitUntilSavingIsDone(description.taskId),
+                     discardOld = false)
       cacheMap
         .set(description, result)(prefix)
-        .map { x =>
-          SetDone
-        }
+        .map(_ => SetDone)
         .recover {
           case e =>
             log.error(e, "Error while saving into cache")
@@ -84,64 +86,62 @@ class TaskResultCacheActor(
         .pipeTo(self)
       sender ! true
 
-    case CheckResult(sch, originalSender) =>
+    case CheckResult(scheduleTask, originalSender) =>
       val savedSender = sender
-      cacheMap
-        .get(sch.description)(
-          sch.fileServicePrefix.append(sch.description.taskId.id))
-        .recover {
-          case e =>
-            log.error(e, "Error while looking up in cache")
-            None
-        }
-        .foreach { res =>
-          if (res.isEmpty) {
-            log.debug("Checking: {}. Not found in cache.",
-                      sch.description.taskId)
-            savedSender ! AnswerFromCache(Left("TaskNotFoundInCache"),
-                                          originalSender,
-                                          sch)
-          } else {
-            if (!config.verifySharedFileInCache) {
-              log.debug("Checking: {}. Got something (not verified).",
-                        sch.description.taskId)
-              savedSender ! AnswerFromCache(Right(res), originalSender, sch)
-            } else {
-              Future
-                .sequence(
-                  res.get.files.map(sf => SharedFileHelper.isAccessible(sf)))
-                .map(_.forall(x => x))
-                .recover {
-                  case e =>
-                    log.warning(
-                      "Checking: {}. Got something ({}), but failed to verify after cache with error:{}.",
-                      sch.description.taskId,
-                      res.get,
-                      e)
-                    false
-                }
-                .foreach { verified =>
-                  if (!verified) {
-                    log.warning(
-                      "Checking: {}. Got something ({}), but failed to verify after cache.",
-                      sch.description.taskId,
-                      res.get)
-                    savedSender ! AnswerFromCache(Left("TaskNotFoundInCache"),
-                                                  originalSender,
-                                                  sch)
-                  } else {
-                    log.debug("Checking: {}. Got something (verified).",
-                              sch.description.taskId)
+      val taskId = scheduleTask.description.taskId
+      val queryFileServicePrefix =
+        scheduleTask.fileServicePrefix.append(taskId.id)
 
-                    savedSender ! AnswerFromCache(Right(res),
-                                                  originalSender,
-                                                  sch)
-                  }
-                }
-
-            }
+      def lookup =
+        cacheMap
+          .get(scheduleTask.description)(queryFileServicePrefix)
+          .recover {
+            case e =>
+              log.error(e, "Error while looking up in cache")
+              None
           }
+
+      val answer = for {
+        cacheLookup <- lookup
+        answer <- cacheLookup match {
+          case None =>
+            log.debug(s"Checking: $taskId. Not found in cache.")
+            Future.successful(
+              AnswerFromCache(Left("TaskNotFoundInCache"),
+                              originalSender,
+                              scheduleTask))
+          case _ if !config.verifySharedFileInCache =>
+            log.debug(s"Checking: $taskId. Got something (not verified).")
+            Future.successful(
+              AnswerFromCache(Right(cacheLookup), originalSender, scheduleTask))
+          case Some(cacheLookup) =>
+            forallFutures(cacheLookup.files.map(SharedFileHelper.isAccessible))
+              .recover {
+                case e =>
+                  log.warning(
+                    s"Checking: $taskId. Got something ($cacheLookup), but failed to verify after cache with error: $e.")
+                  false
+              }
+              .map {
+                case false =>
+                  log.warning(
+                    s"Checking: $taskId. Got something ($cacheLookup), but failed to verify after cache.")
+                  AnswerFromCache(Left("TaskNotFoundInCache"),
+                                  originalSender,
+                                  scheduleTask)
+                case true =>
+                  log.debug(s"Checking: $taskId. Got something (verified).")
+                  AnswerFromCache(Right(Some(cacheLookup)),
+                                  originalSender,
+                                  scheduleTask)
+
+              }
         }
+      } yield answer
+      answer.pipeTo(savedSender)
 
   }
+
+  private def forallFutures(futures: Set[Future[Boolean]]) =
+    Future.sequence(futures).map(_.forall(identity))
 }
