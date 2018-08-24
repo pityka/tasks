@@ -42,10 +42,10 @@ case class ProxyTaskActorRef[B, T](private[tasks] val actor: ActorRef) {
 
   def ? =
     ProxyTask
-      .getBackResultFuture(actor, 1680 hours)
+      .askForResult(actor, 1680 hours)
       .asInstanceOf[Future[T]]
 
   def ?(timeoutp: FiniteDuration) =
-    ProxyTask.getBackResultFuture(actor, timeoutp).asInstanceOf[Future[T]]
+    ProxyTask.askForResult(actor, timeoutp).asInstanceOf[Future[T]]
 
 }

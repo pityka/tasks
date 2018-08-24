@@ -23,8 +23,6 @@ case class Drop(s: String) extends StaticMessage
 
 case class LookUp(s: String) extends StaticMessage
 
-case object ATaskWasForwarded extends StaticMessage
-
 case class QueueInfo(q: List[(ScheduleTask, List[ActorRef])])
     extends StaticMessage
 

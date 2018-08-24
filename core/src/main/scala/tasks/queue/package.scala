@@ -31,7 +31,7 @@ import scala.concurrent._
 package object queue {
 
   def updateHistoryOfComputationEnvironment[T](
-      ce: ComputationEnvironment,
+      computationEnvironment: ComputationEnvironment,
       deserializedInputData: T,
       taskID: String,
       taskVersion: Int
@@ -41,13 +41,13 @@ package object queue {
         dependencies = t.files.toList,
         task = fileservice.History.TaskVersion(taskID, taskVersion),
         timestamp = java.time.Instant.now,
-        codeVersion = ce.components.tasksConfig.codeVersion
+        codeVersion = computationEnvironment.components.tasksConfig.codeVersion
       )
 
-      ce.copy(
-        components = ce.components.copy(
-          filePrefix = ce.components.filePrefix.withHistory(newHistory)))
-    case _ => ce
+      computationEnvironment.copy(
+        components = computationEnvironment.components.copy(filePrefix =
+          computationEnvironment.components.filePrefix.withHistory(newHistory)))
+    case _ => computationEnvironment
   }
 
   type CompFun2 = Base64Data => ComputationEnvironment => Future[UntypedResult]
@@ -55,7 +55,7 @@ package object queue {
   def newTask[A, B](
       prerequisitives: B,
       resource: shared.VersionedCPUMemoryRequest,
-      f: CompFun2,
+      function: CompFun2,
       taskId: TaskId
   )(implicit components: TaskSystemComponents,
     writer1: Serializer[B],
@@ -71,16 +71,18 @@ package object queue {
     ProxyTaskActorRef[B, A](
       context.actorOf(
         Props(
-          new ProxyTask[B, A](taskId1,
-                              f.getClass,
-                              prerequisitives,
-                              writer1,
-                              reader2,
-                              resource,
-                              queue.actor,
-                              fileService,
-                              prefix,
-                              cache.actor)
+          new ProxyTask[B, A](
+            taskId = taskId1,
+            runTaskClass = function.getClass,
+            input = prerequisitives,
+            writer = writer1,
+            reader = reader2,
+            resourceConsumed = resource,
+            queueActor = queue.actor,
+            fileServiceComponent = fileService,
+            fileServicePrefix = prefix,
+            cacheActor = cache.actor
+          )
         ).withDispatcher("proxytask-dispatcher")
       )
     )

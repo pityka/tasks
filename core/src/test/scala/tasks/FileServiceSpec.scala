@@ -131,7 +131,7 @@ class FileServiceSpec
       implicit val serviceimpl =
         FileServiceComponent(service, Some(fs), remoteStore)
       implicit val nlc =
-        NodeLocalCacheActor(system.actorOf(Props[NodeLocalCache]))
+        NodeLocalCache.start
       val t: SharedFile =
         Await.result(SharedFileHelper.createFromFile(input, "proba", false),
                      50 seconds)
@@ -160,7 +160,7 @@ class FileServiceSpec
       implicit val serviceimpl =
         FileServiceComponent(service, Some(fs), remoteStore)
       implicit val nlc =
-        NodeLocalCacheActor(system.actorOf(Props[NodeLocalCache]))
+        NodeLocalCache.start
 
       val t: SharedFile = SharedFileHelper.createForTesting(
         "proba",
@@ -194,7 +194,7 @@ class FileServiceSpec
       implicit val serviceimpl =
         FileServiceComponent(service, Some(fs), remoteStore)
       implicit val nlc =
-        NodeLocalCacheActor(system.actorOf(Props[NodeLocalCache]))
+        NodeLocalCache.start
 
       val t: SharedFile = SharedFileHelper.createForTesting(
         "proba",

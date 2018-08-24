@@ -207,13 +207,11 @@ class TaskSystem private[tasks] (
     FileServiceComponent(fileActor, managedFileStorage, remoteFileStorage)
 
   val nodeLocalCache = {
-    val nodeLocalCacheActor = system.actorOf(
-      Props[NodeLocalCache].withDispatcher("my-pinned-dispatcher"),
-      name = "nodeLocalCache")
+    val nodeLocalCacheActor = NodeLocalCache.start
 
-    reaperActor ! WatchMe(nodeLocalCacheActor)
+    reaperActor ! WatchMe(nodeLocalCacheActor.actor)
 
-    NodeLocalCacheActor(nodeLocalCacheActor)
+    nodeLocalCacheActor
   }
 
   val cacheActor = try {

@@ -166,12 +166,10 @@ class TaskQueue(implicit config: TasksConfig)
         case Right(None) => {
           log.debug("Task is not found in cache. Enqueue. ")
           enQueue(m, ch :: Nil)
-          ch ! ATaskWasForwarded
         }
         case Left(_) => {
           log.debug("Task is not found in cache. Enqueue. ")
           enQueue(m, ch :: Nil)
-          ch ! ATaskWasForwarded
         }
 
       }

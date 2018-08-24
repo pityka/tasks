@@ -28,11 +28,8 @@
 package tasks.queue
 
 import akka.actor.{Actor, PoisonPill, ActorRef}
-import akka.util.Timeout
-import akka.pattern.ask
 import akka.stream.Materializer
 
-import scala.concurrent.duration._
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
 import scala.util._
@@ -94,18 +91,6 @@ case class ComputationEnvironment(
 
   def toTaskSystemComponents =
     components
-
-}
-
-private[tasks] object ProxyTask {
-
-  def getBackResultFuture(actor: ActorRef,
-                          timeoutp: FiniteDuration): Future[Any] = {
-
-    implicit val timout = Timeout(timeoutp)
-    (actor ? (GetBackResult))
-
-  }
 
 }
 
@@ -223,104 +208,4 @@ private class Task(
 
     case x => log.error("received unknown message" + x)
   }
-}
-
-class ProxyTask[MyPrerequisitive, MyResult](
-    taskId: TaskId,
-    runTaskClass: java.lang.Class[_ <: CompFun2],
-    incomings: MyPrerequisitive,
-    writer: Serializer[MyPrerequisitive],
-    reader: Deserializer[MyResult],
-    resourceConsumed: VersionedCPUMemoryRequest,
-    starter: ActorRef,
-    fileServiceComponent: FileServiceComponent,
-    fileServicePrefix: FileServicePrefix,
-    cacheActor: ActorRef
-) extends Actor
-    with akka.actor.ActorLogging {
-
-  private[this] var _channels: Set[ActorRef] = Set[ActorRef]()
-
-  private[this] var result: Option[Any] = None
-
-  private var taskIsQueued = false
-
-  private def distributeResult(): Unit = {
-    log.debug("Distributing result to targets: {}", _channels)
-    result.foreach(r =>
-      _channels.foreach { ch =>
-        ch ! r
-    })
-  }
-
-  private def notifyListenersOnFailure(cause: Throwable): Unit =
-    _channels.foreach(t => t ! akka.actor.Status.Failure(cause))
-
-  private def startTask(): Unit = {
-    if (result.isEmpty) {
-
-      val persisted: Option[MyPrerequisitive] = incomings match {
-        case x: HasPersistent[MyPrerequisitive] => Some(x.persistent)
-        case _                                  => None
-      }
-
-      val s = ScheduleTask(
-        TaskDescription(taskId,
-                        Base64Data(writer(incomings)),
-                        persisted.map(x => Base64Data(writer(x)))),
-        runTaskClass.getName,
-        resourceConsumed,
-        starter,
-        fileServiceComponent.actor,
-        fileServicePrefix,
-        cacheActor
-      )
-
-      log.debug("proxy submitting ScheduleTask object to queue.")
-
-      starter ! s
-    }
-  }
-
-  override def preStart() = {
-    log.debug("ProxyTask prestart.")
-    startTask
-
-  }
-
-  override def postStop() = {
-    log.debug("ProxyTask stopped. {} {} {}", taskId, incomings, self)
-  }
-
-  def receive = {
-    case MessageFromTask(incomingResultRaw) =>
-      val incomingResult: MyResult = reader(incomingResultRaw.data.bytes)
-      log.debug("MessageFromTask received from: {}, {}, {},{}",
-                sender,
-                incomingResultRaw,
-                result,
-                incomingResult)
-      if (result.isEmpty) {
-        result = Some(incomingResult)
-        distributeResult
-      }
-
-    case GetBackResult =>
-      log.debug(
-        "GetBackResult message received. Registering for notification: " + sender.toString)
-      _channels = _channels + sender
-      distributeResult
-
-    case ATaskWasForwarded =>
-      if (!taskIsQueued) {
-        log.debug("The loadbalancer received the message and queued it.")
-        taskIsQueued = true
-      }
-
-    case TaskFailedMessageToProxy(_, cause) =>
-      log.error(cause, "Execution failed. ")
-      notifyListenersOnFailure(cause)
-      self ! PoisonPill
-  }
-
 }
