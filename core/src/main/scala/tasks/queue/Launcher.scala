@@ -61,8 +61,8 @@ object Base64Data {
 }
 
 case class TaskDescription(taskId: TaskId,
-                           startData: Base64Data,
-                           persistent: Option[Base64Data])
+                           input: Base64Data,
+                           persistentInput: Option[Base64Data])
 
 object TaskDescription {
   implicit val encoder: Encoder[TaskDescription] =
@@ -75,7 +75,7 @@ case class ScheduleTask(
     description: TaskDescription,
     taskImplementation: String,
     resource: VersionedCPUMemoryRequest,
-    balancerActor: ActorRef,
+    queueActor: ActorRef,
     fileServiceActor: ActorRef,
     fileServicePrefix: FileServicePrefix,
     cacheActor: ActorRef
@@ -89,8 +89,8 @@ object ScheduleTask {
   }
 }
 
-class TaskLauncher(
-    taskQueue: ActorRef,
+class Launcher(
+    queueActor: ActorRef,
     nodeLocalCache: ActorRef,
     slots: VersionedCPUMemoryAvailable,
     refreshInterval: FiniteDuration,
@@ -104,72 +104,71 @@ class TaskLauncher(
 
   private case object CheckQueue extends Serializable
 
-  val maxResources: VersionedCPUMemoryAvailable = slots
-  var availableResources: VersionedCPUMemoryAvailable = maxResources
+  private val maxResources: VersionedCPUMemoryAvailable = slots
+  private var availableResources: VersionedCPUMemoryAvailable = maxResources
 
-  def idle = maxResources == availableResources
-  var idleState: Long = 0L
+  private def isIdle = maxResources == availableResources
+  private var idleState: Long = 0L
 
-  var denyWorkBeforeShutdown = false
+  private var denyWorkBeforeShutdown = false
 
-  var startedTasks
+  private var runningTasks
     : List[(ActorRef, ScheduleTask, VersionedCPUMemoryAllocated)] = Nil
 
-  var freed = Set[ActorRef]()
+  private var freed = Set[ActorRef]()
 
-  def launch(sch: ScheduleTask, proxies: List[ActorRef]) = {
+  private def launch(scheduleTask: ScheduleTask, proxies: List[ActorRef]) = {
 
     log.debug("Launch method")
 
-    val allocatedResource = availableResources.maximum(sch.resource)
+    val allocatedResource = availableResources.maximum(scheduleTask.resource)
     availableResources = availableResources.substract(allocatedResource)
 
-    val actor = context.actorOf(
+    val taskActor = context.actorOf(
       Props(
         classOf[Task],
         Class
-          .forName(sch.taskImplementation)
+          .forName(scheduleTask.taskImplementation)
           .asInstanceOf[java.lang.Class[_]]
           .getConstructor()
           .newInstance(),
         self,
-        sch.balancerActor,
-        FileServiceComponent(sch.fileServiceActor,
+        scheduleTask.queueActor,
+        FileServiceComponent(scheduleTask.fileServiceActor,
                              managedStorage,
                              remoteStorage),
-        sch.cacheActor,
+        scheduleTask.cacheActor,
         nodeLocalCache,
         allocatedResource.cpuMemoryAllocated,
-        sch.fileServicePrefix.append(sch.description.taskId.id),
+        scheduleTask.fileServicePrefix.append(
+          scheduleTask.description.taskId.id),
         auxExecutionContext,
         actorMaterializer,
         config
       ).withDispatcher("task-worker-dispatcher")
     )
     log.debug("Actor constructed")
-    // log.debug( "Actor started")
     proxies.foreach { sender =>
-      actor ! RegisterForNotification(sender)
+      taskActor ! RegisterForNotification(sender)
     }
 
-    startedTasks = (actor, sch, allocatedResource) :: startedTasks
+    runningTasks = (taskActor, scheduleTask, allocatedResource) :: runningTasks
 
-    log.debug("Sending startdata to actor.")
-    actor ! sch.description.startData
+    log.debug("Sending input to actor.")
+    taskActor ! scheduleTask.description.input
     log.debug("startdata sent.")
     allocatedResource
   }
 
-  def askForWork(): Unit = {
+  private def askForWork(): Unit = {
     if (!availableResources.empty && !denyWorkBeforeShutdown) {
-      // log.debug("send askForWork" + availableResources)
-      taskQueue ! AskForWork(availableResources)
+      queueActor ! AskForWork(availableResources)
     }
   }
 
-  var scheduler: Cancellable = null
+  private var scheduler: Cancellable = null
 
-  override def preStart {
+  override def preStart: Unit = {
     log.debug("TaskLauncher starting")
 
     import context.dispatcher
@@ -183,37 +182,38 @@ class TaskLauncher(
 
   }
 
-  override def postStop {
+  override def postStop: Unit = {
     scheduler.cancel
 
-    startedTasks.foreach(x => x._1 ! PoisonPill)
+    runningTasks.foreach(_._1 ! PoisonPill)
     log.info(
-      s"TaskLauncher stopped, sent PoisonPill to ${startedTasks.size} running tasks.")
+      s"TaskLauncher stopped, sent PoisonPill to ${runningTasks.size} running tasks.")
   }
 
-  def taskFinished(taskActor: ActorRef, receivedResult: UntypedResult) {
-    val elem = startedTasks
+  private def taskFinished(taskActor: ActorRef,
+                           receivedResult: UntypedResult): Unit = {
+    val elem = runningTasks
       .find(_._1 == taskActor)
       .getOrElse(throw new RuntimeException(
         "Wrong message received. No such taskActor."))
-    val sch = elem._2
+    val scheduleTask = elem._2
     import akka.pattern.ask
     import context.dispatcher
     (
-      sch.cacheActor
+      scheduleTask.cacheActor
         .?(
-          SaveResult(sch.description,
+          SaveResult(scheduleTask.description,
                      receivedResult,
-                     sch.fileServicePrefix.append(sch.description.taskId.id)))(
-          sender = taskActor,
+                     scheduleTask.fileServicePrefix.append(
+                       scheduleTask.description.taskId.id)))(
           timeout = 5 seconds
         )
       )
       .foreach { _ =>
-        taskQueue ! TaskDone(sch, receivedResult)
+        queueActor ! TaskDone(scheduleTask, receivedResult)
       }
 
-    startedTasks = startedTasks.filterNot(_ == elem)
+    runningTasks = runningTasks.filterNot(_ == elem)
     if (!freed.contains(taskActor)) {
       availableResources = availableResources.addBack(elem._3)
     } else {
@@ -221,15 +221,15 @@ class TaskLauncher(
     }
   }
 
-  def taskFailed(taskActor: ActorRef, cause: Throwable) {
+  private def taskFailed(taskActor: ActorRef, cause: Throwable): Unit = {
 
-    val elem = startedTasks
+    val elem = runningTasks
       .find(_._1 == taskActor)
       .getOrElse(throw new RuntimeException(
         "Wrong message received. No such taskActor."))
     val sch = elem._2
 
-    startedTasks = startedTasks.filterNot(_ == elem)
+    runningTasks = runningTasks.filterNot(_ == elem)
 
     if (!freed.contains(taskActor)) {
       availableResources = availableResources.addBack(elem._3)
@@ -237,19 +237,19 @@ class TaskLauncher(
       freed -= taskActor
     }
 
-    taskQueue ! TaskFailedMessageToQueue(sch, cause)
+    queueActor ! TaskFailedMessageToQueue(sch, cause)
 
   }
 
   def receive = {
-    case ScheduleWithProxy(sch, acs) =>
-      log.debug(s"Received ScheduleWithProxy from $acs")
+    case ScheduleWithProxy(scheduleTask, proxies) =>
+      log.debug(s"Received ScheduleWithProxy from $proxies")
       if (!denyWorkBeforeShutdown) {
 
-        if (idle) {
+        if (isIdle) {
           idleState += 1
         }
-        val allocated = launch(sch, acs)
+        val allocated = launch(scheduleTask, proxies)
         sender ! Ack(allocated)
         askForWork
       }
@@ -265,12 +265,13 @@ class TaskLauncher(
     case CheckQueue => askForWork
     case Ping       => sender ! Pong
     case PrepareForShutdown =>
-      if (idle) {
+      if (isIdle) {
         denyWorkBeforeShutdown = true
         sender ! ReadyForShutdown
       }
 
     case WhatAreYouDoing =>
+      val idle = isIdle
       log.debug(s"Received WhatAreYouDoing. idle:$idle, idleState:$idleState")
       if (idle) {
         sender ! Idling(idleState)
@@ -280,7 +281,7 @@ class TaskLauncher(
 
     case Release =>
       val taskActor = sender
-      val allocated = startedTasks.find(_._1 == taskActor).map(_._3)
+      val allocated = runningTasks.find(_._1 == taskActor).map(_._3)
       if (allocated.isEmpty) log.error("Can't find actor ")
       else {
         availableResources = availableResources.addBack(allocated.get)
@@ -288,7 +289,7 @@ class TaskLauncher(
       }
       askForWork
 
-    case x => log.debug("unhandled" + x)
+    case other => log.debug("unhandled" + other)
 
   }
 

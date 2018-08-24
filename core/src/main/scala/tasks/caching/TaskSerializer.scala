@@ -34,7 +34,7 @@ import io.circe._
 trait TaskSerializer {
   def serializeTaskDescription(original: TaskDescription): Array[Byte] = {
     val base64TaskDescription =
-      original.persistent.getOrElse(original.startData).value
+      original.persistentInput.getOrElse(original.input).value
 
     (original.taskId + "\n" + base64TaskDescription).getBytes("UTF8")
   }

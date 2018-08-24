@@ -353,7 +353,7 @@ class TaskSystem private[tasks] (
     val refreshInterval = config.askInterval
     val localActor = system.actorOf(
       Props(
-        new TaskLauncher(
+        new Launcher(
           queueActor,
           nodeLocalCache.actor,
           VersionedCPUMemoryAvailable(
