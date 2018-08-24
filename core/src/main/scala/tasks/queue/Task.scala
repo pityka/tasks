@@ -53,15 +53,17 @@ object TaskId {
 
 object UntypedResult {
 
-  def fs(r: Any): Set[SharedFile] = r match {
-    case x: ResultWithSharedFiles =>
-      x.files.toSet ++ x.productIterator.flatMap(x => fs(x)).toSet
-    case x: SharedFile => Set(x)
-    case _             => Set()
+  private def files(r: Any): Set[SharedFile] = r match {
+    case resultWithSharedFiles: ResultWithSharedFiles =>
+      resultWithSharedFiles.files.toSet ++ resultWithSharedFiles.productIterator
+        .flatMap(member => files(member))
+        .toSet
+    case file: SharedFile => Set(file)
+    case _                => Set()
   }
 
   def make[A](r: A)(implicit ser: Serializer[A]): UntypedResult =
-    UntypedResult(fs(r), Base64Data(ser(r)))
+    UntypedResult(files(r), Base64Data(ser(r)))
 
   implicit val encoder: Encoder[UntypedResult] = deriveEncoder[UntypedResult]
 
@@ -77,9 +79,9 @@ case class ComputationEnvironment(
     val taskActor: ActorRef
 ) {
 
-  implicit def fs: FileServiceComponent = components.fs
+  implicit def fileServiceComponent: FileServiceComponent = components.fs
 
-  implicit def actorsystem: akka.actor.ActorSystem = components.actorsystem
+  implicit def actorSystem: akka.actor.ActorSystem = components.actorsystem
 
   implicit def filePrefix: FileServicePrefix = components.filePrefix
 
@@ -97,9 +99,9 @@ case class ComputationEnvironment(
 private class Task(
     runTask: CompFun2,
     launcherActor: ActorRef,
-    balancerActor: ActorRef,
+    queueActor: ActorRef,
     fileServiceComponent: FileServiceComponent,
-    globalCacheActor: ActorRef,
+    cacheActor: ActorRef,
     nodeLocalCache: ActorRef,
     resourceAllocated: CPUMemoryAllocated,
     fileServicePrefix: FileServicePrefix,
@@ -109,37 +111,54 @@ private class Task(
 ) extends Actor
     with akka.actor.ActorLogging {
 
-  override def preStart {
+  override def preStart: Unit = {
     log.debug("Prestart of Task class")
   }
 
-  override def postStop {
+  override def postStop: Unit = {
     fjp.shutdown
-    log.debug("Task stopped, {}", startdat)
+    log.debug(s"Task stopped. Input was: $input.")
 
   }
 
-  var notificationRegister: List[ActorRef] = List[ActorRef]()
-  val mainActor = this.self
+  private var notificationRegister: List[ActorRef] = List[ActorRef]()
 
   val fjp = tasks.util.concurrent
     .newJavaForkJoinPoolWithNamePrefix("tasks-ec", resourceAllocated.cpu)
-  val executionContext =
+  val executionContextOfTask =
     scala.concurrent.ExecutionContext.fromExecutorService(fjp)
 
-  var startdat: Option[String] = None
+  private var input: Option[String] = None
 
-  def startTask(msg: Base64Data): Unit =
+  private def handleError(exception: Throwable): Unit = {
+    exception.printStackTrace()
+    log.error(exception, "Task failed.")
+    launcherActor ! InternalMessageTaskFailed(self, exception)
+    self ! PoisonPill
+  }
+
+  private def handleCompletion(future: Future[UntypedResult]) =
+    future.onComplete {
+      case Success(result) =>
+        log.debug("Task success. Notifications: {}",
+                  notificationRegister.toString)
+        notificationRegister.foreach(_ ! MessageFromTask(result))
+        launcherActor ! InternalMessageFromTask(self, result)
+        self ! PoisonPill
+
+      case Failure(error) => handleError(error)
+    }(executionContextOfTask)
+
+  private def executeTaskAsynchronously(
+      msg: Base64Data): Future[UntypedResult] =
     try {
-      log.debug("Starttask from the executing dispatcher (future).")
-
       val ce = ComputationEnvironment(
         resourceAllocated,
         TaskSystemComponents(
-          QueueActor(balancerActor),
+          QueueActor(queueActor),
           fileServiceComponent,
           context.system,
-          CacheActor(globalCacheActor),
+          CacheActor(cacheActor),
           NodeLocalCacheActor(nodeLocalCache),
           fileServicePrefix,
           auxExecutionContext,
@@ -149,63 +168,32 @@ private class Task(
         akka.event.Logging(context.system.eventStream,
                            "usertasks." + fileServicePrefix.list.mkString(".")),
         LauncherActor(launcherActor),
-        executionContext,
+        executionContextOfTask,
         self
       )
 
-      log.debug("CE {}", ce)
-      log.debug("start data {}", msg)
+      log.debug(
+        s"Starting task with computation environment $ce and with input data $msg.")
 
-      val f = Future(runTask(msg)(ce))(executionContext)
-        .flatMap(x => x)(executionContext)
-
-      f.onComplete {
-        case Success(result) =>
-          log.debug("Task success. Notifications: {}",
-                    notificationRegister.toString)
-          notificationRegister.foreach(_ ! MessageFromTask(result))
-          launcherActor ! InternalMessageFromTask(mainActor, result)
-          self ! PoisonPill
-
-        case Failure(x) =>
-          x.printStackTrace()
-          log.error(
-            x,
-            "Exception caught in the executing dispatcher of a task. " + x.getMessage)
-          launcherActor ! InternalMessageTaskFailed(mainActor, x)
-          self ! PoisonPill
-
-      }(executionContext)
-
+      Future(runTask(msg)(ce))(executionContextOfTask)
+        .flatMap(identity)(executionContextOfTask)
     } catch {
-      case x: Exception => {
-        x.printStackTrace()
-        log.error(
-          x,
-          "Exception caught in the executing dispatcher of a task. " + x.getMessage)
-        launcherActor ! InternalMessageTaskFailed(mainActor, x)
-        self ! PoisonPill
-      }
-      case x: AssertionError => {
-        x.printStackTrace()
-        log.error(
-          x,
-          "Exception caught in the executing dispatcher of a task. " + x.getMessage)
-        launcherActor ! InternalMessageTaskFailed(mainActor, x)
-        self ! PoisonPill
-      }
+      case exception: Exception =>
+        Future.failed(exception)
+      case assertionError: AssertionError =>
+        Future.failed(assertionError)
     }
 
   def receive = {
     case bd: Base64Data =>
-      log.debug("StartTask, from taskactor")
-      startdat = Some(bd.value)
-      startTask(bd)
+      log.debug("Received input data.")
+      input = Some(bd.value)
+      handleCompletion(executeTaskAsynchronously(bd))
 
-    case RegisterForNotification(ac) =>
-      log.debug("Received: " + ac.toString)
-      notificationRegister = ac :: notificationRegister
+    case RegisterForNotification(actorRef) =>
+      log.debug("Registering listener: " + actorRef.toString)
+      notificationRegister = actorRef :: notificationRegister
 
-    case x => log.error("received unknown message" + x)
+    case other => log.error("received unknown message" + other)
   }
 }
