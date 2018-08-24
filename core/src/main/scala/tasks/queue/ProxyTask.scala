@@ -49,7 +49,7 @@ private[tasks] object ProxyTask {
 
 }
 
-/*  Local proxy of the remotely executed task */ 
+/* Local proxy of the remotely executed task */ 
 class ProxyTask[Input, Output](
     taskId: TaskId,
     runTaskClass: java.lang.Class[_ <: CompFun2],
