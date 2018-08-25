@@ -27,7 +27,7 @@
 
 package tasks.queue
 
-import akka.actor.{Actor, ActorRef, Props}
+import akka.actor.{Actor, ActorLogging}
 
 import tasks.util.eq._
 import tasks.shared._
@@ -37,57 +37,53 @@ import tasks.util.config._
 import tasks.wire._
 import tasks._
 
-class TaskQueue(implicit config: TasksConfig)
-    extends Actor
-    with akka.actor.ActorLogging {
+class TaskQueue(implicit config: TasksConfig) extends Actor with ActorLogging {
 
-  // ActorRef here is the proxy of the task
   private val queuedTasks =
-    collection.mutable.Map[ScheduleTask, List[ActorRef]]()
+    collection.mutable.Map[ScheduleTask, List[Proxy]]()
 
-  // Map(task -> (launcher,allocated,list of proxies))
-  private val routedMessages = scala.collection.mutable
+  private val scheduledMessages = scala.collection.mutable
     .Map[ScheduleTask,
-         (ActorRef, VersionedCPUMemoryAllocated, List[ActorRef])]()
+         (LauncherActor, VersionedCPUMemoryAllocated, List[Proxy])]()
 
   // This is non empty while waiting for response from the tasklauncher
   // during that, no other tasks are started
-  private var negotiation: Option[(ActorRef, ScheduleTask)] = None
+  private var negotiation: Option[(LauncherActor, ScheduleTask)] = None
 
-  private val knownLaunchers = scala.collection.mutable.HashSet[ActorRef]()
+  private def negotiatingWithCurrentSender =
+    negotiation.map(_._1.actor === sender).getOrElse(false)
 
-  private def enQueue(sch: ScheduleTask, ac: List[ActorRef]) {
-    if (!routedMessages.contains(sch)) {
+  private val knownLaunchers = scala.collection.mutable.HashSet[LauncherActor]()
+
+  private def enQueue(sch: ScheduleTask, proxies: List[Proxy]): Unit =
+    if (!scheduledMessages.contains(sch)) {
       queuedTasks.get(sch) match {
-        case None      => queuedTasks.update(sch, ac)
-        case Some(acs) => queuedTasks.update(sch, (ac ::: acs).distinct)
+        case None => queuedTasks.update(sch, proxies)
+        case Some(existingProxies) =>
+          queuedTasks.update(sch, (proxies ::: existingProxies).distinct)
       }
-    } else addProxyToRoutedMessages(sch, ac)
+    } else addProxiesToScheduledMessages(sch, proxies)
+
+  private def removeFromScheduledMessages(sch: ScheduleTask): Unit = {
+    scheduledMessages.remove(sch)
   }
 
-  private def removeFromRoutedMessages(sch: ScheduleTask) {
-    // Remove from the list of sent (running) messages
-    routedMessages.remove(sch)
-  }
-
-  private def taskDone(sch: ScheduleTask, r: UntypedResult) {
-    // Remove from the list of sent (running) messages and notify proxies
-    routedMessages.get(sch).foreach {
+  private def taskDone(sch: ScheduleTask, r: UntypedResult): Unit = {
+    scheduledMessages.get(sch).foreach {
       case (_, _, proxies) =>
-        proxies.foreach(_ ! MessageFromTask(r))
+        proxies.foreach(_.actor ! MessageFromTask(r))
     }
-    removeFromRoutedMessages(sch)
+    removeFromScheduledMessages(sch)
 
     if (queuedTasks.contains(sch)) {
       log.error("Should not be queued. {}", queuedTasks(sch))
     }
   }
 
-  private def taskFailed(sch: ScheduleTask, cause: Throwable) {
-    // Remove from the list of sent (running) messages
-    routedMessages.get(sch).foreach {
+  private def taskFailed(sch: ScheduleTask, cause: Throwable): Unit =
+    scheduledMessages.get(sch).foreach {
       case (_, _, proxies) =>
-        routedMessages.remove(sch)
+        scheduledMessages.remove(sch)
         if (config.resubmitFailedTask) {
           log.error(
             cause,
@@ -95,22 +91,17 @@ class TaskQueue(implicit config: TasksConfig)
           enQueue(sch, proxies)
           log.info("Requeued 1 message. Queue size: " + queuedTasks.keys.size)
         } else {
-          proxies.foreach { ac =>
-            ac ! TaskFailedMessageToProxy(sch, cause)
-          }
+          proxies.foreach(_.actor ! TaskFailedMessageToProxy(sch, cause))
           log.error(cause, "Task execution failed: " + sch.toString)
         }
     }
 
-  }
-
-  private def launcherCrashed(crashedLauncher: ActorRef) {
-    // put back the jobs into the queue
+  private def launcherCrashed(crashedLauncher: LauncherActor): Unit = {
     val msgs =
-      routedMessages.toSeq.filter(_._2._1 === crashedLauncher).map(_._1)
+      scheduledMessages.toSeq.filter(_._2._1 === crashedLauncher).map(_._1)
     msgs.foreach { (sch: ScheduleTask) =>
-      val proxies = routedMessages(sch)._3
-      routedMessages.remove(sch)
+      val proxies = scheduledMessages(sch)._3
+      scheduledMessages.remove(sch)
       enQueue(sch, proxies)
     }
     log.info(
@@ -119,151 +110,141 @@ class TaskQueue(implicit config: TasksConfig)
     knownLaunchers -= crashedLauncher
   }
 
-  override def preStart = {
+  override def preStart: Unit = {
     log.debug("TaskQueue starting.")
   }
 
-  override def postStop {
+  override def postStop: Unit = {
     log.info("TaskQueue stopped.")
   }
 
-  def addProxyToRoutedMessages(m: ScheduleTask,
-                               newproxies: List[ActorRef]): Unit = {
-    val (launcher, allocation, proxies) = routedMessages(m)
-    routedMessages
-      .update(m, (launcher, allocation, (newproxies ::: proxies).distinct))
+  def addProxiesToScheduledMessages(sch: ScheduleTask,
+                                    newproxies: List[Proxy]): Unit = {
+    val (launcher, allocation, proxies) = scheduledMessages(sch)
+    scheduledMessages
+      .update(sch, (launcher, allocation, (newproxies ::: proxies).distinct))
   }
 
   def receive = {
-    case m: ScheduleTask => {
+    case sch: ScheduleTask =>
       log.debug("Received ScheduleTask.")
-      if ((queuedTasks.contains(m) && (!queuedTasks(m).has(sender)))) {
-        enQueue(m, sender :: Nil)
-      } else if (routedMessages
-                   .get(m)
-                   .map {
-                     case (_, _, proxies) =>
-                       !proxies.isEmpty && !proxies.contains(sender)
-                   }
-                   .getOrElse(false)) {
+      val proxy = Proxy(sender)
+      val queuedButSentByADifferentProxy = (queuedTasks.contains(sch) && (!queuedTasks(
+        sch).has(proxy)))
+      val scheduledButSentByADifferentProxy = scheduledMessages
+        .get(sch)
+        .map {
+          case (_, _, proxies) =>
+            !proxies.isEmpty && !proxies.contains(proxy)
+        }
+        .getOrElse(false)
+
+      if (queuedButSentByADifferentProxy) {
+        enQueue(sch, proxy :: Nil)
+      } else if (scheduledButSentByADifferentProxy) {
         log.debug(
           "Scheduletask received multiple times from different proxies. Not queueing this one, but delivering result if ready. {}",
-          m)
-        addProxyToRoutedMessages(m, sender :: Nil)
+          sch)
+        addProxiesToScheduledMessages(sch, proxy :: Nil)
       } else {
-        val ch = sender
-        m.cacheActor ! CheckResult(m, ch)
+        sch.cacheActor ! CheckResult(sch, proxy)
       }
-    }
-    case AnswerFromCache(message, ch, sch) => {
-      val m = sch
+
+    case AnswerFromCache(message, proxy, sch) =>
       log.debug("Cache answered.")
       message match {
-        case Right(Some(r)) => {
+        case Right(Some(result)) => {
           log.debug("Replying with a Result found in cache.")
-          ch ! (MessageFromTask(r))
+          proxy.actor ! MessageFromTask(result)
         }
         case Right(None) => {
           log.debug("Task is not found in cache. Enqueue. ")
-          enQueue(m, ch :: Nil)
+          enQueue(sch, proxy :: Nil)
         }
         case Left(_) => {
           log.debug("Task is not found in cache. Enqueue. ")
-          enQueue(m, ch :: Nil)
+          enQueue(sch, proxy :: Nil)
         }
 
       }
-    }
 
-    case AskForWork(resource) =>
+    case AskForWork(availableResource) =>
       if (negotiation.isEmpty) {
         log.debug(
           "AskForWork. Sender: {}. Resource: {}. Negotition state: {}. Queue state: {}",
           sender,
-          resource,
+          availableResource,
           negotiation,
           queuedTasks
             .map(x => (x._1.description.taskId, x._1.resource))
             .toSeq
         )
 
-        val launcher = sender
+        val launcher = LauncherActor(sender)
 
         queuedTasks
           .find {
-            case (k, _) => resource.canFulfillRequest(k.resource)
+            case (sch, _) => availableResource.canFulfillRequest(sch.resource)
           }
-          .foreach { task =>
-            negotiation = Some(launcher -> task._1)
-            log.debug("Dequeued. Sending task to " + launcher)
-            log.debug(negotiation.toString)
+          .foreach {
+            case (sch, proxies) =>
+              negotiation = Some(launcher -> sch)
+              log.debug("Dequeued. Sending task to " + launcher)
+              log.debug(negotiation.toString)
 
-            if (!knownLaunchers.contains(launcher)) {
-              knownLaunchers += launcher
-              context.actorOf(Props(new HeartBeatActor(launcher))
-                                .withDispatcher("heartbeat"),
-                              "heartbeatOf" + launcher.path.address.toString
-                                .replace("://", "___") + launcher.path.name)
-              context.system.eventStream
-                .subscribe(self, classOf[HeartBeatStopped])
-            }
+              if (!knownLaunchers.contains(launcher)) {
+                knownLaunchers += launcher
+                HeartBeatActor.watch(launcher.actor,
+                                     LauncherStopped(launcher),
+                                     self)
+              }
 
-            launcher ! ScheduleWithProxy(task._1, task._2)
+              launcher.actor ! ScheduleWithProxy(sch, proxies)
 
           }
       } else {
         log.debug("AskForWork received but currently in negotiation state.")
       }
 
-    case Ack(allocated)
-        if negotiation.map(_._1 === sender).getOrElse(false) => {
-      val task = negotiation.get._2
+    case Ack(allocated) if negotiatingWithCurrentSender =>
+      val sch = negotiation.get._2
       negotiation = None
 
-      if (routedMessages.contains(task)) {
+      if (scheduledMessages.contains(sch)) {
         log.error(
           "Routed messages already contains task. This is unexpected and can lead to lost messages.")
       }
 
-      val proxies = queuedTasks(task)
-      queuedTasks.remove(task)
+      val proxies = queuedTasks(sch)
+      queuedTasks.remove(sch)
 
-      routedMessages += ((task, (sender, allocated, proxies)))
-    }
+      scheduledMessages += ((sch, (LauncherActor(sender), allocated, proxies)))
 
     case TaskDone(sch, result) =>
       log.debug("TaskDone {} {}", sch, result)
       taskDone(sch, result)
 
     case TaskFailedMessageToQueue(sch, cause) => taskFailed(sch, cause)
-    case m: HeartBeatStopped => {
-      log.info("HeartBeatStopped: " + m)
+    case LauncherStopped(launcher) =>
+      log.info(s"LauncherStopped: $launcher")
+      launcherCrashed(launcher)
 
-      launcherCrashed(m.ac)
-
-    }
-    case Ping => {
-      sender ! true
+    case Ping =>
       sender ! Pong
-    }
 
-    case HowLoadedAreYou => {
-      // EventHandler.debug(this,queue.toString+routedMessages.toString)
+    case HowLoadedAreYou =>
       val qs = QueueStat(
         queuedTasks.toList
           .map(_._1)
           .map(x => (x.description.taskId.toString, x.resource))
           .toList,
-        routedMessages.toSeq
+        scheduledMessages.toSeq
           .map(x => x._1.description.taskId.toString -> x._2._2)
           .toList
       )
       context.system.eventStream.publish(qs)
       sender ! qs
-    }
 
-    case GetQueueInformation => sender ! QueueInfo(queuedTasks.toList)
-
-    case m => log.warning("Unhandled message. " + m.toString)
+    case other => log.warning("Unhandled message. " + other.toString)
   }
 }

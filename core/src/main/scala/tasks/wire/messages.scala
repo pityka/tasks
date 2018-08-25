@@ -23,11 +23,6 @@ case class Drop(s: String) extends StaticMessage
 
 case class LookUp(s: String) extends StaticMessage
 
-case class QueueInfo(q: List[(ScheduleTask, List[ActorRef])])
-    extends StaticMessage
-
-private[tasks] case object GetQueueInformation extends StaticMessage
-
 private[tasks] case class QueryTask(sch: ScheduleTask, ac: ActorRef)
     extends StaticMessage
 
@@ -78,7 +73,7 @@ case object YouShouldSetIt extends StaticMessage
 
 case object Release extends StaticMessage
 
-case class ScheduleWithProxy(sch: ScheduleTask, ac: List[ActorRef])
+case class ScheduleWithProxy(sch: ScheduleTask, ac: List[Proxy])
     extends StaticMessage
 
 // Messages related to files
@@ -157,14 +152,14 @@ private[tasks] case class SaveResult(sch: TaskDescription,
                                      prefix: FileServicePrefix)
     extends StaticMessage
 
-private[tasks] case class CheckResult(sch: ScheduleTask, sender: ActorRef)
+private[tasks] case class CheckResult(sch: ScheduleTask, sender: Proxy)
     extends StaticMessage
 
 private[tasks] case object PoisonPillToCacheActor extends StaticMessage
 
 private[tasks] case class AnswerFromCache(
     message: Either[String, Option[UntypedResult]],
-    sender: ActorRef,
+    sender: Proxy,
     sch: ScheduleTask)
     extends StaticMessage
 

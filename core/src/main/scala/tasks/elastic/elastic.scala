@@ -363,6 +363,8 @@ trait NodeCreatorImpl
 
 trait NodeKillerImpl extends Actor with ShutdownNode {
 
+  private case object TargetStopped
+
   def log: LoggingAdapter
 
   implicit def config: TasksConfig
@@ -373,7 +375,7 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
 
   private var scheduler: Cancellable = null
 
-  override def preStart {
+  override def preStart: Unit = {
     log.debug(
       "NodeKiller start. Monitoring actor: " + targetLauncherActor + " on node: " + targetNode.name)
 
@@ -386,7 +388,7 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
       message = MeasureTime
     )
 
-    context.system.eventStream.subscribe(self, classOf[HeartBeatStopped])
+    HeartBeatActor.watch(targetLauncherActor, TargetStopped, self)
 
   }
 
@@ -411,7 +413,8 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
   }
 
   def receive = {
-    case HeartBeatStopped(down) if targetLauncherActor == down => shutdown
+    case TargetStopped =>
+      shutdown
     case MeasureTime =>
       if (targetIsIdle &&
           (System
@@ -443,11 +446,15 @@ trait NodeKillerImpl extends Actor with ShutdownNode {
 
 }
 
+private case object QueueLostOrStopped
+
 trait SelfShutdown extends Actor with akka.actor.ActorLogging {
 
   def id: RunningJobId
 
   def balancerActor: ActorRef
+
+  implicit def config: TasksConfig
 
   def shutdownRunningNode(d: RunningJobId)
 
@@ -455,15 +462,15 @@ trait SelfShutdown extends Actor with akka.actor.ActorLogging {
     shutdownRunningNode(id)
   }
 
-  override def preStart {
-    context.system.eventStream.subscribe(self, classOf[HeartBeatStopped])
+  override def preStart: Unit = {
+    HeartBeatActor.watch(balancerActor, QueueLostOrStopped, self)
     context.system.eventStream
       .subscribe(self, classOf[akka.remote.DisassociatedEvent])
 
   }
   def receive = {
-    case HeartBeatStopped(actor) if actor == balancerActor =>
-      log.error("HeartBeatStopped for balancerActor received. Shutting down.")
+    case QueueLostOrStopped =>
+      log.error("QueueLostOrStopped received. Shutting down.")
       shutdown
 
     case de: akka.remote.DisassociatedEvent =>

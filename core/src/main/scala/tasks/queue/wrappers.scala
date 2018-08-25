@@ -49,3 +49,22 @@ case class ProxyTaskActorRef[B, T](private[tasks] val actor: ActorRef) {
     ProxyTask.askForResult(actor, timeoutp).asInstanceOf[Future[T]]
 
 }
+
+case class Proxy(actor: ActorRef)
+
+object Proxy {
+  import io.circe._
+  import io.circe.generic.semiauto._
+
+  import tasks.wire.actorRefEncoder
+  implicit val encoder: Encoder[Proxy] = deriveEncoder[Proxy]
+
+  implicit def decoder(implicit EAS: ExtendedActorSystem): Decoder[Proxy] = {
+    implicit val actorRefDecoder: Decoder[ActorRef] =
+      tasks.wire.actorRefDecoder(EAS)
+    val _ = actorRefDecoder // suppress unused warning
+    deriveDecoder[Proxy]
+  }
+}
+
+case class LauncherStopped(launcher: LauncherActor)

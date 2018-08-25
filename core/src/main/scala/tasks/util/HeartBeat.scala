@@ -45,16 +45,19 @@ import tasks.util.config._
 import tasks.wire._
 
 object HeartBeatActor {
-  def watch(target: ActorRef)(implicit AS: ActorRefFactory,
-                              config: TasksConfig) =
+  def watch[A](target: ActorRef, signal: A, listener: ActorRef)(
+      implicit AS: ActorRefFactory,
+      config: TasksConfig) =
     AS.actorOf(
-      Props(new HeartBeatActor(target)).withDispatcher("heartbeat"),
+      Props(new HeartBeatActor(target, signal, listener))
+        .withDispatcher("heartbeat"),
       "heartbeatOf" + target.path.address.toString
         .replace("://", "___") + target.path.name
     )
 }
 
-class HeartBeatActor(target: ActorRef)(implicit config: TasksConfig)
+class HeartBeatActor(target: ActorRef, signal: Any, listener: ActorRef)(
+    implicit config: TasksConfig)
     extends Actor
     with akka.actor.ActorLogging {
 
@@ -87,7 +90,7 @@ class HeartBeatActor(target: ActorRef)(implicit config: TasksConfig)
   }
 
   private def targetDown(): Unit = {
-    context.system.eventStream.publish(HeartBeatStopped(target))
+    listener ! signal
     self ! PoisonPill
   }
 
@@ -104,7 +107,7 @@ class HeartBeatActor(target: ActorRef)(implicit config: TasksConfig)
         target ! Ping
       }
 
-    case Pong | true =>
+    case Pong =>
       failureDetector.heartbeat
 
   }

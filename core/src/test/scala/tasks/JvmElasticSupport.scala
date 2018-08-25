@@ -39,15 +39,20 @@ object JvmElasticSupport {
 
   val taskSystems = scala.collection.mutable.Map[String, Future[TaskSystem]]()
 
+  val nodesShutdown = scala.collection.mutable.ArrayBuffer[String]()
+  val nodesSelfShutdown = scala.collection.mutable.ArrayBuffer[RunningJobId]()
+
   trait Shutdown extends ShutdownNode {
     import scala.concurrent.ExecutionContext.Implicits.global
     def log: LoggingAdapter
 
     def shutdownRunningNode(nodeName: RunningJobId): Unit = {
+      nodesShutdown += nodeName.value
       taskSystems(nodeName.value).foreach(_.shutdown)
     }
 
     def shutdownPendingNode(nodeName: PendingJobId): Unit = {
+      nodesShutdown += nodeName.value
       taskSystems(nodeName.value).foreach(_.shutdown)
     }
 
@@ -122,9 +127,15 @@ object JvmElasticSupport {
     def codeVersion = codeAddress.codeVersion
   }
 
-  class TestSelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
+  class TestSelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)(
+      implicit val config: TasksConfig)
       extends SelfShutdown {
-    def shutdownRunningNode(nodeName: RunningJobId): Unit = ()
+    def shutdownRunningNode(nodeName: RunningJobId): Unit = {
+      import scala.concurrent.ExecutionContext.Implicits.global
+
+      nodesSelfShutdown += nodeName
+      taskSystems(nodeName.value).foreach(_.shutdown)
+    }
   }
 
   object JvmGrid extends ElasticSupport[NodeRegistry, SelfShutdown] {

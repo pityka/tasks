@@ -99,14 +99,6 @@ class TaskSystem private[tasks] (
 
   tasksystemlog.info("Master node address is: " + hostConfig.master.toString)
 
-  def printQueueToLog(): Unit = {
-    implicit val timeout = akka.util.Timeout(10 seconds)
-    import system.dispatcher
-    (queueActor ? GetQueueInformation).foreach {
-      case queue: QueueInfo => tasksystemlog.info("Queue content: " + queue)
-    }
-  }
-
   private val numberOfCores: Int = hostConfig.availableCPU
 
   private val availableMemory: Int = hostConfig.availableMemory
@@ -382,8 +374,6 @@ class TaskSystem private[tasks] (
            CPUMemoryAvailable(hostConfig.availableCPU,
                               hostConfig.availableMemory),
            launcherActor.get))
-
-    HeartBeatActor.watch(queueActor)
 
     system.actorOf(
       Props(elasticSupportFactory.get.createSelfShutdown)

@@ -226,7 +226,8 @@ class SSHNodeRegistry(
   def codeVersion = codeAddress.codeVersion
 }
 
-class SSHSelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
+class SSHSelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)(
+    implicit val config: TasksConfig)
     extends SelfShutdown {
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
     System.exit(0)

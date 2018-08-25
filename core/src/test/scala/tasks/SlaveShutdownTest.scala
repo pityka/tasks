@@ -32,7 +32,7 @@ import scala.concurrent.Future
 import tasks.circesupport._
 import com.typesafe.config.ConfigFactory
 
-object NodeAllocationTest extends TestHelpers {
+object SlaveShutdownTest extends TestHelpers {
 
   val testTask = AsyncTask[Input, Int]("nodeallocationtest", 1) {
     input => implicit computationEnvironment =>
@@ -56,33 +56,23 @@ object NodeAllocationTest extends TestHelpers {
 
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
-
       val f1 = testTask(Input(1))(CPUMemoryRequest(1, 500))
-      val f2 = f1.flatMap(_ => testTask(Input(2))(CPUMemoryRequest(1, 500)))
-      val f3 = testTask(Input(3))(CPUMemoryRequest(1, 500))
-      val future = for {
-        t1 <- f1
-        t2 <- f2
-        t3 <- f3
-      } yield t1 + t2 + t3
 
-      f1.andThen {
-        case _ =>
-          tasks.JvmElasticSupport.taskSystems.head._2.foreach(_.shutdown)
-      }
-
-      await(future)
+      await(f1)
 
     }
+
   }
 
 }
 
-class NodeAllocationTestSuite extends FunSuite with Matchers {
+class SlaveShutdownTestSuite extends FunSuite with Matchers {
 
   test("elastic node allocation should spawn nodes") {
-    NodeAllocationTest.run.get should equal(3)
+    SlaveShutdownTest.run.get
+    Thread.sleep(5000)
+
+    JvmElasticSupport.nodesShutdown.size shouldBe 1
 
   }
 

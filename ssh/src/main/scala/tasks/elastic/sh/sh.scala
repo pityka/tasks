@@ -110,7 +110,8 @@ class SHNodeRegistry(
   def codeVersion = codeAddress.codeVersion
 }
 
-class SHSelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)
+class SHSelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)(
+    implicit val config: TasksConfig)
     extends SelfShutdown {
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
     System.exit(0)

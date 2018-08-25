@@ -117,7 +117,7 @@ class Launcher(
 
   private var freed = Set[ActorRef]()
 
-  private def launch(scheduleTask: ScheduleTask, proxies: List[ActorRef]) = {
+  private def launch(scheduleTask: ScheduleTask, proxies: List[Proxy]) = {
 
     log.debug("Launch method")
 
@@ -148,8 +148,9 @@ class Launcher(
       ).withDispatcher("task-worker-dispatcher")
     )
     log.debug("Actor constructed")
-    proxies.foreach { sender =>
-      taskActor ! RegisterForNotification(sender)
+    proxies.foreach {
+      case Proxy(proxyActorRef) =>
+        taskActor ! RegisterForNotification(proxyActorRef)
     }
 
     runningTasks = (taskActor, scheduleTask, allocatedResource) :: runningTasks
