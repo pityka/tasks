@@ -90,8 +90,8 @@ class ProxyTask[Input, Output](
 
       val scheduleTask = ScheduleTask(
         TaskDescription(taskId,
-                        Base64Data(writer(input)),
-                        persisted.map(x => Base64Data(writer(x)))),
+                        Base64DataHelpers(writer(input)),
+                        persisted.map(x => Base64DataHelpers(writer(x)))),
         runTaskClass.getName,
         resourceConsumed,
         queueActor,
@@ -117,7 +117,7 @@ class ProxyTask[Input, Output](
 
   def receive = {
     case MessageFromTask(untypedOutput) =>
-      val output: Output = reader(untypedOutput.data.bytes)
+      val output: Output = reader(Base64DataHelpers.toBytes(untypedOutput.data))
       log.debug("MessageFromTask received from: {}, {}, {},{}",
                 sender,
                 untypedOutput,

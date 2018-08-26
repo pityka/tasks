@@ -240,9 +240,14 @@ class TaskSystem private[tasks] (
 
   val queueActor = try {
     if (hostConfig.isQueue) {
+
+      val uiComponent = tasks.ui.UIComponent.load.map(_.start)
+
       val localActor =
-        system.actorOf(Props(new TaskQueue).withDispatcher("taskqueue"),
-                       "queue")
+        system.actorOf(
+          Props(new TaskQueue(uiComponent.map(_.tasksQueueEventListener)))
+            .withDispatcher("taskqueue"),
+          "queue")
       reaperActor ! WatchMe(localActor)
       localActor
     } else {

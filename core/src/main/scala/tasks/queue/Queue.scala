@@ -37,9 +37,9 @@ import tasks.util._
 import tasks.util.config._
 import tasks.wire._
 import tasks._
+import tasks.ui.EventListener
 
-class TaskQueue(implicit config: TasksConfig) extends Actor with ActorLogging {
-
+object TaskQueue {
   sealed trait Event
   case class Enqueued(sch: ScheduleTask, proxies: List[Proxy]) extends Event
   case class ProxyAddedToScheduledMessage(sch: ScheduleTask,
@@ -57,6 +57,14 @@ class TaskQueue(implicit config: TasksConfig) extends Actor with ActorLogging {
   case class TaskFailed(sch: ScheduleTask) extends Event
   case class TaskLauncherStoppedFor(sch: ScheduleTask) extends Event
   case class LauncherCrashed(crashedLauncher: LauncherActor) extends Event
+}
+
+class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
+    implicit config: TasksConfig)
+    extends Actor
+    with ActorLogging {
+
+  import TaskQueue._
 
   case class State(
       queuedTasks: Map[ScheduleTask, List[Proxy]],
@@ -70,44 +78,48 @@ class TaskQueue(implicit config: TasksConfig) extends Actor with ActorLogging {
       negotiation: Option[(LauncherActor, ScheduleTask)]
   ) {
 
-    def update(e: Event): State = e match {
-      case Enqueued(sch, proxies) =>
-        if (!scheduledTasks.contains(sch)) {
-          queuedTasks.get(sch) match {
-            case None => copy(queuedTasks = queuedTasks.updated(sch, proxies))
-            case Some(existingProxies) =>
-              copy(
-                queuedTasks.updated(sch,
-                                    (proxies ::: existingProxies).distinct))
-          }
-        } else update(ProxyAddedToScheduledMessage(sch, proxies))
+    def update(e: Event): State = {
+      eventListener.foreach(_.receive(e))
+      e match {
+        case Enqueued(sch, proxies) =>
+          if (!scheduledTasks.contains(sch)) {
+            queuedTasks.get(sch) match {
+              case None => copy(queuedTasks = queuedTasks.updated(sch, proxies))
+              case Some(existingProxies) =>
+                copy(
+                  queuedTasks.updated(sch,
+                                      (proxies ::: existingProxies).distinct))
+            }
+          } else update(ProxyAddedToScheduledMessage(sch, proxies))
 
-      case ProxyAddedToScheduledMessage(sch, newProxies) =>
-        val (launcher, allocation, proxies) = scheduledTasks(sch)
-        copy(
-          scheduledTasks = scheduledTasks
-            .updated(sch,
-                     (launcher, allocation, (newProxies ::: proxies).distinct)))
-      case Negotiating(launcher, sch) =>
-        copy(negotiation = Some((launcher, sch)))
-      case LauncherJoined(launcher) =>
-        copy(knownLaunchers = knownLaunchers + launcher)
-      case NegotiationDone => copy(negotiation = None)
-      case TaskScheduled(sch, launcher, allocated) =>
-        val proxies = queuedTasks(sch)
-        copy(queuedTasks = queuedTasks - sch,
-             scheduledTasks = scheduledTasks
-               .updated(sch, (launcher, allocated, proxies)))
+        case ProxyAddedToScheduledMessage(sch, newProxies) =>
+          val (launcher, allocation, proxies) = scheduledTasks(sch)
+          copy(
+            scheduledTasks = scheduledTasks
+              .updated(
+                sch,
+                (launcher, allocation, (newProxies ::: proxies).distinct)))
+        case Negotiating(launcher, sch) =>
+          copy(negotiation = Some((launcher, sch)))
+        case LauncherJoined(launcher) =>
+          copy(knownLaunchers = knownLaunchers + launcher)
+        case NegotiationDone => copy(negotiation = None)
+        case TaskScheduled(sch, launcher, allocated) =>
+          val proxies = queuedTasks(sch)
+          copy(queuedTasks = queuedTasks - sch,
+               scheduledTasks = scheduledTasks
+                 .updated(sch, (launcher, allocated, proxies)))
 
-      case TaskDone(sch) =>
-        copy(scheduledTasks = scheduledTasks - sch)
-      case TaskFailed(sch) =>
-        update(TaskDone(sch))
-      case TaskLauncherStoppedFor(sch) =>
-        update(TaskDone(sch))
-      case LauncherCrashed(launcher) =>
-        copy(knownLaunchers = knownLaunchers - launcher)
+        case TaskDone(sch) =>
+          copy(scheduledTasks = scheduledTasks - sch)
+        case TaskFailed(sch) =>
+          update(TaskDone(sch))
+        case TaskLauncherStoppedFor(sch) =>
+          update(TaskDone(sch))
+        case LauncherCrashed(launcher) =>
+          copy(knownLaunchers = knownLaunchers - launcher)
 
+      }
     }
 
     def queuedButSentByADifferentProxy(sch: ScheduleTask, proxy: Proxy) =

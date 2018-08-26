@@ -22,69 +22,34 @@
  * SOFTWARE.
  */
 
-package tasks
+package tasks.ui
 
-import org.scalatest._
+import scala.concurrent._
+import scala.concurrent.duration._
 
-import org.scalatest.Matchers
+import io.circe._
+import io.circe.generic.semiauto._
 
-import scala.concurrent.Future
-import tasks.circesupport._
 import com.typesafe.config.ConfigFactory
 
-// flaky/unstable
-object NodeAllocationTest extends TestHelpers {
+trait TestHelpers {
 
-  val testTask = AsyncTask[Input, Int]("nodeallocationtest", 1) {
-    input => implicit computationEnvironment =>
-      log.info("Hello from task")
-      Future(1)
+  def await[T](f: Future[T]) = Await.result(f, atMost = Duration.Inf)
+
+  case class Input(i: Int)
+  object Input {
+    implicit val enc: Encoder[Input] = deriveEncoder[Input]
+    implicit val dec: Decoder[Input] = deriveDecoder[Input]
   }
 
-  val testConfig2 = {
+  def testConfig = {
     val tmp = tasks.util.TempFile.createTempFile(".temp")
     tmp.delete
     ConfigFactory.parseString(
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
-      hosts.numCPU=0
-      tasks.elastic.engine = "tasks.JvmElasticSupport.JvmGrid"
-      tasks.elastic.queueCheckInterval = 3 seconds  
-      tasks.addShutdownHook = false
-      tasks.failuredetector.acceptable-heartbeat-pause = 10 s
+      hosts.numCPU=4
       """
     )
-  }
-
-  def run = {
-    withTaskSystem(testConfig2) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
-
-      val f1 = testTask(Input(1))(CPUMemoryRequest(1, 500))
-      val f2 = f1.flatMap(_ => testTask(Input(2))(CPUMemoryRequest(1, 500)))
-      val f3 = testTask(Input(3))(CPUMemoryRequest(1, 500))
-      val future = for {
-        t1 <- f1
-        t2 <- f2
-        t3 <- f3
-      } yield t1 + t2 + t3
-
-      f1.andThen {
-        case _ =>
-          tasks.JvmElasticSupport.taskSystems.head._2.foreach(_.shutdown)
-      }
-
-      await(future)
-
-    }
-  }
-
-}
-
-class NodeAllocationTestSuite extends FunSuite with Matchers {
-
-  test("elastic node allocation should spawn nodes") {
-    NodeAllocationTest.run.get should equal(3)
-
   }
 
 }

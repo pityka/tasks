@@ -328,7 +328,7 @@ trait NodeCreatorImpl
     }
 
     case NodeComingUp(node) => {
-      log.debug("NodeComingUp: " + node)
+      log.info("NodeComingUp: " + node)
       try {
         registerNode(node)
       } catch {

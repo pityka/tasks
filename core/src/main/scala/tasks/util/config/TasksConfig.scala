@@ -178,4 +178,10 @@ class TasksConfig(val raw: Config) {
 
   val addShutdownHook = raw.getBoolean("tasks.addShutdownHook")
 
+  val uiFqcn = raw.getString("tasks.ui.fqcn")
+
+  val uiServerHost = raw.getString("tasks.ui.host")
+
+  val uiServerPort = raw.getInt("tasks.ui.port")
+
 }

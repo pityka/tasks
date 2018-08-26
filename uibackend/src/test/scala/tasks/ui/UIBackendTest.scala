@@ -22,22 +22,25 @@
  * SOFTWARE.
  */
 
-package tasks
+package tasks.ui
 
 import org.scalatest._
 
 import org.scalatest.Matchers
 
-import scala.concurrent.Future
 import tasks.circesupport._
 import com.typesafe.config.ConfigFactory
+import scala.concurrent._
+import scala.concurrent.duration._
 
-// flaky/unstable
-object NodeAllocationTest extends TestHelpers {
+import tasks._
+
+object UIBackendTest extends TestHelpers {
 
   val testTask = AsyncTask[Input, Int]("nodeallocationtest", 1) {
     input => implicit computationEnvironment =>
       log.info("Hello from task")
+      Thread.sleep(1000)
       Future(1)
   }
 
@@ -46,21 +49,20 @@ object NodeAllocationTest extends TestHelpers {
     tmp.delete
     ConfigFactory.parseString(
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
-      hosts.numCPU=0
-      tasks.elastic.engine = "tasks.JvmElasticSupport.JvmGrid"
-      tasks.elastic.queueCheckInterval = 3 seconds  
-      tasks.addShutdownHook = false
-      tasks.failuredetector.acceptable-heartbeat-pause = 10 s
+      hosts.numCPU=1      
+      tasks.ui.fqcn = default
       """
     )
   }
+
+  val websocketContents = scala.collection.mutable.ArrayBuffer[UIState]()
 
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
       import scala.concurrent.ExecutionContext.Implicits.global
 
       val f1 = testTask(Input(1))(CPUMemoryRequest(1, 500))
-      val f2 = f1.flatMap(_ => testTask(Input(2))(CPUMemoryRequest(1, 500)))
+      val f2 = testTask(Input(2))(CPUMemoryRequest(1, 500))
       val f3 = testTask(Input(3))(CPUMemoryRequest(1, 500))
       val future = for {
         t1 <- f1
@@ -68,22 +70,26 @@ object NodeAllocationTest extends TestHelpers {
         t3 <- f3
       } yield t1 + t2 + t3
 
-      f1.andThen {
-        case _ =>
-          tasks.JvmElasticSupport.taskSystems.head._2.foreach(_.shutdown)
-      }
+      WebSocketClient.make("ws://localhost:28880/states")(frame =>
+        synchronized {
+          websocketContents += io.circe.parser
+            .decode[UIState](frame)
+            .right
+            .get
+      })
 
-      await(future)
+      Await.result(future, atMost = 30 seconds)
 
     }
   }
 
 }
 
-class NodeAllocationTestSuite extends FunSuite with Matchers {
+class UIBackendTestSuite extends FunSuite with Matchers {
 
-  test("elastic node allocation should spawn nodes") {
-    NodeAllocationTest.run.get should equal(3)
+  test("ui backend should serve /states") {
+    UIBackendTest.run.get
+    UIBackendTest.websocketContents.nonEmpty shouldBe true
 
   }
 

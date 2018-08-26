@@ -1,5 +1,5 @@
 lazy val commonSettings = Seq(
-  scalaVersion := "2.12.4",
+  scalaVersion := "2.12.6",
   version := "0.0.19-SNAPSHOT",
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
@@ -68,9 +68,9 @@ lazy val shared = project
   .settings(
     name := "tasks-shared",
     libraryDependencies ++= Seq(
-      "io.circe" %% "circe-core" % "0.8.0",
-      "io.circe" %% "circe-generic" % "0.8.0",
-      "io.circe" %% "circe-parser" % "0.8.0"
+      "io.circe" %% "circe-core" % "0.10.0-M2",
+      "io.circe" %% "circe-generic" % "0.10.0-M2",
+      "io.circe" %% "circe-parser" % "0.10.0-M2"
     )
   )
   .settings(commonSettings: _*)
@@ -125,6 +125,16 @@ lazy val ssh = project
   )
   .dependsOn(core)
 
+lazy val uibackend = project
+  .in(file("uibackend"))
+  .settings(commonSettings: _*)
+  .settings(
+    name := "tasks-ui-backend",
+    libraryDependencies ++= Seq(
+      "org.scalatest" %% "scalatest" % "3.0.0" % "test")
+  )
+  .dependsOn(core)
+
 lazy val example = project
   .in(file("example"))
   .settings(commonSettings: _*)
@@ -170,6 +180,13 @@ lazy val root = (project in file("."))
   .settings(
     publishArtifact := false
   )
-  .aggregate(core, collection, upicklesupport, jsoniter, shared, ec2, ssh)
+  .aggregate(core,
+             collection,
+             upicklesupport,
+             jsoniter,
+             shared,
+             ec2,
+             ssh,
+             uibackend)
 
 scalafmtOnCompile in ThisBuild := true

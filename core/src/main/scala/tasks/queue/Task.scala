@@ -45,12 +45,6 @@ import io.circe.generic.semiauto._
 
 case class UntypedResult(files: Set[SharedFile], data: Base64Data)
 
-case class TaskId(id: String, version: Int)
-object TaskId {
-  implicit val encoder: Encoder[TaskId] = deriveEncoder[TaskId]
-  implicit val dec: Decoder[TaskId] = deriveDecoder[TaskId]
-}
-
 object UntypedResult {
 
   private def files(r: Any): Set[SharedFile] = r match {
@@ -63,7 +57,7 @@ object UntypedResult {
   }
 
   def make[A](r: A)(implicit ser: Serializer[A]): UntypedResult =
-    UntypedResult(files(r), Base64Data(ser(r)))
+    UntypedResult(files(r), Base64DataHelpers(ser(r)))
 
   implicit val encoder: Encoder[UntypedResult] = deriveEncoder[UntypedResult]
 
