@@ -32,6 +32,7 @@ import tasks.util.config.TasksConfig
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.ws.TextMessage
 import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.Route
 
 /* Do not change the fqcn of this object! See core/UIComponent.scala */
 object BackendUIBootstrap extends UIComponentBootstrap {
@@ -42,12 +43,16 @@ object BackendUIBootstrap extends UIComponentBootstrap {
 
 private class Multiplex extends Actor {
   var listeners = List[ActorRef]()
+  var last: Option[Any] = None
   def receive = {
-    case actor: ActorRef => listeners = actor :: listeners
+    case actor: ActorRef =>
+      listeners = actor :: listeners
+      last.foreach(last => actor ! last)
     case Multiplex.Unsubscribe(actor) =>
       listeners = listeners.filterNot(_ == actor)
     case other =>
       listeners.foreach(_ ! other)
+      last = Some(other)
   }
 }
 object Multiplex {
@@ -98,7 +103,19 @@ class UIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
             }
           }
         handleWebSocketMessages(Flow.fromSinkAndSource(Sink.ignore, source))
-      }
+      } ~
+        pathSingleSlash {
+          Route.seal(getFromResource("public/index.html"))
+
+        } ~
+        path("tasks-ui-frontend-fastopt.js") {
+          Route.seal(getFromResource("tasks-ui-frontend-fastopt.js"))
+
+        } ~
+        path("tasks-ui-frontend-fullopt.js") {
+          Route.seal(getFromResource("tasks-ui-frontend-fullopt.js"))
+        }
+
     }
 
   private val route = stateWebSocketRoute

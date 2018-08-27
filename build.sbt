@@ -1,3 +1,5 @@
+import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
+
 lazy val commonSettings = Seq(
   scalaVersion := "2.12.6",
   version := "0.0.19-SNAPSHOT",
@@ -60,10 +62,13 @@ lazy val commonSettings = Seq(
           <url>https://pityka.github.io/tasks/</url>
         </developer>
       </developers>
-  }
+  },
+  fork := true,
+  cancelable in Global := true
 )
 
-lazy val shared = project
+lazy val shared = crossProject(JSPlatform, JVMPlatform)
+  .crossType(sbtcrossproject.CrossPlugin.autoImport.CrossType.Pure)
   .in(file("shared"))
   .settings(
     name := "tasks-shared",
@@ -74,6 +79,11 @@ lazy val shared = project
     )
   )
   .settings(commonSettings: _*)
+  .jsSettings(fork := false)
+
+lazy val sharedJVM = shared.jvm
+
+lazy val sharedJS = shared.js
 
 resolvers += Resolver.jcenterRepo
 
@@ -86,7 +96,6 @@ lazy val core = project
     PB.targets in Compile := Seq(
       scalapb.gen() -> (sourceManaged in Compile).value
     ),
-    fork := true,
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "22.0",
       "com.typesafe.akka" %% "akka-actor" % "2.5.11",
@@ -101,7 +110,7 @@ lazy val core = project
       "org.scala-lang" % "scala-reflect" % scalaVersion.value
     )
   )
-  .dependsOn(shared)
+  .dependsOn(sharedJVM)
 
 lazy val ec2 = project
   .in(file("ec2"))
@@ -131,9 +140,28 @@ lazy val uibackend = project
   .settings(
     name := "tasks-ui-backend",
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.0.0" % "test")
+      "org.scalatest" %% "scalatest" % "3.0.0" % "test"),
+    resources in Compile += (fastOptJS in Compile in uifrontend).value.data
   )
   .dependsOn(core)
+
+lazy val uifrontend = project
+  .in(file("uifrontend"))
+  .settings(commonSettings: _*)
+  .settings(
+    name := "tasks-ui-frontend",
+    libraryDependencies ++= Seq(
+      "com.lihaoyi" %%% "scalatags" % "0.6.7",
+      "org.scala-js" %%% "scalajs-dom" % "0.9.5",
+      "io.circe" %%% "circe-core" % "0.10.0-M2",
+      "io.circe" %%% "circe-parser" % "0.10.0-M2",
+      "io.circe" %%% "circe-generic" % "0.10.0-M2",
+      "net.pishen" %%% "akka-ui" % "0.1.1"
+    ),
+    fork := false
+  )
+  .dependsOn(sharedJS)
+  .enablePlugins(ScalaJSPlugin)
 
 lazy val example = project
   .in(file("example"))
@@ -184,9 +212,11 @@ lazy val root = (project in file("."))
              collection,
              upicklesupport,
              jsoniter,
-             shared,
+             sharedJVM,
+             sharedJS,
              ec2,
              ssh,
-             uibackend)
+             uibackend,
+             uifrontend)
 
 scalafmtOnCompile in ThisBuild := true
