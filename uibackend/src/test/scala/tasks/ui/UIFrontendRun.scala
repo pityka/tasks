@@ -47,7 +47,10 @@ object UIFrontendRun extends TestHelpers {
     tmp.delete
     ConfigFactory.parseString(
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
-      hosts.numCPU=1      
+      hosts.numCPU=0
+      tasks.elastic.engine = "tasks.JvmElasticSupport.JvmGrid"
+      tasks.elastic.queueCheckInterval = 3 seconds  
+      tasks.addShutdownHook = false
       tasks.ui.fqcn = default
       """
     )

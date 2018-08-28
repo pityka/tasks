@@ -143,7 +143,7 @@ lazy val uibackend = project
       "org.scalatest" %% "scalatest" % "3.0.0" % "test"),
     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
   )
-  .dependsOn(core)
+  .dependsOn(core % "compile->compile;test->test")
 
 lazy val uifrontend = project
   .in(file("uifrontend"))

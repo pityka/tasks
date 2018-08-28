@@ -57,13 +57,18 @@ object UIStateProjector {
         )
 
       case TaskDone(sch) =>
-        state.copy(
-          scheduledTasks =
-            state.scheduledTasks.filterNot(_._1 == sch.description))
+        val updatedCompletedTasks = state.scheduledTasks.filter(
+          _._1 == sch.description) ::: state.completedTasks
+        state.copy(scheduledTasks =
+                     state.scheduledTasks.filterNot(_._1 == sch.description),
+                   completedTasks = updatedCompletedTasks)
       case TaskFailed(sch) =>
-        state.copy(
-          scheduledTasks =
-            state.scheduledTasks.filterNot(_._1 == sch.description))
+        val updatedFailedTasks = state.scheduledTasks.filter(
+          _._1 == sch.description) ::: state.failedTasks
+
+        state.copy(scheduledTasks =
+                     state.scheduledTasks.filterNot(_._1 == sch.description),
+                   failedTasks = updatedFailedTasks)
       case TaskLauncherStoppedFor(sch) =>
         state.copy(
           scheduledTasks =

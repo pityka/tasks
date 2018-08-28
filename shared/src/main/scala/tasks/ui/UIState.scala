@@ -42,11 +42,15 @@ case class UIState(
     scheduledTasks: List[(TaskDescription,
                           (UILauncherActor, VersionedCPUMemoryAllocated))],
     knownLaunchers: Set[UILauncherActor],
-    negotiation: Option[(UILauncherActor, TaskDescription)]
+    negotiation: Option[(UILauncherActor, TaskDescription)],
+    failedTasks: List[(TaskDescription,
+                          (UILauncherActor, VersionedCPUMemoryAllocated))],
+    completedTasks: List[(TaskDescription,
+                          (UILauncherActor, VersionedCPUMemoryAllocated))],                          
 )
 
 object UIState {
-  val empty = UIState(Nil, Nil, Set(), None)
+  val empty = UIState(Nil, Nil, Set(), None, Nil,Nil)
   implicit val encoder: Encoder[UIState] = deriveEncoder[UIState]
   implicit val decoder: Decoder[UIState] = deriveDecoder[UIState]
 }
