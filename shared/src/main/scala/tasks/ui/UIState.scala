@@ -29,6 +29,54 @@ import tasks.queue._
 import io.circe._
 import io.circe.generic.semiauto._
 
+case class UIUntypedResult(files:Set[UISharedFile], data: Base64Data)
+
+object UIUntypedResult {
+      implicit val encoder : Encoder[UIUntypedResult] =
+      deriveEncoder[UIUntypedResult]
+    implicit val decoder : Decoder[UIUntypedResult]=
+      deriveDecoder[UIUntypedResult]
+}
+
+sealed trait UIFilePath
+case class UIManagedFilePath(path:Vector[String]) extends UIFilePath
+object UIManagedFilePath {
+      implicit val encoder : Encoder[UIManagedFilePath]=
+      deriveEncoder[UIManagedFilePath]
+    implicit val decoder: Decoder[UIManagedFilePath] =
+      deriveDecoder[UIManagedFilePath]
+}
+case class UIRemoteFilePath(uri:String) extends UIFilePath
+object UIRemoteFilePath {
+      implicit val encoder =
+      deriveEncoder[UIRemoteFilePath]
+    implicit val decoder =
+      deriveDecoder[UIRemoteFilePath]
+}
+object UIFilePath {
+      implicit val encoder =
+      deriveEncoder[UIFilePath]
+    implicit val decoder =
+      deriveDecoder[UIFilePath]
+}
+
+case class UISharedFile(path: UIFilePath, byteSize:Long,hash:Int, history: Option[UIHistory])
+object UISharedFile {
+      implicit val encoder : Encoder[UISharedFile] =
+      deriveEncoder[UISharedFile]
+    implicit val decoder : Decoder[UISharedFile] =
+      deriveDecoder[UISharedFile]
+}
+case class UIHistory(dependencies: List[UISharedFile], task: TaskId, timestamp: java.time.Instant, codeVersion:String)
+object UIHistory {
+      implicit val encoder =
+      deriveEncoder[UIHistory]
+    implicit val decoder =
+      deriveDecoder[UIHistory]
+}
+
+
+
 case class UILauncherActor(actorPath: String)
 object UILauncherActor {
   implicit val encoder: Encoder[UILauncherActor] =
@@ -46,7 +94,7 @@ case class UIState(
     failedTasks: List[(TaskDescription,
                           (UILauncherActor, VersionedCPUMemoryAllocated))],
     completedTasks: List[(TaskDescription,
-                          (UILauncherActor, VersionedCPUMemoryAllocated))],                          
+                          (UILauncherActor, VersionedCPUMemoryAllocated), UIUntypedResult)],                          
 )
 
 object UIState {

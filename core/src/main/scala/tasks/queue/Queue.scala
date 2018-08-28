@@ -148,7 +148,6 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
       val proxy = Proxy(sender)
 
       if (state.queuedButSentByADifferentProxy(sch, proxy)) {
-        // enQueue(sch, proxy :: Nil)
         context.become(running(state.update(Enqueued(sch, List(proxy)))))
       } else if (state.scheduledButSentByADifferentProxy(sch, proxy)) {
         log.debug(
@@ -156,7 +155,6 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
           sch)
         context.become(
           running(state.update(ProxyAddedToScheduledMessage(sch, List(proxy)))))
-        // addProxiesToScheduledMessages(sch, proxy :: Nil)
       } else {
         sch.cacheActor ! CheckResult(sch, proxy)
       }

@@ -26,11 +26,32 @@ package tasks.ui
 
 import tasks.queue._
 import tasks.queue.TaskQueue._
+import tasks.fileservice._
 
 object UIStateProjector {
 
   private def uiLauncherActor(launcher: LauncherActor) =
     UILauncherActor(launcher.actor.path.toString)
+
+  private def uiResult(result: UntypedResult): UIUntypedResult =
+    UIUntypedResult(result.files.map(uiFile), result.data)
+
+  private def uiFile(sharedFile: SharedFile): UISharedFile =
+    UISharedFile(uiPath(sharedFile.path),
+                 sharedFile.byteSize,
+                 sharedFile.hash,
+                 sharedFile.history.map(uiHistory))
+
+  private def uiPath(path: FilePath): UIFilePath = path match {
+    case RemoteFilePath(uri)    => UIRemoteFilePath(uri.toString)
+    case ManagedFilePath(elems) => UIManagedFilePath(elems)
+  }
+
+  private def uiHistory(history: History): UIHistory =
+    UIHistory(history.dependencies.map(uiFile),
+              TaskId(history.task.taskID, history.task.taskVersion),
+              history.timestamp,
+              history.codeVersion)
 
   def project(state: UIState, taskQueueEvent: TaskQueue.Event): UIState = {
     val scheduledTasksMap = state.scheduledTasks.toMap
@@ -56,9 +77,13 @@ object UIStateProjector {
             (sch.description, (uiLauncherActor(launcher), allocated)) :: state.scheduledTasks
         )
 
-      case TaskDone(sch, _) =>
-        val updatedCompletedTasks = state.scheduledTasks.filter(
-          _._1 == sch.description) ::: state.completedTasks
+      case TaskDone(sch, result) =>
+        val updatedCompletedTasks = state.scheduledTasks
+          .filter(_._1 == sch.description)
+          .map {
+            case (description, launcher) =>
+              (description, launcher, uiResult(result))
+          } ::: state.completedTasks
         state.copy(scheduledTasks =
                      state.scheduledTasks.filterNot(_._1 == sch.description),
                    completedTasks = updatedCompletedTasks)

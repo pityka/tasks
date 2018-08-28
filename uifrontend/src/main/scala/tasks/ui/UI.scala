@@ -75,6 +75,43 @@ object Helpers {
       }
     ).render
 
+  val CompletedTasksTableHeader = tr(th("ID"),
+                                     th("Input"),
+                                     th("Launcher"),
+                                     th("CodeVersion"),
+                                     th("CPU"),
+                                     th("RAM"),
+                                     th("Result"),
+                                     th("ResultFiles"))
+
+  def renderTableBodyWithCompletedTasks(
+      completedTasks: List[(TaskDescription,
+                            (UILauncherActor, VersionedCPUMemoryAllocated),
+                            UIUntypedResult)]) =
+    tbody(
+      completedTasks.toSeq.map {
+        case ((taskDescription, (launcher, resource), result)) =>
+          tr(
+            td(`class` := "collapsing")(
+              taskDescription.taskId.id + " @" + taskDescription.taskId.version
+            ),
+            td(
+              code(
+                new String(java.util.Base64.getDecoder
+                  .decode(taskDescription.input.value)))
+            ),
+            td(showUILauncher(launcher)),
+            td(resource.codeVersion),
+            td(resource.cpu),
+            td(resource.memory),
+            td(
+              code(new String(
+                java.util.Base64.getDecoder.decode(result.data.value)))),
+            td(result.files.toString)
+          )
+      }
+    ).render
+
 }
 
 class UI(container: Node) {
@@ -118,11 +155,11 @@ class UI(container: Node) {
       List(
         thead(
           tr(
-            th(colspan := "6")(
+            th(colspan := "8")(
               "Completed tasks, total: " + uiState.completedTasks.size)),
-          ScheduledTasksTableHeader
+          CompletedTasksTableHeader
         ).render,
-        renderTableBodyWithScheduledTasks(uiState.completedTasks)
+        renderTableBodyWithCompletedTasks(uiState.completedTasks)
     )
   )
 
