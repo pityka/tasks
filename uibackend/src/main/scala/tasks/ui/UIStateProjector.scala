@@ -56,7 +56,7 @@ object UIStateProjector {
             (sch.description, (uiLauncherActor(launcher), allocated)) :: state.scheduledTasks
         )
 
-      case TaskDone(sch) =>
+      case TaskDone(sch, _) =>
         val updatedCompletedTasks = state.scheduledTasks.filter(
           _._1 == sch.description) ::: state.completedTasks
         state.copy(scheduledTasks =

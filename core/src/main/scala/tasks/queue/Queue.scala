@@ -53,7 +53,7 @@ object TaskQueue {
                            launcher: LauncherActor,
                            allocated: VersionedCPUMemoryAllocated)
       extends Event
-  case class TaskDone(sch: ScheduleTask) extends Event
+  case class TaskDone(sch: ScheduleTask, result: UntypedResult) extends Event
   case class TaskFailed(sch: ScheduleTask) extends Event
   case class TaskLauncherStoppedFor(sch: ScheduleTask) extends Event
   case class LauncherCrashed(crashedLauncher: LauncherActor) extends Event
@@ -110,12 +110,12 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
                scheduledTasks = scheduledTasks
                  .updated(sch, (launcher, allocated, proxies)))
 
-        case TaskDone(sch) =>
+        case TaskDone(sch, _) =>
           copy(scheduledTasks = scheduledTasks - sch)
         case TaskFailed(sch) =>
-          update(TaskDone(sch))
+          copy(scheduledTasks = scheduledTasks - sch)
         case TaskLauncherStoppedFor(sch) =>
-          update(TaskDone(sch))
+          copy(scheduledTasks = scheduledTasks - sch)
         case LauncherCrashed(launcher) =>
           copy(knownLaunchers = knownLaunchers - launcher)
 
@@ -238,7 +238,7 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
         case (_, _, proxies) =>
           proxies.foreach(_.actor ! MessageFromTask(result))
       }
-      context.become(running(state.update(TaskDone(sch))))
+      context.become(running(state.update(TaskDone(sch, result))))
 
       if (state.queuedTasks.contains(sch)) {
         log.error("Should not be queued. {}", state.queuedTasks(sch))
