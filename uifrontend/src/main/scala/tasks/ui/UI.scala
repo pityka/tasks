@@ -29,6 +29,11 @@ object WebSocketHelper {
 
 object Helpers {
 
+  def prettyJson(b64: Base64Data): String =
+    io.circe.parser
+      .parse(new String(java.util.Base64.getDecoder.decode(b64.value)))
+      .fold(_.toString, _.spaces2)
+
   def showUILauncher(launcher: UILauncherActor): String = {
     val url = new java.net.URI(launcher.actorPath)
     Option(url.getHost).getOrElse("local") + ":" + Option(url.getPort)
@@ -84,6 +89,9 @@ object Helpers {
                                      th("Result"),
                                      th("ResultFiles"))
 
+  val RecoveredTasksTableHeader =
+    tr(th("ID"), th("Input"), th("Result"), th("ResultFiles"))
+
   def renderTableBodyWithCompletedTasks(
       completedTasks: List[(TaskDescription,
                             (UILauncherActor, VersionedCPUMemoryAllocated),
@@ -96,17 +104,31 @@ object Helpers {
               taskDescription.taskId.id + " @" + taskDescription.taskId.version
             ),
             td(
-              code(
-                new String(java.util.Base64.getDecoder
-                  .decode(taskDescription.input.value)))
+              code(prettyJson(taskDescription.input))
             ),
             td(showUILauncher(launcher)),
             td(resource.codeVersion),
             td(resource.cpu),
             td(resource.memory),
+            td(code(prettyJson(result.data))),
+            td(result.files.toString)
+          )
+      }
+    ).render
+
+  def renderTableBodyWithRecoveredTasks(
+      recoveredTasks: List[(TaskDescription, UIUntypedResult)]) =
+    tbody(
+      recoveredTasks.toSeq.map {
+        case ((taskDescription, result)) =>
+          tr(
+            td(`class` := "collapsing")(
+              taskDescription.taskId.id + " @" + taskDescription.taskId.version
+            ),
             td(
-              code(new String(
-                java.util.Base64.getDecoder.decode(result.data.value)))),
+              code(prettyJson(taskDescription.input))
+            ),
+            td(code(prettyJson(result.data))),
             td(result.files.toString)
           )
       }
@@ -163,6 +185,18 @@ class UI(container: Node) {
     )
   )
 
+  val (recoveredTasksTable, recoveredTasksTableSink) = renderTable(
+    uiState =>
+      List(
+        thead(
+          tr(th(colspan := "4")(
+            "Previously completed tasks, total: " + uiState.recoveredTasks.size)),
+          RecoveredTasksTableHeader
+        ).render,
+        renderTableBodyWithRecoveredTasks(uiState.recoveredTasks)
+    )
+  )
+
   val (failedTasksTable, failedTasksTableSink) = renderTable(
     uiState =>
       List(
@@ -195,8 +229,7 @@ class UI(container: Node) {
                     taskDescription.taskId.id + " @" + taskDescription.taskId.version
                   ),
                   td(
-                    code(new String(java.util.Base64.getDecoder.decode(
-                      taskDescription.input.value)))
+                    code(prettyJson(taskDescription.input))
                   )
                 )
             }
@@ -206,12 +239,13 @@ class UI(container: Node) {
   )
 
   val root = div(
-    div(`class` := "ui grid")(
+    div(`class` := "ui grid container")(
       div(`class` := "two wide column")(knownLaunchersTable),
       div(`class` := "eight wide column")(queuedTasksTable),
       div(`class` := "twelve wide column centered")(failedTasksTable),
       div(`class` := "twelve wide column centered")(scheduledTasksTable),
-      div(`class` := "twelve wide column centered")(completedTasksTable)
+      div(`class` := "twelve wide column centered")(completedTasksTable),
+      div(`class` := "twelve wide column centered")(recoveredTasksTable)
     )
   )
 
@@ -233,7 +267,8 @@ class UI(container: Node) {
              queuedTasksTableSink,
              scheduledTasksTableSink,
              completedTasksTableSink,
-             failedTasksTableSink)(Broadcast[UIState](_))
+             failedTasksTableSink,
+             recoveredTasksTableSink)(Broadcast[UIState](_))
 
   uiStateSource.runWith(combinedUIStateSinks)
 

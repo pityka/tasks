@@ -102,6 +102,10 @@ object UIStateProjector {
         state.copy(
           knownLaunchers =
             state.knownLaunchers.filterNot(_ == uiLauncherActor(launcher)))
+      case _: CacheQueried => state
+      case CacheHit(sch, result) =>
+        val updatedRecoveredTasks = (sch.description, uiResult(result)) :: state.recoveredTasks
+        state.copy(recoveredTasks = updatedRecoveredTasks)
 
     }
   }

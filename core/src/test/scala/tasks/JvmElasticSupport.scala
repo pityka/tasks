@@ -79,6 +79,7 @@ object JvmElasticSupport {
     jobid = $jobid
     tasks.akka.actorsystem.name = $jobid   
     tasks.addShutdownHook = false 
+    tasks.fileservice.storageURI="${config.storageURI.toString}"
     """) }(scala.concurrent.ExecutionContext.Implicits.global)
       import scala.concurrent.ExecutionContext.Implicits.global
       ts.map(println).recover {

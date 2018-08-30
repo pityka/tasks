@@ -94,11 +94,12 @@ case class UIState(
     failedTasks: List[(TaskDescription,
                           (UILauncherActor, VersionedCPUMemoryAllocated))],
     completedTasks: List[(TaskDescription,
-                          (UILauncherActor, VersionedCPUMemoryAllocated), UIUntypedResult)],                          
+                          (UILauncherActor, VersionedCPUMemoryAllocated), UIUntypedResult)],  
+    recoveredTasks : List[(TaskDescription, UIUntypedResult)]                                              
 )
 
 object UIState {
-  val empty = UIState(Nil, Nil, Set(), None, Nil,Nil)
+  val empty = UIState(Nil, Nil, Set(), None, Nil,Nil, Nil)
   implicit val encoder: Encoder[UIState] = deriveEncoder[UIState]
   implicit val decoder: Decoder[UIState] = deriveDecoder[UIState]
 }

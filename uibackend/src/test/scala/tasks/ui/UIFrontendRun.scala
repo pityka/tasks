@@ -31,15 +31,18 @@ import org.scalatest.Matchers
 import scala.concurrent.Future
 import com.typesafe.config.ConfigFactory
 
+import akka.stream.scaladsl._
+import akka.util.ByteString
+
 import tasks._
 
 object UIFrontendRun extends TestHelpers {
 
-  val testTask = AsyncTask[Input, Int]("nodeallocationtest", 1) {
+  val testTask = AsyncTask[Input, SharedFile]("uifrontendtest", 1) {
     input => implicit computationEnvironment =>
       log.info("Hello from task")
       Thread.sleep(1000)
-      Future(1)
+      SharedFile(Source.single(ByteString("boo")), s"boo${input.i}")
   }
 
   val testConfig2 = {

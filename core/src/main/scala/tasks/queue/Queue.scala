@@ -57,6 +57,8 @@ object TaskQueue {
   case class TaskFailed(sch: ScheduleTask) extends Event
   case class TaskLauncherStoppedFor(sch: ScheduleTask) extends Event
   case class LauncherCrashed(crashedLauncher: LauncherActor) extends Event
+  case class CacheQueried(sch: ScheduleTask) extends Event
+  case class CacheHit(sch: ScheduleTask, result: UntypedResult) extends Event
 }
 
 class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
@@ -118,6 +120,8 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
           copy(scheduledTasks = scheduledTasks - sch)
         case LauncherCrashed(launcher) =>
           copy(knownLaunchers = knownLaunchers - launcher)
+        case _: CacheHit     => this
+        case _: CacheQueried => this
 
       }
     }
@@ -157,6 +161,7 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
           running(state.update(ProxyAddedToScheduledMessage(sch, List(proxy)))))
       } else {
         sch.cacheActor ! CheckResult(sch, proxy)
+        context.become(running(state.update(CacheQueried(sch))))
       }
 
     case AnswerFromCache(message, proxy, sch) =>
@@ -164,6 +169,7 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
       message match {
         case Right(Some(result)) => {
           log.debug("Replying with a Result found in cache.")
+          context.become(running(state.update(CacheHit(sch, result))))
           proxy.actor ! MessageFromTask(result)
         }
         case Right(None) => {
