@@ -67,11 +67,9 @@ case class TaskSystemComponents(
     this.copy(filePrefix = this.filePrefix.append(name))
 }
 
-class TaskSystem private[tasks] (
-    val hostConfig: HostConfiguration,
-    val system: ActorSystem,
-    val elasticSupport: Option[
-      ElasticSupport[_ <: NodeCreatorImpl, _ <: SelfShutdown]])(
+class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
+                                 val system: ActorSystem,
+                                 val elasticSupport: Option[ElasticSupport])(
     implicit val config: TasksConfig) {
 
   implicit val AS = system
@@ -105,7 +103,7 @@ class TaskSystem private[tasks] (
 
   private lazy val masterAddress = hostConfig.master
 
-  val reaperActor = elasticSupport.flatMap(_.reaper) match {
+  val reaperActor = elasticSupport.flatMap(_.reaperFactory.map(_.apply)) match {
     case None =>
       system.actorOf(Props[ShutdownActorSystemReaper], name = "reaper")
     case Some(reaper) => reaper
@@ -285,7 +283,7 @@ class TaskSystem private[tasks] (
         es =>
           es(
             masterAddress = hostConfig.master,
-            queueActor = queueActor,
+            queueActor = QueueActor(queueActor),
             resource = CPUMemoryAvailable(cpu = hostConfig.availableCPU,
                                           memory = hostConfig.availableMemory),
             codeAddress = codeAddress

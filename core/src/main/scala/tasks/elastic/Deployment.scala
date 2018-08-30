@@ -39,7 +39,7 @@ object Deployment {
 
   def script(
       memory: Int,
-      elasticSupport: ElasticSupport[_, _],
+      elasticSupport: ElasticSupportFqcn,
       masterAddress: InetSocketAddress,
       download: URL,
       slaveHostname: Option[String]

@@ -25,9 +25,7 @@
 
 package tasks.elastic.ssh
 
-import akka.actor.{Actor, ActorRef, Props, ActorSystem}
 import java.net.InetSocketAddress
-import akka.event.LoggingAdapter
 import scala.util._
 
 import scala.collection.JavaConverters._
@@ -56,6 +54,9 @@ object SSHSettings {
       Host(hostname, keyFile, username, memory, cpu, extraArgs)
     }
   }
+
+  implicit def fromConfig(implicit config: TasksConfig) =
+    new SSHSettings
 
 }
 
@@ -121,11 +122,9 @@ object SSHOperations {
 
 }
 
-trait SSHShutdown extends ShutdownNode {
+class SSHShutdown(implicit config: TasksConfig) extends ShutdownNode {
 
-  def log: LoggingAdapter
-
-  def settings: SSHSettings
+  val settings = SSHSettings.fromConfig
 
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
     val hostname = nodeName.value.split(":")(0)
@@ -138,16 +137,15 @@ trait SSHShutdown extends ShutdownNode {
 
 }
 
-trait SSHNodeRegistryImp extends Actor with JobRegistry {
+class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
+    implicit config: TasksConfig,
+    elasticSupport: ElasticSupportFqcn)
+    extends CreateNode {
 
-  def masterAddress: InetSocketAddress
+  val settings = SSHSettings.fromConfig
 
-  def codeAddress: CodeAddress
-
-  def settings: SSHSettings
-
-  def requestOneNewJobFromJobScheduler(requestSize: CPUMemoryRequest)
-    : Try[Tuple2[PendingJobId, CPUMemoryAvailable]] =
+  def requestOneNewJobFromJobScheduler(
+      requestSize: CPUMemoryRequest): Try[(PendingJobId, CPUMemoryAvailable)] =
     settings.hosts
       .filter(x => x._2._2 == true)
       .filter(x =>
@@ -157,7 +155,7 @@ trait SSHNodeRegistryImp extends Actor with JobRegistry {
         case (name, (host, _)) =>
           val script = Deployment.script(
             memory = requestSize.memory,
-            elasticSupport = SSHElasticSupport,
+            elasticSupport = elasticSupport,
             masterAddress = masterAddress,
             download = new java.net.URL("http",
                                         codeAddress.address.getHostName,
@@ -191,80 +189,34 @@ trait SSHNodeRegistryImp extends Actor with JobRegistry {
       .find(_.isSuccess)
       .getOrElse(Failure(new RuntimeException("No enabled/working hosts")))
 
-  def initializeNode(node: Node): Unit = {
-    val ac = node.launcherActor
-
-    context.actorOf(Props(new SSHNodeKiller(ac, node))
-                      .withDispatcher("my-pinned-dispatcher"),
-                    "nodekiller" + node.name.value.replace("://", "___"))
-  }
-
 }
 
-class SSHNodeKiller(
-    val targetLauncherActor: ActorRef,
-    val targetNode: Node
-)(implicit val config: TasksConfig)
-    extends NodeKillerImpl
-    with SSHShutdown
-    with akka.actor.ActorLogging {
-  val settings = new SSHSettings
+class SSHCreateNodeFactory(implicit config: TasksConfig,
+                           elasticSupport: ElasticSupportFqcn)
+    extends CreateNodeFactory {
+  def apply(master: InetSocketAddress, codeAddress: CodeAddress) =
+    new SSHCreateNode(master, codeAddress)
 }
 
-class SSHNodeRegistry(
-    val masterAddress: InetSocketAddress,
-    val targetQueue: ActorRef,
-    override val unmanagedResource: CPUMemoryAvailable,
-    val codeAddress: CodeAddress
-)(implicit val config: TasksConfig)
-    extends SSHNodeRegistryImp
-    with NodeCreatorImpl
-    with SimpleDecideNewNode
-    with SSHShutdown
-    with akka.actor.ActorLogging {
-  val settings = new SSHSettings
-  def codeVersion = codeAddress.codeVersion
-}
-
-class SSHSelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)(
-    implicit val config: TasksConfig)
-    extends SelfShutdown {
-  def shutdownRunningNode(nodeName: RunningJobId): Unit = {
-    System.exit(0)
+object SSHGetNodeName extends GetNodeName {
+  def getNodeName = {
+    val pid = java.lang.management.ManagementFactory
+      .getRuntimeMXBean()
+      .getName()
+      .split("@")
+      .head
+    pid
   }
 }
 
-object SSHElasticSupport
-    extends ElasticSupport[SSHNodeRegistry, SSHSelfShutdown] {
-
-  def fqcn = "tasks.elastic.ssh.SSHElasticSupport"
-
-  def hostConfig(implicit config: TasksConfig) = None
-
-  def reaper(implicit config: TasksConfig,
-             system: ActorSystem): Option[ActorRef] = None
-
-  def apply(master: InetSocketAddress,
-            balancerActor: ActorRef,
-            resource: CPUMemoryAvailable,
-            codeAddress: Option[CodeAddress])(implicit config: TasksConfig) =
-    new Inner {
-      def getNodeName = {
-        val pid = java.lang.management.ManagementFactory
-          .getRuntimeMXBean()
-          .getName()
-          .split("@")
-          .head
-        val hostname = config.hostName
-        hostname + ":" + pid
-      }
-      def createRegistry =
-        codeAddress.map(codeAddress =>
-          new SSHNodeRegistry(master, balancerActor, resource, codeAddress))
-      def createSelfShutdown =
-        new SSHSelfShutdown(RunningJobId(getNodeName), balancerActor)
-    }
-
-  override def toString = "SSH"
-
+object SSHElasticSupport extends ElasticSupportFromConfig {
+  implicit val fqcn = ElasticSupportFqcn("tasks.elastic.sh.SSHElasticSupport")
+  def apply(implicit config: TasksConfig) = SimpleElasticSupport(
+    fqcn = fqcn,
+    hostConfig = None,
+    reaperFactory = None,
+    shutdown = new SSHShutdown,
+    createNodeFactory = new SSHCreateNodeFactory,
+    getNodeName = SSHGetNodeName
+  )
 }

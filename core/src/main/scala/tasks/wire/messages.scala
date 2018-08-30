@@ -122,8 +122,6 @@ case class GetUri(sf: ManagedFilePath) extends StaticMessage
 
 // Messages related to elastic
 
-case object GetNodeRegistryStat extends StaticMessage
-
 private[tasks] case object MeasureTime extends StaticMessage
 
 private[tasks] case class Idling(state: Long) extends StaticMessage

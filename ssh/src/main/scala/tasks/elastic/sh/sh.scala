@@ -25,9 +25,7 @@
 
 package tasks.elastic.sh
 
-import akka.actor.{Actor, ActorRef, Props, ActorSystem}
 import java.net.InetSocketAddress
-import akka.event.LoggingAdapter
 import scala.util._
 import scala.sys.process._
 
@@ -36,9 +34,7 @@ import tasks.shared._
 import tasks.util._
 import tasks.util.config._
 
-trait SHShutdown extends ShutdownNode {
-
-  def log: LoggingAdapter
+object SHShutdown extends ShutdownNode {
 
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
     execGetStreamsAndCode(s"kill ${nodeName.value}")
@@ -48,16 +44,16 @@ trait SHShutdown extends ShutdownNode {
 
 }
 
-trait SHNodeRegistryImp extends Actor with JobRegistry {
-
-  def masterAddress: InetSocketAddress
-  def codeAddress: CodeAddress
+class SHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
+    implicit config: TasksConfig,
+    elasticSupport: ElasticSupportFqcn)
+    extends CreateNode {
 
   def requestOneNewJobFromJobScheduler(requestSize: CPUMemoryRequest)
     : Try[Tuple2[PendingJobId, CPUMemoryAvailable]] = {
     val script = Deployment.script(
       memory = requestSize.memory,
-      elasticSupport = SHElasticSupport,
+      elasticSupport = elasticSupport,
       masterAddress = masterAddress,
       download = new java.net.URL("http",
                                   codeAddress.address.getHostName,
@@ -78,79 +74,34 @@ trait SHNodeRegistryImp extends Actor with JobRegistry {
 
   }
 
-  def initializeNode(node: Node): Unit = {
-    val ac = node.launcherActor
-
-    context.actorOf(Props(new SHNodeKiller(ac, node))
-                      .withDispatcher("my-pinned-dispatcher"),
-                    "nodekiller" + node.name.value.replace("://", "___"))
-  }
-
 }
 
-class SHNodeKiller(
-    val targetLauncherActor: ActorRef,
-    val targetNode: Node
-)(implicit val config: TasksConfig)
-    extends NodeKillerImpl
-    with SHShutdown
-    with akka.actor.ActorLogging
-
-class SHNodeRegistry(
-    val masterAddress: InetSocketAddress,
-    val targetQueue: ActorRef,
-    override val unmanagedResource: CPUMemoryAvailable,
-    val codeAddress: CodeAddress
-)(implicit val config: TasksConfig)
-    extends SHNodeRegistryImp
-    with NodeCreatorImpl
-    with SimpleDecideNewNode
-    with SHShutdown
-    with akka.actor.ActorLogging {
-  def codeVersion = codeAddress.codeVersion
+class SHCreateNodeFactory(implicit config: TasksConfig,
+                          fqcn: ElasticSupportFqcn)
+    extends CreateNodeFactory {
+  def apply(master: InetSocketAddress, codeAddress: CodeAddress) =
+    new SHCreateNode(master, codeAddress)
 }
 
-class SHSelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)(
-    implicit val config: TasksConfig)
-    extends SelfShutdown {
-  def shutdownRunningNode(nodeName: RunningJobId): Unit = {
-    System.exit(0)
+object SHGetNodeName extends GetNodeName {
+  def getNodeName = {
+    val pid = java.lang.management.ManagementFactory
+      .getRuntimeMXBean()
+      .getName()
+      .split("@")
+      .head
+    pid
   }
 }
 
-object SHElasticSupport extends ElasticSupport[SHNodeRegistry, SHSelfShutdown] {
-
-  def fqcn = "tasks.elastic.sh.SHElasticSupport"
-
-  def hostConfig(implicit config: TasksConfig) = None
-
-  def reaper(implicit config: TasksConfig,
-             system: ActorSystem): Option[ActorRef] = None
-
-  def apply(masterAddress: InetSocketAddress,
-            balancerActor: ActorRef,
-            resource: CPUMemoryAvailable,
-            codeAddress: Option[CodeAddress])(implicit config: TasksConfig) =
-    new Inner {
-      def getNodeName = {
-        val pid = java.lang.management.ManagementFactory
-          .getRuntimeMXBean()
-          .getName()
-          .split("@")
-          .head
-        pid
-      }
-      def createRegistry =
-        codeAddress.map(
-          codeAddress =>
-            new SHNodeRegistry(masterAddress,
-                               balancerActor,
-                               resource,
-                               codeAddress))
-      def createSelfShutdown =
-        new SHSelfShutdown(RunningJobId(getNodeName), balancerActor)
-    }
-
-  override def toString = "SH"
-
+object SHElasticSupport extends ElasticSupportFromConfig {
+  implicit val fqcn = ElasticSupportFqcn("tasks.elastic.sh.SHElasticSupport")
+  def apply(implicit config: TasksConfig) = SimpleElasticSupport(
+    fqcn = fqcn,
+    hostConfig = None,
+    reaperFactory = None,
+    shutdown = SHShutdown,
+    createNodeFactory = new SHCreateNodeFactory,
+    getNodeName = SHGetNodeName
+  )
 }

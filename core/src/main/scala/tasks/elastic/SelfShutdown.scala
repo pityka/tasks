@@ -23,11 +23,44 @@
  * SOFTWARE.
  */
 
-package tasks.shared.monitor
+package tasks.elastic
+
+import akka.actor.{Actor, ActorLogging}
 
 import tasks.shared._
+import tasks.util._
+import tasks.util.config._
+import tasks.queue.QueueActor
 
-@SerialVersionUID(1L)
-case class QueueStat(queued: List[(String, VersionedCPUMemoryRequest)],
-                     running: List[(String, VersionedCPUMemoryAllocated)])
-    extends Serializable
+class SelfShutdown(shutdownRunningNode: ShutdownRunningNode,
+                   id: RunningJobId,
+                   queueActor: QueueActor)(implicit config: TasksConfig)
+    extends Actor
+    with ActorLogging {
+
+  private case object QueueLostOrStopped
+
+  def shutdown() = {
+    shutdownRunningNode.shutdownRunningNode(id)
+  }
+
+  override def preStart: Unit = {
+    HeartBeatActor.watch(queueActor.actor, QueueLostOrStopped, self)
+    context.system.eventStream
+      .subscribe(self, classOf[akka.remote.DisassociatedEvent])
+
+  }
+  def receive = {
+    case QueueLostOrStopped =>
+      log.error("QueueLostOrStopped received. Shutting down.")
+      shutdown
+
+    case de: akka.remote.DisassociatedEvent =>
+      log.error(
+        "DisassociatedEvent. " + de.remoteAddress + " vs " + queueActor.actor.path.address)
+      if (de.remoteAddress == queueActor.actor.path.address) {
+        shutdown
+      }
+
+  }
+}

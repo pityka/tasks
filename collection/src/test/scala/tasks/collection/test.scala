@@ -102,7 +102,6 @@ class TaskCollectionTestSuite extends FunSuite with Matchers {
   test("collection") {
     val tmp = tasks.util.TempFile.createTempFile(".temp")
     tmp.delete
-    println(tmp)
     Tests.run(tmp.getAbsolutePath).get should equal((18, Vector(1, 4, 6, 7)))
     Tests.run(tmp.getAbsolutePath).get should equal((18, Vector(1, 4, 6, 7)))
   }

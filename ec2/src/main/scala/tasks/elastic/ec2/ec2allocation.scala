@@ -28,9 +28,8 @@
 
 package tasks.elastic.ec2
 
-import akka.actor.{Actor, ActorRef, Props, ActorSystem}
+import akka.actor.{ActorSystem, Props, ActorRef}
 import java.net.InetSocketAddress
-import akka.event.LoggingAdapter
 import scala.util._
 
 import tasks.elastic._
@@ -54,11 +53,7 @@ import com.amazonaws.services.ec2.model.CreateTagsRequest
 
 import scala.collection.JavaConverters._
 
-trait EC2Shutdown extends ShutdownNode {
-
-  def log: LoggingAdapter
-
-  val ec2: AmazonEC2Client
+class EC2Shutdown(ec2: AmazonEC2Client) extends ShutdownNode {
 
   def shutdownRunningNode(nodeName: RunningJobId): Unit =
     EC2Operations.terminateInstance(ec2, nodeName.value)
@@ -71,11 +66,12 @@ trait EC2Shutdown extends ShutdownNode {
 
 }
 
-trait EC2NodeRegistryImp extends Actor with JobRegistry {
-
-  implicit def config: tasks.util.config.TasksConfig
-
-  var counter = 0
+class EC2CreateNode(
+    masterAddress: InetSocketAddress,
+    codeAddress: CodeAddress,
+    ec2: AmazonEC2Client,
+    elasticSupport: ElasticSupportFqcn)(implicit config: TasksConfig)
+    extends CreateNode {
 
   private def gzipBase64(str: String): String = {
 
@@ -87,11 +83,26 @@ trait EC2NodeRegistryImp extends Actor with JobRegistry {
     javax.xml.bind.DatatypeConverter.printBase64Binary(bytes)
   }
 
-  def masterAddress: InetSocketAddress
+  def requestOneNewJobFromJobScheduler(
+      requestSize: CPUMemoryRequest): Try[(PendingJobId, CPUMemoryAvailable)] =
+    Try {
+      val (requestid, instancetype) = requestSpotInstance
+      val jobid = PendingJobId(requestid)
+      val size = CPUMemoryAvailable(
+        cpu = instancetype._2.cpu,
+        memory = instancetype._2.memory
+      )
+      (jobid, size)
+    }
 
-  def codeAddress: CodeAddress
+  override def initializeNode(node: Node): Unit = {
 
-  def ec2: AmazonEC2Client
+    ec2.createTags(
+      new CreateTagsRequest(
+        List(node.name.value).asJava,
+        config.instanceTags.map(t => new Tag(t._1, t._2)).asJava))
+
+  }
 
   override def convertRunningToPending(
       p: RunningJobId): Option[PendingJobId] = {
@@ -150,7 +161,7 @@ trait EC2NodeRegistryImp extends Actor with JobRegistry {
 
     val userdata = "#!/usr/bin/env bash\n" + Deployment.script(
       memory = selectedInstanceType._2.memory,
-      elasticSupport = EC2ElasticSupport,
+      elasticSupport = elasticSupport,
       masterAddress = masterAddress,
       download = new java.net.URL("http",
                                   codeAddress.address.getHostName,
@@ -188,71 +199,10 @@ trait EC2NodeRegistryImp extends Actor with JobRegistry {
 
   }
 
-  def requestOneNewJobFromJobScheduler(request: CPUMemoryRequest)
-    : Try[Tuple2[PendingJobId, CPUMemoryAvailable]] = Try {
-    val (requestid, instancetype) = requestSpotInstance
-    val jobid = PendingJobId(requestid)
-    val size = CPUMemoryAvailable(
-      cpu = instancetype._2.cpu,
-      memory = instancetype._2.memory
-    )
-    (jobid, size)
-  }
-
-  def initializeNode(node: Node): Unit = {
-    val ac = node.launcherActor
-
-    ec2.createTags(
-      new CreateTagsRequest(
-        List(node.name.value).asJava,
-        config.instanceTags.map(t => new Tag(t._1, t._2)).asJava))
-
-    context.actorOf(Props(new EC2NodeKiller(ac, node))
-                      .withDispatcher("my-pinned-dispatcher"),
-                    "nodekiller" + node.name.value.replace("://", "___"))
-
-  }
-
-}
-
-class EC2NodeKiller(
-    val targetLauncherActor: ActorRef,
-    val targetNode: Node
-)(implicit val config: TasksConfig)
-    extends NodeKillerImpl
-    with EC2Shutdown
-    with akka.actor.ActorLogging {
-  val ec2 = new AmazonEC2Client()
-  ec2.setEndpoint(config.endpoint)
-}
-
-class EC2NodeRegistry(
-    val masterAddress: InetSocketAddress,
-    val targetQueue: ActorRef,
-    override val unmanagedResource: CPUMemoryAvailable,
-    val codeAddress: CodeAddress
-)(implicit val config: TasksConfig)
-    extends EC2NodeRegistryImp
-    with NodeCreatorImpl
-    with SimpleDecideNewNode
-    with EC2Shutdown
-    with akka.actor.ActorLogging {
-  val ec2 = new AmazonEC2Client()
-  ec2.setEndpoint(config.endpoint)
-  def codeVersion = codeAddress.codeVersion
-}
-
-class EC2SelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)(
-    implicit val config: TasksConfig)
-    extends SelfShutdown
-    with EC2Shutdown {
-  val ec2 = new AmazonEC2Client()
-  ec2.setEndpoint(config.endpoint)
 }
 
 class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig)
-    extends Reaper
-    with EC2Shutdown {
+    extends Reaper {
 
   val ec2 = new AmazonEC2Client()
   ec2.setEndpoint(config.endpoint)
@@ -267,37 +217,38 @@ class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig)
   }
 }
 
-object EC2ElasticSupport
-    extends ElasticSupport[EC2NodeRegistry, EC2SelfShutdown] {
+class EC2CreateNodeFactory(implicit config: TasksConfig,
+                           ec2: AmazonEC2Client,
+                           elasticSupport: ElasticSupportFqcn)
+    extends CreateNodeFactory {
+  def apply(master: InetSocketAddress, codeAddress: CodeAddress) =
+    new EC2CreateNode(master, codeAddress, ec2, elasticSupport)
+}
 
-  def fqcn = "tasks.elastic.ec2.EC2ElasticSupport"
+object EC2GetNodeName extends GetNodeName {
+  def getNodeName = EC2Operations.readMetadata("instance-id").head
+}
 
-  def hostConfig(implicit config: TasksConfig) = Some(new EC2MasterSlave)
+object EC2ReaperFactory extends ReaperFactory {
+  def apply(implicit system: ActorSystem, config: TasksConfig): ActorRef =
+    system.actorOf(Props(new EC2Reaper(config.terminateMaster)),
+                   name = "reaper")
+}
 
-  def reaper(implicit config: TasksConfig,
-             system: ActorSystem): Option[ActorRef] =
-    Some(
-      system.actorOf(Props(new EC2Reaper(config.terminateMaster)),
-                     name = "reaper"))
+object EC2ElasticSupport extends ElasticSupportFromConfig {
 
-  def apply(masterAddress: InetSocketAddress,
-            balancerActor: ActorRef,
-            resource: CPUMemoryAvailable,
-            codeAddress: Option[CodeAddress])(implicit config: TasksConfig) =
-    new Inner {
+  implicit val fqcn = ElasticSupportFqcn("tasks.elastic.ec2.EC2ElasticSupport")
 
-      def getNodeName = EC2Operations.readMetadata("instance-id").head
-      def createRegistry =
-        codeAddress.map(
-          codeAddress =>
-            new EC2NodeRegistry(masterAddress,
-                                balancerActor,
-                                resource,
-                                codeAddress))
-      def createSelfShutdown =
-        new EC2SelfShutdown(RunningJobId(getNodeName), balancerActor)
-    }
-
-  override def toString = "EC2"
-
+  def apply(implicit config: TasksConfig) = {
+    implicit val ec2 = new AmazonEC2Client()
+    ec2.setEndpoint(config.endpoint)
+    SimpleElasticSupport(
+      fqcn = fqcn,
+      hostConfig = Some(new EC2MasterSlave),
+      reaperFactory = Some(EC2ReaperFactory),
+      shutdown = new EC2Shutdown(ec2),
+      createNodeFactory = new EC2CreateNodeFactory,
+      getNodeName = EC2GetNodeName
+    )
+  }
 }

@@ -34,7 +34,7 @@ import com.typesafe.config.ConfigFactory
 
 object SlaveShutdownTest extends TestHelpers {
 
-  val testTask = AsyncTask[Input, Int]("nodeallocationtest", 1) {
+  val testTask = AsyncTask[Input, Int]("slaveshutdowntest", 1) {
     input => implicit computationEnvironment =>
       log.info("Hello from task")
       Future(1)
@@ -49,7 +49,7 @@ object SlaveShutdownTest extends TestHelpers {
       tasks.elastic.engine = "tasks.JvmElasticSupport.JvmGrid"
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
-      tasks.failuredetector.acceptable-heartbeat-pause = 30 s
+      tasks.failuredetector.acceptable-heartbeat-pause = 10 s
       """
     )
   }
@@ -71,8 +71,7 @@ class SlaveShutdownTestSuite extends FunSuite with Matchers {
   test("elastic node allocation should spawn nodes") {
     SlaveShutdownTest.run.get
     Thread.sleep(5000)
-
-    JvmElasticSupport.nodesShutdown.size shouldBe 1
+    JvmElasticSupport.nodesShutdown.distinct.size shouldBe 1
 
   }
 

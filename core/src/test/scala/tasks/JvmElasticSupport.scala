@@ -24,9 +24,7 @@
 
 package tasks
 
-import akka.actor.{Actor, ActorRef, Props, ActorSystem}
 import java.net.InetSocketAddress
-import akka.event.LoggingAdapter
 import scala.util._
 
 import tasks.elastic._
@@ -40,37 +38,31 @@ object JvmElasticSupport {
   val taskSystems = scala.collection.mutable.Map[String, Future[TaskSystem]]()
 
   val nodesShutdown = scala.collection.mutable.ArrayBuffer[String]()
-  val nodesSelfShutdown = scala.collection.mutable.ArrayBuffer[RunningJobId]()
 
-  trait Shutdown extends ShutdownNode {
+  object Shutdown extends ShutdownNode {
     import scala.concurrent.ExecutionContext.Implicits.global
-    def log: LoggingAdapter
 
     def shutdownRunningNode(nodeName: RunningJobId): Unit = {
       nodesShutdown += nodeName.value
-      taskSystems(nodeName.value).foreach(_.shutdown)
+      taskSystems.get(nodeName.value).foreach(_.foreach(_.shutdown))
     }
 
     def shutdownPendingNode(nodeName: PendingJobId): Unit = {
       nodesShutdown += nodeName.value
-      taskSystems(nodeName.value).foreach(_.shutdown)
+      taskSystems.get(nodeName.value).foreach(_.foreach(_.shutdown))
     }
 
   }
 
-  trait NodeRegistryImp extends Actor with JobRegistry {
-
-    def masterAddress: InetSocketAddress
-    def codeAddress: CodeAddress
+  class JvmCreateNode(masterAddress: InetSocketAddress)(
+      implicit config: TasksConfig)
+      extends CreateNode {
 
     def requestOneNewJobFromJobScheduler(
         requestSize: tasks.shared.CPUMemoryRequest)
-      : Try[Tuple2[PendingJobId, CPUMemoryAvailable]] = {
-
+      : Try[(PendingJobId, CPUMemoryAvailable)] = {
       val jobid =
         java.util.UUID.randomUUID.toString.replaceAllLiterally("-", "")
-
-      log.info("Start new task system")
 
       val ts = Future { defaultTaskSystem(s"""
     hosts.master = "${masterAddress.getHostName}:${masterAddress.getPort}"
@@ -96,76 +88,27 @@ object JvmElasticSupport {
 
     }
 
-    def initializeNode(node: Node): Unit = {
-      val ac = node.launcherActor
-
-      context.actorOf(Props(new NodeKiller(ac, node))
-                        .withDispatcher("my-pinned-dispatcher"),
-                      "nodekiller" + node.name.value.replace("://", "___"))
-    }
-
   }
 
-  class NodeKiller(
-      val targetLauncherActor: ActorRef,
-      val targetNode: Node
-  )(implicit val config: TasksConfig)
-      extends NodeKillerImpl
-      with Shutdown
-      with akka.actor.ActorLogging
-
-  class NodeRegistry(
-      val masterAddress: InetSocketAddress,
-      val targetQueue: ActorRef,
-      override val unmanagedResource: CPUMemoryAvailable,
-      val codeAddress: CodeAddress
-  )(implicit val config: TasksConfig)
-      extends NodeRegistryImp
-      with NodeCreatorImpl
-      with SimpleDecideNewNode
-      with Shutdown
-      with akka.actor.ActorLogging {
-    def codeVersion = codeAddress.codeVersion
+  class JvmCreateNodeFactory(implicit config: TasksConfig)
+      extends CreateNodeFactory {
+    def apply(master: InetSocketAddress, codeAddress: CodeAddress) =
+      new JvmCreateNode(master)
   }
 
-  class TestSelfShutdown(val id: RunningJobId, val balancerActor: ActorRef)(
-      implicit val config: TasksConfig)
-      extends SelfShutdown {
-    def shutdownRunningNode(nodeName: RunningJobId): Unit = {
-      import scala.concurrent.ExecutionContext.Implicits.global
-
-      nodesSelfShutdown += nodeName
-      taskSystems(nodeName.value).foreach(_.shutdown)
-    }
+  object JvmGetNodeName extends GetNodeName {
+    def getNodeName = taskSystems.head._1
   }
 
-  object JvmGrid extends ElasticSupport[NodeRegistry, SelfShutdown] {
-
-    def fqcn = "tasks.JmvGrid"
-
-    def hostConfig(implicit config: TasksConfig) = None
-
-    def reaper(implicit config: TasksConfig, system: ActorSystem) = None
-
-    def apply(masterAddress: InetSocketAddress,
-              balancerActor: ActorRef,
-              resource: CPUMemoryAvailable,
-              codeAddress: Option[CodeAddress])(implicit config: TasksConfig) =
-      new Inner {
-        def getNodeName = config.raw.getString("jobid")
-        def createRegistry =
-          codeAddress.map(
-            codeAddress =>
-              new NodeRegistry(masterAddress,
-                               balancerActor,
-                               resource,
-                               codeAddress))
-        def createSelfShutdown =
-          new TestSelfShutdown(RunningJobId(getNodeName), balancerActor)
-      }
-
-    override def toString = "jvmtest"
-
+  object JvmGrid extends ElasticSupportFromConfig {
+    implicit val fqcn = ElasticSupportFqcn("tasks.JvmElasticSupport.JvmGrid")
+    def apply(implicit config: TasksConfig) = SimpleElasticSupport(
+      fqcn = fqcn,
+      hostConfig = None,
+      reaperFactory = None,
+      shutdown = Shutdown,
+      createNodeFactory = new JvmCreateNodeFactory,
+      getNodeName = JvmGetNodeName
+    )
   }
-
 }

@@ -220,3 +220,5 @@ lazy val root = (project in file("."))
              uifrontend)
 
 scalafmtOnCompile in ThisBuild := true
+
+parallelExecution in ThisBuild := false
