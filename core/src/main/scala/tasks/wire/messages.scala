@@ -139,7 +139,7 @@ private[tasks] case class NodeComingUp(node: Node) extends StaticMessage
 private[tasks] case class InitFailed(nodename: PendingJobId)
     extends StaticMessage
 
-private[tasks] case class NodeIsDown(node: Node) extends StaticMessage
+private[tasks] case class RemoveNode(node: Node) extends StaticMessage
 
 // Messages related to cache
 

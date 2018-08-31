@@ -60,6 +60,7 @@ object NodeAllocationTest extends TestHelpers {
       import scala.concurrent.ExecutionContext.Implicits.global
 
       val f1 = testTask(Input(1))(CPUMemoryRequest(1, 500))
+
       val f2 = f1.flatMap(_ => testTask(Input(2))(CPUMemoryRequest(1, 500)))
       val f3 = testTask(Input(3))(CPUMemoryRequest(1, 500))
       val future = for {
@@ -70,7 +71,9 @@ object NodeAllocationTest extends TestHelpers {
 
       f1.andThen {
         case _ =>
-          tasks.JvmElasticSupport.taskSystems.head._2.foreach(_.shutdown)
+          synchronized {
+            tasks.JvmElasticSupport.taskSystems.head._2.foreach(_.shutdown)
+          }
       }
 
       await(future)

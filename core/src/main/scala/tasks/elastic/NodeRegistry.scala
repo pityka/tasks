@@ -32,7 +32,20 @@ import tasks.shared.monitor._
 import tasks.shared._
 import tasks.util.config._
 import tasks.wire._
-import scala.util.Failure
+import scala.util.{Failure, Success}
+
+object NodeRegistry {
+
+  sealed trait Event
+  case object NodeRequested extends Event
+  case class NodeIsPending(pendingJobId: PendingJobId,
+                           resource: CPUMemoryAvailable)
+      extends Event
+  case class NodeIsUp(node: Node, pendingJobId: PendingJobId) extends Event
+  case class NodeIsDown(node: Node) extends Event
+  case class InitFailed(pending: PendingJobId) extends Event
+
+}
 
 class NodeRegistry(
     unmanagedResource: CPUMemoryAvailable,
@@ -44,109 +57,49 @@ class NodeRegistry(
     extends Actor
     with ActorLogging {
 
-  private val jobregistry =
-    scala.collection.mutable.Set[Tuple2[RunningJobId, CPUMemoryAvailable]]()
+  import NodeRegistry._
 
-  private val pending =
-    scala.collection.mutable.Set[Tuple2[PendingJobId, CPUMemoryAvailable]]()
-
-  private var allTime = 0
-
-  private def toPend(p: PendingJobId, size: CPUMemoryAvailable) {
-    pending += ((p, size))
-  }
-
-  def allRegisteredNodes =
-    Set[Tuple2[RunningJobId, CPUMemoryAvailable]](jobregistry.toSeq: _*)
-
-  def pendingNodes = {
-    Set[Tuple2[PendingJobId, CPUMemoryAvailable]](pending.toSeq: _*)
-  }
-
-  def requestNewNodes(types: Map[CPUMemoryRequest, Int]) = {
-    if (types.values.sum > 0) {
-      if (config.maxNodes > (jobregistry.size + pending.size) &&
-          allTime <= config.maxNodesCumulative) {
-
-        log.info(
-          "Request " + types.size + " node. One from each: " + types.keySet)
-
-        types.foreach {
-          case (request, _) =>
-            val jobinfo = createNode.requestOneNewJobFromJobScheduler(request)
-            allTime += 1
-
-            jobinfo match {
-              case Failure(e) =>
-                log.warning("Request failed: " + e.getMessage + " " + e)
-              case _ => ()
-            }
-
-            jobinfo.foreach { ji =>
-              val jobid = ji._1
-              val size = ji._2
-              toPend(jobid, size)
-            }
-        }
-
-      } else {
-        log.info(
-          "New node request will not proceed: pending nodes or reached max nodes. max: " + config.maxNodes + ", pending: " + pending.size + ", running: " + jobregistry.size)
+  case class State(
+      running: Map[RunningJobId, CPUMemoryAvailable],
+      pending: Map[PendingJobId, CPUMemoryAvailable],
+      cumulativeRequested: Int
+  ) {
+    def update(e: Event): State = {
+      e match {
+        case NodeRequested =>
+          copy(cumulativeRequested = cumulativeRequested + 1)
+        case NodeIsUp(Node(runningJobId, resource, _), pendingJobId) =>
+          copy(
+            pending = pending - pendingJobId,
+            running = running + ((runningJobId, resource))
+          )
+        case NodeIsDown(Node(runningJobId, _, _)) =>
+          copy(running = running - runningJobId)
+        case InitFailed(pendingJobId) => copy(pending = pending - pendingJobId)
+        case NodeIsPending(pendingJobId, resource) =>
+          copy(pending = pending + ((pendingJobId, resource)))
       }
     }
   }
 
-  def refreshPendingList: List[PendingJobId] = pending.toList.map(_._1)
-
-  private def registerJob(id: RunningJobId, size: CPUMemoryAvailable) {
-    val elem = (id, size)
-    jobregistry += elem
-    val pendingID = createNode.convertRunningToPending(id)
-    if (pendingID.isDefined) {
-      scala.util.Try {
-        pending -= (pending.filter(_._1 == (pendingID.get)).head)
-      }
-    } else {
-      val activePendings = refreshPendingList
-      val removal =
-        pending.toSeq.map(_._1).filter(x => !activePendings.contains(x))
-      removal.foreach { r =>
-        pending -= (pending.filter(_._1 == r).head)
-      }
-    }
-
-    log.debug(s"registerJob: $id , $size . ")
-  }
-
-  def registerNode(node: Node) {
-    log.debug("Registering node: " + node)
-    val jobid = node.name
-    val size = node.size
-    registerJob(jobid, size)
-    createNode.initializeNode(node)
-    context.actorOf(
-      Props(
-        new NodeKiller(shutdownNode = shutdownNode,
-                       targetLauncherActor = LauncherActor(node.launcherActor),
-                       targetNode = node))
-        .withDispatcher("my-pinned-dispatcher"),
-      "nodekiller" + node.name.value.replace("://", "___")
-    )
-  }
-
-  def deregisterNode(n: Node) {
-    jobregistry -= ((n.name, n.size))
-  }
-
-  def initfailed(pendingID: PendingJobId) {
-    (pending.filter(_._1 == (pendingID)).headOption).foreach { x =>
-      pending -= x
-    }
+  object State {
+    val empty = State(Map(), Map(), 0)
   }
 
   private var scheduler: Cancellable = null
 
-  override def preStart {
+  var currentState: State = State.empty
+
+  def become(state: State) = {
+    currentState = state
+    context.become(running(state))
+  }
+
+  def receive = {
+    case _ => ???
+  }
+
+  override def preStart: Unit = {
     log.info("NodeCreator start. Monitoring actor: " + targetQueue)
 
     import context.dispatcher
@@ -158,46 +111,74 @@ class NodeRegistry(
       message = MeasureTime
     )
 
-    context.system.eventStream.subscribe(self, classOf[NodeIsDown])
+    become(State.empty)
 
   }
 
-  override def postStop {
+  override def postStop: Unit = {
     scheduler.cancel
     log.info("NodeCreator stopping.")
-    allRegisteredNodes.foreach { node =>
-      log.info("Shutting down node " + node)
-      shutdownNode.shutdownRunningNode(node._1)
+    currentState.running.foreach {
+      case (node, _) =>
+        log.info("Shutting down node " + node)
+        shutdownNode.shutdownRunningNode(node)
     }
-    pendingNodes.foreach { node =>
-      shutdownNode.shutdownPendingNode(node._1)
+    currentState.pending.foreach {
+      case (node, _) =>
+        shutdownNode.shutdownPendingNode(node)
     }
     log.info("Shutted down all registered nodes.")
   }
 
-  def startNewNode(types: Map[CPUMemoryRequest, Int]) {
-    requestNewNodes(types)
-  }
-
-  def receive = {
+  def running(state: State): Receive = {
     case MeasureTime =>
       log.debug("Tick from scheduler.")
-
       targetQueue.actor ! HowLoadedAreYou
 
-    case m: QueueStat =>
+    case queueStat: QueueStat =>
       if (config.logQueueStatus) {
         log.info(
-          s"Queued tasks: ${m.queued.size}. Running tasks: ${m.running.size}. Pending nodes: ${pendingNodes.size} . Running nodes: ${allRegisteredNodes.size}. Largest request: ${m.queued
+          s"Queued tasks: ${queueStat.queued.size}. Running tasks: ${queueStat.running.size}. Pending nodes: ${state.pending.size} . Running nodes: ${state.running.size}. Largest request: ${queueStat.queued
             .sortBy(_._2.cpu)
-            .lastOption}/${m.queued.sortBy(_._2.memory).lastOption}")
+            .lastOption}/${queueStat.queued.sortBy(_._2.memory).lastOption}")
       }
       try {
-        startNewNode(
-          decideNewNode.needNewNode(
-            m,
-            allRegisteredNodes.toSeq.map(_._2) ++ Seq(unmanagedResource),
-            pendingNodes.toSeq.map(_._2)))
+        val neededNodes = decideNewNode.needNewNode(
+          queueStat,
+          state.running.toSeq.map(_._2) ++ Seq(unmanagedResource),
+          state.pending.toSeq.map(_._2))
+
+        val skip = neededNodes.values.sum == 0
+        if (!skip) {
+          val canRequest = config.maxNodes > (state.running.size + state.pending.size) &&
+            state.cumulativeRequested <= config.maxNodesCumulative
+          if (!canRequest) {
+            log.info(
+              "New node request will not proceed: pending nodes or reached max nodes. max: " + config.maxNodes + ", pending: " + state.pending.size + ", running: " + state.running.size)
+          } else {
+
+            log.info(
+              "Request " + neededNodes.size + " node. One from each: " + neededNodes.keySet)
+
+            val updatedState = neededNodes.foldLeft(state) {
+              case (state, (request, _)) =>
+                val jobinfo =
+                  createNode.requestOneNewJobFromJobScheduler(request)
+                val withRequested = state.update(NodeRequested)
+
+                jobinfo match {
+                  case Failure(e) =>
+                    log.warning("Request failed: " + e.getMessage + " " + e)
+                    withRequested
+                  case Success((jobId, size)) =>
+                    withRequested.update(NodeIsPending(jobId, size))
+                }
+            }
+            become(updatedState)
+
+          }
+        }
+
       } catch {
         case e: Exception => log.error(e, "Error during requesting node")
       }
@@ -205,28 +186,51 @@ class NodeRegistry(
     case NodeComingUp(node) =>
       log.info("NodeComingUp: " + node)
       try {
-        registerNode(node)
+        log.debug("Registering node: " + node)
+        val Node(jobId, resource, _) = node
+
+        createNode.convertRunningToPending(jobId) match {
+          case Some(convertedRunningId) =>
+            val newState = state.update(NodeIsUp(node, convertedRunningId))
+            become(newState)
+
+            log.debug(s"registerJob: $jobId , $resource . ")
+
+            createNode.initializeNode(node)
+            context.actorOf(
+              Props(
+                new NodeKiller(shutdownNode = shutdownNode,
+                               targetLauncherActor =
+                                 LauncherActor(node.launcherActor),
+                               targetNode = node,
+                               listener = self))
+                .withDispatcher("my-pinned-dispatcher"),
+              "nodekiller" + node.name.value.replace("://", "___")
+            )
+          case None =>
+            log.error(
+              s"Failed to find running job id from pending job id. $node")
+        }
+
       } catch {
         case e: Exception => log.error(e, "unexpected exception")
       }
 
-    case NodeIsDown(node) =>
-      log.debug("NodeIsDown: " + node)
+    case RemoveNode(node) =>
+      log.info("RemoveNode: " + node)
       try {
-        deregisterNode(node)
+        become(state.update(NodeIsDown(node)))
       } catch {
         case e: Exception => log.error(e, "unexpected exception")
       }
-
     case InitFailed(pending) =>
       log.error("Node init failed: " + pending)
       try {
-        initfailed(pending)
+        become(state.update(InitFailed(pending)))
         shutdownNode.shutdownPendingNode(pending)
       } catch {
         case e: Exception => log.error(e, "unexpected exception")
       }
-
   }
 
 }

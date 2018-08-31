@@ -25,7 +25,7 @@
 
 package tasks.elastic
 
-import akka.actor.{Actor, ActorLogging, PoisonPill, Cancellable}
+import akka.actor.{Actor, ActorRef, ActorLogging, PoisonPill, Cancellable}
 import scala.concurrent.duration._
 
 import tasks.util._
@@ -35,7 +35,8 @@ import tasks.queue.LauncherActor
 
 class NodeKiller(shutdownNode: ShutdownNode,
                  targetLauncherActor: LauncherActor,
-                 targetNode: Node)(implicit config: TasksConfig)
+                 targetNode: Node,
+                 listener: ActorRef)(implicit config: TasksConfig)
     extends Actor
     with ActorLogging {
 
@@ -75,7 +76,7 @@ class NodeKiller(shutdownNode: ShutdownNode,
     log.info(
       "Shutting down target node: name= " + targetNode.name + " , actor= " + targetLauncherActor)
     shutdownNode.shutdownRunningNode(targetNode.name)
-    context.system.eventStream.publish(NodeIsDown(targetNode))
+    listener ! RemoveNode(targetNode)
     scheduler.cancel
     self ! PoisonPill
   }

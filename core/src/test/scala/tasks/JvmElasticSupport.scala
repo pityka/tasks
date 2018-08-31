@@ -35,21 +35,26 @@ import scala.concurrent.Future
 
 object JvmElasticSupport {
 
-  val taskSystems = scala.collection.mutable.Map[String, Future[TaskSystem]]()
+  val taskSystems =
+    scala.collection.mutable.ArrayBuffer[(String, Future[TaskSystem])]()
 
   val nodesShutdown = scala.collection.mutable.ArrayBuffer[String]()
 
   object Shutdown extends ShutdownNode {
     import scala.concurrent.ExecutionContext.Implicits.global
 
-    def shutdownRunningNode(nodeName: RunningJobId): Unit = {
+    def shutdownRunningNode(nodeName: RunningJobId): Unit = synchronized {
       nodesShutdown += nodeName.value
-      taskSystems.get(nodeName.value).foreach(_.foreach(_.shutdown))
+      taskSystems
+        .filter(_._1 == nodeName.value)
+        .foreach(_._2.foreach(_.shutdown))
     }
 
-    def shutdownPendingNode(nodeName: PendingJobId): Unit = {
+    def shutdownPendingNode(nodeName: PendingJobId): Unit = synchronized {
       nodesShutdown += nodeName.value
-      taskSystems.get(nodeName.value).foreach(_.foreach(_.shutdown))
+      taskSystems
+        .filter(_._1 == nodeName.value)
+        .foreach(_._2.foreach(_.shutdown))
     }
 
   }
@@ -78,9 +83,9 @@ object JvmElasticSupport {
         case e =>
           println(e)
       }
-
-      taskSystems += ((jobid, ts))
-
+      synchronized {
+        taskSystems += ((jobid, ts))
+      }
       Try(
         (PendingJobId(jobid),
          CPUMemoryAvailable(cpu = requestSize.cpu._1,
@@ -97,7 +102,7 @@ object JvmElasticSupport {
   }
 
   object JvmGetNodeName extends GetNodeName {
-    def getNodeName = taskSystems.head._1
+    def getNodeName = synchronized { taskSystems.last._1 }
   }
 
   object JvmGrid extends ElasticSupportFromConfig {

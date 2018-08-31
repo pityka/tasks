@@ -34,7 +34,7 @@ import com.typesafe.config.ConfigFactory
 
 trait TestHelpers {
 
-  def await[T](f: Future[T]) = Await.result(f, atMost = Duration.Inf)
+  def await[T](f: Future[T]) = Await.result(f, atMost = 60 seconds)
 
   case class Input(i: Int)
   object Input {
