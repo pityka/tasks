@@ -27,40 +27,15 @@ package tasks.ui
 import akka.actor._
 import akka.stream.scaladsl._
 import akka.stream._
-import tasks.queue.TaskQueue
+import tasks.elastic.NodeRegistry
 import tasks.util.config.TasksConfig
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.ws.TextMessage
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 
-/* Do not change the fqcn of this object! See core/UIComponent.scala */
-object BackendUIBootstrap extends UIComponentBootstrap {
-  def start(implicit actorSystem: ActorSystem,
-            config: TasksConfig): UIBackendImpl =
-    new UIBackendImpl
-}
-
-private class Multiplex extends Actor {
-  var listeners = List[ActorRef]()
-  var last: Option[Any] = None
-  def receive = {
-    case actor: ActorRef =>
-      listeners = actor :: listeners
-      last.foreach(last => actor ! last)
-    case Multiplex.Unsubscribe(actor) =>
-      listeners = listeners.filterNot(_ == actor)
-    case other =>
-      listeners.foreach(_ ! other)
-      last = Some(other)
-  }
-}
-object Multiplex {
-  case class Unsubscribe(ac: ActorRef)
-}
-
-class UIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
-    extends UIComponent {
+class AppUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
+    extends AppUI {
 
   implicit val AM = ActorMaterializer()
   import actorSystem.dispatcher
@@ -68,29 +43,31 @@ class UIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
   val log = akka.event.Logging(actorSystem.eventStream, getClass)
 
   private val stateFlow =
-    Flow[TaskQueue.Event].scan(UIState.empty)(UIStateProjector.project(_, _))
+    Flow[NodeRegistry.Event]
+      .scan(UIAppState.empty)(UIAppStateProjector.project(_, _))
 
   private val multiplex = actorSystem.actorOf(Props[Multiplex])
 
-  private val (eventListener, eventSource) = ActorSource.make[TaskQueue.Event]
+  private val (eventListener, eventSource) =
+    ActorSource.make[NodeRegistry.Event]
 
   eventSource
     .via(stateFlow)
     .runWith(Sink.actorRef(multiplex, onCompleteMessage = None))
 
   private val stateToTextMessage =
-    Flow[UIState].map { state =>
+    Flow[UIAppState].map { state =>
       val json: String =
-        implicitly[io.circe.Encoder[UIState]].apply(state).noSpaces
+        implicitly[io.circe.Encoder[UIAppState]].apply(state).noSpaces
       TextMessage(json)
     }
 
-  private val stateWebSocketRoute =
+  private val route =
     get {
       path("states") {
         val source = Source
-          .actorRef[UIState](bufferSize = 1000000,
-                             overflowStrategy = OverflowStrategy.fail)
+          .actorRef[UIAppState](bufferSize = 1000000,
+                                overflowStrategy = OverflowStrategy.fail)
           .mapMaterializedValue { actorRef =>
             multiplex ! actorRef
             actorRef
@@ -105,7 +82,7 @@ class UIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
         handleWebSocketMessages(Flow.fromSinkAndSource(Sink.ignore, source))
       } ~
         pathSingleSlash {
-          Route.seal(getFromResource("public/index.html"))
+          Route.seal(getFromResource("public/index_app.html"))
 
         } ~
         path("tasks-ui-frontend-fastopt.js") {
@@ -118,20 +95,18 @@ class UIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
 
     }
 
-  private val route = stateWebSocketRoute
-
   private val bindingFuture =
-    Http().bindAndHandle(route, config.uiServerHost, config.uiServerPort)
+    Http().bindAndHandle(route, config.appUIServerHost, config.appUIServerPort)
 
   bindingFuture.andThen {
     case scala.util.Success(serverBinding) =>
       log.info(
-        s"Started UI backend http server at ${serverBinding.localAddress}")
+        s"Started UI app backend http server at ${serverBinding.localAddress}")
   }
 
-  def tasksQueueEventListener: EventListener[TaskQueue.Event] =
-    new EventListener[TaskQueue.Event] {
-      def receive(event: TaskQueue.Event): Unit = {
+  def nodeRegistryEventListener: EventListener[NodeRegistry.Event] =
+    new EventListener[NodeRegistry.Event] {
+      def receive(event: NodeRegistry.Event): Unit = {
         eventListener ! event
       }
     }

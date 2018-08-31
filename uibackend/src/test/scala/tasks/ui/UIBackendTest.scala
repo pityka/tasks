@@ -55,7 +55,7 @@ object UIBackendTest extends TestHelpers {
     )
   }
 
-  val websocketContents = scala.collection.mutable.ArrayBuffer[UIState]()
+  val websocketContents = scala.collection.mutable.ArrayBuffer[UIQueueState]()
 
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
@@ -73,7 +73,7 @@ object UIBackendTest extends TestHelpers {
       WebSocketClient.make("ws://localhost:28880/states")(frame =>
         synchronized {
           websocketContents += io.circe.parser
-            .decode[UIState](frame)
+            .decode[UIQueueState](frame)
             .right
             .get
       })

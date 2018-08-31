@@ -85,7 +85,7 @@ object UILauncherActor {
     deriveDecoder[UILauncherActor]
 }
 
-case class UIState(
+case class UIQueueState(
     queuedTasks: List[TaskDescription],
     scheduledTasks: List[(TaskDescription,
                           (UILauncherActor, VersionedCPUMemoryAllocated))],
@@ -98,8 +98,29 @@ case class UIState(
     recoveredTasks : List[(TaskDescription, UIUntypedResult)]                                              
 )
 
-object UIState {
-  val empty = UIState(Nil, Nil, Set(), None, Nil,Nil, Nil)
-  implicit val encoder: Encoder[UIState] = deriveEncoder[UIState]
-  implicit val decoder: Decoder[UIState] = deriveDecoder[UIState]
+object UIQueueState {
+  val empty = UIQueueState(Nil, Nil, Set(), None, Nil,Nil, Nil)
+  implicit val encoder: Encoder[UIQueueState] = deriveEncoder[UIQueueState]
+  implicit val decoder: Decoder[UIQueueState] = deriveDecoder[UIQueueState]
+}
+
+case class UIJobId(value:String)
+object UIJobId {
+  implicit val encoder: Encoder[UIJobId] =
+    deriveEncoder[UIJobId]
+  implicit val decoder: Decoder[UIJobId] =
+    deriveDecoder[UIJobId]
+} 
+
+case class UIAppState(                                           
+      running: Seq[(UIJobId, CPUMemoryAvailable)],
+      pending: Seq[(UIJobId, CPUMemoryAvailable)],
+      cumulativeRequested: Int
+)
+
+object UIAppState {
+
+  val empty = UIAppState(Nil, Nil, 0  )
+  implicit val encoder: Encoder[UIAppState] = deriveEncoder[UIAppState]
+  implicit val decoder: Decoder[UIAppState] = deriveDecoder[UIAppState]
 }

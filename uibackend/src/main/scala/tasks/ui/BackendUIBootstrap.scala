@@ -21,42 +21,18 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package tasks.ui
 
-import tasks.queue.TaskQueue
-import tasks.elastic.NodeRegistry
-import tasks.util.reflectivelyInstantiateObject
+import akka.actor._
 import tasks.util.config.TasksConfig
-import akka.actor.ActorSystem
 
-trait EventListener[-E] {
-  def receive(event: E): Unit
-}
-
-trait UIComponentBootstrap {
+/* Do not change the fqcn of this object! See core/UIComponent.scala */
+object BackendUIBootstrap extends UIComponentBootstrap {
   def startQueueUI(implicit actorSystem: ActorSystem,
-                   config: TasksConfig): QueueUI
-  def startAppUI(implicit actorSystem: ActorSystem, config: TasksConfig): AppUI
-}
+                   config: TasksConfig): QueueUIBackendImpl =
+    new QueueUIBackendImpl
 
-trait QueueUI {
-  def tasksQueueEventListener: EventListener[TaskQueue.Event]
-}
-
-trait AppUI {
-  def nodeRegistryEventListener: EventListener[NodeRegistry.Event]
-}
-
-object UIComponentBootstrap {
-  def load(implicit config: TasksConfig): Option[UIComponentBootstrap] =
-    config.uiFqcn match {
-      case ""     => None
-      case "NOUI" => None
-      case "default" =>
-        Some(
-          reflectivelyInstantiateObject[UIComponentBootstrap](
-            "tasks.ui.BackendUIBootstrap"))
-      case other =>
-        Some(reflectivelyInstantiateObject[UIComponentBootstrap](other))
-    }
+  def startAppUI(implicit actorSystem: ActorSystem,
+                 config: TasksConfig): AppUI = new AppUIBackendImpl
 }

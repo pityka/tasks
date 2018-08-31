@@ -21,42 +21,33 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package tasks.ui
 
-import tasks.queue.TaskQueue
-import tasks.elastic.NodeRegistry
-import tasks.util.reflectivelyInstantiateObject
-import tasks.util.config.TasksConfig
-import akka.actor.ActorSystem
+import tasks.elastic.{NodeRegistry, Node}
+import tasks.elastic.NodeRegistry._
+import tasks.util.eq._
 
-trait EventListener[-E] {
-  def receive(event: E): Unit
-}
-
-trait UIComponentBootstrap {
-  def startQueueUI(implicit actorSystem: ActorSystem,
-                   config: TasksConfig): QueueUI
-  def startAppUI(implicit actorSystem: ActorSystem, config: TasksConfig): AppUI
-}
-
-trait QueueUI {
-  def tasksQueueEventListener: EventListener[TaskQueue.Event]
-}
-
-trait AppUI {
-  def nodeRegistryEventListener: EventListener[NodeRegistry.Event]
-}
-
-object UIComponentBootstrap {
-  def load(implicit config: TasksConfig): Option[UIComponentBootstrap] =
-    config.uiFqcn match {
-      case ""     => None
-      case "NOUI" => None
-      case "default" =>
-        Some(
-          reflectivelyInstantiateObject[UIComponentBootstrap](
-            "tasks.ui.BackendUIBootstrap"))
-      case other =>
-        Some(reflectivelyInstantiateObject[UIComponentBootstrap](other))
+object UIAppStateProjector {
+  def project(state: UIAppState, event: NodeRegistry.Event): UIAppState =
+    event match {
+      case NodeRequested =>
+        state.copy(cumulativeRequested = state.cumulativeRequested + 1)
+      case NodeIsUp(Node(runningJobId, resource, _), pendingJobId) =>
+        state.copy(
+          pending =
+            state.pending.filterNot(_._1 === UIJobId(pendingJobId.value)),
+          running = state.running :+ ((UIJobId(runningJobId.value), resource))
+        )
+      case NodeIsDown(Node(runningJobId, _, _)) =>
+        state.copy(running =
+          state.running.filterNot(_._1 == UIJobId(runningJobId.value)))
+      case InitFailed(pendingJobId) =>
+        state.copy(
+          pending =
+            state.pending.filterNot(_._1 === UIJobId(pendingJobId.value)))
+      case NodeIsPending(pendingJobId, resource) =>
+        state.copy(
+          pending = state.pending :+ ((UIJobId(pendingJobId.value), resource)))
     }
 }

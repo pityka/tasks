@@ -236,10 +236,12 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
     }
   }
 
+  val uiBootstrap = tasks.ui.UIComponentBootstrap.load
+
   val queueActor = try {
     if (hostConfig.isQueue) {
 
-      val uiComponent = tasks.ui.UIComponent.load.map(_.start)
+      val uiComponent = uiBootstrap.map(_.startQueueUI)
 
       val localActor =
         system.actorOf(
@@ -270,6 +272,9 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
 
   val elasticSupportFactory =
     if (hostConfig.isApp || hostConfig.isWorker) {
+
+      val uiComponent = uiBootstrap.map(_.startAppUI)
+
       val codeAddress =
         if (hostConfig.isApp)
           Some(
@@ -286,7 +291,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
             queueActor = QueueActor(queueActor),
             resource = CPUMemoryAvailable(cpu = hostConfig.availableCPU,
                                           memory = hostConfig.availableMemory),
-            codeAddress = codeAddress
+            codeAddress = codeAddress,
+            eventListener = uiComponent.map(_.nodeRegistryEventListener)
         ))
     } else None
 

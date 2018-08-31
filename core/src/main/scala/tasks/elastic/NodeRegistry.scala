@@ -33,6 +33,7 @@ import tasks.shared._
 import tasks.util.config._
 import tasks.wire._
 import scala.util.{Failure, Success}
+import tasks.ui.EventListener
 
 object NodeRegistry {
 
@@ -52,7 +53,8 @@ class NodeRegistry(
     createNode: CreateNode,
     decideNewNode: DecideNewNode,
     shutdownNode: ShutdownNode,
-    targetQueue: QueueActor
+    targetQueue: QueueActor,
+    eventListener: Option[EventListener[NodeRegistry.Event]]
 )(implicit config: TasksConfig)
     extends Actor
     with ActorLogging {
@@ -65,6 +67,7 @@ class NodeRegistry(
       cumulativeRequested: Int
   ) {
     def update(e: Event): State = {
+      eventListener.foreach(_.receive(e))
       e match {
         case NodeRequested =>
           copy(cumulativeRequested = cumulativeRequested + 1)

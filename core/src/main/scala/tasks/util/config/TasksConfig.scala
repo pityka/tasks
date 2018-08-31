@@ -180,8 +180,12 @@ class TasksConfig(val raw: Config) {
 
   val uiFqcn = raw.getString("tasks.ui.fqcn")
 
-  val uiServerHost = raw.getString("tasks.ui.host")
+  val uiServerHost = raw.getString("tasks.ui.queue.host")
 
-  val uiServerPort = raw.getInt("tasks.ui.port")
+  val uiServerPort = raw.getInt("tasks.ui.queue.port")
+
+  val appUIServerHost = raw.getString("tasks.ui.app.host")
+
+  val appUIServerPort = raw.getInt("tasks.ui.app.port")
 
 }

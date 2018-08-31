@@ -31,6 +31,7 @@ import tasks.shared._
 import tasks.util.config._
 import tasks.deploy._
 import tasks.queue.QueueActor
+import tasks.ui.EventListener
 
 trait ElasticSupport {
 
@@ -46,11 +47,12 @@ trait ElasticSupport {
     def getNodeName: String
   }
 
-  def apply(
-      masterAddress: InetSocketAddress,
-      queueActor: QueueActor,
-      resource: CPUMemoryAvailable,
-      codeAddress: Option[CodeAddress])(implicit config: TasksConfig): Inner
+  def apply(masterAddress: InetSocketAddress,
+            queueActor: QueueActor,
+            resource: CPUMemoryAvailable,
+            codeAddress: Option[CodeAddress],
+            eventListener: Option[EventListener[NodeRegistry.Event]])(
+      implicit config: TasksConfig): Inner
 
 }
 
@@ -71,7 +73,9 @@ case class SimpleElasticSupport(val fqcn: ElasticSupportFqcn,
   def apply(masterAddress: InetSocketAddress,
             queueActor: QueueActor,
             resource: CPUMemoryAvailable,
-            codeAddress: Option[CodeAddress])(implicit config: TasksConfig) =
+            codeAddress: Option[CodeAddress],
+            eventListener: Option[EventListener[NodeRegistry.Event]])(
+      implicit config: TasksConfig) =
     new Inner {
       def getNodeName = self.getNodeName.getNodeName
       def createRegistry =
@@ -82,7 +86,8 @@ case class SimpleElasticSupport(val fqcn: ElasticSupportFqcn,
               createNode = createNodeFactory.apply(masterAddress, codeAddress),
               decideNewNode = new SimpleDecideNewNode(codeAddress.codeVersion),
               shutdownNode = shutdown,
-              targetQueue = queueActor
+              targetQueue = queueActor,
+              eventListener = eventListener
           ))
       def createSelfShutdown =
         new SelfShutdown(shutdownRunningNode = shutdown,

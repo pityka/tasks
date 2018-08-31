@@ -28,7 +28,7 @@ import tasks.queue._
 import tasks.queue.TaskQueue._
 import tasks.fileservice._
 
-object UIStateProjector {
+object UIQueueStateProjector {
 
   private def uiLauncherActor(launcher: LauncherActor) =
     UILauncherActor(launcher.actor.path.toString)
@@ -53,7 +53,8 @@ object UIStateProjector {
               history.timestamp,
               history.codeVersion)
 
-  def project(state: UIState, taskQueueEvent: TaskQueue.Event): UIState = {
+  def project(state: UIQueueState,
+              taskQueueEvent: TaskQueue.Event): UIQueueState = {
     val scheduledTasksMap = state.scheduledTasks.toMap
     taskQueueEvent match {
       case Enqueued(sch, _) =>
