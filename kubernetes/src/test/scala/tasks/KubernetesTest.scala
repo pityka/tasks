@@ -52,10 +52,7 @@ object KubernetesTest extends TestHelpers {
     ConfigFactory.parseString(
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=0
-      hosts.master="192.168.99.1:28888"
       hosts.hostname="192.168.99.1"
-      hosts.hostname-from-slave="192.168.99.1"
-      hosts.queue = true
       tasks.elastic.engine = "tasks.elastic.kubernetes.K8SElasticSupport"
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
