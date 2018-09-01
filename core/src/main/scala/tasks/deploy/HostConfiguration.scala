@@ -73,10 +73,12 @@ trait HostConfigurationFromConfig extends HostConfiguration {
 
   private def startApp = config.startApp
 
+  private val isMaster = myAddress == master
+
   lazy val myRoles: Set[Role] =
     if (config.masterAddress.isDefined && !startApp) Set(Worker)
+    else if (isMaster && startApp) Set(App, Queue, Worker)
     else if (config.masterAddress.isDefined && startApp) Set(Worker, App)
-    else if (myAddress == master && startApp) Set(App, Queue, Worker)
     else Set(Queue)
 
 }

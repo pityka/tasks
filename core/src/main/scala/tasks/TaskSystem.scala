@@ -270,6 +270,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
 
   val packageServerPort = hostConfig.myAddress.getPort + 1
 
+  val packageServerHostname = hostConfig.myAddress.getHostName
+
   val elasticSupportFactory =
     if (hostConfig.isApp || hostConfig.isWorker) {
 
@@ -279,7 +281,7 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
         if (hostConfig.isApp)
           Some(
             elastic.CodeAddress(
-              new java.net.InetSocketAddress(hostConfig.myAddress.getHostName,
+              new java.net.InetSocketAddress(packageServerHostname,
                                              packageServerPort),
               config.codeVersion))
         else None
@@ -323,12 +325,21 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
           val actorsystem = 1 //shade implicit conversion
           val _ = actorsystem // suppress unused warning
           val bindingFuture =
-            Http().bindAndHandle(service.route, "0.0.0.0", packageServerPort)
+            Http()
+              .bindAndHandle(service.route, "0.0.0.0", packageServerPort)
+              .andThen {
+                case Success(binding) =>
+                  tasksystemlog.info(s"Started package server on $binding")
+                case Failure(e) =>
+                  tasksystemlog.error(e, "Failed to bind package server")
+              }
 
-          Some(bindingFuture)
-        case Failure(_) =>
+          import scala.concurrent.duration._
+          Some(Await.ready(bindingFuture, atMost = 60 seconds))
+        case Failure(e) =>
           tasksystemlog.error(
-            "Packaging self failed. Main thread exited? Skip starting package server.")
+            e,
+            s"Packaging self failed. Main thread exited? Skip starting package server.")
       }
 
     } else None

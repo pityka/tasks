@@ -31,9 +31,13 @@ import java.io.File
 
 object Deployment {
 
-  def pack: File = {
+  def pack(implicit config: TasksConfig): File = {
     val tmp = TempFile.createTempFile("package")
-    selfpackage.write(tmp)
+    val mainClassName = config.slaveMainClass match {
+      case ""    => None
+      case other => Some(other)
+    }
+    selfpackage.write(tmp, mainClassName)
     tmp
   }
 
@@ -44,7 +48,8 @@ object Deployment {
       download: URL,
       slaveHostname: Option[String]
   )(implicit config: TasksConfig): String = {
-    val downloadScript = s"curl -m 60 $download > package && chmod u+x package"
+    val downloadScript =
+      s"curl -m 60 $download > package && echo 'Download OK' && chmod u+x package && echo 'CHMOD OK' "
 
     val hostnameString = slaveHostname match {
       case None       => ""
@@ -65,9 +70,7 @@ object Deployment {
         .replaceAllLiterally("{GRID}", elasticSupport.fqcn)
         .replaceAllLiterally("{STORAGE}", config.storageURI.toString)
 
-    s"""
-$downloadScript && nohup $edited 1> stdout 2>stderr &
-"""
+    s"""$downloadScript && $edited"""
 
   }
 }

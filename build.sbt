@@ -103,7 +103,7 @@ lazy val core = project
       "com.typesafe.akka" %% "akka-testkit" % "2.5.11",
       "com.typesafe.akka" %% "akka-http-core" % "10.1.1",
       "com.typesafe" % "config" % "1.3.3",
-      "io.github.pityka" %% "selfpackage" % "1.0.1",
+      "io.github.pityka" %% "selfpackage" % "1.2.0",
       "io.github.pityka" %% "s3-stream-fork" % "0.0.3",
       "io.github.pityka" %% "akka-http-unboundedqueue" % "1.2.0",
       "org.scalatest" %% "scalatest" % "3.0.0" % "test",
@@ -133,6 +133,17 @@ lazy val ssh = project
     )
   )
   .dependsOn(core)
+
+lazy val kubernetes = project
+  .in(file("kubernetes"))
+  .settings(commonSettings: _*)
+  .settings(
+    name := "tasks-kubernetes",
+    libraryDependencies ++= Seq(
+      "io.fabric8" % "kubernetes-client" % "4.0.4"
+    )
+  )
+  .dependsOn(core % "compile->compile;test->test")
 
 lazy val uibackend = project
   .in(file("uibackend"))

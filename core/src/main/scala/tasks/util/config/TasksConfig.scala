@@ -188,4 +188,13 @@ class TasksConfig(val raw: Config) {
 
   val appUIServerPort = raw.getInt("tasks.ui.app.port")
 
+  val kubernetesImageName = raw.getString("tasks.kubernetes.image")
+
+  val kubernetesNamespace = raw.getString("tasks.kubernetes.namespace")
+
+  val kubernetesImagePullPolicy =
+    raw.getString("tasks.kubernetes.image-pull-policy")
+
+  val slaveMainClass = raw.getString("tasks.slave-main-class")
+
 }

@@ -32,9 +32,15 @@ import scala.concurrent.Future
 import tasks.circesupport._
 import com.typesafe.config.ConfigFactory
 
-object NodeAllocationTest extends TestHelpers {
+object KubernetesTestSlave extends App {
+  withTaskSystem { _ =>
+    Thread.sleep(100000)
+  }
+}
 
-  val testTask = AsyncTask[Input, Int]("nodeallocationtest", 1) {
+object KubernetesTest extends TestHelpers {
+
+  val testTask = AsyncTask[Input, Int]("kubernetestest", 1) {
     input => implicit computationEnvironment =>
       log.info("Hello from task")
       Future(1)
@@ -46,10 +52,17 @@ object NodeAllocationTest extends TestHelpers {
     ConfigFactory.parseString(
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=0
-      tasks.elastic.engine = "tasks.JvmElasticSupport.JvmGrid"
+      hosts.master="192.168.99.1:28888"
+      hosts.hostname="192.168.99.1"
+      hosts.hostname-from-slave="192.168.99.1"
+      hosts.queue = true
+      tasks.elastic.engine = "tasks.elastic.kubernetes.K8SElasticSupport"
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
+      tasks.kubernetes.image = "alpine37-openjdk8-curl:latest"
+      tasks.kubernetes.image-pull-policy = "Never"
+      tasks.slave-main-class = "tasks.KubernetesTestSlave"
       """
     )
   }
@@ -68,24 +81,18 @@ object NodeAllocationTest extends TestHelpers {
         t3 <- f3
       } yield t1 + t2 + t3
 
-      f1.andThen {
-        case _ =>
-          synchronized {
-            tasks.JvmElasticSupport.taskSystems.head._2.foreach(_.shutdown)
-          }
-      }
-
-      await(future)
+      import scala.concurrent.duration._
+      scala.concurrent.Await.result(future, atMost = 400000 seconds)
 
     }
   }
 
 }
 
-class NodeAllocationTestSuite extends FunSuite with Matchers {
+class KubernetesTestSuite extends FunSuite with Matchers {
 
-  test("elastic node allocation should spawn nodes") {
-    NodeAllocationTest.run.get should equal(3)
+  test("kubernetes allocation should spawn nodes") {
+    (KubernetesTest.run.get: Int) should equal(3)
 
   }
 
