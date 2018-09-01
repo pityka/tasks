@@ -140,7 +140,8 @@ lazy val kubernetes = project
   .settings(
     name := "tasks-kubernetes",
     libraryDependencies ++= Seq(
-      "io.fabric8" % "kubernetes-client" % "4.0.4"
+      "io.fabric8" % "kubernetes-client" % "4.0.4",
+      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.0"
     )
   )
   .dependsOn(core % "compile->compile;test->test")
