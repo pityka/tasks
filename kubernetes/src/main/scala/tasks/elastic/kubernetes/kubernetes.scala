@@ -35,15 +35,18 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.api.model.{EnvVar}
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
 import scala.collection.JavaConverters._
+import com.typesafe.scalalogging.StrictLogging
 
-class K8SShutdown(k8s: KubernetesClient) extends ShutdownNode {
+class K8SShutdown(k8s: KubernetesClient)
+    extends ShutdownNode
+    with StrictLogging {
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
-    println(s"shut down $nodeName")
+    logger.info(s"Shut down $nodeName")
     k8s.pods.withName(nodeName.value).delete
   }
 
   def shutdownPendingNode(nodeName: PendingJobId): Unit = {
-    println(s"shut down $nodeName")
+    logger.info(s"Shut down $nodeName")
     k8s.pods.withName(nodeName.value).delete
   }
 
