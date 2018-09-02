@@ -13,7 +13,7 @@ trait Framing { self: Constants =>
       .via(AkkaStreamComponents
         .strictBatchWeighted[ByteString](BufferSize, _.size.toLong)(_ ++ _))
       .via(Compression.gunzip())
-      .via(AkkaStreamComponents.delimiter(Eof.head,
+      .via(AkkaStreamComponents.delimiter(Eol.head,
                                           maximumFrameLength = Int.MaxValue))
 
   def decodeFileForFlatJoin[T](decoder: Deserializer[T],

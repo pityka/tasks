@@ -110,7 +110,7 @@ trait FactoryMethods { self: Constants =>
     val encoderFlow =
       AkkaStreamComponents
         .parallelize[T, ByteString](encoderPar, ElemBufferSize)(elem =>
-          List(ByteString(encoder.apply(elem)) ++ Eof))
+          List(ByteString(encoder.apply(elem)) ++ Eol))
 
     var count = 0L
     source
@@ -144,7 +144,7 @@ trait FactoryMethods { self: Constants =>
           count += 1
           x
         }
-        .map(t => ByteString(encoder.apply(t)) ++ Eof)
+        .map(t => ByteString(encoder.apply(t)) ++ Eol)
         .via(AkkaStreamComponents
           .strictBatchWeighted[ByteString](512 * 1024, _.size.toLong)(_ ++ _))
         .via(Compression.gzip)
