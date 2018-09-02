@@ -46,10 +46,11 @@ object Deployment {
       elasticSupport: ElasticSupportFqcn,
       masterAddress: InetSocketAddress,
       download: URL,
-      slaveHostname: Option[String]
+      slaveHostname: Option[String],
+      background: Boolean
   )(implicit config: TasksConfig): String = {
     val downloadScript =
-      s"curl -m 60 $download > package && echo 'Download OK' && chmod u+x package && echo 'CHMOD OK' "
+      s"curl -m 60 $download > package && chmod u+x package"
 
     val hostnameString = slaveHostname match {
       case None       => ""
@@ -70,7 +71,11 @@ object Deployment {
         .replaceAllLiterally("{GRID}", elasticSupport.fqcn)
         .replaceAllLiterally("{STORAGE}", config.storageURI.toString)
 
-    s"""$downloadScript && $edited"""
+    val runPackage =
+      if (background) s"""nohup $edited 1> stdout 2> stderr & """
+      else s"$edited ;"
+
+    s"""$downloadScript && $runPackage"""
 
   }
 }

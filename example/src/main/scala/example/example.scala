@@ -39,7 +39,6 @@ import io.circe.generic.auto._
   *   - `piCalc` calculates Pi based on the number of points inside/outside
   *
   * Both of these need case classes to hold inputs and results.
-  * Inputs need to extend the [[tasks.Prerequisitive]] trait.
   */
 object PiTasks {
   case class BatchResult(inside: Int, outside: Int)
@@ -59,13 +58,6 @@ object PiTasks {
 
     /* Input of task, does not need to be a pattern match */
     case BatchInput(sizeFile: SharedFile, _: Int) =>
-      /** Implicit context
-        *
-        * - Provides available resources allocated to the task
-        * - ExecutionContext
-        * - Implicit references to the TaskSystem (for spawning new subtasks)
-        * - Logger
-        */
       implicit ctx =>
         /* SharedFile#file downloads the file to the local tmp folder */
         val localFile: Future[java.io.File] = sizeFile.file
@@ -132,10 +124,6 @@ object Fib {
             case 1 => Future.successful(1)
             case n => {
 
-              /**
-                * Spawns new subtask with input and requested resources
-                * The `?` method returns a Future with the result of the task
-                */
               val f1 = fibtask(FibInput(n - 1))(CPUMemoryRequest(1, 1))
               val f2 = fibtask(FibInput(n - 2))(CPUMemoryRequest(1, 1))
 
@@ -146,9 +134,6 @@ object Fib {
 
               } yield r3
 
-              /**
-                * Releases resources in the scheduler, allowing for the
-                * scheduling of the f1 and f2 tasks. */
               releaseResources
 
               f3
@@ -177,16 +162,17 @@ object PiApp extends App {
 
   val sort = EColl.sortBy("sortByToString", 1)(10, (_: Int).toString)
 
-  val group = EColl.groupBy("groupByToConstant", 1)(10, (_: Int) => "a")
+  val group = EColl.groupBy("groupByToConstant", 1)(10, (_: Int) => "a", None)
 
-  val join = EColl.outerJoinBy("outerjoinByToString", 1)(10, (_: Int).toString)
+  val join =
+    EColl.outerJoinBy("outerjoinByToString", 1)(10, (_: Int).toString, None)
 
   val count =
-    EColl.foldLeft("count", 1)(0, (x: Int, y: Seq[Option[Int]]) => x + 1)
+    EColl.fold("count", 1)((_: Int) => "fold")(
+      (b: Int) => ctx => Future.successful(b),
+      (x: Int, y: Seq[Option[Int]]) => x + 1)
 
   val sum = EColl.reduce("sum", 1)((x: Int, y: Int) => x + y)
-
-  // val count = MacroPlay.foldLeft
 
   /**
     *Opens and closes a TaskSystem with default configuration
@@ -203,11 +189,6 @@ object PiApp extends App {
       writer.write("1000")
       writer.close
 
-      /** Lifts a plain file into a SharedFile
-        *
-        * This copies the file to the configured 'file pool'
-        * (e.g. S3 or a folder on the master node)
-        */
       SharedFile(tmp, name = "taskSize.txt")
     }
 
@@ -240,7 +221,7 @@ object PiApp extends App {
       e4 <- sort(e3)(CPUMemoryRequest(1, 1))
       e5 <- group(e4)(CPUMemoryRequest(1, 1))
       e6 <- join(List(e1, e2, e3))(CPUMemoryRequest(1, 1))
-      e7 <- count(e6)(CPUMemoryRequest(1, 1))
+      e7 <- count(e6 -> 0)(CPUMemoryRequest(1, 1))
       e8 <- sum(e4)(CPUMemoryRequest(1, 1))
     } yield e8
 

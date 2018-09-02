@@ -161,7 +161,8 @@ class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
                                         codeAddress.address.getHostName,
                                         codeAddress.address.getPort,
                                         "/"),
-            slaveHostname = Some(host.hostname)
+            slaveHostname = Some(host.hostname),
+            background = true
           )
           SSHOperations.openSession(host) { session =>
             val command =

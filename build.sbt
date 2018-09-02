@@ -103,7 +103,7 @@ lazy val core = project
       "com.typesafe.akka" %% "akka-testkit" % "2.5.11",
       "com.typesafe.akka" %% "akka-http-core" % "10.1.1",
       "com.typesafe" % "config" % "1.3.3",
-      "io.github.pityka" %% "selfpackage" % "1.2.0",
+      "io.github.pityka" %% "selfpackage" % "1.2.1",
       "io.github.pityka" %% "s3-stream-fork" % "0.0.3",
       "io.github.pityka" %% "akka-http-unboundedqueue" % "1.2.0",
       "org.scalatest" %% "scalatest" % "3.0.0" % "test",
@@ -132,7 +132,7 @@ lazy val ssh = project
       "ch.ethz.ganymed" % "ganymed-ssh2" % "261"
     )
   )
-  .dependsOn(core)
+  .dependsOn(core % "compile->compile;test->test")
 
 lazy val kubernetes = project
   .in(file("kubernetes"))
@@ -178,7 +178,7 @@ lazy val uifrontend = project
 lazy val example = project
   .in(file("example"))
   .settings(commonSettings: _*)
-  .dependsOn(core, collection)
+  .dependsOn(core, collection, ssh)
   .enablePlugins(JavaAppPackaging)
   .settings(
     executableScriptName := "entrypoint",
@@ -229,7 +229,9 @@ lazy val root = (project in file("."))
              ec2,
              ssh,
              uibackend,
-             uifrontend)
+             uifrontend,
+             kubernetes,
+             example)
 
 scalafmtOnCompile in ThisBuild := true
 

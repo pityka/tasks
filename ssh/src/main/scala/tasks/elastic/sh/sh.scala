@@ -59,7 +59,8 @@ class SHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
                                   codeAddress.address.getHostName,
                                   codeAddress.address.getPort,
                                   "/"),
-      slaveHostname = None
+      slaveHostname = None,
+      background = true
     )
 
     val (stdout, _, _) = execGetStreamsAndCode(

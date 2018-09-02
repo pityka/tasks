@@ -167,7 +167,8 @@ class EC2CreateNode(
                                   codeAddress.address.getHostName,
                                   codeAddress.address.getPort,
                                   "/"),
-      slaveHostname = None
+      slaveHostname = None,
+      background = true
     )
 
     launchSpecification.setUserData(gzipBase64(userdata))

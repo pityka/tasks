@@ -72,10 +72,11 @@ class K8SCreateNode(masterAddress: InetSocketAddress,
                                   codeAddress.address.getHostName,
                                   codeAddress.address.getPort,
                                   "/"),
-      slaveHostname = None
+      slaveHostname = None,
+      background = false
     )
 
-    val command = Seq("/bin/bash", "-c", script + "echo $!;exit;")
+    val command = Seq("/bin/bash", "-c", script)
 
     val name = KubernetesHelpers.newName
 
