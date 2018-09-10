@@ -118,4 +118,6 @@ trait ManagedFileStorage {
 
   def list(regexp: String): List[SharedFile]
 
+  def sharedFolder(prefix: Seq[String]): Option[File]
+
 }

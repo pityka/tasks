@@ -80,6 +80,8 @@ case class ScheduleWithProxy(sch: ScheduleTask, ac: List[Proxy])
 
 case class GetListOfFilesInStorage(regexp: String) extends StaticMessage
 
+case class GetSharedFolder(prefix: Vector[String]) extends StaticMessage
+
 case class NewFile(f: File, p: ProposedManagedFilePath, ephemeralFile: Boolean)
     extends StaticMessage
 

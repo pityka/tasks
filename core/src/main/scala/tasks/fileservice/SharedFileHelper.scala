@@ -241,4 +241,44 @@ private[tasks] object SharedFileHelper {
 
     }
 
+  def createOnSharedFileSystem(callback: File => List[File])(
+      implicit prefix: FileServicePrefix,
+      ec: ExecutionContext,
+      service: FileServiceComponent,
+      context: ActorRefFactory,
+      config: TasksConfig) =
+    if (service.storage.isDefined) {
+
+      val directory = service.storage.get
+        .sharedFolder(prefix.list)
+        .getOrElse(
+          throw new RuntimeException("Storage does not support shared folders"))
+      val files = callback(directory)
+      val directoryPath = directory.getAbsolutePath
+      Future.sequence(files.map { file =>
+        assert(file.getAbsolutePath.startsWith(directoryPath))
+        createFromFile(file,
+                       file.getAbsolutePath.drop(directoryPath.size),
+                       deleteFile = false)
+      })
+    } else {
+
+      val serviceactor = service.actor
+
+      implicit val timout = akka.util.Timeout(1441 minutes)
+
+      (serviceactor ? GetSharedFolder(prefix.list))
+        .mapTo[Option[File]]
+        .flatMap { maySharedFolder =>
+          val directory = maySharedFolder.getOrElse(
+            throw new RuntimeException(
+              "Storage does not support shared folders"))
+          val files = callback(directory)
+          Future.sequence(files.map { file =>
+            createFromFile(file, file.getName, deleteFile = false)
+          })
+        }
+
+    }
+
 }

@@ -112,6 +112,7 @@ class FileService(
   }
 
   def receive = {
+    case GetSharedFolder(prefix) => sender ! storage.sharedFolder(prefix)
     case NewFile(file, proposedPath, ephemeral) =>
       try {
         if (isLocal(file)) {

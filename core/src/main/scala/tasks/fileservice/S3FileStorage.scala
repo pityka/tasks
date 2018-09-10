@@ -62,6 +62,8 @@ class S3Storage(bucketName: String,
     if (sse) rq.serverSideEncryption else rq
   }
 
+  def sharedFolder(prefix: Seq[String]): Option[File] = None
+
   def list(pattern: String): List[SharedFile] = ???
 
   def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean] =

@@ -83,6 +83,14 @@ class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)
 
   }
 
+  def sharedFolder(prefix: Seq[String]): Option[File] = {
+    val folder = new File(
+      basePath.getAbsolutePath + File.separator + prefix.mkString(
+        File.separator))
+    folder.mkdirs
+    Some(folder)
+  }
+
   def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean] =
     Future.successful {
       val f = assemblePath(path)
