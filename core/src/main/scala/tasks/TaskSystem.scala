@@ -153,12 +153,22 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
           throw new RuntimeException(s"$storageFolder is a file. Abort.")
         }
         if (!storageFolder.isDirectory) {
-          tasksystemlog.warning(
-            s"Folder $storageFolder does not exists. Try to create it. ")
-          storageFolder.mkdirs
+          if (hostConfig.isQueue) {
+
+            tasksystemlog.warning(
+              s"Folder $storageFolder does not exists. Try to create it. ")
+            storageFolder.mkdirs
+            val extendedFolder = config.fileServiceExtendedFolders
+            Some(new FolderFileStorage(storageFolder, extendedFolder))
+          } else {
+            tasksystemlog.warning(
+              s"Folder $storageFolder does not exists. This is not a master node. Reverting to no managed storage.")
+            None
+          }
+        } else {
+          val extendedFolder = config.fileServiceExtendedFolders
+          Some(new FolderFileStorage(storageFolder, extendedFolder))
         }
-        val extendedFolder = config.fileServiceExtendedFolders
-        Some(new FolderFileStorage(storageFolder, extendedFolder))
       }
     }
 
