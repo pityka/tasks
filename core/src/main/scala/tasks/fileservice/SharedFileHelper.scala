@@ -241,7 +241,7 @@ private[tasks] object SharedFileHelper {
 
     }
 
-  def createOnSharedFileSystem(callback: File => List[File])(
+  def createFromFolder(callback: File => List[File])(
       implicit prefix: FileServicePrefix,
       ec: ExecutionContext,
       service: FileServiceComponent,
@@ -270,12 +270,17 @@ private[tasks] object SharedFileHelper {
       (serviceactor ? GetSharedFolder(prefix.list))
         .mapTo[Option[File]]
         .flatMap { maySharedFolder =>
-          val directory = maySharedFolder.getOrElse(
-            throw new RuntimeException(
-              "Storage does not support shared folders"))
+          val directory = maySharedFolder.getOrElse {
+            val tmp = TempFile.createTempFile("tmpfolder")
+            tmp.delete
+            tmp.mkdir
+            tmp
+          }
           val files = callback(directory)
           Future.sequence(files.map { file =>
-            createFromFile(file, file.getName, deleteFile = false)
+            val fileName =
+              file.getAbsolutePath.drop(directory.getAbsolutePath.size)
+            createFromFile(file, fileName, deleteFile = false)
           })
         }
 

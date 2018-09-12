@@ -120,9 +120,9 @@ object SharedFile {
       implicit tsc: TaskSystemComponents): Future[SharedFile] =
     SharedFileHelper.createFromSource(source, name)
 
-  def onSharedFolder(callback: File => List[File])(
+  def fromFolder(callback: File => List[File])(
       implicit tsc: TaskSystemComponents): Future[Seq[SharedFile]] =
-    SharedFileHelper.createOnSharedFileSystem(callback)
+    SharedFileHelper.createFromFolder(callback)
 
 }
 
