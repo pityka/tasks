@@ -262,7 +262,7 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
           } else {
             proxies.foreach(_.actor ! TaskFailedMessageToProxy(sch, cause))
             log.error(cause, "Task execution failed: " + sch.toString)
-            state
+            removed
           }
       }
       context.become(running(updated))

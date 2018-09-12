@@ -27,6 +27,7 @@ package tasks
 import org.scalatest._
 
 import org.scalatest.Matchers
+import com.typesafe.config.ConfigFactory
 
 import tasks.circesupport._
 import scala.concurrent.Future
@@ -34,6 +35,17 @@ import scala.concurrent.Future
 object FailingTasksTest extends TestHelpers {
 
   val sideEffect = scala.collection.mutable.ArrayBuffer[String]()
+
+  override def testConfig = {
+    val tmp = tasks.util.TempFile.createTempFile(".temp")
+    tmp.delete
+    ConfigFactory.parseString(
+      s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
+      hosts.numCPU=4
+      tasks.cache.enabled = false
+      """
+    )
+  }
 
   class TestException extends RuntimeException("boom")
 
@@ -53,7 +65,7 @@ object FailingTasksTest extends TestHelpers {
       Future("succeeded")
   }
 
-  def run: Option[(String, String)] = {
+  def run: Option[(String, String, String)] = {
     withTaskSystem(testConfig) { implicit ts =>
       import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -61,10 +73,15 @@ object FailingTasksTest extends TestHelpers {
         case _: TestException => "recovered"
       }
       val f2 = success(Input(2))(CPUMemoryRequest(1, 500))
+      val f3 = f1.flatMap(_ =>
+        fail(Input(1))(CPUMemoryRequest(1, 500)).recover {
+          case _: TestException => "recovered"
+      })
       val future = for {
         t1 <- f1
         t2 <- f2
-      } yield (t1, t2)
+        t3 <- f3
+      } yield (t1, t2, t3)
 
       await(future)
 
@@ -77,7 +94,7 @@ class FailingTasksTestSuite extends FunSuite with Matchers {
 
   test(
     "a failing task should propagate its exception and not interfere with other tasks") {
-    FailingTasksTest.run.get shouldBe (("recovered", "succeeded"))
+    FailingTasksTest.run.get shouldBe (("recovered", "succeeded", "recovered"))
   }
 
 }
