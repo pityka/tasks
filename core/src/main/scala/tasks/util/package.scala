@@ -269,36 +269,6 @@ package object util {
   }
 
   /**
-    * Execute command. Returns stdout and stderr as strings, and true if it was successful. Also writes to log.
-    *
-    * A process is considered successful if its exit code is 0 and the error stream is empty.
-    * The latter criterion can be disabled with the unsuccessfulOnErrorStream parameter.
-    * @param pb The process description.
-    * @param unsuccessfulOnErrorStream if true, then the process is considered as a failure if its stderr is not empty.
-    * @param atMost max waiting time.
-    * @param log A logger.
-    * @return (stdout,stderr,success) triples
-    */
-  def execGetStreamsAndCodeWithLog(
-      pb: ProcessBuilder,
-      unsuccessfulOnErrorStream: Boolean = true,
-      atMost: Duration = Duration.Inf)(implicit log: {
-    def info(s: String): Unit; def error(s: String): Unit
-  }): (List[String], List[String], Boolean) = {
-    import scala.language.reflectiveCalls
-    var ls: List[String] = Nil
-    var lse: List[String] = Nil
-    var boolean = true
-    val exitvalue = exec(pb, atMost) { ln =>
-      ls = ln :: ls; log.info(ln)
-    } { ln =>
-      if (unsuccessfulOnErrorStream) { boolean = false }; lse = ln :: lse;
-      if (unsuccessfulOnErrorStream) log.error(ln) else log.info(ln)
-    }
-    (ls.reverse, lse.reverse, boolean && (exitvalue == 0))
-  }
-
-  /**
     * Merge maps with key collision
     * @param fun Handles key collision
     */
