@@ -80,7 +80,7 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
     .toOption
   implicit val streamHelper = new StreamHelper(s3Stream)
 
-  private val tasksystemlog = akka.event.Logging(AS, "TaskSystem")
+  private val tasksystemlog = akka.event.Logging(AS.eventStream, "tasks.boot")
 
   tasksystemlog.info("Listening on: " + hostConfig.myAddress.toString)
   tasksystemlog.info("CPU: " + hostConfig.availableCPU.toString)
