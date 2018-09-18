@@ -257,9 +257,10 @@ private[tasks] object SharedFileHelper {
       val directoryPath = directory.getAbsolutePath
       Future.sequence(files.map { file =>
         assert(file.getAbsolutePath.startsWith(directoryPath))
-        createFromFile(file,
-                       file.getAbsolutePath.drop(directoryPath.size),
-                       deleteFile = false)
+        createFromFile(
+          file,
+          file.getAbsolutePath.drop(directoryPath.size).stripPrefix("/"),
+          deleteFile = false)
       })
     } else {
 
@@ -279,7 +280,9 @@ private[tasks] object SharedFileHelper {
           val files = callback(directory)
           Future.sequence(files.map { file =>
             val fileName =
-              file.getAbsolutePath.drop(directory.getAbsolutePath.size)
+              file.getAbsolutePath
+                .drop(directory.getAbsolutePath.size)
+                .stripPrefix("/")
             createFromFile(file, fileName, deleteFile = false)
           })
         }
