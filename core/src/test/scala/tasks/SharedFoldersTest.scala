@@ -79,7 +79,7 @@ class SharedFoldersTestSuite extends FunSuite with Matchers {
       SharedFoldersTest.tmp.getAbsolutePath + "/sharedFolders/intermediate/fileName")
     sf.path.asInstanceOf[ManagedFilePath].pathElements shouldBe Vector(
       "sharedFolders",
-      "/intermediate/fileName")
+      "intermediate/fileName")
     expectedFile.canRead shouldBe true
     scala.io.Source.fromFile(expectedFile).mkString shouldBe "345"
   }
