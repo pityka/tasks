@@ -37,11 +37,15 @@ import tasks.circesupport._
 
 import com.typesafe.config.ConfigFactory
 
-object DSLTest extends TestHelpers {
+object DSLTest extends TestHelpers with Matchers {
 
   val increment = AsyncTask[Input, Int]("dsltest", 1) {
     case Input(c) =>
       implicit computationEnvironment =>
+        assert(computationEnvironment.filePrefix.history.isDefined)
+        computationEnvironment.filePrefix.history.get.task shouldBe fileservice.History
+          .TaskVersion("dsltest", 1)
+        computationEnvironment.filePrefix.history.get.codeVersion shouldBe "undefined"
         Future(c + 1)
   }
 

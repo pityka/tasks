@@ -35,19 +35,29 @@ package object queue {
       deserializedInputData: T,
       taskID: String,
       taskVersion: Int
-  ): ComputationEnvironment = deserializedInputData match {
-    case t: ResultWithSharedFiles =>
-      val newHistory = fileservice.History(
-        dependencies = t.files.toList,
-        task = fileservice.History.TaskVersion(taskID, taskVersion),
-        timestamp = java.time.Instant.now,
-        codeVersion = computationEnvironment.components.tasksConfig.codeVersion
-      )
+  ): ComputationEnvironment = {
+    val newHistory = deserializedInputData match {
+      case t: HasSharedFiles =>
+        fileservice.History(
+          dependencies = t.files.toList,
+          task = fileservice.History.TaskVersion(taskID, taskVersion),
+          timestamp = java.time.Instant.now,
+          codeVersion =
+            computationEnvironment.components.tasksConfig.codeVersion
+        )
+      case _ =>
+        fileservice.History(
+          dependencies = Nil,
+          task = fileservice.History.TaskVersion(taskID, taskVersion),
+          timestamp = java.time.Instant.now,
+          codeVersion =
+            computationEnvironment.components.tasksConfig.codeVersion
+        )
+    }
 
-      computationEnvironment.copy(
-        components = computationEnvironment.components.copy(filePrefix =
-          computationEnvironment.components.filePrefix.withHistory(newHistory)))
-    case _ => computationEnvironment
+    computationEnvironment.copy(
+      components = computationEnvironment.components.copy(filePrefix =
+        computationEnvironment.components.filePrefix.withHistory(newHistory)))
   }
 
   type CompFun2 = Base64Data => ComputationEnvironment => Future[UntypedResult]

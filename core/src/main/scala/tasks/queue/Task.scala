@@ -48,7 +48,7 @@ case class UntypedResult(files: Set[SharedFile], data: Base64Data)
 object UntypedResult {
 
   private def files(r: Any): Set[SharedFile] = r match {
-    case resultWithSharedFiles: ResultWithSharedFiles =>
+    case resultWithSharedFiles: HasSharedFiles =>
       resultWithSharedFiles.files.toSet ++ resultWithSharedFiles.productIterator
         .flatMap(member => files(member))
         .toSet

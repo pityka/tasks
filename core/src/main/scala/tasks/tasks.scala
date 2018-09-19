@@ -31,7 +31,19 @@ import tasks.queue._
 
 import scala.concurrent._
 
-abstract class ResultWithSharedFiles(sf: SharedFile*) extends Product {
+trait HasSharedFiles extends Product {
+  def files: Seq[SharedFile]
+}
+
+abstract class ResultWithSharedFiles(sf: SharedFile*)
+    extends Product
+    with HasSharedFiles {
+  def files = sf
+}
+
+abstract class WithSharedFiles(sf: SharedFile*)
+    extends Product
+    with HasSharedFiles {
   def files = sf
 }
 
