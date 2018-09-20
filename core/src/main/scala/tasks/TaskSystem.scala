@@ -65,6 +65,9 @@ case class TaskSystemComponents(
 
   def withChildPrefix(name: String) =
     this.copy(filePrefix = this.filePrefix.append(name))
+
+  def withChildPrefix(names: Seq[String]) =
+    this.copy(filePrefix = this.filePrefix.append(names))
 }
 
 class TaskSystem private[tasks] (val hostConfig: HostConfiguration,

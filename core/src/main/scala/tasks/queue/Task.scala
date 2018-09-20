@@ -73,6 +73,10 @@ case class ComputationEnvironment(
     val taskActor: ActorRef
 ) {
 
+  def withFilePrefix[B](prefix: Seq[String])(
+      fun: ComputationEnvironment => B): B =
+    fun(copy(components = components.withChildPrefix(prefix)))
+
   implicit def fileServiceComponent: FileServiceComponent = components.fs
 
   implicit def actorSystem: akka.actor.ActorSystem = components.actorsystem

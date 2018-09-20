@@ -47,6 +47,7 @@ case class FileServiceComponent(actor: ActorRef,
 
 case class FileServicePrefix(list: Vector[String], history: Option[History]) {
   def append(n: String) = FileServicePrefix(list :+ n, history)
+  def append(ns: Seq[String]) = FileServicePrefix(list ++ ns, history)
   private[fileservice] def propose(name: String) =
     ProposedManagedFilePath(list :+ name, history)
   private[tasks] def withHistory(history: History) =
