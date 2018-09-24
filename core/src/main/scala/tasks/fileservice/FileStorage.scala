@@ -67,11 +67,20 @@ class RemoteFileStorage(implicit mat: Materializer,
     streamHelper.createSource(uri(path))
 
   def getSizeAndHash(path: RemoteFilePath): Future[(Long, Int)] =
-    streamHelper.getContentLengthAndETag(uri(path)).map {
-      case (size, etag) =>
-        (size.getOrElse(
-           throw new RuntimeException(s"Size can't retrieved for $path")),
-         etag.map(_.hashCode).getOrElse(-1))
+    path.uri.scheme match {
+      case "file" =>
+        val file = new File(path.uri.path)
+        openFileInputStream(file) { is =>
+          val hash = FileStorage.getContentHash(is)
+          Future.successful((file.length, hash))
+        }
+      case "s3" | "http" | "https" =>
+        streamHelper.getContentLengthAndETag(uri(path)).map {
+          case (size, etag) =>
+            (size.getOrElse(
+               throw new RuntimeException(s"Size can't retrieved for $path")),
+             etag.map(_.hashCode).getOrElse(-1))
+        }
     }
 
   def contains(path: RemoteFilePath, size: Long, hash: Int): Future[Boolean] =
