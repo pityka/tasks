@@ -129,4 +129,6 @@ trait ManagedFileStorage {
 
   def sharedFolder(prefix: Seq[String]): Option[File]
 
+  def delete(path: ManagedFilePath): Future[Boolean]
+
 }

@@ -83,6 +83,17 @@ class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)
 
   }
 
+  def delete(mp: ManagedFilePath) =
+    if (config.allowDeletion) {
+      val file = assemblePath(mp)
+      file.delete
+      logger.info(s"File deleted $file $mp")
+      Future.successful(true)
+    } else {
+      logger.info(s"File deletion disabled. Would have deleted $mp")
+      Future.successful(false)
+    }
+
   def sharedFolder(prefix: Seq[String]): Option[File] = {
     val folder = new File(
       basePath.getAbsolutePath + File.separator + prefix.mkString(

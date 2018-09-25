@@ -197,4 +197,9 @@ class TasksConfig(val raw: Config) {
 
   val slaveMainClass = raw.getString("tasks.slave-main-class")
 
+  val createFilePrefixForTaskId =
+    raw.getBoolean("tasks.createFilePrefixForTaskId")
+
+  val allowDeletion = raw.getBoolean("tasks.fileservice.allowDeletion")
+
 }

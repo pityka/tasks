@@ -109,6 +109,12 @@ class Launcher(
     val allocatedResource = availableResources.maximum(scheduleTask.resource)
     availableResources = availableResources.substract(allocatedResource)
 
+    val filePrefix =
+      if (config.createFilePrefixForTaskId)
+        scheduleTask.fileServicePrefix.append(
+          scheduleTask.description.taskId.id)
+      else scheduleTask.fileServicePrefix
+
     val taskActor = context.actorOf(
       Props(
         classOf[Task],
@@ -125,8 +131,7 @@ class Launcher(
         scheduleTask.cacheActor,
         nodeLocalCache,
         allocatedResource.cpuMemoryAllocated,
-        scheduleTask.fileServicePrefix.append(
-          scheduleTask.description.taskId.id),
+        filePrefix,
         auxExecutionContext,
         actorMaterializer,
         config

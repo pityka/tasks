@@ -77,6 +77,9 @@ case class SharedFile(
     SharedFileHelper.getUri(this)
 
   def name = path.name
+
+  def delete(implicit tsc: TaskSystemComponents): Future[Boolean] =
+    SharedFileHelper.delete(this)
 }
 
 object SharedFile {

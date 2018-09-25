@@ -122,6 +122,8 @@ case class IsAccessible(sf: ManagedFilePath, size: Long, hash: Int)
 
 case class GetUri(sf: ManagedFilePath) extends StaticMessage
 
+case class Delete(sf: ManagedFilePath) extends StaticMessage
+
 // Messages related to elastic
 
 private[tasks] case object MeasureTime extends StaticMessage

@@ -155,4 +155,6 @@ class S3Storage(bucketName: String,
   def uri(mp: ManagedFilePath): tasks.util.Uri =
     tasks.util.Uri("s3://" + bucketName + "/" + assembleName(mp))
 
+  def delete(mp: ManagedFilePath) = Future.successful(false)
+
 }

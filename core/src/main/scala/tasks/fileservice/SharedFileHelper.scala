@@ -179,6 +179,20 @@ private[tasks] object SharedFileHelper {
       }
     }
 
+  def delete(sf: SharedFile)(
+      implicit service: FileServiceComponent): Future[Boolean] =
+    sf.path match {
+      case RemoteFilePath(_) => Future.successful(false)
+      case path: ManagedFilePath => {
+        if (service.storage.isDefined)
+          service.storage.get.delete(path)
+        else {
+          implicit val timout = akka.util.Timeout(1441 minutes)
+          (service.actor ? Delete(path)).asInstanceOf[Future[Boolean]]
+        }
+      }
+    }
+
   def createFromFile(file: File, name: String, deleteFile: Boolean)(
       implicit prefix: FileServicePrefix,
       ec: ExecutionContext,
