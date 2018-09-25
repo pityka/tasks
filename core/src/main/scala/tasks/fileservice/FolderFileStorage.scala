@@ -87,10 +87,10 @@ class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)
     if (config.allowDeletion) {
       val file = assemblePath(mp)
       file.delete
-      logger.info(s"File deleted $file $mp")
+      logger.warning(s"File deleted $file $mp")
       Future.successful(true)
     } else {
-      logger.info(s"File deletion disabled. Would have deleted $mp")
+      logger.warning(s"File deletion disabled. Would have deleted $mp")
       Future.successful(false)
     }
 
