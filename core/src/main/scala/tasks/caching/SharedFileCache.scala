@@ -78,8 +78,15 @@ private[tasks] class SharedFileCache(
       }
       .map { file =>
         file.flatMap { file =>
-          logger.debug(s"Reading result $file")
-          Try(deserializeResult(readBinaryFile(file))).toOption
+          logger.debug(s"Looking for result description $file")
+          val t = Try(deserializeResult(readBinaryFile(file)))
+          t.failed.foreach {
+            case e: java.io.IOException =>
+              logger.debug(s"Not found $file. $e")
+            case e: Exception =>
+              logger.debug(s"Failed to deserialize due to $e")
+          }
+          t.toOption
         }
       }
   }

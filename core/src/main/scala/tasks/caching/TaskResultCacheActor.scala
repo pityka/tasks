@@ -115,6 +115,8 @@ class TaskResultCacheActor(
             Future.successful(
               AnswerFromCache(Right(cacheLookup), originalSender, scheduleTask))
           case Some(cacheLookup) =>
+            log.debug(
+              s"Checking: $taskId. Got something $cacheLookup, verifying..")
             forallFutures(cacheLookup.files.map(SharedFileHelper.isAccessible))
               .recover {
                 case e =>
@@ -138,6 +140,11 @@ class TaskResultCacheActor(
               }
         }
       } yield answer
+      answer.recover {
+        case e: Exception =>
+          log.error(e, "Cache check failed")
+          throw e
+      }
       answer.pipeTo(savedSender)
 
   }
