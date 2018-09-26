@@ -31,6 +31,7 @@ import java.io.File
 import scala.util._
 import scala.concurrent._
 import akka.actor.ActorSystem
+import akka.stream.Materializer
 
 import tasks.queue._
 import tasks._
@@ -49,6 +50,7 @@ private[tasks] class SharedFileCache(
     nodeLocalCacheActor: NodeLocalCacheActor,
     AS: ActorSystem,
     EC: ExecutionContext,
+    MAT: Materializer,
     config: TasksConfig)
     extends Cache
     with TaskSerializer {
@@ -94,6 +96,7 @@ private[tasks] class SharedFileCache(
   def set(taskDescription: TaskDescription, untypedResult: UntypedResult)(
       implicit p: FileServicePrefix) = {
     try {
+      implicit val historyContext = tasks.fileservice.NoHistory
       val serializedTaskDescription = serializeTaskDescription(taskDescription)
       val hash = getHash(serializedTaskDescription)
       val value: File = writeBinaryToFile(serializeResult(untypedResult))

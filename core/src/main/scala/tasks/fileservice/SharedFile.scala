@@ -36,6 +36,7 @@ import scala.concurrent._
 import tasks.util.Uri
 import tasks.TaskSystemComponents
 import tasks.Implicits._
+import tasks.HasSharedFiles
 
 import io.circe.{Decoder, Encoder, DecodingFailure}
 import io.circe.generic.semiauto._
@@ -57,15 +58,19 @@ case class RemoteFilePath(uri: Uri) extends FilePath {
 case class SharedFile(
     path: FilePath,
     byteSize: Long,
-    hash: Int,
-    history: Option[History]
-) {
+    hash: Int
+) extends HasSharedFiles {
+
+  def files = List(this)
 
   override def toString =
-    s"SharedFile($path, size=$byteSize, hash=$hash, history=$history)"
+    s"SharedFile($path, size=$byteSize, hash=$hash)"
 
   def file(implicit tsc: TaskSystemComponents) =
     SharedFileHelper.getPathToFile(this)
+
+  def history(implicit tsc: TaskSystemComponents): Future[History] =
+    SharedFileHelper.getHistory(this)
 
   def source(implicit tsc: TaskSystemComponents) =
     SharedFileHelper.getSourceToFile(this)
@@ -84,26 +89,19 @@ case class SharedFile(
 
 object SharedFile {
 
-  implicit val encoder: Encoder[SharedFile] = //deriveEncoder[SharedFile]
-    Encoder.forProduct4("path", "byteSize", "hash", "history")(sf =>
-      (sf.path, sf.byteSize, sf.hash, sf.history))
+  implicit val encoder: Encoder[SharedFile] =
+    Encoder.forProduct3("path", "byteSize", "hash")(sf =>
+      (sf.path, sf.byteSize, sf.hash))
 
-  implicit val decoder: Decoder[SharedFile] = //deriveDecoder[SharedFile]
+  implicit val decoder: Decoder[SharedFile] =
     Decoder.instance { cursor =>
       cursor.focus.flatMap(_.asObject) match {
         case None => Left(DecodingFailure("not object", Nil))
-        case Some(json) =>
-          if (json.size == 3)
-            Decoder
-              .forProduct4("path", "byteSize", "hash", "history")(
-                (a: FilePath, b: Long, c: Int, h: History) =>
-                  new SharedFile(a, b, c, Some(h)))
-              .apply(cursor)
-          else
-            Decoder
-              .forProduct3("path", "byteSize", "hash")(
-                (a: FilePath, b: Long, c: Int) => new SharedFile(a, b, c, None))
-              .apply(cursor)
+        case Some(_) =>
+          Decoder
+            .forProduct3("path", "byteSize", "hash")(
+              (a: FilePath, b: Long, c: Int) => new SharedFile(a, b, c))
+            .apply(cursor)
 
       }
     }

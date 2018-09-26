@@ -37,21 +37,12 @@ object UIQueueStateProjector {
     UIUntypedResult(result.files.map(uiFile), result.data)
 
   private def uiFile(sharedFile: SharedFile): UISharedFile =
-    UISharedFile(uiPath(sharedFile.path),
-                 sharedFile.byteSize,
-                 sharedFile.hash,
-                 sharedFile.history.map(uiHistory))
+    UISharedFile(uiPath(sharedFile.path), sharedFile.byteSize, sharedFile.hash)
 
   private def uiPath(path: FilePath): UIFilePath = path match {
     case RemoteFilePath(uri)    => UIRemoteFilePath(uri.toString)
     case ManagedFilePath(elems) => UIManagedFilePath(elems)
   }
-
-  private def uiHistory(history: History): UIHistory =
-    UIHistory(history.dependencies.map(uiFile),
-              TaskId(history.task.taskID, history.task.taskVersion),
-              history.timestamp,
-              history.codeVersion)
 
   def project(state: UIQueueState,
               taskQueueEvent: TaskQueue.Event): UIQueueState = {

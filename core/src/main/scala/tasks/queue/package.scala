@@ -35,29 +35,40 @@ package object queue {
       deserializedInputData: T,
       taskID: String,
       taskVersion: Int
-  ): ComputationEnvironment = {
+  )(implicit tsc: TaskSystemComponents): Future[ComputationEnvironment] = {
+    implicit val ec = tsc.executionContext
     val newHistory = deserializedInputData match {
-      case t: HasSharedFiles =>
-        fileservice.History(
-          dependencies = t.files.toList,
-          task = fileservice.History.TaskVersion(taskID, taskVersion),
-          timestamp = java.time.Instant.now,
-          codeVersion =
-            computationEnvironment.components.tasksConfig.codeVersion
-        )
+      case hasSharedFiles: HasSharedFiles =>
+        val dependencies =
+          Future
+            .traverse(hasSharedFiles.files)(_.history)
+
+        dependencies.map { dependencies =>
+          fileservice.HistoryContextImpl(
+            dependencies = dependencies.toList,
+            task = fileservice.History.TaskVersion(taskID, taskVersion),
+            codeVersion =
+              computationEnvironment.components.tasksConfig.codeVersion,
+            timestamp = java.time.Instant.now
+          )
+        }
+
       case _ =>
-        fileservice.History(
-          dependencies = Nil,
-          task = fileservice.History.TaskVersion(taskID, taskVersion),
-          timestamp = java.time.Instant.now,
-          codeVersion =
-            computationEnvironment.components.tasksConfig.codeVersion
-        )
+        Future.successful(
+          fileservice.HistoryContextImpl(
+            dependencies = Nil,
+            task = fileservice.History.TaskVersion(taskID, taskVersion),
+            codeVersion =
+              computationEnvironment.components.tasksConfig.codeVersion,
+            timestamp = java.time.Instant.now
+          ))
     }
 
-    computationEnvironment.copy(
-      components = computationEnvironment.components.copy(filePrefix =
-        computationEnvironment.components.filePrefix.withHistory(newHistory)))
+    newHistory.map { newHistory =>
+      computationEnvironment.copy(
+        components =
+          computationEnvironment.components.copy(historyContext = newHistory))
+    }
   }
 
   type CompFun2 = Base64Data => ComputationEnvironment => Future[UntypedResult]

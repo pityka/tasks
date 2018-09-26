@@ -66,6 +66,16 @@ class S3Storage(bucketName: String,
 
   def list(pattern: String): List[SharedFile] = ???
 
+  def contains(path: ManagedFilePath): Future[Boolean] =
+    s3stream.getMetadata(S3Location(bucketName, assembleName(path))).map {
+      metadata =>
+        metadata.response.status.intValue == 200
+    } recover {
+      case x: Exception =>
+        log.debug("This might be an error, or likely a missing file. {}", x)
+        false
+    }
+
   def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean] =
     s3stream.getMetadata(S3Location(bucketName, assembleName(path))).map {
       metadata =>

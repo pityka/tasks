@@ -33,68 +33,22 @@ import akka.util._
 
 import scala.util._
 
-import java.io.{File, InputStream, FileInputStream, BufferedInputStream}
+import java.io.File
 import java.nio.channels.WritableByteChannel
 
 import tasks.util._
 import tasks.wire._
 
-class FileUserStream(sf: ManagedFilePath,
-                     size: Long,
-                     hash: Int,
-                     service: ActorRef,
-                     isLocal: java.io.File => Boolean)
-    extends AbstractFileUser[InputStream](sf, size, hash, service, isLocal) {
-
-  private var writeableChannel: Option[WritableByteChannel] = None
-
-  def transfertome(): Unit = {
-    log.debug("Unreadable")
-    val pipe = java.nio.channels.Pipe.open
-    writeableChannel = Some(pipe.sink)
-    val transferinActor = context.actorOf(
-      Props(new TransferIn(writeableChannel.get, self))
-        .withDispatcher("transferin"))
-
-    service ! TransferFileToUser(transferinActor, sf)
-
-    result = Some(
-      Success(java.nio.channels.Channels.newInputStream(pipe.source)))
-    finish
-  }
-
-  def finish(): Unit = {
-    if (listener.isDefined) {
-      listener.get ! result.get
-      self ! PoisonPill
-    }
-  }
-
-  def finishLocalFile(f: File): Unit = {
-    log.debug("Readable")
-    result = Some(Success(new BufferedInputStream(new FileInputStream(f))))
-    finish
-  }
-
-  override def receive = super.receive orElse {
-    case filetransfermessages.FileSaved() => {
-      writeableChannel.get.close
-    }
-  }
-}
-
 class FileUserSource(sf: ManagedFilePath,
-                     size: Long,
-                     hash: Int,
                      service: ActorRef,
                      isLocal: java.io.File => Boolean)
-    extends AbstractFileUser[Source[ByteString, _]](sf,
-                                                    size,
-                                                    hash,
-                                                    service,
-                                                    isLocal) {
+    extends AbstractFileUser[Source[ByteString, _]](sf, 0, 0, service, isLocal) {
 
   private var writeableChannel: Option[WritableByteChannel] = None
+
+  override def preStart: Unit = {
+    self ! KnownPaths(Nil)
+  }
 
   def transfertome(): Unit = {
     log.debug("Unreadable")

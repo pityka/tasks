@@ -60,7 +60,7 @@ object UIFilePath {
       deriveDecoder[UIFilePath]
 }
 
-case class UISharedFile(path: UIFilePath, byteSize:Long,hash:Int, history: Option[UIHistory])
+case class UISharedFile(path: UIFilePath, byteSize:Long,hash:Int)
 object UISharedFile {
       implicit val encoder : Encoder[UISharedFile] =
       deriveEncoder[UISharedFile]

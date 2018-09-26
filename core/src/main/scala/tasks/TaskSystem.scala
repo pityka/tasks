@@ -60,7 +60,8 @@ case class TaskSystemComponents(
     filePrefix: FileServicePrefix,
     executionContext: ExecutionContext,
     actorMaterializer: Materializer,
-    tasksConfig: TasksConfig
+    tasksConfig: TasksConfig,
+    historyContext: HistoryContext
 ) {
 
   def withChildPrefix(name: String) =
@@ -230,6 +231,7 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
                                 nodeLocalCache,
                                 system,
                                 system.dispatcher,
+                                AM,
                                 config)
         else new DisabledCache
 
@@ -366,16 +368,19 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
   private val auxExecutionContext =
     scala.concurrent.ExecutionContext.fromExecutorService(auxFjp)
 
+  val rootHistory = NoHistory
+
   val components = TaskSystemComponents(
     queue = QueueActor(queueActor),
     fs = fileServiceComponent,
     actorsystem = system,
     cache = CacheActor(cacheActor),
     nodeLocalCache = nodeLocalCache,
-    filePrefix = FileServicePrefix(Vector(), None),
+    filePrefix = FileServicePrefix(Vector()),
     executionContext = auxExecutionContext,
     actorMaterializer = AM,
-    tasksConfig = config
+    tasksConfig = config,
+    historyContext = rootHistory
   )
 
   private val launcherActor = if (numberOfCores > 0 && hostConfig.isWorker) {

@@ -65,4 +65,8 @@ private[tasks] object Implicits {
   implicit def cacheActor(
       implicit component: TaskSystemComponents): CacheActor = component.cache
 
+  implicit def historyContext(
+      implicit component: TaskSystemComponents): HistoryContext =
+    component.historyContext
+
 }

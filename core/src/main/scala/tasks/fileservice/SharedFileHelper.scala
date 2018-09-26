@@ -50,69 +50,66 @@ private[tasks] object SharedFileHelper {
       nlc: NodeLocalCacheActor,
       prefix: FileServicePrefix,
       ec: ExecutionContext): Future[SharedFile] = {
-    getPathToFile(new SharedFile(prefix.propose(name).toManaged, -1L, 0, None))
+    getPathToFile(new SharedFile(prefix.propose(name).toManaged, -1L, 0))
       .map { f =>
-        new SharedFile(prefix.propose(name).toManaged, -1L, 0, None)
+        new SharedFile(prefix.propose(name).toManaged, -1L, 0)
       }
 
   }
 
   def createForTesting(name: String) =
-    new SharedFile(ManagedFilePath(Vector(name)), 0, 0, None)
+    new SharedFile(ManagedFilePath(Vector(name)), 0, 0)
   def createForTesting(name: String, size: Long, hash: Int) =
-    new SharedFile(ManagedFilePath(Vector(name)), size, hash, None)
+    new SharedFile(ManagedFilePath(Vector(name)), size, hash)
 
-  def create(size: Long,
-             hash: Int,
-             path: ManagedFilePath,
-             history: Option[History]): SharedFile =
-    new SharedFile(path, size, hash, history)
+  def create(size: Long, hash: Int, path: ManagedFilePath): SharedFile =
+    new SharedFile(path, size, hash)
 
   def create(path: RemoteFilePath, storage: RemoteFileStorage)(
       implicit ec: ExecutionContext): Future[SharedFile] =
     storage.getSizeAndHash(path).map {
       case (size, hash) =>
-        new SharedFile(path, size, hash, None)
+        new SharedFile(path, size, hash)
     }
 
   val isLocal = (f: File) => f.canRead
+
+  private def getSourceToManagedPath(path: ManagedFilePath)(
+      implicit service: FileServiceComponent,
+      context: ActorRefFactory,
+      ec: ExecutionContext) =
+    if (service.storage.isDefined) {
+      service.storage.get.createSource(path)
+    } else {
+      val serviceactor = service.actor
+      implicit val timout = akka.util.Timeout(1441 minutes)
+      val ac = context.actorOf(
+        Props(new FileUserSource(path, serviceactor, isLocal))
+          .withDispatcher("fileuser-dispatcher"))
+
+      val f = (ac ? WaitingForPath)
+        .asInstanceOf[Future[Try[Source[ByteString, _]]]]
+
+      f onComplete {
+        case _ => ac ! PoisonPill
+      }
+
+      val f2 = f map (_ match {
+        case Success(r) => r
+        case Failure(e) =>
+          throw new RuntimeException("getSourceToFile failed. " + path, e)
+      })
+
+      Source.fromFuture(f2).flatMapConcat(x => x)
+    }
 
   def getSourceToFile(sf: SharedFile)(
       implicit service: FileServiceComponent,
       context: ActorRefFactory,
       ec: ExecutionContext): Source[ByteString, _] =
     sf.path match {
-      case path: RemoteFilePath => service.remote.createSource(path)
-      case path: ManagedFilePath =>
-        if (service.storage.isDefined) {
-          service.storage.get.createSource(path)
-        } else {
-          val serviceactor = service.actor
-          implicit val timout = akka.util.Timeout(1441 minutes)
-          val ac = context.actorOf(
-            Props(
-              new FileUserSource(path,
-                                 sf.byteSize,
-                                 sf.hash,
-                                 serviceactor,
-                                 isLocal))
-              .withDispatcher("fileuser-dispatcher"))
-
-          val f = (ac ? WaitingForPath)
-            .asInstanceOf[Future[Try[Source[ByteString, _]]]]
-
-          f onComplete {
-            case _ => ac ! PoisonPill
-          }
-
-          val f2 = f map (_ match {
-            case Success(r) => r
-            case Failure(e) =>
-              throw new RuntimeException("getSourceToFile failed. " + sf, e)
-          })
-
-          Source.fromFuture(f2).flatMapConcat(x => x)
-        }
+      case path: RemoteFilePath  => service.remote.createSource(path)
+      case path: ManagedFilePath => getSourceToManagedPath(path)
     }
 
   def getPathToFile(sf: SharedFile)(implicit service: FileServiceComponent,
@@ -165,6 +162,17 @@ private[tasks] object SharedFileHelper {
 
     }
 
+  def isAccessible(managed: ManagedFilePath)(
+      implicit service: FileServiceComponent): Future[Boolean] =
+    if (service.storage.isDefined) {
+      service.storage.get.contains(managed)
+    } else {
+      implicit val timout = akka.util.Timeout(1441 minutes)
+
+      (service.actor ? IsPathAccessible(managed))
+        .asInstanceOf[Future[Boolean]]
+    }
+
   def getUri(sf: SharedFile)(
       implicit service: FileServiceComponent): Future[Uri] =
     sf.path match {
@@ -193,19 +201,74 @@ private[tasks] object SharedFileHelper {
       }
     }
 
+  def saveHistory(sf: SharedFile, historyContext: HistoryContext)(
+      implicit prefix: FileServicePrefix,
+      ec: ExecutionContext,
+      service: FileServiceComponent,
+      context: ActorRefFactory,
+      config: TasksConfig,
+      mat: Materializer): Future[Unit] = {
+    historyContext match {
+      case NoHistory => Future.successful(())
+      case ctx: HistoryContextImpl =>
+        val history = History(sf, Some(ctx))
+        val serialized =
+          History.encoder.apply(history).noSpaces.getBytes("UTF-8")
+
+        implicit val hctx = NoHistory
+        createFromSource(Source.single(ByteString(serialized)),
+                         sf.name + ".history").map(_ => ())
+    }
+
+  }
+
+  def getHistory(sf: SharedFile)(implicit service: FileServiceComponent,
+                                 context: ActorRefFactory,
+                                 ec: ExecutionContext,
+                                 mat: Materializer): Future[History] = {
+    sf.path match {
+      case _: RemoteFilePath => Future.successful(History(sf, None))
+      case managed: ManagedFilePath =>
+        val historyManagedPath = ManagedFilePath(
+          managed.pathElements.dropRight(1) :+ managed.name + ".history")
+
+        def readFile =
+          getSourceToManagedPath(historyManagedPath)
+            .runFold(ByteString.empty)(_ ++ _)
+            .map(_.toArray)
+            .map { byteArray =>
+              val string = new String(byteArray)
+              io.circe.parser.decode[History](string) match {
+                case Left(e) =>
+                  throw e
+                case Right(history) => history
+              }
+            }
+
+        for {
+          fileIsPresent <- isAccessible(historyManagedPath)
+          history <- if (fileIsPresent) readFile
+          else Future.successful(History(sf, None))
+        } yield history
+
+    }
+  }
+
   def createFromFile(file: File, name: String, deleteFile: Boolean)(
       implicit prefix: FileServicePrefix,
       ec: ExecutionContext,
       service: FileServiceComponent,
       context: ActorRefFactory,
-      config: TasksConfig) =
-    if (service.storage.isDefined) {
+      config: TasksConfig,
+      historyContext: HistoryContext,
+      mat: Materializer) = {
+    val sharedFile = if (service.storage.isDefined) {
       val proposedPath = prefix.propose(name)
       service.storage.get.importFile(file, proposedPath).map { f =>
         if (deleteFile) {
           file.delete
         }
-        SharedFileHelper.create(f._1, f._2, f._4, proposedPath.history)
+        SharedFileHelper.create(f._1, f._2, f._4)
       }
     } else {
       val serviceactor = service.actor
@@ -225,6 +288,11 @@ private[tasks] object SharedFileHelper {
         .andThen { case _ => ac ! PoisonPill }
 
     }
+    for {
+      sf <- sharedFile
+      _ <- saveHistory(sf, historyContext)
+    } yield sf
+  }
 
   def createFromSource(source: Source[ByteString, _], name: String)(
       implicit prefix: FileServicePrefix,
@@ -232,11 +300,12 @@ private[tasks] object SharedFileHelper {
       service: FileServiceComponent,
       context: ActorRefFactory,
       mat: Materializer,
-      config: TasksConfig) =
-    if (service.storage.isDefined) {
+      config: TasksConfig,
+      historyContext: HistoryContext) = {
+    val sharedFile = if (service.storage.isDefined) {
       val proposedPath = prefix.propose(name)
       service.storage.get.importSource(source, proposedPath).map { x =>
-        SharedFileHelper.create(x._1, x._2, x._3, proposedPath.history)
+        SharedFileHelper.create(x._1, x._2, x._3)
       }
     } else {
 
@@ -254,13 +323,20 @@ private[tasks] object SharedFileHelper {
         .andThen { case _ => ac ! PoisonPill }
 
     }
+    for {
+      sf <- sharedFile
+      _ <- saveHistory(sf, historyContext)
+    } yield sf
+  }
 
   def createFromFolder(callback: File => List[File])(
       implicit prefix: FileServicePrefix,
       ec: ExecutionContext,
       service: FileServiceComponent,
       context: ActorRefFactory,
-      config: TasksConfig) =
+      config: TasksConfig,
+      historyContext: HistoryContext,
+      mat: Materializer) =
     if (service.storage.isDefined) {
 
       val directory = service.storage.get

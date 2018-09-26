@@ -45,13 +45,11 @@ case class FileServiceComponent(actor: ActorRef,
                                 storage: Option[ManagedFileStorage],
                                 remote: RemoteFileStorage)
 
-case class FileServicePrefix(list: Vector[String], history: Option[History]) {
-  def append(n: String) = FileServicePrefix(list :+ n, history)
-  def append(ns: Seq[String]) = FileServicePrefix(list ++ ns, history)
+case class FileServicePrefix(list: Vector[String]) {
+  def append(n: String) = FileServicePrefix(list :+ n)
+  def append(ns: Seq[String]) = FileServicePrefix(list ++ ns)
   private[fileservice] def propose(name: String) =
-    ProposedManagedFilePath(list :+ name, history)
-  private[tasks] def withHistory(history: History) =
-    copy(history = Some(history))
+    ProposedManagedFilePath(list :+ name)
 }
 object FileServicePrefix {
   implicit val encoder: Encoder[FileServicePrefix] =
@@ -60,8 +58,7 @@ object FileServicePrefix {
     deriveDecoder[FileServicePrefix]
 }
 
-case class ProposedManagedFilePath(list: Vector[String],
-                                   history: Option[History]) {
+case class ProposedManagedFilePath(list: Vector[String]) {
   def name = list.last
   def toManaged = ManagedFilePath(list)
 }
@@ -107,10 +104,9 @@ class FileService(
 
   private def create(length: Long,
                      hash: Int,
-                     path: ManagedFilePath,
-                     history: Option[History]): Future[SharedFile] = {
+                     path: ManagedFilePath): Future[SharedFile] = {
     Future {
-      ((SharedFileHelper.create(length, hash, path, history)))
+      ((SharedFileHelper.create(length, hash, path)))
     }(ec)
   }
 
@@ -124,7 +120,7 @@ class FileService(
             .importFile(file, proposedPath)
             .flatMap {
               case (length, hash, _, managedFilePath) =>
-                create(length, hash, managedFilePath, proposedPath.history)
+                create(length, hash, managedFilePath)
                   .recover {
                     case e =>
                       log.error(e,
@@ -199,7 +195,7 @@ class FileService(
           try {
             storage.importFile(file, proposedPath).flatMap {
               case (length, hash, _, managedFilePath) =>
-                create(length, hash, managedFilePath, proposedPath.history)
+                create(length, hash, managedFilePath)
                   .recover {
                     case e =>
                       log.error(e,
@@ -259,6 +255,8 @@ class FileService(
     case GetListOfFilesInStorage(regexp) => sender ! storage.list(regexp)
     case IsAccessible(managedPath, size, hash) =>
       sender ! storage.contains(managedPath, size, hash)
+    case IsPathAccessible(managedPath) =>
+      sender ! storage.contains(managedPath)
     case GetUri(managedPath) => sender ! storage.uri(managedPath)
     case Delete(managedPath) => storage.delete(managedPath).pipeTo(sender)
   }

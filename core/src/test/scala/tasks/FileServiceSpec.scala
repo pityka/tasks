@@ -83,7 +83,7 @@ class FileServiceSpec
 
   }
 
-  implicit val prefix = FileServicePrefix(Vector(), None)
+  implicit val prefix = FileServicePrefix(Vector())
 
   describe("fileservice new file folderstorage ") {
     it("add new file") {
@@ -105,6 +105,7 @@ class FileServiceSpec
           )))
       implicit val serviceimpl =
         FileServiceComponent(service, Some(fs), remoteStore)
+      implicit val historyContext = tasks.fileservice.NoHistory
       SharedFileHelper.createFromFile(input, "proba", false)
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
@@ -132,6 +133,7 @@ class FileServiceSpec
         FileServiceComponent(service, Some(fs), remoteStore)
       implicit val nlc =
         NodeLocalCache.start
+      implicit val historyContext = tasks.fileservice.NoHistory
       val t: SharedFile =
         Await.result(SharedFileHelper.createFromFile(input, "proba", false),
                      50 seconds)

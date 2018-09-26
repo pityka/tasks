@@ -52,8 +52,7 @@ object UntypedResult {
       resultWithSharedFiles.files.toSet ++ resultWithSharedFiles.productIterator
         .flatMap(member => files(member))
         .toSet
-    case file: SharedFile => Set(file)
-    case _                => Set()
+    case _ => Set()
   }
 
   def make[A](r: A)(implicit ser: Serializer[A]): UntypedResult =
@@ -161,7 +160,8 @@ private class Task(
           fileServicePrefix,
           auxExecutionContext,
           actorMaterializer,
-          tasksConfig
+          tasksConfig,
+          NoHistory
         ),
         akka.event.Logging(context.system.eventStream,
                            "usertasks." + fileServicePrefix.list.mkString(".")),

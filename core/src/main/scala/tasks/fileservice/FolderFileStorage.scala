@@ -120,6 +120,19 @@ class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)
       pass
     }
 
+  def contains(path: ManagedFilePath): Future[Boolean] =
+    Future.successful {
+      val f = assemblePath(path)
+      val canRead = f.canRead
+      val pass = canRead
+
+      if (!pass) {
+        logger.debug(s"$this does not contain $path due to: canRead:$canRead")
+      }
+
+      pass
+    }
+
   def createSource(path: ManagedFilePath): Source[ByteString, _] =
     FileIO.fromPath(assemblePath(path).toPath, chunkSize = 65536)
 
@@ -199,7 +212,6 @@ class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)
             .move(finalFile, assemblePath(managed, ".old.0"))
 
           copyFile(file, finalFile)
-          writeHistory(proposed.history, finalFile)
           (size, hash, finalFile, managed)
         }
 
@@ -208,14 +220,6 @@ class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)
         (size, hash, assemblePath(managed), managed)
       }
     })
-
-  private def writeHistory(history: Option[History], filePath: File): Unit =
-    history.foreach { history =>
-      val path =
-        new java.io.File(filePath.getParent,
-                         "." + filePath.getName + ".history")
-      writeBinaryToFile(path, history.toString.getBytes("UTF-8"))
-    }
 
   def uri(mp: ManagedFilePath) = {
     // throw new RuntimeException("URI not supported")
@@ -240,8 +244,7 @@ class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)
                            .map(_.toString)
                            .toVector),
                        l,
-                       h,
-                       None)
+                       h)
       }
     } catch {
       case x: Throwable => throw x

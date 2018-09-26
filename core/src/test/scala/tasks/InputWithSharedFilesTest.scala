@@ -33,7 +33,7 @@ import scala.concurrent.Future
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
 
-object InputWithSharedFilesTest extends TestHelpers {
+object InputWithSharedFilesTest extends TestHelpers with Matchers {
 
   val sideEffect = scala.collection.mutable.ArrayBuffer[String]()
 
@@ -46,7 +46,16 @@ object InputWithSharedFilesTest extends TestHelpers {
   val task2 = AsyncTask[SharedFile, Int]("sharedfileinput2", 1) {
     input => implicit computationEnvironment =>
       sideEffect += "execution of task 2"
-      Future(1)
+      for {
+        sf2 <- SharedFile(Source.single(ByteString("abcd")), "f1")
+        sf2History <- sf2.history
+        _ = {
+          println(sf2History.context.get.dependencies)
+          sf2History.context.get.dependencies.size shouldBe 1
+        }
+        r <- Future(1)
+      } yield r
+
   }
 
   def run = {
