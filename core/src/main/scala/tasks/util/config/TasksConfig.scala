@@ -29,7 +29,6 @@ package tasks.util.config
 
 import com.typesafe.config.Config
 import scala.collection.JavaConverters._
-import java.io.File
 
 class TasksConfig(val raw: Config) {
 
@@ -51,11 +50,6 @@ class TasksConfig(val raw: Config) {
   val verifySharedFileInCache = raw.getBoolean("tasks.verifySharedFileInCache")
 
   val disableRemoting = raw.getBoolean("tasks.disableRemoting")
-
-  val nonLocalFileSystems = raw
-    .getStringList("tasks.nonLocalFileSystems")
-    .asScala
-    .map(f => new java.io.File(f))
 
   val skipContentHashVerificationAfterCache =
     raw.getBoolean("tasks.skipContentHashVerificationAfterCache")
@@ -84,13 +78,6 @@ class TasksConfig(val raw: Config) {
 
   val storageURI =
     new java.net.URI(raw.getString("tasks.fileservice.storageURI"))
-
-  val fileServiceExtendedFolders = raw
-    .getStringList("tasks.fileservice.extendedFolders")
-    .asScala
-    .map(x => new File(x))
-    .toList
-    .filter(_.isDirectory)
 
   val fileServiceThreadPoolSize =
     raw.getInt("tasks.fileservice.threadPoolSize")

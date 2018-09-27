@@ -47,11 +47,10 @@ object FolderFileStorage {
 
 }
 
-class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)(
-    implicit
-    ec: ExecutionContext,
-    config: TasksConfig,
-    as: akka.actor.ActorSystem)
+class FolderFileStorage(val basePath: File)(implicit
+                                            ec: ExecutionContext,
+                                            config: TasksConfig,
+                                            as: akka.actor.ActorSystem)
     extends ManagedFileStorage {
 
   if (basePath.exists && !basePath.isDirectory)
@@ -64,12 +63,11 @@ class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)
   val logger = akka.event.Logging(as, getClass)
 
   override def toString =
-    s"FolderFileStorage(basePath=$basePath, extendedPaths=$extendedPaths)"
+    s"FolderFileStorage(basePath=$basePath)"
 
-  private val canonicalExtendedPaths = extendedPaths.map(_.getCanonicalPath)
   private val canonicalBasePath = basePath.getCanonicalPath
 
-  private def fileIsRelativeToBaseOrExtended(f: File): Boolean = {
+  private def fileIsRelativeToBase(f: File): Boolean = {
     val canonical = f.getCanonicalFile
 
     def getParents(f: File, p: List[File]): List[File] =
@@ -78,8 +76,7 @@ class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)
 
     val canonicalParents = getParents(canonical, Nil).map(_.getCanonicalPath)
 
-    (canonicalBasePath :: canonicalExtendedPaths).exists(path =>
-      canonicalParents.contains(path))
+    (canonicalBasePath :: Nil).exists(path => canonicalParents.contains(path))
 
   }
 
@@ -185,7 +182,7 @@ class FolderFileStorage(val basePath: File, val extendedPaths: List[File] = Nil)
       val hash = FolderFileStorage.getContentHash(file)
       val managed = proposed.toManaged
 
-      if (fileIsRelativeToBaseOrExtended(file)) (size, hash, file, managed)
+      if (fileIsRelativeToBase(file)) (size, hash, file, managed)
       else if (assemblePath(managed).canRead) {
         val finalFile = assemblePath(managed)
         if (com.google.common.io.Files.equal(finalFile, file))

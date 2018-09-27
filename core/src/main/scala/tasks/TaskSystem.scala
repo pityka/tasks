@@ -166,16 +166,14 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
             tasksystemlog.warning(
               s"Folder $storageFolder does not exists. Try to create it. ")
             storageFolder.mkdirs
-            val extendedFolder = config.fileServiceExtendedFolders
-            Some(new FolderFileStorage(storageFolder, extendedFolder))
+            Some(new FolderFileStorage(storageFolder))
           } else {
             tasksystemlog.warning(
               s"Folder $storageFolder does not exists. This is not a master node. Reverting to no managed storage.")
             None
           }
         } else {
-          val extendedFolder = config.fileServiceExtendedFolders
-          Some(new FolderFileStorage(storageFolder, extendedFolder))
+          Some(new FolderFileStorage(storageFolder))
         }
       }
     }
