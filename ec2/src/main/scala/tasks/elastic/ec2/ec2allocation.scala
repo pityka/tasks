@@ -161,6 +161,7 @@ class EC2CreateNode(
 
     val userdata = "#!/usr/bin/env bash\n" + Deployment.script(
       memory = selectedInstanceType._2.memory,
+      cpu = selectedInstanceType._2.cpu,
       elasticSupport = elasticSupport,
       masterAddress = masterAddress,
       download = new java.net.URL("http",

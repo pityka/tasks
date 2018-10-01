@@ -155,6 +155,7 @@ class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
         case (name, (host, _)) =>
           val script = Deployment.script(
             memory = requestSize.memory,
+            cpu = requestSize.cpu._2,
             elasticSupport = elasticSupport,
             masterAddress = masterAddress,
             download = new java.net.URL("http",

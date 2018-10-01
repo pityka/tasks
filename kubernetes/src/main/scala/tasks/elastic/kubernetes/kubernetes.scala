@@ -66,6 +66,7 @@ class K8SCreateNode(masterAddress: InetSocketAddress,
     : Try[(PendingJobId, CPUMemoryAvailable)] = {
     val script = Deployment.script(
       memory = requestSize.memory,
+      cpu = requestSize.cpu._2,
       elasticSupport = elasticSupport,
       masterAddress = masterAddress,
       download = new java.net.URL("http",
