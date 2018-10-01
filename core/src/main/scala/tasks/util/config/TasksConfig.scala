@@ -189,4 +189,7 @@ class TasksConfig(val raw: Config) {
 
   val allowDeletion = raw.getBoolean("tasks.fileservice.allowDeletion")
 
+  val folderFileStorageCompleteFileCheck =
+    raw.getBoolean("tasks.fileservice.folderFileStorageCompleteFileCheck")
+
 }

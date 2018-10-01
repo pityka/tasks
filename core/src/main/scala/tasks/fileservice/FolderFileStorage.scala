@@ -174,6 +174,13 @@ class FolderFileStorage(val basePath: File)(implicit
 
   }
 
+  private def checkContentEquality(file1: File, file2: File) =
+    if (config.folderFileStorageCompleteFileCheck)
+      com.google.common.io.Files.equal(file1, file2)
+    else
+      file1.length == file2.length && FolderFileStorage.getContentHash(file1) == FolderFileStorage
+        .getContentHash(file2)
+
   def importFile(file: File, proposed: ProposedManagedFilePath)
     : Future[(Long, Int, File, ManagedFilePath)] =
     Future.successful({
@@ -187,7 +194,7 @@ class FolderFileStorage(val basePath: File)(implicit
         val finalFile = assemblePath(managed)
         logger.debug(
           s"Found a file already in storage with the same name ($finalFile). Check for equality.")
-        if (com.google.common.io.Files.equal(finalFile, file))
+        if (checkContentEquality(finalFile, file))
           (size, hash, finalFile, managed)
         else {
           logger.debug(s"Equality failed. Importing file. $file to $finalFile")
