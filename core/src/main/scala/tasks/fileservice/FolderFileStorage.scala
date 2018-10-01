@@ -177,7 +177,7 @@ class FolderFileStorage(val basePath: File)(implicit
   def importFile(file: File, proposed: ProposedManagedFilePath)
     : Future[(Long, Int, File, ManagedFilePath)] =
     Future.successful({
-
+      logger.debug(s"Importing file $file under name $proposed")
       val size = file.length
       val hash = FolderFileStorage.getContentHash(file)
       val managed = proposed.toManaged
@@ -185,10 +185,12 @@ class FolderFileStorage(val basePath: File)(implicit
       if (fileIsRelativeToBase(file)) (size, hash, file, managed)
       else if (assemblePath(managed).canRead) {
         val finalFile = assemblePath(managed)
+        logger.debug(
+          s"Found a file already in storage with the same name ($finalFile). Check for equality.")
         if (com.google.common.io.Files.equal(finalFile, file))
           (size, hash, finalFile, managed)
         else {
-
+          logger.debug(s"Equality failed. Importing file. $file to $finalFile")
           def candidates(i: Int, past: List[File]): List[File] = {
             val candidate = assemblePath(managed, ".old." + i)
             if (candidate.canRead) candidates(i + 1, candidate :: past)
