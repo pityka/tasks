@@ -197,4 +197,8 @@ package object tasks {
     if (config.disableRemoting) new LocalConfigurationFromConfig
     else new MasterSlaveFromConfig
 
+  def appendToFilePrefix[T](elements: Seq[String])(
+      implicit ce: ComputationEnvironment): (ComputationEnvironment => T) => T =
+    ce.withFilePrefix[T](elements) _
+
 }
