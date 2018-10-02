@@ -86,10 +86,18 @@ class QueueUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
         } ~
         path("tasks-ui-frontend-fastopt.js") {
           Route.seal(getFromResource("tasks-ui-frontend-fastopt.js"))
-
         } ~
         path("tasks-ui-frontend-fullopt.js") {
           Route.seal(getFromResource("tasks-ui-frontend-fullopt.js"))
+        } ~
+        path("jquery@3.3.1.min.js") {
+          Route.seal(getFromResource("public/jquery.min.js"))
+        } ~
+        path("semantic-ui@2.3.3.min.js") {
+          Route.seal(getFromResource("public/semantic.min.js"))
+        } ~
+        path("semantic-ui@2.3.3.min.css") {
+          Route.seal(getFromResource("public/semantic.min.css"))
         }
 
     }
