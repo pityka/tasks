@@ -9,7 +9,7 @@ class StaticMessageSerializer(system: ExtendedActorSystem) extends Serializer {
 
   implicit val as = system
 
-  val log = akka.event.Logging(system.eventStream, "StaticMessageSerializer")
+  val log = akka.event.Logging(system.eventStream, "tasks.wire.StaticMessageSerializer")
 
   override def identifier: Int = 999
 
