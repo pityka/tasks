@@ -41,7 +41,7 @@ class ScheduleTaskSerializer(system: ExtendedActorSystem) extends Serializer {
 
   implicit val as = system
 
-  val log = akka.event.Logging(system.eventStream, "ScheduleTaskSerializer")
+  val log = akka.event.Logging(system.eventStream, "tasks.wire.ScheduleTaskSerializer")
 
   override def identifier: Int = 1000
 
