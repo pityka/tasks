@@ -1,7 +1,8 @@
 package tasks
 import tasks.queue._
+import com.typesafe.scalalogging.StrictLogging
 
-package object circesupport {
+package object circesupport extends StrictLogging {
   import io.circe.{Encoder, Decoder}
   implicit def serializer[A](implicit enc: Encoder[A]): Serializer[A] =
     new Serializer[A] {
@@ -10,7 +11,12 @@ package object circesupport {
   implicit def deserielizer[A](implicit dec: Decoder[A]): Deserializer[A] =
     new Deserializer[A] {
       def apply(b: Array[Byte]) =
-        io.circe.parser.decode[A](new String(b)).right.get
+        io.circe.parser.decode[A](new String(b)) match {
+          case Left(error) =>
+            logger.error(error.toString)
+            throw error
+          case Right(ok) => ok
+        }
     }
 
   implicit val sharedFileDecoder =

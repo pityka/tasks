@@ -107,6 +107,7 @@ lazy val core = project
       "io.github.pityka" %% "s3-stream-fork" % "0.0.3",
       "io.github.pityka" %% "akka-http-unboundedqueue" % "1.2.0",
       "org.scalatest" %% "scalatest" % "3.0.0" % "test",
+      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.0",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value
     )
   )
@@ -140,8 +141,7 @@ lazy val kubernetes = project
   .settings(
     name := "tasks-kubernetes",
     libraryDependencies ++= Seq(
-      "io.fabric8" % "kubernetes-client" % "4.0.4",
-      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.0"
+      "io.fabric8" % "kubernetes-client" % "4.0.4"
     )
   )
   .dependsOn(core % "compile->compile;test->test")
