@@ -14,7 +14,7 @@ trait FlatjoinSupport {
       while (ba.hasRemaining) {
         ba.put(bb.get)
       }
-      implicitly[Deserializer[T]].apply(ba.array)
+      implicitly[Deserializer[T]].apply(ba.array).right.get
     }
   }
 }

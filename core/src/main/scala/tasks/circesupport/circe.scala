@@ -11,12 +11,7 @@ package object circesupport extends StrictLogging {
   implicit def deserielizer[A](implicit dec: Decoder[A]): Deserializer[A] =
     new Deserializer[A] {
       def apply(b: Array[Byte]) =
-        io.circe.parser.decode[A](new String(b)) match {
-          case Left(error) =>
-            logger.error(error.toString)
-            throw error
-          case Right(ok) => ok
-        }
+        io.circe.parser.decode[A](new String(b)).left.map(_.toString)
     }
 
   implicit val sharedFileDecoder =

@@ -80,7 +80,7 @@ class ProxyTask[Input, Output](
   private def notifyListenersOnFailure(cause: Throwable): Unit =
     listeners.foreach(_ ! akka.actor.Status.Failure(cause))
 
-  private def startTask(): Unit =
+  private def startTask(cache: Boolean): Unit =
     if (result.isEmpty) {
 
       val persisted: Option[Input] = input match {
@@ -97,7 +97,8 @@ class ProxyTask[Input, Output](
         queueActor,
         fileServiceComponent.actor,
         fileServicePrefix,
-        cacheActor
+        cacheActor,
+        cache
       )
 
       log.debug("proxy submitting ScheduleTask object to queue.")
@@ -107,7 +108,7 @@ class ProxyTask[Input, Output](
 
   override def preStart() = {
     log.debug("ProxyTask prestart.")
-    startTask
+    startTask(cache = true)
 
   }
 
@@ -117,15 +118,21 @@ class ProxyTask[Input, Output](
 
   def receive = {
     case MessageFromTask(untypedOutput) =>
-      val output: Output = reader(Base64DataHelpers.toBytes(untypedOutput.data))
-      log.debug("MessageFromTask received from: {}, {}, {},{}",
-                sender,
-                untypedOutput,
-                result,
-                output)
-      if (result.isEmpty) {
-        result = Some(output)
-        distributeResult()
+      reader(Base64DataHelpers.toBytes(untypedOutput.data)) match {
+        case Right(output) =>
+          log.debug("MessageFromTask received from: {}, {}, {},{}",
+                    sender,
+                    untypedOutput,
+                    result,
+                    output)
+          if (result.isEmpty) {
+            result = Some(output)
+            distributeResult()
+          }
+        case Left(error) =>
+          log.error(
+            s"MessageFromTask received from and failed to decode: $sender, $untypedOutput, $result, $error. Task is rescheduled without caching.")
+          startTask(cache = false)
       }
 
     case GetBackResult =>

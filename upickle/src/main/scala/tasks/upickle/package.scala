@@ -10,7 +10,12 @@ package object upicklesupport {
     }
   implicit def deser[A](implicit dec: Reader[A]): Deserializer[A] =
     new Deserializer[A] {
-      def apply(b: Array[Byte]) = upickle.default.read[A](new String(b))
+      def apply(b: Array[Byte]) =
+        scala.util
+          .Try(upickle.default.read[A](new String(b)))
+          .toEither
+          .left
+          .map(_.toString)
     }
 
   implicit val instantRW =

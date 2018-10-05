@@ -55,7 +55,7 @@ object Macros {
       private[this] val c = $comp
       def apply(j:tasks.queue.Base64Data) =
           (ce:tasks.queue.ComputationEnvironment) => {
-            val deserializedInputData = r(tasks.queue.Base64DataHelpers.toBytes(j))
+            val deserializedInputData = r(tasks.queue.Base64DataHelpers.toBytes(j)).right.get
             val ceWithUpdatedHistory = tasks.queue.updateHistoryOfComputationEnvironment(ce,deserializedInputData, $taskID, $taskVersion)(ce.components)
             ceWithUpdatedHistory.flatMap{ ceWithUpdatedHistory =>
             (c(deserializedInputData)(ceWithUpdatedHistory)).map(x => tasks.queue.UntypedResult.make(x)(w))(ce.executionContext)

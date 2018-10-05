@@ -5,5 +5,5 @@ trait Serializer[A] {
 }
 
 trait Deserializer[A] {
-  def apply(b: Array[Byte]): A
+  def apply(b: Array[Byte]): Either[String, A]
 }

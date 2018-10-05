@@ -160,8 +160,15 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
         context.become(
           running(state.update(ProxyAddedToScheduledMessage(sch, List(proxy)))))
       } else {
-        sch.cacheActor ! CheckResult(sch, proxy)
-        context.become(running(state.update(CacheQueried(sch))))
+        if (sch.tryCache) {
+          sch.cacheActor ! CheckResult(sch, proxy)
+          context.become(running(state.update(CacheQueried(sch))))
+        } else {
+          log.debug(
+            "ScheduleTask should not be checked in the cache. Enqueue. ")
+          context.become(running(state.update(Enqueued(sch, List(proxy)))))
+        }
+
       }
 
     case AnswerFromCache(message, proxy, sch) =>

@@ -28,7 +28,7 @@ trait Framing { self: Constants =>
           .parallelize[ByteString, (String, ByteString)](parallelism,
                                                          ElemBufferSize) {
             line =>
-              val t = decoder.apply(line.toArray)
+              val t = decoder.apply(line.toArray).right.get
               val k = stringKey.key(t)
               List((k, line))
           })

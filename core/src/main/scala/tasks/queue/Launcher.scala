@@ -63,7 +63,8 @@ case class ScheduleTask(
     queueActor: ActorRef,
     fileServiceActor: ActorRef,
     fileServicePrefix: FileServicePrefix,
-    cacheActor: ActorRef
+    cacheActor: ActorRef,
+    tryCache: Boolean
 )
 
 object ScheduleTask {

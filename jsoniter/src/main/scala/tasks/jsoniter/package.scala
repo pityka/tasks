@@ -12,7 +12,8 @@ package object jsonitersupport {
     }
   implicit def deser[A: JsonValueCodec]: Deserializer[A] =
     new Deserializer[A] {
-      def apply(b: Array[Byte]) = readFromArray[A](b)
+      def apply(b: Array[Byte]) =
+        scala.util.Try(readFromArray[A](b)).toEither.left.map(_.toString)
     }
 
   implicit val mPathCodec =

@@ -14,7 +14,8 @@ case class EValue[T](data: SharedFile) extends ResultWithSharedFiles(data) {
           tsc: TaskSystemComponents): Future[T] =
     data.source
       .runFold(ByteString())(_ ++ _)(tsc.actorMaterializer)
-      .map(bs => decoder(bs.toArray))(tsc.actorMaterializer.executionContext)
+      .map(bs => decoder(bs.toArray).right.get)(
+        tsc.actorMaterializer.executionContext)
 
   def source(implicit decoder: Deserializer[T],
              tsc: TaskSystemComponents): Source[T, _] =

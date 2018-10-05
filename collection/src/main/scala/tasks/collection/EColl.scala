@@ -28,7 +28,8 @@ case class EColl[T](partitions: List[SharedFile], length: Long)
     val decoderFlow =
       AkkaStreamComponents
         .parallelize[ByteString, T](parallelism, EColl.ElemBufferSize)(line =>
-          List(decoder(line.toArray)))(tsc.actorMaterializer.executionContext)
+          List(decoder(line.toArray).right.get))(
+          tsc.actorMaterializer.executionContext)
 
     Source(partitions)
       .flatMapConcat(
@@ -42,7 +43,7 @@ case class EColl[T](partitions: List[SharedFile], length: Long)
                                 tsc: TaskSystemComponents): Source[T, _] =
     partitions(i).source
       .via(EColl.decodeFrame)
-      .map(line => decoder.apply(line.toArray))
+      .map(line => decoder.apply(line.toArray).right.get)
 
 }
 
