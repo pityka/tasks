@@ -50,9 +50,7 @@ object HeartBeatActor {
       config: TasksConfig) =
     AS.actorOf(
       Props(new HeartBeatActor(target, signal, listener))
-        .withDispatcher("heartbeat"),
-      "heartbeatOf" + target.path.address.toString
-        .replace("://", "___") + target.path.name
+        .withDispatcher("heartbeat")
     )
 }
 
