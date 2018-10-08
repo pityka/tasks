@@ -292,7 +292,9 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
   val elasticSupportFactory =
     if (hostConfig.isApp || hostConfig.isWorker) {
 
-      val uiComponent = uiBootstrap.map(_.startAppUI)
+      val uiComponent = if (hostConfig.isApp) {
+        Some(uiBootstrap.map(_.startAppUI))
+      } else None
 
       val codeAddress =
         if (hostConfig.isApp)
@@ -311,7 +313,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
             resource = CPUMemoryAvailable(cpu = hostConfig.availableCPU,
                                           memory = hostConfig.availableMemory),
             codeAddress = codeAddress,
-            eventListener = uiComponent.map(_.nodeRegistryEventListener)
+            eventListener =
+              uiComponent.flatMap(_.map(_.nodeRegistryEventListener))
         ))
     } else None
 
