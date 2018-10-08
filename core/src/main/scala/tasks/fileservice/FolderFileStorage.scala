@@ -204,8 +204,15 @@ class FolderFileStorage(val basePath: File)(implicit
             else past
           }
 
-          candidates(0, Nil)
-            .map(f => (f.getName.drop(managed.name.size).drop(5).toInt + 1, f))
+          def parseVersion(f: File): Int =
+            f.getName.split("\\.").last.toInt
+
+          val oldFiles = candidates(0, Nil)
+
+          logger.debug(s"Moving $oldFiles away.")
+
+          oldFiles
+            .map(f => (parseVersion(f) + 1, f))
             .sortBy(_._1)
             .reverse
             .foreach {
