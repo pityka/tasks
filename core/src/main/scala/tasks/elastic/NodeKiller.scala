@@ -43,6 +43,7 @@ class NodeKiller(shutdownNode: ShutdownNode,
   private case object TargetStopped
 
   private var scheduler: Cancellable = null
+  private var heartBeat: ActorRef = null
 
   override def preStart: Unit = {
     log.debug(
@@ -57,12 +58,20 @@ class NodeKiller(shutdownNode: ShutdownNode,
       message = MeasureTime
     )
 
-    HeartBeatActor.watch(targetLauncherActor.actor, TargetStopped, self)
+    heartBeat =
+      HeartBeatActor.watch(targetLauncherActor.actor, TargetStopped, self)
 
   }
 
-  override def postStop {
-    scheduler.cancel
+  override def postStop: Unit = {
+    if (scheduler != null) {
+      scheduler.cancel
+    }
+
+    if (heartBeat != null) {
+      heartBeat ! PoisonPill
+    }
+
     log.info("NodeKiller stopped.")
   }
 
