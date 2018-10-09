@@ -105,8 +105,9 @@ class FolderFileStorage(val basePath: File)(implicit
       val canRead = f.canRead
       val sizeOnDiskNow = f.length
       val sizeMatch = sizeOnDiskNow === size
-      val contentMatch = (config.skipContentHashVerificationAfterCache || FolderFileStorage
-        .getContentHash(f) === hash)
+      def contentMatch =
+        (config.skipContentHashVerificationAfterCache || (canRead && FolderFileStorage
+          .getContentHash(f) === hash))
       val pass = canRead && (size < 0 || (sizeMatch && contentMatch))
 
       if (!pass) {
