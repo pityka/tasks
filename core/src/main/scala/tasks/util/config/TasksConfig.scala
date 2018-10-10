@@ -125,7 +125,7 @@ class TasksConfig(val raw: Config) {
   val keyName = raw.getString("tasks.elastic.aws.keyName")
 
   val additionalJavaCommandline =
-    raw.getString("tasks.elastic.javaCommandline")
+    raw.getString("tasks.elastic.javaCommandLine")
 
   val iamRole = {
     val s = raw.getString("tasks.elastic.aws.iamRole")
