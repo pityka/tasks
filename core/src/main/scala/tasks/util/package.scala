@@ -205,45 +205,13 @@ package object util extends StrictLogging {
     * Execute command with user function to process each line of output.
     *
     * Based on from http://www.jroller.com/thebugslayer/entry/executing_external_system_commands_in
-    * Creates 3 new threads: one for the stdout, one for the stderror, and one waits for the exit code.
+    * Creates 2 new threads: one for the stdout, one for the stderror.
     * @param pb Description of the executable process
-    * @param atMost Maximum time to wait for the process to complete. Default infinite.
     * @return Exit code of the process.
     */
-  def exec(pb: ProcessBuilder,
-           atMost: Duration = Duration.Inf)(stdOutFunc: String => Unit = {
-    x: String =>
-    })(implicit stdErrFunc: String => Unit = (x: String) => ()): Int = {
-
-    import java.util.concurrent.Executors
-
-    val executorService = Executors.newSingleThreadExecutor
-
-    implicit val ec = ExecutionContext.fromExecutorService(executorService)
-
-    val process = pb.run(ProcessLogger(stdOutFunc, stdErrFunc))
-
-    val hook = try {
-      Some(scala.sys.addShutdownHook { process.destroy() })
-    } catch {
-      case e: Throwable =>
-        Try(process.destroy)
-        Try(executorService.shutdownNow)
-        logger.warn(
-          s"Can't add shutdown hook. Swallowing exception and skip adding hook. ${e.getMessage}")
-        None
-    }
-
-    try {
-      val f = Future { process.exitValue }
-      Await.result(f, atMost = atMost)
-    } finally {
-      Try(process.destroy)
-      Try(executorService.shutdownNow)
-      Try(hook.foreach(_.remove))
-
-    }
-  }
+  def exec(pb: ProcessBuilder)(stdOutFunc: String => Unit = { x: String =>
+    })(implicit stdErrFunc: String => Unit = (x: String) => ()): Int =
+    pb.run(ProcessLogger(stdOutFunc, stdErrFunc)).exitValue
 
   /**
     * Execute command. Returns stdout and stderr as strings, and true if it was successful.
@@ -256,13 +224,12 @@ package object util extends StrictLogging {
     * @return (stdout,stderr,success) triples
     */
   def execGetStreamsAndCode(pb: ProcessBuilder,
-                            unsuccessfulOnErrorStream: Boolean = true,
-                            atMost: Duration = Duration.Inf)
+                            unsuccessfulOnErrorStream: Boolean = true)
     : (List[String], List[String], Boolean) = {
     var ls: List[String] = Nil
     var lse: List[String] = Nil
     var boolean = true
-    val exitvalue = exec(pb, atMost) { ln =>
+    val exitvalue = exec(pb) { ln =>
       ls = ln :: ls
     } { ln =>
       if (unsuccessfulOnErrorStream) { boolean = false }; lse = ln :: lse

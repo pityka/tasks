@@ -37,7 +37,7 @@ import tasks.util.config._
 object SHShutdown extends ShutdownNode {
 
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
-    execGetStreamsAndCode(s"kill ${nodeName.value}")
+    s"kill ${nodeName.value}".!
   }
 
   def shutdownPendingNode(nodeName: PendingJobId): Unit = ()
