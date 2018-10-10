@@ -229,7 +229,8 @@ package object util extends StrictLogging {
       case e: Throwable =>
         Try(process.destroy)
         Try(executorService.shutdownNow)
-        logger.warn(s"Can't add shutdown hook. Swallowing exception and skip adding hook. ${e.getMessage}")
+        logger.warn(
+          s"Can't add shutdown hook. Swallowing exception and skip adding hook. ${e.getMessage}")
         None
     }
 
