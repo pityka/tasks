@@ -42,8 +42,9 @@ import scala.concurrent._
 import scala.concurrent.duration._
 import scala.util._
 import tasks.util.config._
+import com.typesafe.scalalogging.StrictLogging
 
-package object util {
+package object util extends StrictLogging {
 
   def base64(b: Array[Byte]): String =
     java.util.Base64.getEncoder.encodeToString(b)
@@ -223,13 +224,13 @@ package object util {
     val process = pb.run(ProcessLogger(stdOutFunc, stdErrFunc))
 
     val hook = try {
-      scala.sys.addShutdownHook { process.destroy() }
+      Some(scala.sys.addShutdownHook { process.destroy() })
     } catch {
-      case x: Throwable => {
+      case e: Throwable =>
         Try(process.destroy)
         Try(executorService.shutdownNow)
-        throw x
-      }
+        logger.warn(s"Can't add shutdown hook. Swallowing exception and skip adding hook. ${e.getMessage}")
+        None
     }
 
     try {
@@ -238,7 +239,7 @@ package object util {
     } finally {
       Try(process.destroy)
       Try(executorService.shutdownNow)
-      Try(hook.remove)
+      Try(hook.foreach(_.remove))
 
     }
   }
