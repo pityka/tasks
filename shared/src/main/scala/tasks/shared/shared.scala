@@ -28,27 +28,9 @@ package tasks.shared
 import io.circe._
 import io.circe.generic.semiauto._
 
-sealed trait ResourceRequest extends Serializable
 
-sealed trait ResourceAllocated[T <: ResourceRequest] extends Serializable
-
-sealed trait ResourceAvailable[T <: ResourceRequest, A <: ResourceAllocated[T]] {
-  def canFulfillRequest(r: T): Boolean
-
-  def substract(r: T): ResourceAvailable[T, A]
-
-  def substract(r: A): ResourceAvailable[T, A]
-
-  def addBack(r: A): ResourceAvailable[T, A]
-
-  def maximum(r: T): A
-
-  def empty: Boolean
-
-}
 
 case class CPUMemoryRequest(cpu: (Int, Int), memory: Int)
-    extends ResourceRequest
 
 object CPUMemoryRequest {
 
@@ -62,7 +44,6 @@ object CPUMemoryRequest {
 }
 
 case class CPUMemoryAllocated(cpu: Int, memory: Int)
-    extends ResourceAllocated[CPUMemoryRequest]
 
 object CPUMemoryAllocated {
   implicit val decoder: Decoder[CPUMemoryAllocated] =
@@ -71,8 +52,7 @@ object CPUMemoryAllocated {
     deriveEncoder[CPUMemoryAllocated]
 }
 
-case class CPUMemoryAvailable(cpu: Int, memory: Int)
-    extends ResourceAvailable[CPUMemoryRequest, CPUMemoryAllocated] {
+case class CPUMemoryAvailable(cpu: Int, memory: Int) {
 
   def canFulfillRequest(r: CPUMemoryRequest) =
     cpu >= r.cpu._1 && memory >= r.memory
@@ -108,7 +88,7 @@ object CPUMemoryAvailable {
 
 case class VersionedCPUMemoryRequest(codeVersion: CodeVersion,
                                      cpuMemoryRequest: CPUMemoryRequest)
-    extends ResourceRequest {
+     {
   def cpu = cpuMemoryRequest.cpu
   def memory = cpuMemoryRequest.memory
 }
@@ -127,7 +107,7 @@ object VersionedCPUMemoryRequest {
 
 case class VersionedCPUMemoryAllocated(codeVersion: CodeVersion,
                                        cpuMemoryAllocated: CPUMemoryAllocated)
-    extends ResourceAllocated[VersionedCPUMemoryRequest] {
+    {
   def cpu = cpuMemoryAllocated.cpu
   def memory = cpuMemoryAllocated.memory
 }
@@ -141,8 +121,7 @@ object VersionedCPUMemoryAllocated {
 
 case class VersionedCPUMemoryAvailable(codeVersion: CodeVersion,
                                        cpuMemoryAvailable: CPUMemoryAvailable)
-    extends ResourceAvailable[VersionedCPUMemoryRequest,
-                              VersionedCPUMemoryAllocated] {
+     {
   def canFulfillRequest(r: VersionedCPUMemoryRequest) =
     r.codeVersion == codeVersion && cpuMemoryAvailable.canFulfillRequest(
       r.cpuMemoryRequest)
