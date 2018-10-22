@@ -28,6 +28,6 @@ package tasks.shared.monitor
 import tasks.shared._
 
 @SerialVersionUID(1L)
-case class QueueStat(queued: List[(String, VersionedCPUMemoryRequest)],
-                     running: List[(String, VersionedCPUMemoryAllocated)])
+case class QueueStat(queued: List[(String, VersionedResourceRequest)],
+                     running: List[(String, VersionedResourceAllocated)])
     extends Serializable

@@ -37,7 +37,7 @@ private[tasks] case class TaskFailedMessageToProxy(sch: ScheduleTask,
                                                    cause: Throwable)
     extends StaticMessage
 
-private[tasks] case class AskForWork(resources: VersionedCPUMemoryAvailable)
+private[tasks] case class AskForWork(resources: VersionedResourceAvailable)
     extends StaticMessage
 
 case object HowLoadedAreYou extends StaticMessage
@@ -59,7 +59,7 @@ case class MessageFromTask(result: UntypedResult) extends StaticMessage
 
 case object SaveDone extends StaticMessage
 
-private[tasks] case class Ack(allocated: VersionedCPUMemoryAllocated)
+private[tasks] case class Ack(allocated: VersionedResourceAllocated)
     extends StaticMessage
 
 private[tasks] case class RegisterForNotification(actor: ActorRef)

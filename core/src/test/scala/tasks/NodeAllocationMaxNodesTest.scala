@@ -60,9 +60,9 @@ object NodeAllocationMaxNodesTest extends TestHelpers {
     withTaskSystem(testConfig2) { implicit ts =>
       import scala.concurrent.ExecutionContext.Implicits.global
 
-      val f1 = testTask(Input(1))(CPUMemoryRequest(1, 500))
-      val f2 = testTask(Input(2))(CPUMemoryRequest(1, 500))
-      val f3 = testTask(Input(3))(CPUMemoryRequest(1, 500))
+      val f1 = testTask(Input(1))(ResourceRequest(1, 500))
+      val f2 = testTask(Input(2))(ResourceRequest(1, 500))
+      val f3 = testTask(Input(3))(ResourceRequest(1, 500))
       val future = for {
         t1 <- f1
         t2 <- f2

@@ -64,7 +64,7 @@ object SharedFoldersTest extends TestHelpers {
         ConfigFactory.parseString(
           s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}"
         ))) { implicit ts =>
-      (await(increment(Input(0))(CPUMemoryRequest(1, 500))))
+      (await(increment(Input(0))(ResourceRequest(1, 500))))
 
     }
   }

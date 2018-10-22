@@ -58,11 +58,11 @@ object InputWithHasPersistentTest extends TestHelpers {
 
       val future = for {
         t1 <- task(InputWithHasPersistent(Some(1), Some(1)))(
-          CPUMemoryRequest(1, 500))
+          ResourceRequest(1, 500))
         t2 <- task(InputWithHasPersistent(Some(2), Some(1)))(
-          CPUMemoryRequest(1, 500))
+          ResourceRequest(1, 500))
         t3 <- task(InputWithHasPersistent(Some(2), Some(2)))(
-          CPUMemoryRequest(1, 500))
+          ResourceRequest(1, 500))
       } yield t1 + t2 + t3
 
       await(future)

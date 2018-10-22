@@ -32,7 +32,7 @@ import akka.ui._
 import akka.actor._
 import akka.stream._
 import akka.stream.scaladsl._
-import tasks.shared.CPUMemoryAvailable
+import tasks.shared.ResourceAvailable
 
 class AppUI(container: Node) {
 
@@ -44,7 +44,7 @@ class AppUI(container: Node) {
   val TableHeader = tr(th("ID"), th("CPU"), th("RAM"))
 
   def makeTable(header: String,
-                project: UIAppState => Seq[(UIJobId, CPUMemoryAvailable)]) = {
+                project: UIAppState => Seq[(UIJobId, ResourceAvailable)]) = {
     val body = tbody().render
     val bodySink = Flow[UIAppState]
       .map { uiState =>

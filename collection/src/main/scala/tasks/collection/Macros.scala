@@ -65,7 +65,7 @@ object Macros {
 
          releaseResources
          scala.concurrent.Future.sequence(0 until t.partitions.size map { i =>
-           subtask(i -> t)(CPUMemoryRequest(resourceAllocated.cpu,resourceAllocated.memory))
+           subtask(i -> t)(ResourceRequest(resourceAllocated.cpu,resourceAllocated.memory))
          }).map(_.reduce(_ ++ _)).flatMap(_.writeLength(t.basename+"."+$taskID))
         }
     """
@@ -93,7 +93,7 @@ object Macros {
 
          releaseResources
          scala.concurrent.Future.sequence(0 until t.partitions.size map { i =>
-           subtask(i -> t)(CPUMemoryRequest(resourceAllocated.cpu,resourceAllocated.memory))
+           subtask(i -> t)(ResourceRequest(resourceAllocated.cpu,resourceAllocated.memory))
          }).map(_.reduce(_ ++ _)).flatMap(_.writeLength(t.basename+"."+$taskID))
         }
     """
@@ -125,7 +125,7 @@ object Macros {
 
     releaseResources
     scala.concurrent.Future.sequence(0 until t.partitions.size map { i =>
-      subtask(i -> t)(CPUMemoryRequest(1,resourceAllocated.memory))
+      subtask(i -> t)(ResourceRequest(1,resourceAllocated.memory))
     }).map(_.reduce(_ ++ _)).flatMap(_.writeLength(t.basename+"."+$taskID))
    }
 
@@ -167,7 +167,7 @@ object Macros {
 
     releaseResources
     scala.concurrent.Future.sequence(0 until t.partitions.size map { i =>
-      subtask((i,t,b))(CPUMemoryRequest(1,resourceAllocated.memory))
+      subtask((i,t,b))(ResourceRequest(1,resourceAllocated.memory))
     }).map(_.reduce(_ ++ _)).flatMap(_.writeLength(t.basename+"."+$taskID+"."+dataDependentName))
    }
 
@@ -275,7 +275,7 @@ object Macros {
 
     releaseResources
     scala.concurrent.Future.sequence(0 until t.partitions.size map { i =>
-      subtask((i,t,b))(CPUMemoryRequest(1,resourceAllocated.memory))
+      subtask((i,t,b))(ResourceRequest(1,resourceAllocated.memory))
     }).map(_.reduce(_ ++ _)).flatMap(_.writeLength(t.basename+"."+$taskID))
    }
 
@@ -304,7 +304,7 @@ object Macros {
 
     releaseResources
     scala.concurrent.Future.sequence(0 until t.partitions.size map { i =>
-      subtask(i -> t)(CPUMemoryRequest(resourceAllocated.cpu,resourceAllocated.memory))
+      subtask(i -> t)(ResourceRequest(resourceAllocated.cpu,resourceAllocated.memory))
     }).map(_.reduce(_ ++ _)).flatMap(_.writeLength(t.basename+"."+$taskID))
    }
     """
@@ -335,7 +335,7 @@ object Macros {
 
         releaseResources
         scala.concurrent.Future.sequence(0 until t.partitions.size map { i =>
-          subtask((i, t))(CPUMemoryRequest(1,resourceAllocated.memory))
+          subtask((i, t))(ResourceRequest(1,resourceAllocated.memory))
         }).flatMap{ partitions =>
           if (partitions.size == 1) scala.concurrent.Future.successful(partitions.head)
           else {
@@ -693,7 +693,7 @@ object Macros {
         val w = implicitly[tasks.queue.Serializer[$a]]
         val r = implicitly[tasks.queue.Deserializer[$a]]
         scala.concurrent.Future.sequence(0 until t.partitions.size map { i =>
-          subtask(i -> t)(CPUMemoryRequest(resourceAllocated.cpu,resourceAllocated.memory)).flatMap(_.get(r,ctx.components))
+          subtask(i -> t)(ResourceRequest(resourceAllocated.cpu,resourceAllocated.memory)).flatMap(_.get(r,ctx.components))
         }).map(_.reduce((x,y) => fun(x,y)))
         .flatMap( a => EValue.apply(a,$taskID+"."+t.basename)(w,ctx.components))
        }

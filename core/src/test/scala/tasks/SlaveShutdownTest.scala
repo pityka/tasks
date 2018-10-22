@@ -56,7 +56,7 @@ object SlaveShutdownTest extends TestHelpers {
 
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
-      val f1 = testTask(Input(1))(CPUMemoryRequest(1, 500))
+      val f1 = testTask(Input(1))(ResourceRequest(1, 500))
 
       await(f1)
 

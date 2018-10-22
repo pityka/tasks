@@ -56,7 +56,7 @@ class ProxyTask[Input, Output](
     input: Input,
     writer: Serializer[Input],
     reader: Deserializer[Output],
-    resourceConsumed: VersionedCPUMemoryRequest,
+    resourceConsumed: VersionedResourceRequest,
     queueActor: ActorRef,
     fileServiceComponent: FileServiceComponent,
     fileServicePrefix: FileServicePrefix,

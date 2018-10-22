@@ -84,11 +84,11 @@ class EC2CreateNode(
   }
 
   def requestOneNewJobFromJobScheduler(
-      requestSize: CPUMemoryRequest): Try[(PendingJobId, CPUMemoryAvailable)] =
+      requestSize: ResourceRequest): Try[(PendingJobId, ResourceAvailable)] =
     Try {
       val (requestid, instancetype) = requestSpotInstance
       val jobid = PendingJobId(requestid)
-      val size = CPUMemoryAvailable(
+      val size = ResourceAvailable(
         cpu = instancetype._2.cpu,
         memory = instancetype._2.memory
       )

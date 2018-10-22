@@ -63,10 +63,10 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
       import scala.concurrent.ExecutionContext.Implicits.global
 
       val future = for {
-        t11 <- task1(Input(1))(CPUMemoryRequest(1, 500))
-        t21 <- task2(t11)(CPUMemoryRequest(1, 500))
-        t12 <- task1(Input(2))(CPUMemoryRequest(1, 500))
-        t22 <- task2(t12)(CPUMemoryRequest(1, 500))
+        t11 <- task1(Input(1))(ResourceRequest(1, 500))
+        t21 <- task2(t11)(ResourceRequest(1, 500))
+        t12 <- task1(Input(2))(ResourceRequest(1, 500))
+        t22 <- task2(t12)(ResourceRequest(1, 500))
       } yield t21 + t22
 
       await(future)

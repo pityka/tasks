@@ -36,19 +36,19 @@ import tasks.util.config._
 object EC2Operations {
 
   val instanceTypes = List(
-    "m3.medium" -> CPUMemoryAvailable(1, 3750),
-    "c3.large" -> CPUMemoryAvailable(2, 3750),
-    "m3.xlarge" -> CPUMemoryAvailable(4, 7500),
-    "c3.xlarge" -> CPUMemoryAvailable(4, 7500),
-    "r3.large" -> CPUMemoryAvailable(2, 15000),
-    "m3.2xlarge" -> CPUMemoryAvailable(8, 15000),
-    "c3.2xlarge" -> CPUMemoryAvailable(8, 15000),
-    "r3.xlarge" -> CPUMemoryAvailable(4, 30000),
-    "c3.4xlarge" -> CPUMemoryAvailable(16, 30000),
-    "r3.2xlarge" -> CPUMemoryAvailable(8, 60000),
-    "c3.8xlarge" -> CPUMemoryAvailable(32, 60000),
-    "r3.4xlarge" -> CPUMemoryAvailable(16, 120000),
-    "r3.8xlarge" -> CPUMemoryAvailable(32, 240000)
+    "m3.medium" -> ResourceAvailable(1, 3750),
+    "c3.large" -> ResourceAvailable(2, 3750),
+    "m3.xlarge" -> ResourceAvailable(4, 7500),
+    "c3.xlarge" -> ResourceAvailable(4, 7500),
+    "r3.large" -> ResourceAvailable(2, 15000),
+    "m3.2xlarge" -> ResourceAvailable(8, 15000),
+    "c3.2xlarge" -> ResourceAvailable(8, 15000),
+    "r3.xlarge" -> ResourceAvailable(4, 30000),
+    "c3.4xlarge" -> ResourceAvailable(16, 30000),
+    "r3.2xlarge" -> ResourceAvailable(8, 60000),
+    "c3.8xlarge" -> ResourceAvailable(32, 60000),
+    "r3.4xlarge" -> ResourceAvailable(16, 120000),
+    "r3.8xlarge" -> ResourceAvailable(32, 240000)
   )
 
   def currentInstanceType =

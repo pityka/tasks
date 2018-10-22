@@ -59,9 +59,9 @@ object CacheWithoutFilePrefixTest extends TestHelpers {
       import scala.concurrent.ExecutionContext.Implicits.global
 
       val future = for {
-        t1 <- task(Input(1))(CPUMemoryRequest(1, 500))
-        t2 <- task(Input(1))(CPUMemoryRequest(1, 500))
-        t3 <- task(Input(2))(CPUMemoryRequest(1, 500))
+        t1 <- task(Input(1))(ResourceRequest(1, 500))
+        t2 <- task(Input(1))(ResourceRequest(1, 500))
+        t3 <- task(Input(2))(ResourceRequest(1, 500))
       } yield t1 + t2 + t3
 
       await(future)

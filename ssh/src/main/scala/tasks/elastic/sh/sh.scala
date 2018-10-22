@@ -49,8 +49,8 @@ class SHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
     elasticSupport: ElasticSupportFqcn)
     extends CreateNode {
 
-  def requestOneNewJobFromJobScheduler(requestSize: CPUMemoryRequest)
-    : Try[Tuple2[PendingJobId, CPUMemoryAvailable]] = {
+  def requestOneNewJobFromJobScheduler(requestSize: ResourceRequest)
+    : Try[Tuple2[PendingJobId, ResourceAvailable]] = {
     val script = Deployment.script(
       memory = requestSize.memory,
       cpu = requestSize.cpu._2,
@@ -71,7 +71,7 @@ class SHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
 
     Try(
       (PendingJobId(pid.toString),
-       CPUMemoryAvailable(cpu = requestSize.cpu._1,
+       ResourceAvailable(cpu = requestSize.cpu._1,
                           memory = requestSize.memory)))
 
   }

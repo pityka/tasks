@@ -30,48 +30,48 @@ import io.circe.generic.semiauto._
 
 
 
-case class CPUMemoryRequest(cpu: (Int, Int), memory: Int)
+case class ResourceRequest(cpu: (Int, Int), memory: Int)
 
-object CPUMemoryRequest {
+object ResourceRequest {
 
-  def apply(cpu: Int, memory: Int): CPUMemoryRequest =
-    CPUMemoryRequest((cpu, cpu), memory)
+  def apply(cpu: Int, memory: Int): ResourceRequest =
+    ResourceRequest((cpu, cpu), memory)
 
-  implicit val decoder: Decoder[CPUMemoryRequest] =
-    deriveDecoder[CPUMemoryRequest]
-  implicit val encoder: Encoder[CPUMemoryRequest] =
-    deriveEncoder[CPUMemoryRequest]
+  implicit val decoder: Decoder[ResourceRequest] =
+    deriveDecoder[ResourceRequest]
+  implicit val encoder: Encoder[ResourceRequest] =
+    deriveEncoder[ResourceRequest]
 }
 
-case class CPUMemoryAllocated(cpu: Int, memory: Int)
+case class ResourceAllocated(cpu: Int, memory: Int)
 
-object CPUMemoryAllocated {
-  implicit val decoder: Decoder[CPUMemoryAllocated] =
-    deriveDecoder[CPUMemoryAllocated]
-  implicit val encoder: Encoder[CPUMemoryAllocated] =
-    deriveEncoder[CPUMemoryAllocated]
+object ResourceAllocated {
+  implicit val decoder: Decoder[ResourceAllocated] =
+    deriveDecoder[ResourceAllocated]
+  implicit val encoder: Encoder[ResourceAllocated] =
+    deriveEncoder[ResourceAllocated]
 }
 
-case class CPUMemoryAvailable(cpu: Int, memory: Int) {
+case class ResourceAvailable(cpu: Int, memory: Int) {
 
-  def canFulfillRequest(r: CPUMemoryRequest) =
+  def canFulfillRequest(r: ResourceRequest) =
     cpu >= r.cpu._1 && memory >= r.memory
 
-  def substract(r: CPUMemoryRequest) = {
+  def substract(r: ResourceRequest) = {
     val remainingCPU = math.max((cpu - r.cpu._2), 0)
-    CPUMemoryAvailable(remainingCPU, memory - r.memory)
+    ResourceAvailable(remainingCPU, memory - r.memory)
   }
 
-  def substract(r: CPUMemoryAllocated) =
-    CPUMemoryAvailable(cpu - r.cpu, memory - r.memory)
+  def substract(r: ResourceAllocated) =
+    ResourceAvailable(cpu - r.cpu, memory - r.memory)
 
-  def addBack(r: CPUMemoryAllocated) =
-    CPUMemoryAvailable(cpu + r.cpu, memory + r.memory)
+  def addBack(r: ResourceAllocated) =
+    ResourceAvailable(cpu + r.cpu, memory + r.memory)
 
-  def maximum(r: CPUMemoryRequest) = {
+  def maximum(r: ResourceRequest) = {
     val allocatedMemory = math.min(r.memory, memory)
     val allocatedCPU = math.min(cpu, r.cpu._2)
-    CPUMemoryAllocated(allocatedCPU, allocatedMemory)
+    ResourceAllocated(allocatedCPU, allocatedMemory)
   }
 
   def empty = cpu == 0 || memory == 0
@@ -79,81 +79,81 @@ case class CPUMemoryAvailable(cpu: Int, memory: Int) {
 
 }
 
-object CPUMemoryAvailable {
-  implicit val decoder: Decoder[CPUMemoryAvailable] =
-    deriveDecoder[CPUMemoryAvailable]
-  implicit val encoder: Encoder[CPUMemoryAvailable] =
-    deriveEncoder[CPUMemoryAvailable]
+object ResourceAvailable {
+  implicit val decoder: Decoder[ResourceAvailable] =
+    deriveDecoder[ResourceAvailable]
+  implicit val encoder: Encoder[ResourceAvailable] =
+    deriveEncoder[ResourceAvailable]
 }
 
-case class VersionedCPUMemoryRequest(codeVersion: CodeVersion,
-                                     cpuMemoryRequest: CPUMemoryRequest)
+case class VersionedResourceRequest(codeVersion: CodeVersion,
+                                     cpuMemoryRequest: ResourceRequest)
      {
   def cpu = cpuMemoryRequest.cpu
   def memory = cpuMemoryRequest.memory
 }
 
-object VersionedCPUMemoryRequest {
+object VersionedResourceRequest {
   def apply(codeVersion: CodeVersion,
             cpu: Int,
-            memory: Int): VersionedCPUMemoryRequest =
-    VersionedCPUMemoryRequest(codeVersion, CPUMemoryRequest((cpu, cpu), memory))
+            memory: Int): VersionedResourceRequest =
+    VersionedResourceRequest(codeVersion, ResourceRequest((cpu, cpu), memory))
 
-  implicit val decoder: Decoder[VersionedCPUMemoryRequest] =
-    deriveDecoder[VersionedCPUMemoryRequest]
-  implicit val encoder: Encoder[VersionedCPUMemoryRequest] =
-    deriveEncoder[VersionedCPUMemoryRequest]
+  implicit val decoder: Decoder[VersionedResourceRequest] =
+    deriveDecoder[VersionedResourceRequest]
+  implicit val encoder: Encoder[VersionedResourceRequest] =
+    deriveEncoder[VersionedResourceRequest]
 }
 
-case class VersionedCPUMemoryAllocated(codeVersion: CodeVersion,
-                                       cpuMemoryAllocated: CPUMemoryAllocated)
+case class VersionedResourceAllocated(codeVersion: CodeVersion,
+                                       cpuMemoryAllocated: ResourceAllocated)
     {
   def cpu = cpuMemoryAllocated.cpu
   def memory = cpuMemoryAllocated.memory
 }
 
-object VersionedCPUMemoryAllocated {
-  implicit val decoder: Decoder[VersionedCPUMemoryAllocated] =
-    deriveDecoder[VersionedCPUMemoryAllocated]
-  implicit val encoder: Encoder[VersionedCPUMemoryAllocated] =
-    deriveEncoder[VersionedCPUMemoryAllocated]
+object VersionedResourceAllocated {
+  implicit val decoder: Decoder[VersionedResourceAllocated] =
+    deriveDecoder[VersionedResourceAllocated]
+  implicit val encoder: Encoder[VersionedResourceAllocated] =
+    deriveEncoder[VersionedResourceAllocated]
 }
 
-case class VersionedCPUMemoryAvailable(codeVersion: CodeVersion,
-                                       cpuMemoryAvailable: CPUMemoryAvailable)
+case class VersionedResourceAvailable(codeVersion: CodeVersion,
+                                       cpuMemoryAvailable: ResourceAvailable)
      {
-  def canFulfillRequest(r: VersionedCPUMemoryRequest) =
+  def canFulfillRequest(r: VersionedResourceRequest) =
     r.codeVersion == codeVersion && cpuMemoryAvailable.canFulfillRequest(
       r.cpuMemoryRequest)
 
-  def substract(r: VersionedCPUMemoryRequest) =
-    VersionedCPUMemoryAvailable(
+  def substract(r: VersionedResourceRequest) =
+    VersionedResourceAvailable(
       codeVersion,
       cpuMemoryAvailable.substract(r.cpuMemoryRequest))
 
-  def substract(r: VersionedCPUMemoryAllocated) =
-    VersionedCPUMemoryAvailable(
+  def substract(r: VersionedResourceAllocated) =
+    VersionedResourceAvailable(
       codeVersion,
       cpuMemoryAvailable.substract(r.cpuMemoryAllocated))
 
-  def addBack(r: VersionedCPUMemoryAllocated) =
-    VersionedCPUMemoryAvailable(
+  def addBack(r: VersionedResourceAllocated) =
+    VersionedResourceAvailable(
       codeVersion,
       cpuMemoryAvailable.addBack(r.cpuMemoryAllocated))
 
-  def maximum(r: VersionedCPUMemoryRequest) =
-    VersionedCPUMemoryAllocated(codeVersion,
+  def maximum(r: VersionedResourceRequest) =
+    VersionedResourceAllocated(codeVersion,
                                 cpuMemoryAvailable.maximum(r.cpuMemoryRequest))
 
   def empty = cpuMemoryAvailable.empty
 
 }
 
-object VersionedCPUMemoryAvailable {
-  implicit val decoder: Decoder[VersionedCPUMemoryAvailable] =
-    deriveDecoder[VersionedCPUMemoryAvailable]
-  implicit val encoder: Encoder[VersionedCPUMemoryAvailable] =
-    deriveEncoder[VersionedCPUMemoryAvailable]
+object VersionedResourceAvailable {
+  implicit val decoder: Decoder[VersionedResourceAvailable] =
+    deriveDecoder[VersionedResourceAvailable]
+  implicit val encoder: Encoder[VersionedResourceAvailable] =
+    deriveEncoder[VersionedResourceAvailable]
 }
 
 case class RunningJobId(value: String)

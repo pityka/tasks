@@ -64,7 +64,7 @@ object UntypedResult {
 }
 
 case class ComputationEnvironment(
-    val resourceAllocated: CPUMemoryAllocated,
+    val resourceAllocated: ResourceAllocated,
     implicit val components: TaskSystemComponents,
     implicit val log: akka.event.LoggingAdapter,
     implicit val launcher: LauncherActor,
@@ -100,7 +100,7 @@ private class Task(
     fileServiceComponent: FileServiceComponent,
     cacheActor: ActorRef,
     nodeLocalCache: ActorRef,
-    resourceAllocated: CPUMemoryAllocated,
+    resourceAllocated: ResourceAllocated,
     fileServicePrefix: FileServicePrefix,
     auxExecutionContext: ExecutionContext,
     actorMaterializer: Materializer,

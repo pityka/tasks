@@ -145,7 +145,7 @@ class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
   val settings = SSHSettings.fromConfig
 
   def requestOneNewJobFromJobScheduler(
-      requestSize: CPUMemoryRequest): Try[(PendingJobId, CPUMemoryAvailable)] =
+      requestSize: ResourceRequest): Try[(PendingJobId, ResourceAvailable)] =
     settings.hosts
       .filter(x => x._2._2 == true)
       .filter(x =>
@@ -184,7 +184,7 @@ class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
             settings.disableHost(name)
 
             (PendingJobId(host.hostname + ":" + pid.toString),
-             CPUMemoryAvailable(cpu = host.cpu, memory = host.memory))
+             ResourceAvailable(cpu = host.cpu, memory = host.memory))
 
           }
       }

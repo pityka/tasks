@@ -44,7 +44,7 @@ object EarlyShutdownTest extends TestHelpers {
 
   def run = {
     withTaskSystem(testConfig) { implicit ts =>
-      task(Input(1))(CPUMemoryRequest(1, 500))
+      task(Input(1))(ResourceRequest(1, 500))
       while (sideEffect.size < 1) {
         Thread.sleep(50)
       }

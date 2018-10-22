@@ -39,7 +39,7 @@ import io.circe.{Encoder, Decoder}
 import io.circe.generic.semiauto._
 
 case class Node(name: RunningJobId,
-                size: CPUMemoryAvailable,
+                size: ResourceAvailable,
                 launcherActor: ActorRef)
 
 object Node {
@@ -64,7 +64,7 @@ trait ShutdownNode extends ShutdownRunningNode {
 
 trait CreateNode {
   def requestOneNewJobFromJobScheduler(
-      k: CPUMemoryRequest): Try[(PendingJobId, CPUMemoryAvailable)]
+      k: ResourceRequest): Try[(PendingJobId, ResourceAvailable)]
 
   def convertRunningToPending(p: RunningJobId): Option[PendingJobId] =
     Some(PendingJobId(p.value))
@@ -87,8 +87,8 @@ trait ReaperFactory {
 trait DecideNewNode {
   def needNewNode(
       q: QueueStat,
-      registeredNodes: Seq[CPUMemoryAvailable],
-      pendingNodes: Seq[CPUMemoryAvailable]): Map[CPUMemoryRequest, Int]
+      registeredNodes: Seq[ResourceAvailable],
+      pendingNodes: Seq[ResourceAvailable]): Map[ResourceRequest, Int]
 }
 
 class ShutdownReaper(id: RunningJobId, shutdown: ShutdownRunningNode)

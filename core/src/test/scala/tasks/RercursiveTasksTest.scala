@@ -59,9 +59,9 @@ object RercursiveTasksTest {
           case 1 => Future.successful(FibOut(1))
           case n => {
             val f1 = fibtask(FibInput(Some(n - 1), Some(false :: tag)))(
-              CPUMemoryRequest(1, 1))
+              ResourceRequest(1, 1))
             val f2 = fibtask(FibInput(Some(n - 2), Some(true :: tag)))(
-              CPUMemoryRequest(1, 1))
+              ResourceRequest(1, 1))
             releaseResources
             for {
               r1 <- f1
@@ -102,7 +102,7 @@ hosts.numCPU=4
 
   test("recursive fibonacci") {
     val n = 16
-    val r = await(fibtask(FibInput(n))(CPUMemoryRequest(1, 1))).n
+    val r = await(fibtask(FibInput(n))(ResourceRequest(1, 1))).n
     assertResult(r)(serial(n))
   }
 

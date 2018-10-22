@@ -49,7 +49,7 @@ trait ElasticSupport {
 
   def apply(masterAddress: InetSocketAddress,
             queueActor: QueueActor,
-            resource: CPUMemoryAvailable,
+            resource: ResourceAvailable,
             codeAddress: Option[CodeAddress],
             eventListener: Option[EventListener[NodeRegistry.Event]])(
       implicit config: TasksConfig): Inner
@@ -72,7 +72,7 @@ case class SimpleElasticSupport(val fqcn: ElasticSupportFqcn,
 
   def apply(masterAddress: InetSocketAddress,
             queueActor: QueueActor,
-            resource: CPUMemoryAvailable,
+            resource: ResourceAvailable,
             codeAddress: Option[CodeAddress],
             eventListener: Option[EventListener[NodeRegistry.Event]])(
       implicit config: TasksConfig) =

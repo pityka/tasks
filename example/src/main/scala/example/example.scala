@@ -124,13 +124,13 @@ object Fib {
             case 1 => Future.successful(1)
             case n => {
 
-              val f1 = fibtask(FibInput(n - 1))(CPUMemoryRequest(1, 1))
-              val f2 = fibtask(FibInput(n - 2))(CPUMemoryRequest(1, 1))
+              val f1 = fibtask(FibInput(n - 1))(ResourceRequest(1, 1))
+              val f2 = fibtask(FibInput(n - 2))(ResourceRequest(1, 1))
 
               val f3: Future[Int] = for {
                 r1 <- f1
                 r2 <- f2
-                r3 <- reduce(FibReduce(r1, r2))(CPUMemoryRequest(1, 1))
+                r3 <- reduce(FibReduce(r1, r2))(ResourceRequest(1, 1))
 
               } yield r3
 
@@ -197,17 +197,17 @@ object PiApp extends App {
       Future
         .sequence(
           1 to numTasks map { i =>
-            batchCalc(BatchInput(taskSize, i))(CPUMemoryRequest(1, 1000))
+            batchCalc(BatchInput(taskSize, i))(ResourceRequest(1, 1000))
           }
         )
         .flatMap { batches =>
           piCalc(PiInput(batches.map(_.inside).sum,
-                         batches.map(_.outside).sum))(CPUMemoryRequest(1, 1000))
+                         batches.map(_.outside).sum))(ResourceRequest(1, 1000))
         }
     }
 
     /* Start tasks for Fibonacci, subtasks are started by this task. */
-    val fibResult = fibtask(FibInput(4))(CPUMemoryRequest(1, 1000))
+    val fibResult = fibtask(FibInput(4))(ResourceRequest(1, 1000))
 
     /* Block and wait for the futures */
     println(Await.result(pi, atMost = 10 minutes))
@@ -216,13 +216,13 @@ object PiApp extends App {
     val mappedEColl = for {
       e1 <- EColl.fromSource(akka.stream.scaladsl.Source(List(3, 2, 1)),
                              name = "ecollint")
-      e2 <- twice(e1)(CPUMemoryRequest(1, 1))
-      e3 <- odd(e2)(CPUMemoryRequest(1, 1))
-      e4 <- sort(e3)(CPUMemoryRequest(1, 1))
-      e5 <- group(e4)(CPUMemoryRequest(1, 1))
-      e6 <- join(List(e1, e2, e3))(CPUMemoryRequest(1, 1))
-      e7 <- count(e6 -> 0)(CPUMemoryRequest(1, 1))
-      e8 <- sum(e4)(CPUMemoryRequest(1, 1))
+      e2 <- twice(e1)(ResourceRequest(1, 1))
+      e3 <- odd(e2)(ResourceRequest(1, 1))
+      e4 <- sort(e3)(ResourceRequest(1, 1))
+      e5 <- group(e4)(ResourceRequest(1, 1))
+      e6 <- join(List(e1, e2, e3))(ResourceRequest(1, 1))
+      e7 <- count(e6 -> 0)(ResourceRequest(1, 1))
+      e8 <- sum(e4)(ResourceRequest(1, 1))
     } yield e8
 
     println(Await.result(mappedEColl, atMost = 10 minutes))

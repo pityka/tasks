@@ -55,15 +55,15 @@ object NodeLocalCacheTest extends TestHelpers {
 
   def run = {
     withTaskSystem(testConfig) { implicit ts =>
-      val f1 = testTask(Input(1))(CPUMemoryRequest(1, 500))
-      val f2 = testTask(Input(2))(CPUMemoryRequest(1, 500))
-      val f3 = testTask(Input(3))(CPUMemoryRequest(1, 500))
+      val f1 = testTask(Input(1))(ResourceRequest(1, 500))
+      val f2 = testTask(Input(2))(ResourceRequest(1, 500))
+      val f3 = testTask(Input(3))(ResourceRequest(1, 500))
       val future = for {
         t1 <- f1
         t2 <- f2
         t3 <- f3
         _ = tasks.queue.NodeLocalCache.drop("key0")
-        t4 <- testTask(Input(4))(CPUMemoryRequest(1, 500))
+        t4 <- testTask(Input(4))(ResourceRequest(1, 500))
       } yield t1 + t2 + t3 + t4
 
       await(future)

@@ -64,8 +64,8 @@ object JvmElasticSupport {
       extends CreateNode {
 
     def requestOneNewJobFromJobScheduler(
-        requestSize: tasks.shared.CPUMemoryRequest)
-      : Try[(PendingJobId, CPUMemoryAvailable)] = {
+        requestSize: tasks.shared.ResourceRequest)
+      : Try[(PendingJobId, ResourceAvailable)] = {
       val jobid =
         java.util.UUID.randomUUID.toString.replaceAllLiterally("-", "")
 
@@ -88,7 +88,7 @@ object JvmElasticSupport {
       }
       Try(
         (PendingJobId(jobid),
-         CPUMemoryAvailable(cpu = requestSize.cpu._1,
+         ResourceAvailable(cpu = requestSize.cpu._1,
                             memory = requestSize.memory)))
 
     }

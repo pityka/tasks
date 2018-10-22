@@ -37,17 +37,17 @@ class SimpleDecideNewNode(codeVersion: CodeVersion)(
 
   def needNewNode(
       q: QueueStat,
-      registeredNodes: Seq[CPUMemoryAvailable],
-      pendingNodes: Seq[CPUMemoryAvailable]): Map[CPUMemoryRequest, Int] = {
-    val resourceNeeded: List[CPUMemoryRequest] = q.queued.map(_._2).collect {
-      case VersionedCPUMemoryRequest(v, request) if v === codeVersion => request
+      registeredNodes: Seq[ResourceAvailable],
+      pendingNodes: Seq[ResourceAvailable]): Map[ResourceRequest, Int] = {
+    val resourceNeeded: List[ResourceRequest] = q.queued.map(_._2).collect {
+      case VersionedResourceRequest(v, request) if v === codeVersion => request
     }
 
-    val availableResources: List[CPUMemoryAvailable] =
+    val availableResources: List[ResourceAvailable] =
       (registeredNodes ++ pendingNodes).toList
 
     val (_, allocatedResources) =
-      resourceNeeded.foldLeft((availableResources, List[CPUMemoryRequest]())) {
+      resourceNeeded.foldLeft((availableResources, List[ResourceRequest]())) {
         case ((available, allocated), request) =>
           val (prefix, suffix) =
             available.span(x => !x.canFulfillRequest(request))
@@ -61,7 +61,7 @@ class SimpleDecideNewNode(codeVersion: CodeVersion)(
           else (available, allocated)
       }
 
-    val nonAllocatedResources: Map[CPUMemoryRequest, Int] = {
+    val nonAllocatedResources: Map[ResourceRequest, Int] = {
       val map1 = resourceNeeded.groupBy(x => x).map(x => x._1 -> x._2.size)
       val map2 = allocatedResources.groupBy(x => x).map(x => x._1 -> x._2.size)
       (addMaps(map1, map2)(_ - _)).filter(x => { assert(x._2 >= 0); x._2 > 0 })

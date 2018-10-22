@@ -59,7 +59,7 @@ object Base64DataHelpers {
 case class ScheduleTask(
     description: TaskDescription,
     taskImplementation: String,
-    resource: VersionedCPUMemoryRequest,
+    resource: VersionedResourceRequest,
     queueActor: ActorRef,
     fileServiceActor: ActorRef,
     fileServicePrefix: FileServicePrefix,
@@ -78,7 +78,7 @@ object ScheduleTask {
 class Launcher(
     queueActor: ActorRef,
     nodeLocalCache: ActorRef,
-    slots: VersionedCPUMemoryAvailable,
+    slots: VersionedResourceAvailable,
     refreshInterval: FiniteDuration,
     auxExecutionContext: ExecutionContext,
     actorMaterializer: Materializer,
@@ -90,8 +90,8 @@ class Launcher(
 
   private case object CheckQueue extends Serializable
 
-  private val maxResources: VersionedCPUMemoryAvailable = slots
-  private var availableResources: VersionedCPUMemoryAvailable = maxResources
+  private val maxResources: VersionedResourceAvailable = slots
+  private var availableResources: VersionedResourceAvailable = maxResources
 
   private def isIdle = maxResources == availableResources
   private var idleState: Long = 0L
@@ -99,7 +99,7 @@ class Launcher(
   private var denyWorkBeforeShutdown = false
 
   private var runningTasks
-    : List[(ActorRef, ScheduleTask, VersionedCPUMemoryAllocated)] = Nil
+    : List[(ActorRef, ScheduleTask, VersionedResourceAllocated)] = Nil
 
   private var freed = Set[ActorRef]()
 

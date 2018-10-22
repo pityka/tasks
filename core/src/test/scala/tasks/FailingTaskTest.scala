@@ -69,12 +69,12 @@ object FailingTasksTest extends TestHelpers {
     withTaskSystem(testConfig) { implicit ts =>
       import scala.concurrent.ExecutionContext.Implicits.global
 
-      val f1 = fail(Input(1))(CPUMemoryRequest(1, 500)).recover {
+      val f1 = fail(Input(1))(ResourceRequest(1, 500)).recover {
         case _: TestException => "recovered"
       }
-      val f2 = success(Input(2))(CPUMemoryRequest(1, 500))
+      val f2 = success(Input(2))(ResourceRequest(1, 500))
       val f3 = f1.flatMap(_ =>
-        fail(Input(1))(CPUMemoryRequest(1, 500)).recover {
+        fail(Input(1))(ResourceRequest(1, 500)).recover {
           case _: TestException => "recovered"
       })
       val future = for {

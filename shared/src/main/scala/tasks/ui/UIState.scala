@@ -88,13 +88,13 @@ object UILauncherActor {
 case class UIQueueState(
     queuedTasks: List[TaskDescription],
     scheduledTasks: List[(TaskDescription,
-                          (UILauncherActor, VersionedCPUMemoryAllocated))],
+                          (UILauncherActor, VersionedResourceAllocated))],
     knownLaunchers: Set[UILauncherActor],
     negotiation: Option[(UILauncherActor, TaskDescription)],
     failedTasks: List[(TaskDescription,
-                          (UILauncherActor, VersionedCPUMemoryAllocated))],
+                          (UILauncherActor, VersionedResourceAllocated))],
     completedTasks: List[(TaskDescription,
-                          (UILauncherActor, VersionedCPUMemoryAllocated), UIUntypedResult)],  
+                          (UILauncherActor, VersionedResourceAllocated), UIUntypedResult)],  
     recoveredTasks : List[(TaskDescription, UIUntypedResult)]                                              
 )
 
@@ -113,8 +113,8 @@ object UIJobId {
 } 
 
 case class UIAppState(                                           
-      running: Seq[(UIJobId, CPUMemoryAvailable)],
-      pending: Seq[(UIJobId, CPUMemoryAvailable)],
+      running: Seq[(UIJobId, ResourceAvailable)],
+      pending: Seq[(UIJobId, ResourceAvailable)],
       cumulativeRequested: Int
 )
 

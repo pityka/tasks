@@ -62,8 +62,8 @@ class K8SCreateNode(masterAddress: InetSocketAddress,
                                            elasticSupport: ElasticSupportFqcn)
     extends CreateNode {
 
-  def requestOneNewJobFromJobScheduler(requestSize: CPUMemoryRequest)
-    : Try[(PendingJobId, CPUMemoryAvailable)] = {
+  def requestOneNewJobFromJobScheduler(
+      requestSize: ResourceRequest): Try[(PendingJobId, ResourceAvailable)] = {
     val script = Deployment.script(
       memory = requestSize.memory,
       cpu = requestSize.cpu._2,
@@ -100,7 +100,7 @@ class K8SCreateNode(masterAddress: InetSocketAddress,
         .endSpec
         .done
 
-      val available = CPUMemoryAvailable(requestSize.cpu._2, requestSize.memory)
+      val available = ResourceAvailable(requestSize.cpu._2, requestSize.memory)
 
       (PendingJobId(name), available)
     }

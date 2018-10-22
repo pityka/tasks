@@ -82,7 +82,7 @@ object Helpers {
 
   def renderTableBodyWithScheduledTasks(
       scheduledTasks: List[(TaskDescription,
-                            (UILauncherActor, VersionedCPUMemoryAllocated))]) =
+                            (UILauncherActor, VersionedResourceAllocated))]) =
     tbody(
       scheduledTasks.toSeq.map {
         case ((taskDescription, (launcher, resource))) =>
@@ -117,7 +117,7 @@ object Helpers {
 
   def renderTableBodyWithCompletedTasks(
       completedTasks: List[(TaskDescription,
-                            (UILauncherActor, VersionedCPUMemoryAllocated),
+                            (UILauncherActor, VersionedResourceAllocated),
                             UIUntypedResult)]) =
     tbody(
       completedTasks.toSeq.map {

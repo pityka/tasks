@@ -77,15 +77,15 @@ object Tests {
       val mappedEColl = for {
         e1 <- EColl.fromSource(akka.stream.scaladsl.Source(List(3, 2, 1)),
                                name = "ecollint")
-        e2 <- twice(e1)(CPUMemoryRequest(1, 1))
-        e3 <- odd(e2)(CPUMemoryRequest(1, 1))
-        e4 <- sort(e3)(CPUMemoryRequest(1, 1))
-        e5 <- group(e4)(CPUMemoryRequest(1, 1))
-        e6 <- join(List(e1, e2, e3))(CPUMemoryRequest(1, 1))
-        e7 <- count(e6 -> 0)(CPUMemoryRequest(1, 1))
-        e8 <- sum(e4)(CPUMemoryRequest(1, 1))
-        e9 <- scan((e1, 1))(CPUMemoryRequest(1, 1))
-        e10 <- toSeq(e9)(CPUMemoryRequest(1, 1))
+        e2 <- twice(e1)(ResourceRequest(1, 1))
+        e3 <- odd(e2)(ResourceRequest(1, 1))
+        e4 <- sort(e3)(ResourceRequest(1, 1))
+        e5 <- group(e4)(ResourceRequest(1, 1))
+        e6 <- join(List(e1, e2, e3))(ResourceRequest(1, 1))
+        e7 <- count(e6 -> 0)(ResourceRequest(1, 1))
+        e8 <- sum(e4)(ResourceRequest(1, 1))
+        e9 <- scan((e1, 1))(ResourceRequest(1, 1))
+        e10 <- toSeq(e9)(ResourceRequest(1, 1))
         v8 <- e8.get
         v10 <- e10.get
       } yield (v8, v10)

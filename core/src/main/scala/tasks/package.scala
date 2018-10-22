@@ -50,19 +50,19 @@ package object tasks {
   type CodeVersion = tasks.shared.CodeVersion
   val CodeVersion = tasks.shared.CodeVersion _
 
-  type CPUMemoryRequest = tasks.shared.VersionedCPUMemoryRequest
+  type ResourceRequest = tasks.shared.VersionedResourceRequest
 
-  def CPUMemoryRequest(cpu: (Int, Int), memory: Int)(
+  def ResourceRequest(cpu: (Int, Int), memory: Int)(
       implicit codeVersion: CodeVersion) =
-    tasks.shared.VersionedCPUMemoryRequest(
+    tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.CPUMemoryRequest(cpu, memory))
+      tasks.shared.ResourceRequest(cpu, memory))
 
-  def CPUMemoryRequest(cpu: Int, memory: Int)(
+  def ResourceRequest(cpu: Int, memory: Int)(
       implicit codeVersion: CodeVersion) =
-    tasks.shared.VersionedCPUMemoryRequest(
+    tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.CPUMemoryRequest(cpu, memory))
+      tasks.shared.ResourceRequest(cpu, memory))
 
   implicit def tsc(implicit ts: TaskSystem): TaskSystemComponents =
     ts.components

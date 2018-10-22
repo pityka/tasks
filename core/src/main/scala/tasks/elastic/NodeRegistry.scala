@@ -40,7 +40,7 @@ object NodeRegistry {
   sealed trait Event
   case object NodeRequested extends Event
   case class NodeIsPending(pendingJobId: PendingJobId,
-                           resource: CPUMemoryAvailable)
+                           resource: ResourceAvailable)
       extends Event
   case class NodeIsUp(node: Node, pendingJobId: PendingJobId) extends Event
   case class NodeIsDown(node: Node) extends Event
@@ -49,7 +49,7 @@ object NodeRegistry {
 }
 
 class NodeRegistry(
-    unmanagedResource: CPUMemoryAvailable,
+    unmanagedResource: ResourceAvailable,
     createNode: CreateNode,
     decideNewNode: DecideNewNode,
     shutdownNode: ShutdownNode,
@@ -62,8 +62,8 @@ class NodeRegistry(
   import NodeRegistry._
 
   case class State(
-      running: Map[RunningJobId, CPUMemoryAvailable],
-      pending: Map[PendingJobId, CPUMemoryAvailable],
+      running: Map[RunningJobId, ResourceAvailable],
+      pending: Map[PendingJobId, ResourceAvailable],
       cumulativeRequested: Int
   ) {
     def update(e: Event): State = {

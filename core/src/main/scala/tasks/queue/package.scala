@@ -75,7 +75,7 @@ package object queue {
 
   def newTask[A, B](
       prerequisitives: B,
-      resource: shared.VersionedCPUMemoryRequest,
+      resource: shared.VersionedResourceRequest,
       function: CompFun2,
       taskId: TaskId
   )(implicit components: TaskSystemComponents,

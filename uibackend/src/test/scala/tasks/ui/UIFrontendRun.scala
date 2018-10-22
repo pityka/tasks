@@ -63,7 +63,7 @@ object UIFrontendRun extends TestHelpers {
     withTaskSystem(testConfig2) { implicit ts =>
       import scala.concurrent.ExecutionContext.Implicits.global
       Future.sequence(
-        (1 to 100).map(i => testTask(Input(i))(CPUMemoryRequest(1, 500))))
+        (1 to 100).map(i => testTask(Input(i))(ResourceRequest(1, 500))))
 
       Thread.sleep(Long.MaxValue)
 

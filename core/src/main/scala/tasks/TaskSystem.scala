@@ -310,8 +310,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
           es(
             masterAddress = hostConfig.master,
             queueActor = QueueActor(queueActor),
-            resource = CPUMemoryAvailable(cpu = hostConfig.availableCPU,
-                                          memory = hostConfig.availableMemory),
+            resource = ResourceAvailable(cpu = hostConfig.availableCPU,
+                                         memory = hostConfig.availableMemory),
             codeAddress = codeAddress,
             eventListener =
               uiComponent.flatMap(_.map(_.nodeRegistryEventListener))
@@ -391,9 +391,9 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
         new Launcher(
           queueActor,
           nodeLocalCache.actor,
-          VersionedCPUMemoryAvailable(
+          VersionedResourceAvailable(
             config.codeVersion,
-            CPUMemoryAvailable(cpu = numberOfCores, memory = availableMemory)),
+            ResourceAvailable(cpu = numberOfCores, memory = availableMemory)),
           refreshInterval = refreshInterval,
           auxExecutionContext = auxExecutionContext,
           actorMaterializer = AM,
@@ -414,8 +414,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
 
     remoteNodeRegistry.get ! NodeComingUp(
       Node(RunningJobId(nodeName),
-           CPUMemoryAvailable(hostConfig.availableCPU,
-                              hostConfig.availableMemory),
+           ResourceAvailable(hostConfig.availableCPU,
+                             hostConfig.availableMemory),
            launcherActor.get))
 
     system.actorOf(

@@ -51,7 +51,7 @@ object TaskQueue {
   case object NegotiationDone extends Event
   case class TaskScheduled(sch: ScheduleTask,
                            launcher: LauncherActor,
-                           allocated: VersionedCPUMemoryAllocated)
+                           allocated: VersionedResourceAllocated)
       extends Event
   case class TaskDone(sch: ScheduleTask, result: UntypedResult) extends Event
   case class TaskFailed(sch: ScheduleTask) extends Event
@@ -72,7 +72,7 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
       queuedTasks: Map[ScheduleTask, List[Proxy]],
       scheduledTasks: Map[ScheduleTask,
                           (LauncherActor,
-                           VersionedCPUMemoryAllocated,
+                           VersionedResourceAllocated,
                            List[Proxy])],
       knownLaunchers: Set[LauncherActor],
       /*This is non empty while waiting for response from the tasklauncher
