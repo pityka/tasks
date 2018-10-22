@@ -89,7 +89,7 @@ object JvmElasticSupport {
       Try(
         (PendingJobId(jobid),
          ResourceAvailable(cpu = requestSize.cpu._1,
-                            memory = requestSize.memory)))
+                           memory = requestSize.memory)))
 
     }
 
