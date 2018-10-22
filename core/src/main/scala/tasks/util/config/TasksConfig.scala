@@ -61,6 +61,8 @@ class TasksConfig(val raw: Config) {
 
   val hostRAM = raw.getInt("hosts.RAM")
 
+  val hostScratch = raw.getInt("hosts.scratch")
+
   val hostName = raw.getString("hosts.hostname")
 
   val hostPort = raw.getInt("hosts.port")

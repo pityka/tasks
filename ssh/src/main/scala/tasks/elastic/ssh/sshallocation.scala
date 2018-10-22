@@ -42,6 +42,7 @@ object SSHSettings {
                   username: String,
                   memory: Int,
                   cpu: Int,
+                  scratch: Int,
                   extraArgs: String)
   object Host {
     def fromConfig(config: Config) = {
@@ -50,8 +51,9 @@ object SSHSettings {
       val username = config.getString("username")
       val memory = config.getInt("memory")
       val cpu = config.getInt("cpu")
+      val scratch = config.getInt("scratch")
       val extraArgs = Try(config.getString("extraArgs")).toOption.getOrElse("")
-      Host(hostname, keyFile, username, memory, cpu, extraArgs)
+      Host(hostname, keyFile, username, memory, cpu, scratch, extraArgs)
     }
   }
 
@@ -184,7 +186,9 @@ class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
             settings.disableHost(name)
 
             (PendingJobId(host.hostname + ":" + pid.toString),
-             ResourceAvailable(cpu = host.cpu, memory = host.memory))
+             ResourceAvailable(cpu = host.cpu,
+                               memory = host.memory,
+                               scratch = host.scratch))
 
           }
       }

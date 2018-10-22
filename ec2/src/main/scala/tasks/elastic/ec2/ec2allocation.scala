@@ -88,10 +88,7 @@ class EC2CreateNode(
     Try {
       val (requestid, instancetype) = requestSpotInstance
       val jobid = PendingJobId(requestid)
-      val size = ResourceAvailable(
-        cpu = instancetype._2.cpu,
-        memory = instancetype._2.memory
-      )
+      val size = instancetype._2
       (jobid, size)
     }
 

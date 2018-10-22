@@ -100,7 +100,7 @@ class K8SCreateNode(masterAddress: InetSocketAddress,
         .endSpec
         .done
 
-      val available = ResourceAvailable(requestSize.cpu._2, requestSize.memory)
+      val available = requestSize.toAvailable
 
       (PendingJobId(name), available)
     }

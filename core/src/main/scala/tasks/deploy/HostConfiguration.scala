@@ -46,6 +46,8 @@ trait HostConfiguration {
 
   def availableMemory: Int
 
+  def availableScratch: Int
+
   def master: InetSocketAddress
 
   def myRoles: Set[Role]
@@ -69,6 +71,8 @@ trait HostConfigurationFromConfig extends HostConfiguration {
 
   lazy val availableMemory = config.hostRAM
 
+  lazy val availableScratch = config.hostScratch
+
   lazy val master: InetSocketAddress = config.masterAddress.getOrElse(myAddress)
 
   private def startApp = config.startApp
@@ -83,7 +87,9 @@ trait HostConfigurationFromConfig extends HostConfiguration {
 
 }
 
-class LocalConfiguration(val availableCPU: Int, val availableMemory: Int)
+class LocalConfiguration(val availableCPU: Int,
+                         val availableMemory: Int,
+                         val availableScratch: Int)
     extends HostConfiguration {
 
   override lazy val myRoles = Set(App, Queue, Worker)
@@ -94,7 +100,9 @@ class LocalConfiguration(val availableCPU: Int, val availableMemory: Int)
 }
 
 class LocalConfigurationFromConfig(implicit config: TasksConfig)
-    extends LocalConfiguration(config.hostNumCPU, config.hostRAM)
+    extends LocalConfiguration(config.hostNumCPU,
+                               config.hostRAM,
+                               config.hostScratch)
 
 class MasterSlaveFromConfig(implicit val config: TasksConfig)
     extends HostConfigurationFromConfig
