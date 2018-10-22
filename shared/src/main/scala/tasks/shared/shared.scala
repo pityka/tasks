@@ -30,12 +30,12 @@ import io.circe.generic.semiauto._
 
 
 
-case class ResourceRequest(cpu: (Int, Int), memory: Int)
+case class ResourceRequest(cpu: (Int, Int), memory: Int, scratch:Int)
 
 object ResourceRequest {
 
-  def apply(cpu: Int, memory: Int): ResourceRequest =
-    ResourceRequest((cpu, cpu), memory)
+  def apply(cpu: Int, memory: Int, scratch: Int): ResourceRequest =
+    ResourceRequest((cpu, cpu), memory, scratch)
 
   implicit val decoder: Decoder[ResourceRequest] =
     deriveDecoder[ResourceRequest]
@@ -43,7 +43,7 @@ object ResourceRequest {
     deriveEncoder[ResourceRequest]
 }
 
-case class ResourceAllocated(cpu: Int, memory: Int)
+case class ResourceAllocated(cpu: Int, memory: Int, scratch: Int)
 
 object ResourceAllocated {
   implicit val decoder: Decoder[ResourceAllocated] =
@@ -52,29 +52,30 @@ object ResourceAllocated {
     deriveEncoder[ResourceAllocated]
 }
 
-case class ResourceAvailable(cpu: Int, memory: Int) {
+case class ResourceAvailable(cpu: Int, memory: Int, scratch: Int) {
 
   def canFulfillRequest(r: ResourceRequest) =
-    cpu >= r.cpu._1 && memory >= r.memory
+    cpu >= r.cpu._1 && memory >= r.memory && r.scratch >= scratch
 
   def substract(r: ResourceRequest) = {
     val remainingCPU = math.max((cpu - r.cpu._2), 0)
-    ResourceAvailable(remainingCPU, memory - r.memory)
+    ResourceAvailable(remainingCPU, memory - r.memory, scratch - r.scratch)
   }
 
   def substract(r: ResourceAllocated) =
-    ResourceAvailable(cpu - r.cpu, memory - r.memory)
+    ResourceAvailable(cpu - r.cpu, memory - r.memory, scratch - r.scratch)
 
   def addBack(r: ResourceAllocated) =
-    ResourceAvailable(cpu + r.cpu, memory + r.memory)
+    ResourceAvailable(cpu + r.cpu, memory + r.memory, scratch + r.scratch)
 
   def maximum(r: ResourceRequest) = {
     val allocatedMemory = math.min(r.memory, memory)
     val allocatedCPU = math.min(cpu, r.cpu._2)
-    ResourceAllocated(allocatedCPU, allocatedMemory)
+    val allocatedScratch = math.min(scratch,r.scratch)
+    ResourceAllocated(allocatedCPU, allocatedMemory, allocatedScratch)
   }
 
-  def empty = cpu == 0 || memory == 0
+  def empty = cpu == 0 || memory == 0 || scratch == 0
   def isEmpty = empty
 
 }
@@ -91,13 +92,15 @@ case class VersionedResourceRequest(codeVersion: CodeVersion,
      {
   def cpu = cpuMemoryRequest.cpu
   def memory = cpuMemoryRequest.memory
+  def scratch = cpuMemoryRequest.scratch
 }
 
 object VersionedResourceRequest {
   def apply(codeVersion: CodeVersion,
             cpu: Int,
-            memory: Int): VersionedResourceRequest =
-    VersionedResourceRequest(codeVersion, ResourceRequest((cpu, cpu), memory))
+            memory: Int,
+            scratch: Int): VersionedResourceRequest =
+    VersionedResourceRequest(codeVersion, ResourceRequest((cpu, cpu), memory, scratch))
 
   implicit val decoder: Decoder[VersionedResourceRequest] =
     deriveDecoder[VersionedResourceRequest]
@@ -110,6 +113,7 @@ case class VersionedResourceAllocated(codeVersion: CodeVersion,
     {
   def cpu = cpuMemoryAllocated.cpu
   def memory = cpuMemoryAllocated.memory
+  def scratch = cpuMemoryAllocated.scratch
 }
 
 object VersionedResourceAllocated {

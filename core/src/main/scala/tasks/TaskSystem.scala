@@ -105,10 +105,6 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
 
   tasksystemlog.info("Master node address is: " + hostConfig.master.toString)
 
-  private val numberOfCores: Int = hostConfig.availableCPU
-
-  private val availableMemory: Int = hostConfig.availableMemory
-
   private lazy val masterAddress = hostConfig.master
 
   val reaperActor = elasticSupport.flatMap(_.reaperFactory.map(_.apply)) match {
@@ -311,7 +307,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
             masterAddress = hostConfig.master,
             queueActor = QueueActor(queueActor),
             resource = ResourceAvailable(cpu = hostConfig.availableCPU,
-                                         memory = hostConfig.availableMemory),
+                                         memory = hostConfig.availableMemory,
+                                         scratch = hostConfig.availableScratch),
             codeAddress = codeAddress,
             eventListener =
               uiComponent.flatMap(_.map(_.nodeRegistryEventListener))
@@ -384,27 +381,30 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
     historyContext = rootHistory
   )
 
-  private val launcherActor = if (numberOfCores > 0 && hostConfig.isWorker) {
-    val refreshInterval = config.askInterval
-    val localActor = system.actorOf(
-      Props(
-        new Launcher(
-          queueActor,
-          nodeLocalCache.actor,
-          VersionedResourceAvailable(
-            config.codeVersion,
-            ResourceAvailable(cpu = numberOfCores, memory = availableMemory)),
-          refreshInterval = refreshInterval,
-          auxExecutionContext = auxExecutionContext,
-          actorMaterializer = AM,
-          remoteStorage = remoteFileStorage,
-          managedStorage = managedFileStorage
-        ))
-        .withDispatcher("launcher"),
-      "launcher"
-    )
-    Some(localActor)
-  } else None
+  private val launcherActor =
+    if (hostConfig.availableCPU > 0 && hostConfig.isWorker) {
+      val refreshInterval = config.askInterval
+      val localActor = system.actorOf(
+        Props(
+          new Launcher(
+            queueActor,
+            nodeLocalCache.actor,
+            VersionedResourceAvailable(
+              config.codeVersion,
+              ResourceAvailable(cpu = hostConfig.availableCPU,
+                                memory = hostConfig.availableMemory,
+                                scratch = hostConfig.availableScratch)),
+            refreshInterval = refreshInterval,
+            auxExecutionContext = auxExecutionContext,
+            actorMaterializer = AM,
+            remoteStorage = remoteFileStorage,
+            managedStorage = managedFileStorage
+          ))
+          .withDispatcher("launcher"),
+        "launcher"
+      )
+      Some(localActor)
+    } else None
 
   if (!hostConfig.isApp && hostConfig.isWorker && elasticSupportFactory.isDefined && launcherActor.isDefined) {
     val nodeName = getNodeName
@@ -415,7 +415,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
     remoteNodeRegistry.get ! NodeComingUp(
       Node(RunningJobId(nodeName),
            ResourceAvailable(hostConfig.availableCPU,
-                             hostConfig.availableMemory),
+                             hostConfig.availableMemory,
+                             hostConfig.availableScratch),
            launcherActor.get))
 
     system.actorOf(
