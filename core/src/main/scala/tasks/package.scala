@@ -62,13 +62,13 @@ package object tasks {
       implicit codeVersion: CodeVersion) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.ResourceRequest(cpu, memory, 0))
+      tasks.shared.ResourceRequest(cpu, memory, 1))
 
   def ResourceRequest(cpu: Int, memory: Int)(
       implicit codeVersion: CodeVersion) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.ResourceRequest((cpu, cpu), memory, 0))
+      tasks.shared.ResourceRequest((cpu, cpu), memory, 1))
 
   def ResourceRequest(cpu: Int, memory: Int, scratch: Int)(
       implicit codeVersion: CodeVersion) =
