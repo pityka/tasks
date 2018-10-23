@@ -44,6 +44,7 @@ object Deployment {
   def script(
       memory: Int,
       cpu: Int,
+      scratch: Int,
       elasticSupport: ElasticSupportFqcn,
       masterAddress: InetSocketAddress,
       download: URL,
@@ -59,7 +60,7 @@ object Deployment {
     }
 
     val edited =
-      s"./package -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory $hostnameString"
+      s"./package -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $hostnameString"
         .replaceAllLiterally(
           "{RAM}",
           math
