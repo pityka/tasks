@@ -91,9 +91,7 @@ object Helpers {
               taskDescription.taskId.id + " @" + taskDescription.taskId.version
             ),
             td(
-              code(
-                new String(java.util.Base64.getDecoder
-                  .decode(taskDescription.input.value)))
+              code(prettyJson(taskDescription.input))
             ),
             td(showUILauncher(launcher)),
             td(resource.codeVersion),
