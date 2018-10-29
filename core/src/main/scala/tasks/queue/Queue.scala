@@ -206,7 +206,13 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
 
         state.queuedTasks
           .find {
-            case (sch, _) => availableResource.canFulfillRequest(sch.resource)
+            case (sch, _) =>
+              val ret = availableResource.canFulfillRequest(sch.resource)
+              if (!ret) {
+                log.debug(
+                  s"Can't fulfill request ${sch.resource} with available resources $availableResource")
+              }
+              ret
           }
           .foreach {
             case (sch, proxies) =>
