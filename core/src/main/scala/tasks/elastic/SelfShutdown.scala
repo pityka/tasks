@@ -46,21 +46,12 @@ class SelfShutdown(shutdownRunningNode: ShutdownRunningNode,
 
   override def preStart: Unit = {
     HeartBeatActor.watch(queueActor.actor, QueueLostOrStopped, self)
-    context.system.eventStream
-      .subscribe(self, classOf[akka.remote.DisassociatedEvent])
-
   }
+
   def receive = {
     case QueueLostOrStopped =>
       log.error("QueueLostOrStopped received. Shutting down.")
       shutdown
-
-    case de: akka.remote.DisassociatedEvent =>
-      log.error(
-        "DisassociatedEvent. " + de.remoteAddress + " vs " + queueActor.actor.path.address)
-      if (de.remoteAddress == queueActor.actor.path.address) {
-        shutdown
-      }
 
   }
 }
