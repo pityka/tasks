@@ -52,7 +52,7 @@ object Deployment {
       background: Boolean
   )(implicit config: TasksConfig): String = {
     val downloadScript =
-      s"curl -m 60 $download > package && chmod u+x package"
+      s"cd $$TMPDIR && curl -m 60 $download > package && chmod u+x package"
 
     val hostnameString = slaveHostname match {
       case None       => ""
