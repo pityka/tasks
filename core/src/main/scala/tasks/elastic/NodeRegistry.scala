@@ -160,10 +160,16 @@ class NodeRegistry(
               "New node request will not proceed: pending nodes or reached max nodes. max: " + config.maxNodes + ", pending: " + state.pending.size + ", running: " + state.running.size)
           } else {
 
-            log.info(
-              "Request " + neededNodes.size + " node. One from each: " + neededNodes.keySet)
+            val allowedNewNodes = math.min(
+              config.maxNodes - (state.running.size + state.pending.size),
+              config.maxNodesCumulative - state.cumulativeRequested)
 
-            val updatedState = neededNodes.foldLeft(state) {
+            val requestedNodes = neededNodes.take(allowedNewNodes)
+
+            log.info(
+              "Request " + requestedNodes.size + " node. One from each: " + requestedNodes.keySet)
+
+            val updatedState = requestedNodes.foldLeft(state) {
               case (state, (request, _)) =>
                 val jobinfo =
                   createNode.requestOneNewJobFromJobScheduler(request)
