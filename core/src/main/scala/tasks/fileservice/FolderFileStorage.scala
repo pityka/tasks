@@ -190,8 +190,15 @@ class FolderFileStorage(val basePath: File)(implicit
       val hash = FolderFileStorage.getContentHash(file)
       val managed = proposed.toManaged
 
-      if (fileIsRelativeToBase(file)) (size, hash, file, managed)
-      else if (assemblePath(managed).canRead) {
+      if (fileIsRelativeToBase(file)) {
+        val locationAsManagedFilePath = {
+          val relativeToBase =
+            file.getAbsolutePath.stripPrefix(canonicalBasePath)
+          val elements = relativeToBase.split('/').toVector
+          ManagedFilePath(elements)
+        }
+        (size, hash, file, locationAsManagedFilePath)
+      } else if (assemblePath(managed).canRead) {
         val finalFile = assemblePath(managed)
         logger.debug(
           s"Found a file already in storage with the same name ($finalFile). Check for equality.")
