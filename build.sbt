@@ -73,9 +73,9 @@ lazy val shared = crossProject(JSPlatform, JVMPlatform)
   .settings(
     name := "tasks-shared",
     libraryDependencies ++= Seq(
-      "io.circe" %% "circe-core" % "0.10.0-M2",
-      "io.circe" %% "circe-generic" % "0.10.0-M2",
-      "io.circe" %% "circe-parser" % "0.10.0-M2"
+      "io.circe" %% "circe-core" % "0.10.1",
+      "io.circe" %% "circe-generic" % "0.10.1",
+      "io.circe" %% "circe-parser" % "0.10.1"
     )
   )
   .settings(commonSettings: _*)
@@ -165,9 +165,9 @@ lazy val uifrontend = project
     libraryDependencies ++= Seq(
       "com.lihaoyi" %%% "scalatags" % "0.6.7",
       "org.scala-js" %%% "scalajs-dom" % "0.9.5",
-      "io.circe" %%% "circe-core" % "0.10.0-M2",
-      "io.circe" %%% "circe-parser" % "0.10.0-M2",
-      "io.circe" %%% "circe-generic" % "0.10.0-M2",
+      "io.circe" %%% "circe-core" % "0.10.1",
+      "io.circe" %%% "circe-parser" % "0.10.1",
+      "io.circe" %%% "circe-generic" % "0.10.1",
       "net.pishen" %%% "akka-ui" % "0.1.1"
     ),
     fork := false
