@@ -41,6 +41,8 @@ trait ElasticSupport {
 
   def reaperFactory: Option[ReaperFactory]
 
+  def selfShutdownNow(): Unit
+
   trait Inner {
     def createRegistry: Option[NodeRegistry]
     def createSelfShutdown: SelfShutdown
@@ -69,6 +71,9 @@ case class SimpleElasticSupport(val fqcn: ElasticSupportFqcn,
                                 createNodeFactory: CreateNodeFactory,
                                 val getNodeName: GetNodeName)
     extends ElasticSupport { self =>
+
+  def selfShutdownNow =
+    shutdown.shutdownRunningNode(RunningJobId(getNodeName.getNodeName))
 
   def apply(masterAddress: InetSocketAddress,
             queueActor: QueueActor,

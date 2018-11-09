@@ -118,11 +118,25 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
     if (!hostConfig.isApp && hostConfig.isWorker && elasticSupport.isDefined) {
       val remoteActorPath =
         s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/noderegistry"
-      val noderegistry = Await.result(
-        system.actorSelection(remoteActorPath).resolveOne(60 seconds),
-        atMost = 60 seconds)
+      val noderegistry = Try(
+        Await.result(
+          system.actorSelection(remoteActorPath).resolveOne(60 seconds),
+          atMost = 60 seconds))
       tasksystemlog.info("Remote node registry: " + noderegistry)
-      Some(noderegistry)
+      noderegistry match {
+        case Success(nr) => Some(nr)
+        case Failure(e) =>
+          tasksystemlog.error(
+            "Failed to contact remote node registry. Shut down job.",
+            e)
+          try {
+            elasticSupport.get.selfShutdownNow
+          } finally {
+            tasksystemlog.info("Stop jvm")
+            System.exit(1)
+          }
+          None
+      }
     } else None
 
   val remoteFileStorage = new RemoteFileStorage
@@ -408,10 +422,11 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
     } else None
 
   if (!hostConfig.isApp && hostConfig.isWorker && elasticSupportFactory.isDefined && launcherActor.isDefined) {
+    tasksystemlog.info("Getting node name..")
     val nodeName = getNodeName
 
     tasksystemlog.info(
-      "This is a worker node. ElasticNodeAllocation is enabled. Notifying remote node registry about this node. Node name: " + nodeName)
+      "This is a worker node. ElasticNodeAllocation is enabled. Notifying remote node registry about this node. Node name: " + nodeName + ". Launcher actor address is: " + launcherActor.get)
 
     remoteNodeRegistry.get ! NodeComingUp(
       Node(RunningJobId(nodeName),
