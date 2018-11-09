@@ -73,13 +73,14 @@ object SharedFoldersTest extends TestHelpers {
 
 class SharedFoldersTestSuite extends FunSuite with Matchers {
 
-  test("chains should work") {
+  test("SharedFile.fromFolder should import intermediate folders ") {
     val sf = SharedFoldersTest.run.get
     val expectedFile = new File(
       SharedFoldersTest.tmp.getAbsolutePath + "/sharedFolders/intermediate/fileName")
     sf.path.asInstanceOf[ManagedFilePath].pathElements shouldBe Vector(
       "sharedFolders",
-      "intermediate/fileName")
+      "intermediate",
+      "fileName")
     expectedFile.canRead shouldBe true
     scala.io.Source.fromFile(expectedFile).mkString shouldBe "345"
   }

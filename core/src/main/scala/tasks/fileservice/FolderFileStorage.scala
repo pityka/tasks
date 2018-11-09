@@ -194,7 +194,7 @@ class FolderFileStorage(val basePath: File)(implicit
         val locationAsManagedFilePath = {
           val relativeToBase =
             file.getAbsolutePath.stripPrefix(canonicalBasePath)
-          val elements = relativeToBase.split('/').toVector
+          val elements = relativeToBase.split('/').toVector.filter(_.nonEmpty)
           ManagedFilePath(elements)
         }
         (size, hash, file, locationAsManagedFilePath)
