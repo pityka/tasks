@@ -49,13 +49,11 @@ private[tasks] object SharedFileHelper {
       context: ActorRefFactory,
       nlc: NodeLocalCacheActor,
       prefix: FileServicePrefix,
-      ec: ExecutionContext): Future[SharedFile] = {
+      ec: ExecutionContext): Future[SharedFile] =
     getPathToFile(new SharedFile(prefix.propose(name).toManaged, -1L, 0))
       .map { f =>
         new SharedFile(prefix.propose(name).toManaged, -1L, 0)
       }
-
-  }
 
   def createForTesting(name: String) =
     new SharedFile(ManagedFilePath(Vector(name)), 0, 0)

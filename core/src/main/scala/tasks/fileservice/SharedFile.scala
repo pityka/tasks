@@ -125,6 +125,10 @@ object SharedFile {
       implicit tsc: TaskSystemComponents): Future[Seq[SharedFile]] =
     SharedFileHelper.createFromFolder(callback)
 
+  def getByNameUnchecked(name: String)(
+      implicit tsc: TaskSystemComponents): Future[SharedFile] =
+    SharedFileHelper.getByNameUnchecked(name)
+
 }
 
 object ManagedFilePath {

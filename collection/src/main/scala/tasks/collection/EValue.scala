@@ -24,6 +24,12 @@ case class EValue[T](data: SharedFile) extends ResultWithSharedFiles(data) {
 }
 
 object EValue {
+  def getByName[T](name: String)(implicit
+                                 tsc: TaskSystemComponents): Future[EValue[T]] =
+    SharedFile
+      .getByNameUnchecked(name)
+      .map(sf => EValue[T](sf))((tsc.actorMaterializer.executionContext))
+
   def apply[T](t: T, name: String)(
       implicit encoder: Serializer[T],
       tsc: TaskSystemComponents): Future[EValue[T]] =
