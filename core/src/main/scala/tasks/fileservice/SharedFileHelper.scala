@@ -42,7 +42,9 @@ import tasks.util.config._
 import tasks.queue._
 import tasks.wire._
 
-private[tasks] object SharedFileHelper {
+import com.typesafe.scalalogging.StrictLogging
+
+private[tasks] object SharedFileHelper extends StrictLogging {
 
   def getByNameUnchecked(name: String)(
       implicit service: FileServiceComponent,
@@ -220,7 +222,7 @@ private[tasks] object SharedFileHelper {
     historyContext match {
       case NoHistory => Future.successful(())
       case ctx: HistoryContextImpl =>
-        val history = History(sf, Some(ctx))
+        val history = History(sf, Some(ctx.deduplicate))
         val serialized =
           History.encoder.apply(history).noSpaces.getBytes("UTF-8")
 
@@ -240,17 +242,25 @@ private[tasks] object SharedFileHelper {
       case managed: ManagedFilePath =>
         val historyManagedPath = ManagedFilePath(
           managed.pathElements.dropRight(1) :+ managed.name + ".history")
+        logger.debug("Decoding history of " + sf)
 
         def readFile =
           getSourceToManagedPath(historyManagedPath)
+            .take(1024 * 1024 * 20L)
             .runFold(ByteString.empty)(_ ++ _)
             .map(_.toArray)
             .map { byteArray =>
-              val string = new String(byteArray)
-              io.circe.parser.decode[History](string) match {
-                case Left(e) =>
-                  throw e
-                case Right(history) => history
+              if (byteArray.length >= 1024 * 1024 * 20) {
+                logger.warn("Truncating history due to file size.")
+                History(sf, None)
+              } else {
+                val string = new String(byteArray)
+
+                io.circe.parser.decode[History](string) match {
+                  case Left(e) =>
+                    throw e
+                  case Right(history) => history.deduplicate
+                }
               }
             }
 

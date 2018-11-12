@@ -44,24 +44,28 @@ package object queue {
             .traverse(hasSharedFiles.files)(_.history)
 
         dependencies.map { dependencies =>
-          fileservice.HistoryContextImpl(
-            dependencies = dependencies.toList,
-            task = fileservice.History.TaskVersion(taskID, taskVersion),
-            codeVersion =
-              computationEnvironment.components.tasksConfig.codeVersion,
-            timestamp = java.time.Instant.now
-          )
+          fileservice
+            .HistoryContextImpl(
+              dependencies = dependencies.toList,
+              task = fileservice.History.TaskVersion(taskID, taskVersion),
+              codeVersion =
+                computationEnvironment.components.tasksConfig.codeVersion,
+              timestamp = java.time.Instant.now
+            )
+            .deduplicate
         }
 
       case _ =>
         Future.successful(
-          fileservice.HistoryContextImpl(
-            dependencies = Nil,
-            task = fileservice.History.TaskVersion(taskID, taskVersion),
-            codeVersion =
-              computationEnvironment.components.tasksConfig.codeVersion,
-            timestamp = java.time.Instant.now
-          ))
+          fileservice
+            .HistoryContextImpl(
+              dependencies = Nil,
+              task = fileservice.History.TaskVersion(taskID, taskVersion),
+              codeVersion =
+                computationEnvironment.components.tasksConfig.codeVersion,
+              timestamp = java.time.Instant.now
+            )
+            .deduplicate)
     }
 
     newHistory.map { newHistory =>

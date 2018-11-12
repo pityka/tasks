@@ -140,13 +140,16 @@ package object tasks {
 
   def defaultTaskSystem(extraConf: Option[Config]): TaskSystem = {
 
-    val configuration = () =>
+    val configuration = () => {
+      ConfigFactory.invalidateCaches
+
       (extraConf.map { extraConf =>
         ConfigFactory.defaultOverrides
           .withFallback(extraConf)
           .withFallback(ConfigFactory.load)
       } getOrElse
         ConfigFactory.load)
+    }
 
     implicit val tconfig = tasks.util.config.parse(configuration)
 

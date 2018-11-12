@@ -11,12 +11,57 @@ case class HistoryContextImpl(
     task: History.TaskVersion,
     codeVersion: String,
     timestamp: java.time.Instant
-) extends HistoryContext
+) extends HistoryContext {
+  def deduplicate = {
+    def loop(cursor: HistoryContext,
+             filesSeen: Set[SharedFile]): (HistoryContext, Set[SharedFile]) =
+      cursor match {
+        case cursor: HistoryContextImpl =>
+          val (updatedFilesSeen, modifiedDependencyList) =
+            cursor.dependencies.foldLeft((filesSeen, List.empty[History])) {
+              case ((filesSeen, accumulator), nextElem) =>
+                if (filesSeen.contains(nextElem.self))
+                  (filesSeen + nextElem.self,
+                   nextElem.copy(context = None) :: accumulator)
+                else {
+                  nextElem.context match {
+                    case None =>
+                      (filesSeen, nextElem :: accumulator)
+                    case Some(context) =>
+                      val filesSeenIncludingThis = filesSeen + nextElem.self
+                      val (deduplicatedContext, fileSeenInContext) =
+                        loop(context, filesSeenIncludingThis)
+
+                      (filesSeenIncludingThis ++ fileSeenInContext,
+                       nextElem.copy(context = Some(deduplicatedContext)) :: accumulator)
+                  }
+
+                }
+
+            }
+
+          (cursor.copy(dependencies = modifiedDependencyList.reverse),
+           updatedFilesSeen)
+        case NoHistory =>
+          (NoHistory, Set.empty)
+
+      }
+
+    loop(this, Set())._1
+  }
+}
+
 case object NoHistory extends HistoryContext {
   def dependencies = Nil
 }
 
-case class History(self: SharedFile, context: Option[HistoryContext])
+case class History(self: SharedFile, context: Option[HistoryContext]) {
+  def deduplicate =
+    copy(context = context.map {
+      case ctx: HistoryContextImpl => ctx.deduplicate
+      case NoHistory               => NoHistory
+    })
+}
 
 object History {
 
