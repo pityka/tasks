@@ -29,8 +29,24 @@ package tasks.util.config
 
 import com.typesafe.config.Config
 import scala.collection.JavaConverters._
+import com.typesafe.scalalogging.StrictLogging
 
-class TasksConfig(val raw: Config) {
+class TasksConfig(load: () => Config) extends StrictLogging {
+
+  private val lastLoadedAt =
+    new java.util.concurrent.atomic.AtomicLong(System.nanoTime)
+  private var lastLoaded = load()
+
+  def raw: Config = {
+    val currentTime = System.nanoTime
+    if (currentTime - lastLoadedAt.get > 10000000000L) {
+      logger.debug("Reload config.")
+      val current = load()
+      lastLoaded = current
+      lastLoadedAt.set(currentTime)
+      current
+    } else lastLoaded
+  }
 
   val asString = raw.root.render
 
@@ -43,15 +59,15 @@ class TasksConfig(val raw: Config) {
   val launcherActorHeartBeatInterval: FD =
     raw.getDuration("tasks.failuredetector.heartbeat-interval")
 
-  val fileSendChunkSize = raw.getBytes("tasks.fileSendChunkSize").toInt
+  def fileSendChunkSize = raw.getBytes("tasks.fileSendChunkSize").toInt
 
-  val resubmitFailedTask = raw.getBoolean("tasks.resubmitFailedTask")
+  def resubmitFailedTask = raw.getBoolean("tasks.resubmitFailedTask")
 
-  val verifySharedFileInCache = raw.getBoolean("tasks.verifySharedFileInCache")
+  def verifySharedFileInCache = raw.getBoolean("tasks.verifySharedFileInCache")
 
   val disableRemoting = raw.getBoolean("tasks.disableRemoting")
 
-  val skipContentHashVerificationAfterCache =
+  def skipContentHashVerificationAfterCache =
     raw.getBoolean("tasks.skipContentHashVerificationAfterCache")
 
   val acceptableHeartbeatPause: FD =
@@ -88,13 +104,13 @@ class TasksConfig(val raw: Config) {
 
   val elasticSupport = raw.getString("tasks.elastic.engine")
 
-  val idleNodeTimeout: FD = raw.getDuration("tasks.elastic.idleNodeTimeout")
+  def idleNodeTimeout: FD = raw.getDuration("tasks.elastic.idleNodeTimeout")
 
-  val maxNodes = raw.getInt("tasks.elastic.maxNodes")
+  def maxNodes = raw.getInt("tasks.elastic.maxNodes")
 
-  val maxPendingNodes = raw.getInt("tasks.elastic.maxPending")
+  def maxPendingNodes = raw.getInt("tasks.elastic.maxPending")
 
-  val maxNodesCumulative = raw.getInt("tasks.elastic.maxNodesCumulative")
+  def maxNodesCumulative = raw.getInt("tasks.elastic.maxNodesCumulative")
 
   val queueCheckInterval: FD =
     raw.getDuration("tasks.elastic.queueCheckInterval")
@@ -105,37 +121,37 @@ class TasksConfig(val raw: Config) {
   val nodeKillerMonitorInterval: FD =
     raw.getDuration("tasks.elastic.nodeKillerMonitorInterval")
 
-  val jvmMaxHeapFactor = raw.getDouble("tasks.elastic.jvmMaxHeapFactor")
+  def jvmMaxHeapFactor = raw.getDouble("tasks.elastic.jvmMaxHeapFactor")
 
-  val logQueueStatus = raw.getBoolean("tasks.elastic.logQueueStatus")
+  def logQueueStatus = raw.getBoolean("tasks.elastic.logQueueStatus")
 
   val endpoint: String = raw.getString("tasks.elastic.aws.endpoint")
 
-  val spotPrice: Double = raw.getDouble("tasks.elastic.aws.spotPrice")
+  def spotPrice: Double = raw.getDouble("tasks.elastic.aws.spotPrice")
 
-  val amiID: String = raw.getString("tasks.elastic.aws.ami")
+  def amiID: String = raw.getString("tasks.elastic.aws.ami")
 
-  val slaveInstanceType = raw.getString("tasks.elastic.aws.instanceType")
+  def slaveInstanceType = raw.getString("tasks.elastic.aws.instanceType")
 
-  val securityGroup: String = raw.getString("tasks.elastic.aws.securityGroup")
+  def securityGroup: String = raw.getString("tasks.elastic.aws.securityGroup")
 
-  val securityGroups: List[String] =
+  def securityGroups: List[String] =
     raw.getStringList("tasks.elastic.aws.securityGroups").asScala.toList
 
-  val subnetId = raw.getString("tasks.elastic.aws.subnetId")
+  def subnetId = raw.getString("tasks.elastic.aws.subnetId")
 
-  val keyName = raw.getString("tasks.elastic.aws.keyName")
+  def keyName = raw.getString("tasks.elastic.aws.keyName")
 
-  val additionalJavaCommandline =
+  def additionalJavaCommandline =
     raw.getString("tasks.elastic.javaCommandLine")
 
-  val iamRole = {
+  def iamRole = {
     val s = raw.getString("tasks.elastic.aws.iamRole")
     if (s == "" || s == "-") None
     else Some(s)
   }
 
-  val placementGroup: Option[String] =
+  def placementGroup: Option[String] =
     raw.getString("tasks.elastic.aws.placementGroup") match {
       case x if x == "" => None
       case x            => Some(x)
@@ -154,12 +170,13 @@ class TasksConfig(val raw: Config) {
     .map(x => x(0) -> x(1))
     .toList
 
-  val instanceTags = raw
-    .getStringList("tasks.elastic.aws.tags")
-    .asScala
-    .grouped(2)
-    .map(x => x(0) -> x(1))
-    .toList
+  def instanceTags =
+    raw
+      .getStringList("tasks.elastic.aws.tags")
+      .asScala
+      .grouped(2)
+      .map(x => x(0) -> x(1))
+      .toList
 
   val terminateMaster = raw.getBoolean("tasks.elastic.aws.terminateMaster")
 
@@ -177,11 +194,11 @@ class TasksConfig(val raw: Config) {
 
   val appUIServerPort = raw.getInt("tasks.ui.app.port")
 
-  val kubernetesImageName = raw.getString("tasks.kubernetes.image")
+  def kubernetesImageName = raw.getString("tasks.kubernetes.image")
 
-  val kubernetesNamespace = raw.getString("tasks.kubernetes.namespace")
+  def kubernetesNamespace = raw.getString("tasks.kubernetes.namespace")
 
-  val kubernetesImagePullPolicy =
+  def kubernetesImagePullPolicy =
     raw.getString("tasks.kubernetes.image-pull-policy")
 
   val slaveMainClass = raw.getString("tasks.slave-main-class")
@@ -189,9 +206,9 @@ class TasksConfig(val raw: Config) {
   val createFilePrefixForTaskId =
     raw.getBoolean("tasks.createFilePrefixForTaskId")
 
-  val allowDeletion = raw.getBoolean("tasks.fileservice.allowDeletion")
+  def allowDeletion = raw.getBoolean("tasks.fileservice.allowDeletion")
 
-  val folderFileStorageCompleteFileCheck =
+  def folderFileStorageCompleteFileCheck =
     raw.getBoolean("tasks.fileservice.folderFileStorageCompleteFileCheck")
 
 }

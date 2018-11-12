@@ -140,13 +140,13 @@ package object tasks {
 
   def defaultTaskSystem(extraConf: Option[Config]): TaskSystem = {
 
-    val configuration =
-      extraConf.map { extraConf =>
+    val configuration = () =>
+      (extraConf.map { extraConf =>
         ConfigFactory.defaultOverrides
           .withFallback(extraConf)
           .withFallback(ConfigFactory.load)
       } getOrElse
-        ConfigFactory.load
+        ConfigFactory.load)
 
     implicit val tconfig = tasks.util.config.parse(configuration)
 
@@ -188,7 +188,7 @@ package object tasks {
       ConfigFactory.defaultOverrides
         .withFallback(akkaProgrammaticalConfiguration)
         .withFallback(ConfigFactory.parseResources("akka.conf"))
-        .withFallback(configuration)
+        .withFallback(configuration())
 
     }
 

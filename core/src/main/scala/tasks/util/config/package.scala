@@ -27,7 +27,6 @@ package tasks.util
 
 import com.typesafe.config.Config
 import scala.concurrent.duration._
-import akka.actor.ActorSystem
 import scala.language.implicitConversions
 
 package object config {
@@ -37,8 +36,6 @@ package object config {
   implicit def asFiniteDuration(d: java.time.Duration) =
     scala.concurrent.duration.Duration.fromNanos(d.toNanos)
 
-  def parse(c: Config) = new TasksConfig(c)
-
-  def parse(implicit as: ActorSystem) = new TasksConfig(as.settings.config)
+  def parse(c: () => Config) = new TasksConfig(c)
 
 }

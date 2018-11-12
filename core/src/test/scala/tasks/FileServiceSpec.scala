@@ -73,7 +73,8 @@ class FileServiceSpec
   implicit val sh = new StreamHelper(None)
 
   implicit val tconfig = tasks.util.config
-    .parse(ConfigFactory.load().withFallback(ConfigFactory.load("akka.conf")))
+    .parse(() =>
+      ConfigFactory.load().withFallback(ConfigFactory.load("akka.conf")))
 
   val remoteStore = new RemoteFileStorage
 
