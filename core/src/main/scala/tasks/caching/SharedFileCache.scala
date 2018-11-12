@@ -71,8 +71,10 @@ private[tasks] class SharedFileCache(
     val fileName = "__meta__result__" + hash
     SharedFileHelper
       .getByNameUnchecked(fileName)
-      .flatMap(sf => SharedFileHelper.getPathToFile(sf))
-      .map(x => Some(x))
+      .flatMap {
+        case None     => Future.successful(None)
+        case Some(sf) => SharedFileHelper.getPathToFile(sf).map(Some(_))
+      }
       .recover {
         case e =>
           logger.error(e, s"Failed to locate cached result file: $fileName")

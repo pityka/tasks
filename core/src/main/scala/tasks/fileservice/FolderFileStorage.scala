@@ -134,9 +134,15 @@ class FolderFileStorage(val basePath: File)(implicit
   def createSource(path: ManagedFilePath): Source[ByteString, _] =
     FileIO.fromPath(assemblePath(path).toPath, chunkSize = 65536)
 
-  def exportFile(path: ManagedFilePath): Future[File] =
-    Future.successful(assemblePath(path))
-
+  def exportFile(path: ManagedFilePath): Future[File] = {
+    val file = assemblePath(path)
+    if (file.canRead) Future.successful(file)
+    else {
+      Future.failed(
+        new java.nio.file.NoSuchFileException(
+          file.getAbsolutePath + " " + System.nanoTime))
+    }
+  }
   private def copyFile(source: File, destination: File): Unit = {
     val parentFolder = destination.getParentFile
     parentFolder.mkdirs

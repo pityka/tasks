@@ -49,12 +49,17 @@ private[tasks] object SharedFileHelper {
       context: ActorRefFactory,
       nlc: NodeLocalCacheActor,
       prefix: FileServicePrefix,
-      ec: ExecutionContext): Future[SharedFile] =
-    getPathToFile(new SharedFile(prefix.propose(name).toManaged, -1L, 0))
-      .map { f =>
-        new SharedFile(prefix.propose(name).toManaged, -1L, 0)
+      ec: ExecutionContext): Future[Option[SharedFile]] = {
+    val sf = new SharedFile(prefix.propose(name).toManaged, -1L, 0)
+    getPathToFile(sf)
+      .map { _ =>
+        Some(sf)
       }
-
+      .recover {
+        case _: java.nio.file.NoSuchFileException =>
+          None
+      }
+  }
   def createForTesting(name: String) =
     new SharedFile(ManagedFilePath(Vector(name)), 0, 0)
   def createForTesting(name: String, size: Long, hash: Int) =
@@ -114,33 +119,39 @@ private[tasks] object SharedFileHelper {
                                     context: ActorRefFactory,
                                     nlc: NodeLocalCacheActor,
                                     ec: ExecutionContext): Future[File] =
-    NodeLocalCache._getItemAsync("fs::" + sf) {
-      sf.path match {
-        case p: RemoteFilePath => service.remote.exportFile(p)
-        case p: ManagedFilePath =>
-          if (service.storage.isDefined) {
-            service.storage.get.exportFile(p)
-          } else {
-            val serviceactor = service.actor
-            implicit val timout = akka.util.Timeout(1441 minutes)
-            val ac = context.actorOf(
-              Props(
-                new FileUser(p, sf.byteSize, sf.hash, serviceactor, isLocal))
-                .withDispatcher("fileuser-dispatcher"))
-
-            val f = (ac ? WaitingForPath).asInstanceOf[Future[Try[File]]]
-            f onComplete {
-              case _ => ac ! PoisonPill
-            }
-
-            f map (_ match {
-              case Success(r) => r
-              case Failure(e) =>
-                throw new RuntimeException("getPathToFile failed. " + p, e)
-            })
-          }
+    NodeLocalCache
+      ._getItemAsync("fs::" + sf)(getPathToFileUncached(sf))
+      .recoverWith {
+        case _: java.nio.file.NoSuchFileException => getPathToFileUncached(sf)
       }
 
+  private def getPathToFileUncached(sf: SharedFile)(
+      implicit service: FileServiceComponent,
+      context: ActorRefFactory,
+      ec: ExecutionContext): Future[File] =
+    sf.path match {
+      case p: RemoteFilePath => service.remote.exportFile(p)
+      case p: ManagedFilePath =>
+        if (service.storage.isDefined) {
+          service.storage.get.exportFile(p)
+        } else {
+          val serviceactor = service.actor
+          implicit val timout = akka.util.Timeout(1441 minutes)
+          val ac = context.actorOf(
+            Props(new FileUser(p, sf.byteSize, sf.hash, serviceactor, isLocal))
+              .withDispatcher("fileuser-dispatcher"))
+
+          val f = (ac ? WaitingForPath).asInstanceOf[Future[Try[File]]]
+          f onComplete {
+            case _ => ac ! PoisonPill
+          }
+
+          f map (_ match {
+            case Success(r) => r
+            case Failure(e) =>
+              throw new RuntimeException("getPathToFile failed. " + p, e)
+          })
+        }
     }
 
   def isAccessible(sf: SharedFile)(

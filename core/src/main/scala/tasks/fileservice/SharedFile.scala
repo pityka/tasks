@@ -126,7 +126,7 @@ object SharedFile {
     SharedFileHelper.createFromFolder(callback)
 
   def getByNameUnchecked(name: String)(
-      implicit tsc: TaskSystemComponents): Future[SharedFile] =
+      implicit tsc: TaskSystemComponents): Future[Option[SharedFile]] =
     SharedFileHelper.getByNameUnchecked(name)
 
 }
