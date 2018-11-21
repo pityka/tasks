@@ -151,11 +151,28 @@ class FolderFileStorage(val basePath: File)(implicit
     com.google.common.io.Files.copy(source, tmp)
 
     destination.delete
-    val succ = tmp.renameTo(destination)
+
+    def tryRename(i: Int): Boolean = {
+      val success = tmp.renameTo(destination)
+      if (success) success
+      else if (i > 0) {
+        logger.warning(
+          s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}. Try $i more times.")
+        tryRename(i - 1)
+      } else {
+        logger.error(
+          s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}")
+        false
+      }
+    }
+
+    val succ = tryRename(3)
     if (succ) {
       tmp.delete
 
-    } else throw new RuntimeException("can't rename file" + destination)
+    } else
+      throw new RuntimeException(
+        s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}")
   }
 
   private def assemblePath(path: ManagedFilePath): File = {
