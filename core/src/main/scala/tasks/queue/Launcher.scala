@@ -89,6 +89,7 @@ class Launcher(
     with akka.actor.ActorLogging {
 
   private case object CheckQueue extends Serializable
+  private case object PrintResources extends Serializable
 
   private val maxResources: VersionedResourceAvailable = slots
   private var availableResources: VersionedResourceAvailable = maxResources
@@ -159,12 +160,19 @@ class Launcher(
   }
 
   private var scheduler: Cancellable = null
+  private var logScheduler: Cancellable = null
 
   override def preStart: Unit = {
     log.debug("TaskLauncher starting")
 
     import context.dispatcher
 
+    logScheduler = context.system.scheduler.schedule(
+      initialDelay = 0 seconds,
+      interval = 20 seconds,
+      receiver = self,
+      message = PrintResources
+    )
     scheduler = context.system.scheduler.schedule(
       initialDelay = 0 seconds,
       interval = refreshInterval,
@@ -176,6 +184,8 @@ class Launcher(
 
   override def postStop: Unit = {
     scheduler.cancel
+
+    logScheduler.cancel
 
     runningTasks.foreach(_._1 ! PoisonPill)
     log.info(
@@ -254,6 +264,8 @@ class Launcher(
       taskFailed(actor, cause)
       askForWork
 
+    case PrintResources =>
+      log.info(s"Available resources: $availableResources on $self")
     case CheckQueue => askForWork
     case Ping       => sender ! Pong
     case PrepareForShutdown =>
