@@ -218,7 +218,8 @@ private[tasks] object SharedFileHelper extends StrictLogging {
       service: FileServiceComponent,
       context: ActorRefFactory,
       config: TasksConfig,
-      mat: Materializer): Future[Unit] = {
+      mat: Materializer,
+      nlc: NodeLocalCacheActor): Future[Unit] = {
     historyContext match {
       case NoHistory => Future.successful(())
       case ctx: HistoryContextImpl =>
@@ -280,38 +281,44 @@ private[tasks] object SharedFileHelper extends StrictLogging {
       context: ActorRefFactory,
       config: TasksConfig,
       historyContext: HistoryContext,
-      mat: Materializer) = {
-    val sharedFile = if (service.storage.isDefined) {
-      val proposedPath = prefix.propose(name)
-      service.storage.get.importFile(file, proposedPath).map { f =>
-        if (deleteFile) {
-          file.delete
+      mat: Materializer,
+      nlc: NodeLocalCacheActor) =
+    NodeLocalCache
+      ._getItemAsync("fsCreateFromFile::" + prefix.propose(name)) {
+        val sharedFile = if (service.storage.isDefined) {
+          val proposedPath = prefix.propose(name)
+          service.storage.get.importFile(file, proposedPath).map { f =>
+            if (deleteFile) {
+              file.delete
+            }
+            SharedFileHelper.create(f._1, f._2, f._4)
+          }
+        } else {
+          val serviceactor = service.actor
+          if (!file.canRead) {
+            throw new java.io.FileNotFoundException("not found" + file)
+          }
+
+          implicit val timout = akka.util.Timeout(1441 minutes)
+
+          val ac = context.actorOf(
+            Props(
+              new FileSender(file,
+                             prefix.propose(name),
+                             deleteFile,
+                             serviceactor))
+              .withDispatcher("filesender-dispatcher"))
+          (ac ? WaitingForSharedFile)
+            .asInstanceOf[Future[Option[SharedFile]]]
+            .map(_.get)
+            .andThen { case _ => ac ! PoisonPill }
+
         }
-        SharedFileHelper.create(f._1, f._2, f._4)
+        for {
+          sf <- sharedFile
+          _ <- saveHistory(sf, historyContext)
+        } yield sf
       }
-    } else {
-      val serviceactor = service.actor
-      if (!file.canRead) {
-        throw new java.io.FileNotFoundException("not found" + file)
-      }
-
-      implicit val timout = akka.util.Timeout(1441 minutes)
-
-      val ac = context.actorOf(
-        Props(
-          new FileSender(file, prefix.propose(name), deleteFile, serviceactor))
-          .withDispatcher("filesender-dispatcher"))
-      (ac ? WaitingForSharedFile)
-        .asInstanceOf[Future[Option[SharedFile]]]
-        .map(_.get)
-        .andThen { case _ => ac ! PoisonPill }
-
-    }
-    for {
-      sf <- sharedFile
-      _ <- saveHistory(sf, historyContext)
-    } yield sf
-  }
 
   def createFromSource(source: Source[ByteString, _], name: String)(
       implicit prefix: FileServicePrefix,
@@ -320,33 +327,36 @@ private[tasks] object SharedFileHelper extends StrictLogging {
       context: ActorRefFactory,
       mat: Materializer,
       config: TasksConfig,
-      historyContext: HistoryContext) = {
-    val sharedFile = if (service.storage.isDefined) {
-      val proposedPath = prefix.propose(name)
-      service.storage.get.importSource(source, proposedPath).map { x =>
-        SharedFileHelper.create(x._1, x._2, x._3)
+      historyContext: HistoryContext,
+      nlc: NodeLocalCacheActor) =
+    NodeLocalCache
+      ._getItemAsync("fsCreateFromSource::" + prefix.propose(name)) {
+        val sharedFile = if (service.storage.isDefined) {
+          val proposedPath = prefix.propose(name)
+          service.storage.get.importSource(source, proposedPath).map { x =>
+            SharedFileHelper.create(x._1, x._2, x._3)
+          }
+        } else {
+
+          val serviceactor = service.actor
+
+          implicit val timout = akka.util.Timeout(1441 minutes)
+
+          val ac = context.actorOf(
+            Props(new SourceSender(source, prefix.propose(name), serviceactor))
+              .withDispatcher("filesender-dispatcher"))
+
+          (ac ? WaitingForSharedFile)
+            .asInstanceOf[Future[Option[SharedFile]]]
+            .map(_.get)
+            .andThen { case _ => ac ! PoisonPill }
+
+        }
+        for {
+          sf <- sharedFile
+          _ <- saveHistory(sf, historyContext)
+        } yield sf
       }
-    } else {
-
-      val serviceactor = service.actor
-
-      implicit val timout = akka.util.Timeout(1441 minutes)
-
-      val ac = context.actorOf(
-        Props(new SourceSender(source, prefix.propose(name), serviceactor))
-          .withDispatcher("filesender-dispatcher"))
-
-      (ac ? WaitingForSharedFile)
-        .asInstanceOf[Future[Option[SharedFile]]]
-        .map(_.get)
-        .andThen { case _ => ac ! PoisonPill }
-
-    }
-    for {
-      sf <- sharedFile
-      _ <- saveHistory(sf, historyContext)
-    } yield sf
-  }
 
   def createFromFolder(callback: File => List[File])(
       implicit prefix: FileServicePrefix,
@@ -355,7 +365,8 @@ private[tasks] object SharedFileHelper extends StrictLogging {
       context: ActorRefFactory,
       config: TasksConfig,
       historyContext: HistoryContext,
-      mat: Materializer) =
+      mat: Materializer,
+      nlc: NodeLocalCacheActor) =
     if (service.storage.isDefined) {
 
       val directory = service.storage.get

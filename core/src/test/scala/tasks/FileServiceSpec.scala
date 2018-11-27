@@ -98,6 +98,8 @@ class FileServiceSpec
       val folder2 =
         new File(new java.io.File(getClass.getResource("/").getPath), "test1f")
       folder2.mkdir
+      implicit val nlc =
+        NodeLocalCache.start
       val fs = new FolderFileStorage(folder)
       val service = system.actorOf(
         Props(
