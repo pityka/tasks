@@ -210,7 +210,7 @@ lazy val collection = project
   .settings(
     name := "tasks-collection",
     libraryDependencies ++= Seq(
-      "io.github.pityka" %% "flatjoin-akka-stream" % "0.0.9",
+      "io.github.pityka" %% "flatjoin-akka-stream" % "0.0.12",
       "org.scalatest" %% "scalatest" % "3.0.0" % "test")
   )
   .dependsOn(core)

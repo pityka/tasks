@@ -329,7 +329,7 @@ object Macros {
             val w = implicitly[tasks.queue.Serializer[$a]]
             implicit val fmt = tasks.collection.EColl.flatJoinFormat[$a]
             implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
-            val sortedSource = t.sourceOfPartition(idx)(r,ctx.components).via(flatjoin_akka.sort)
+            val sortedSource = t.sourceOfPartition(idx)(r,ctx.components).via(flatjoin_akka.Instance().sort(1))
              EColl.fromSourceAsPartition(sortedSource, t.basename+"."+$taskID, idx)(w,ctx.components)
           }
 
@@ -349,7 +349,7 @@ object Macros {
             val fileReader = (f:java.io.File) => tasks.collection.EColl.decodeFileForFlatJoin(r,sk,resourceAllocated.cpu)(f)(ctx.components.actorMaterializer.executionContext)
 
             scala.concurrent.Future.sequence(partitions.map(_.partitions.head.file)).flatMap{ files =>
-              val mergeFlow = flatjoin_akka.merge[$a](fileReader)
+              val mergeFlow = flatjoin_akka.Instance().merge[$a](fileReader)
               EColl.fromSource(akka.stream.scaladsl.Source(files.toList).via(mergeFlow),t.basename+"."+$taskID,$partitionSize, resourceAllocated.cpu)(w,ctx.components)
             }
           }
@@ -377,7 +377,7 @@ object Macros {
           implicit val fmt = tasks.collection.EColl.flatJoinFormat[$a]
           implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
           val parallelismOfJoin = math.min(resourceAllocated.cpu,$maxParallelJoins.getOrElse(resourceAllocated.cpu))
-          val groupedSource = t.source(resourceAllocated.cpu)(r,ctx.components).via(flatjoin_akka.groupByShardsInMemory(resourceAllocated.cpu,parallelismOfJoin))
+          val groupedSource = t.source(resourceAllocated.cpu)(r,ctx.components).via(flatjoin_akka.Instance().groupByShardsInMemory(resourceAllocated.cpu,parallelismOfJoin))
            EColl.fromSource(groupedSource, (t.basename+"."+$taskID),$partitionSize, resourceAllocated.cpu)(w,ctx.components)
         }
     """
@@ -429,7 +429,7 @@ object Macros {
           implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
           val parallelismOfJoin = math.min(resourceAllocated.cpu,$maxParallelJoins.getOrElse(resourceAllocated.cpu))
           val catted = akka.stream.scaladsl.Source(ts.zipWithIndex).flatMapConcat(x => x._1.source(resourceAllocated.cpu).map(y =>x._2 -> y))
-          val joinedSource = catted.via(flatjoin_akka.outerJoinByShards(ts.size,resourceAllocated.cpu,parallelismOfJoin))
+          val joinedSource = catted.via(flatjoin_akka.Instance().outerJoinByShards(ts.size,resourceAllocated.cpu,parallelismOfJoin))
           EColl.fromSource(joinedSource, ($taskID+"."+ts.map(_.basename).mkString(".x.")),$partitionSize, resourceAllocated.cpu)(w,ctx.components)
         }
     """
@@ -457,7 +457,7 @@ object Macros {
           implicit val sk = new flatjoin.StringKey[$a] { def key(t:$a) = fun(t)}
                     
           val catted = akka.stream.scaladsl.Source(ts.zipWithIndex).flatMapConcat(x => x._1.source(resourceAllocated.cpu).map(y =>x._2 -> y))
-          val joinedSource = catted.via(flatjoin_akka.outerJoinSorted(ts.size))
+          val joinedSource = catted.via(flatjoin_akka.Instance().outerJoinSorted(ts.size))
           EColl.fromSource(joinedSource, ($taskID+"."+ts.map(_.basename).mkString(".x.")),$partitionSize, resourceAllocated.cpu)(w,ctx.components)
         }
     """
@@ -499,7 +499,7 @@ object Macros {
           }}
        
           val catted : akka.stream.scaladsl.Source[(Int,Either[$a,$b]),_] = as.source(resourceAllocated.cpu).map(a => 0 -> Left[$a,$b](a)) ++ bs.source(resourceAllocated.cpu).map(b => 1 -> Right[$a,$b](b))
-          val joinedSource = catted.via(flatjoin_akka.outerJoinByShards(2,resourceAllocated.cpu,parallelismOfJoin))
+          val joinedSource = catted.via(flatjoin_akka.Instance().outerJoinByShards(2,resourceAllocated.cpu,parallelismOfJoin))
           val unzippedSource = joinedSource.map{ seq =>
             val a = seq(0)
             val b = seq(1)
@@ -544,7 +544,7 @@ object Macros {
           }}
        
           val catted : akka.stream.scaladsl.Source[(Int,Either[$a,$b]),_] = as.source(resourceAllocated.cpu).map(a => 0 -> Left[$a,$b](a)) ++ bs.source(resourceAllocated.cpu).map(b => 1 -> Right[$a,$b](b))
-          val joinedSource = catted.via(flatjoin_akka.outerJoinSorted(2,resourceAllocated.cpu))
+          val joinedSource = catted.via(flatjoin_akka.Instance().outerJoinSorted(2,resourceAllocated.cpu))
           val unzippedSource = joinedSource.map{ seq =>
             val a = seq(0)
             val b = seq(1)
@@ -591,7 +591,7 @@ object Macros {
           }}
        
           val catted : akka.stream.scaladsl.Source[(Int,Either[$a,$b]),_] = as.source(resourceAllocated.cpu).map(a => 0 -> Left[$a,$b](a)) ++ bs.source(resourceAllocated.cpu).map(b => 1 -> Right[$a,$b](b))
-          val joinedSource = catted.via(flatjoin_akka.outerJoinByShards(2,resourceAllocated.cpu,parallelismOfJoin))
+          val joinedSource = catted.via(flatjoin_akka.Instance().outerJoinByShards(2,resourceAllocated.cpu,parallelismOfJoin))
           val unzippedSource = joinedSource.map{ seq =>
             val a = seq(0)
             val b = seq(1)
