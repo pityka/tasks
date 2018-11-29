@@ -466,14 +466,17 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
         if (hostConfig.isQueue) {
           val cacheReaper = system.actorOf(Props(new CallbackReaper({
             fileActor ! PoisonPill
+            nodeLocalCache.actor ! PoisonPill
           })))
           (cacheReaper ? WatchMe(cacheActor, answer = true)).foreach { _ =>
             cacheActor ! PoisonPillToCacheActor
           }
           queueActor ! PoisonPill
+        } else {
+
+          nodeLocalCache.actor ! PoisonPill
         }
         localNodeRegistry.foreach(_ ! PoisonPill)
-        nodeLocalCache.actor ! PoisonPill
 
         tasksystemlog.info(
           "Shutting down tasksystem. Blocking until all actors have terminated.")
