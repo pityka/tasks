@@ -205,7 +205,7 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
         val launcher = LauncherActor(sender)
 
         state.queuedTasks
-          .find {
+          .filter {
             case (sch, _) =>
               val ret = availableResource.canFulfillRequest(sch.resource)
               if (!ret) {
@@ -214,6 +214,9 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
               }
               ret
           }
+          .toSeq
+          .sortBy(_._1.priority)
+          .headOption
           .foreach {
             case (sch, proxies) =>
               val withNegotiation = state.update(Negotiating(launcher, sch))

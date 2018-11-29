@@ -81,7 +81,8 @@ package object queue {
       prerequisitives: B,
       resource: shared.VersionedResourceRequest,
       function: CompFun2,
-      taskId: TaskId
+      taskId: TaskId,
+      priority: Int
   )(implicit components: TaskSystemComponents,
     writer1: Serializer[B],
     reader2: Deserializer[A]): ProxyTaskActorRef[B, A] = {
@@ -106,7 +107,8 @@ package object queue {
             queueActor = queue.actor,
             fileServiceComponent = fileService,
             fileServicePrefix = prefix,
-            cacheActor = cache.actor
+            cacheActor = cache.actor,
+            priority = priority
           )
         ).withDispatcher("proxytask-dispatcher")
       )
