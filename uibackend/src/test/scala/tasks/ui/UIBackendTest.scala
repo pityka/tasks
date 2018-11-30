@@ -61,9 +61,15 @@ object UIBackendTest extends TestHelpers {
     withTaskSystem(testConfig2) { implicit ts =>
       import scala.concurrent.ExecutionContext.Implicits.global
 
-      val f1 = testTask(Input(1))(ResourceRequest(1, 500))
-      val f2 = testTask(Input(2))(ResourceRequest(1, 500))
-      val f3 = testTask(Input(3))(ResourceRequest(1, 500))
+      val sf =
+        Await.result(
+          SharedFile(akka.stream.scaladsl.Source.single(akka.util.ByteString()),
+                     "boo"),
+          atMost = 50 seconds)
+
+      val f1 = testTask(Input(1, sf))(ResourceRequest(1, 500))
+      val f2 = testTask(Input(2, sf))(ResourceRequest(1, 500))
+      val f3 = testTask(Input(3, sf))(ResourceRequest(1, 500))
       val future = for {
         t1 <- f1
         t2 <- f2

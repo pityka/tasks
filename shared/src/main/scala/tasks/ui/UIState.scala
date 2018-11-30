@@ -39,14 +39,18 @@ object UIUntypedResult {
 }
 
 sealed trait UIFilePath
-case class UIManagedFilePath(path:Vector[String]) extends UIFilePath
+case class UIManagedFilePath(path:Vector[String]) extends UIFilePath {
+  override def toString = path.mkString("/")
+}
 object UIManagedFilePath {
       implicit val encoder : Encoder[UIManagedFilePath]=
       deriveEncoder[UIManagedFilePath]
     implicit val decoder: Decoder[UIManagedFilePath] =
       deriveDecoder[UIManagedFilePath]
 }
-case class UIRemoteFilePath(uri:String) extends UIFilePath
+case class UIRemoteFilePath(uri:String) extends UIFilePath {
+  override def toString = uri
+}
 object UIRemoteFilePath {
       implicit val encoder =
       deriveEncoder[UIRemoteFilePath]

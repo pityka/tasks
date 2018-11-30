@@ -36,6 +36,9 @@ import akka.util.ByteString
 
 import tasks._
 
+import scala.concurrent._
+import scala.concurrent.duration._
+
 object UIFrontendRun extends TestHelpers {
 
   val testTask = AsyncTask[Input, SharedFile]("uifrontendtest", 1) {
@@ -62,8 +65,13 @@ object UIFrontendRun extends TestHelpers {
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
       import scala.concurrent.ExecutionContext.Implicits.global
+      val sf =
+        Await.result(
+          SharedFile(akka.stream.scaladsl.Source.single(akka.util.ByteString()),
+                     "boo"),
+          atMost = 50 seconds)
       Future.sequence(
-        (1 to 100).map(i => testTask(Input(i))(ResourceRequest(1, 500))))
+        (1 to 100).map(i => testTask(Input(i, sf))(ResourceRequest(1, 500))))
 
       Thread.sleep(Long.MaxValue)
 
@@ -74,7 +82,7 @@ object UIFrontendRun extends TestHelpers {
 
 class UIFrontendRunSuite extends FunSuite with Matchers {
 
-  ignore("keep task system running with ui") {
+  test("keep task system running with ui") {
     UIFrontendRun.run
 
   }

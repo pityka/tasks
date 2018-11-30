@@ -36,7 +36,7 @@ trait TestHelpers {
 
   def await[T](f: Future[T]) = Await.result(f, atMost = Duration.Inf)
 
-  case class Input(i: Int)
+  case class Input(i: Int, sf: tasks.SharedFile)
   object Input {
     implicit val enc: Encoder[Input] = deriveEncoder[Input]
     implicit val dec: Decoder[Input] = deriveDecoder[Input]

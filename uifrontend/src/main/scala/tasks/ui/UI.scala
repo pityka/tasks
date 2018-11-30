@@ -55,7 +55,46 @@ object Helpers {
   def prettyJson(b64: Base64Data): String =
     io.circe.parser
       .parse(new String(java.util.Base64.getDecoder.decode(b64.value)))
-      .fold(_.toString, _.spaces2)
+      .fold(_.toString.take(100), extractFilePath)
+
+  def extractFilePath(json: io.circe.Json): String = {
+    import io.circe._
+    def loop(json: io.circe.Json): List[String] = json.arrayOrObject(
+      or = Nil,
+      jsonArray =
+        elements => elements.flatMap(element => loop(element)).distinct.toList,
+      jsonObject = obj =>
+        if (obj.contains("path") && obj.contains("hash") && obj.contains(
+              "byteSize")) {
+          obj("path").flatMap(_.asObject) match {
+            case Some(obj) if obj.contains("RemoteFilePath") =>
+              Json
+                .fromJsonObject(obj)
+                .hcursor
+                .downField("RemoteFilePath")
+                .downField("uri")
+                .as[String]
+                .right
+                .toOption
+                .toList
+            case Some(obj) if obj.contains("ManagedFilePath") =>
+              Json
+                .fromJsonObject(obj)
+                .hcursor
+                .downField("ManagedFilePath")
+                .downField("pathElements")
+                .as[Vector[String]]
+                .right
+                .toOption
+                .map(_.mkString("/"))
+                .toList
+            case _ => Nil
+          }
+        } else obj.values.flatMap(v => loop(v)).toList
+    )
+
+    loop(json).mkString(", ")
+  }
 
   def showUILauncher(launcher: UILauncherActor): String = {
     val url = new java.net.URI(launcher.actorPath)
@@ -107,11 +146,10 @@ object Helpers {
                                      th("CodeVersion"),
                                      th("CPU"),
                                      th("RAM"),
-                                     th("Result"),
                                      th("ResultFiles"))
 
   val RecoveredTasksTableHeader =
-    tr(th("ID"), th("Input"), th("Result"), th("ResultFiles"))
+    tr(th("ID"), th("Input"), th("ResultFiles"))
 
   def renderTableBodyWithCompletedTasks(
       completedTasks: List[(TaskDescription,
@@ -131,8 +169,9 @@ object Helpers {
             td(resource.codeVersion),
             td(resource.cpu),
             td(resource.memory),
-            td(code(prettyJson(result.data))),
-            td(result.files.toString)
+            td(
+              code(
+                result.files.map(_.path.toString).toSeq.sorted.mkString(", ")))
           )
       }
     ).render
@@ -150,7 +189,9 @@ object Helpers {
               code(prettyJson(taskDescription.input))
             ),
             td(code(prettyJson(result.data))),
-            td(result.files.toString)
+            td(
+              code(
+                result.files.map(_.path.toString).toSeq.sorted.mkString(", ")))
           )
       }
     ).render
