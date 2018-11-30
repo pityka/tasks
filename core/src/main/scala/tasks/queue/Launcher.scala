@@ -65,7 +65,7 @@ case class ScheduleTask(
     fileServicePrefix: FileServicePrefix,
     cacheActor: ActorRef,
     tryCache: Boolean,
-    priority: Int
+    priority: Priority
 )
 
 object ScheduleTask {
@@ -137,7 +137,8 @@ class Launcher(
         filePrefix,
         auxExecutionContext,
         actorMaterializer,
-        config
+        config,
+        scheduleTask.priority
       ).withDispatcher("task-worker-dispatcher")
     )
     log.debug("Actor constructed")

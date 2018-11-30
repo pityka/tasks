@@ -215,7 +215,7 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
               ret
           }
           .toSeq
-          .sortBy(_._1.priority)
+          .sortBy(_._1.priority.toInt)
           .headOption
           .foreach {
             case (sch, proxies) =>

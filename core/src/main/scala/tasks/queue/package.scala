@@ -27,6 +27,7 @@ package tasks
 
 import akka.actor._
 import scala.concurrent._
+import tasks.shared.Priority
 
 package object queue {
 
@@ -82,7 +83,7 @@ package object queue {
       resource: shared.VersionedResourceRequest,
       function: CompFun2,
       taskId: TaskId,
-      priority: Int
+      priority: Priority
   )(implicit components: TaskSystemComponents,
     writer1: Serializer[B],
     reader2: Deserializer[A]): ProxyTaskActorRef[B, A] = {

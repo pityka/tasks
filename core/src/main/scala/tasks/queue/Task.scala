@@ -104,7 +104,8 @@ private class Task(
     fileServicePrefix: FileServicePrefix,
     auxExecutionContext: ExecutionContext,
     actorMaterializer: Materializer,
-    tasksConfig: TasksConfig
+    tasksConfig: TasksConfig,
+    priority: Priority
 ) extends Actor
     with akka.actor.ActorLogging {
 
@@ -161,7 +162,8 @@ private class Task(
           auxExecutionContext,
           actorMaterializer,
           tasksConfig,
-          NoHistory
+          NoHistory,
+          priority
         ),
         akka.event.Logging(context.system.eventStream,
                            "usertasks." + fileServicePrefix.list.mkString(".")),

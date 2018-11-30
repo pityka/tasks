@@ -61,7 +61,7 @@ class ProxyTask[Input, Output](
     fileServiceComponent: FileServiceComponent,
     fileServicePrefix: FileServicePrefix,
     cacheActor: ActorRef,
-    priority: Int
+    priority: Priority
 ) extends Actor
     with akka.actor.ActorLogging {
 

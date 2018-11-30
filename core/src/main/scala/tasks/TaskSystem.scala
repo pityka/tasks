@@ -61,7 +61,8 @@ case class TaskSystemComponents(
     executionContext: ExecutionContext,
     actorMaterializer: Materializer,
     tasksConfig: TasksConfig,
-    historyContext: HistoryContext
+    historyContext: HistoryContext,
+    priority: Priority
 ) {
 
   def withChildPrefix(name: String) =
@@ -393,7 +394,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
     executionContext = auxExecutionContext,
     actorMaterializer = AM,
     tasksConfig = config,
-    historyContext = rootHistory
+    historyContext = rootHistory,
+    priority = Priority(0)
   )
 
   private val launcherActor =
