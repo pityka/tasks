@@ -213,8 +213,7 @@ class NodeRegistry(
                                  LauncherActor(node.launcherActor),
                                targetNode = node,
                                listener = self))
-                .withDispatcher("my-pinned-dispatcher"),
-              "nodekiller" + node.name.value.replace("://", "___")
+                .withDispatcher("my-pinned-dispatcher")
             )
           case None =>
             log.error(
