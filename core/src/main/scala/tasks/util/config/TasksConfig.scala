@@ -211,4 +211,6 @@ class TasksConfig(load: () => Config) extends StrictLogging {
   def folderFileStorageCompleteFileCheck =
     raw.getBoolean("tasks.fileservice.folderFileStorageCompleteFileCheck")
 
+  def pendingNodeTimeout = raw.getDuration("tasks.elastic.pendingNodeTimeout")
+
 }

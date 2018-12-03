@@ -180,7 +180,13 @@ class NodeRegistry(
                     log.warning("Request failed: " + e.getMessage + " " + e)
                     withRequested
                   case Success((jobId, size)) =>
+                    context.system.scheduler.scheduleOnce(
+                      delay = config.pendingNodeTimeout,
+                      receiver = self,
+                      message = InitFailed(jobId)
+                    )(context.dispatcher)
                     withRequested.update(NodeIsPending(jobId, size))
+
                 }
             }
             become(updatedState)
@@ -232,12 +238,14 @@ class NodeRegistry(
         case e: Exception => log.error(e, "unexpected exception")
       }
     case InitFailed(pending) =>
-      log.error("Node init failed: " + pending)
-      try {
-        become(state.update(InitFailed(pending)))
-        shutdownNode.shutdownPendingNode(pending)
-      } catch {
-        case e: Exception => log.error(e, "unexpected exception")
+      if (state.pending.contains(pending)) {
+        log.error("Node init failed: " + pending)
+        try {
+          become(state.update(InitFailed(pending)))
+          shutdownNode.shutdownPendingNode(pending)
+        } catch {
+          case e: Exception => log.error(e, "unexpected exception")
+        }
       }
   }
 
