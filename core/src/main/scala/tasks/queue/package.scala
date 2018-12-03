@@ -47,7 +47,7 @@ package object queue {
         dependencies.map { dependencies =>
           fileservice
             .HistoryContextImpl(
-              dependencies = dependencies.toList,
+              dependencies = dependencies.toList.sorted,
               task = fileservice.History.TaskVersion(taskID, taskVersion),
               codeVersion =
                 computationEnvironment.components.tasksConfig.codeVersion,

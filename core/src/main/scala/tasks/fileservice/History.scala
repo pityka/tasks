@@ -65,6 +65,8 @@ case class History(self: SharedFile, context: Option[HistoryContext]) {
 
 object History {
 
+  implicit val ordering: Ordering[History] = Ordering.by(_.self.toString)
+
   case class TaskVersion(taskID: String, taskVersion: Int)
   object TaskVersion {
     implicit val encoder: Encoder[TaskVersion] =
