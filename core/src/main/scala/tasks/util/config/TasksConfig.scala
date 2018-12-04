@@ -37,9 +37,12 @@ class TasksConfig(load: () => Config) extends StrictLogging {
     new java.util.concurrent.atomic.AtomicLong(System.nanoTime)
   private var lastLoaded = load()
 
+  private def maxConfigLoadInterval =
+    lastLoaded.getDuration("tasks.maxConfigLoadInterval").toNanos
+
   def raw: Config = {
     val currentTime = System.nanoTime
-    if (currentTime - lastLoadedAt.get > 10000000000L) {
+    if (currentTime - lastLoadedAt.get > maxConfigLoadInterval) {
       logger.debug("Reload config.")
       val current = load()
       lastLoaded = current
