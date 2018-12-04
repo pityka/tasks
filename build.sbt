@@ -98,9 +98,9 @@ lazy val core = project
     ),
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "22.0",
-      "com.typesafe.akka" %% "akka-actor" % "2.5.16",
-      "com.typesafe.akka" %% "akka-remote" % "2.5.16",
-      "com.typesafe.akka" %% "akka-testkit" % "2.5.16",
+      "com.typesafe.akka" %% "akka-actor" % "2.5.18",
+      "com.typesafe.akka" %% "akka-remote" % "2.5.18",
+      "com.typesafe.akka" %% "akka-testkit" % "2.5.18" % "test",
       "com.typesafe.akka" %% "akka-http-core" % "10.1.1",
       "com.typesafe" % "config" % "1.3.3",
       "io.github.pityka" %% "selfpackage" % "1.2.3",
