@@ -12,3 +12,5 @@ tmp
 run.log
 GITCOMMITHASH
 fib/
+.bloop/
+.metals/
