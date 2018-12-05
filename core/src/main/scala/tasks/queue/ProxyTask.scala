@@ -105,6 +105,7 @@ class ProxyTask[Input, Output](
                     untypedOutput,
                     output)
           distributeResult(output)
+          self ! PoisonPill
         case Left(error) =>
           log.error(
             s"MessageFromTask received from and failed to decode: $sender, $untypedOutput, $error. Task is rescheduled without caching.")

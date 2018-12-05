@@ -120,7 +120,8 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
           copy(scheduledTasks = scheduledTasks - sch)
         case LauncherCrashed(launcher) =>
           copy(knownLaunchers = knownLaunchers - launcher)
-        case _: CacheHit     => this
+        case CacheHit(sch, _) =>
+          copy(scheduledTasks = scheduledTasks - sch)
         case _: CacheQueried => this
 
       }

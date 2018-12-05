@@ -97,7 +97,7 @@ package object queue {
 
     val promise = Promise[A]
 
-    val actor = context.actorOf(
+    context.actorOf(
       Props(
         new ProxyTask[B, A](
           taskId = taskId1,
@@ -117,10 +117,6 @@ package object queue {
     )
 
     promise.future
-      .andThen {
-        case _ =>
-          actor ! PoisonPill
-      }(components.executionContext)
 
   }
 }
