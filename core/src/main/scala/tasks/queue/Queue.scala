@@ -219,7 +219,7 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
           .sortBy(_._1.priority.toInt)
           .headOption
           .foreach {
-            case (sch, proxies) =>
+            case (sch, _) =>
               val withNegotiation = state.update(Negotiating(launcher, sch))
               log.debug(
                 s"Dequeued. Sending task to $launcher. Negotation: ${state.negotiation}")
@@ -233,7 +233,7 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
 
               context.become(running(newState))
 
-              launcher.actor ! ScheduleWithProxy(sch, proxies)
+              launcher.actor ! Schedule(sch)
 
           }
       } else {

@@ -60,9 +60,6 @@ case object SaveDone extends StaticMessage
 private[tasks] case class Ack(allocated: VersionedResourceAllocated)
     extends StaticMessage
 
-private[tasks] case class RegisterForNotification(actor: ActorRef)
-    extends StaticMessage
-
 private[tasks] case object GetMaximumSlots extends StaticMessage
 
 private[tasks] case object GetAvailableSlots extends StaticMessage
@@ -71,8 +68,7 @@ case object YouShouldSetIt extends StaticMessage
 
 case object Release extends StaticMessage
 
-case class ScheduleWithProxy(sch: ScheduleTask, ac: List[Proxy])
-    extends StaticMessage
+case class Schedule(sch: ScheduleTask) extends StaticMessage
 
 // Messages related to files
 

@@ -116,10 +116,7 @@ private class Task(
   override def postStop: Unit = {
     fjp.shutdown
     log.debug(s"Task stopped. Input was: $input.")
-
   }
-
-  private var notificationRegister: List[ActorRef] = List[ActorRef]()
 
   val fjp = tasks.util.concurrent
     .newJavaForkJoinPoolWithNamePrefix("tasks-ec", resourceAllocated.cpu)
@@ -138,9 +135,7 @@ private class Task(
   private def handleCompletion(future: Future[UntypedResult]) =
     future.onComplete {
       case Success(result) =>
-        log.debug("Task success. Notifications: {}",
-                  notificationRegister.toString)
-        notificationRegister.foreach(_ ! MessageFromTask(result))
+        log.debug("Task success. ")
         launcherActor ! InternalMessageFromTask(self, result)
         self ! PoisonPill
 
@@ -189,10 +184,6 @@ private class Task(
       log.debug("Received input data.")
       input = Some(bd.value)
       handleCompletion(executeTaskAsynchronously(bd))
-
-    case RegisterForNotification(actorRef) =>
-      log.debug("Registering listener: " + actorRef.toString)
-      notificationRegister = actorRef :: notificationRegister
 
     case other => log.error("received unknown message" + other)
   }

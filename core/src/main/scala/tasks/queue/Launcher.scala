@@ -105,7 +105,7 @@ class Launcher(
 
   private var freed = Set[ActorRef]()
 
-  private def launch(scheduleTask: ScheduleTask, proxies: List[Proxy]) = {
+  private def launch(scheduleTask: ScheduleTask) = {
 
     log.debug("Launch method")
 
@@ -142,10 +142,6 @@ class Launcher(
       ).withDispatcher("task-worker-dispatcher")
     )
     log.debug("Actor constructed")
-    proxies.foreach {
-      case Proxy(proxyActorRef) =>
-        taskActor ! RegisterForNotification(proxyActorRef)
-    }
 
     runningTasks = (taskActor, scheduleTask, allocatedResource) :: runningTasks
 
@@ -246,14 +242,14 @@ class Launcher(
   }
 
   def receive = {
-    case ScheduleWithProxy(scheduleTask, proxies) =>
-      log.debug(s"Received ScheduleWithProxy from $proxies")
+    case Schedule(scheduleTask) =>
+      log.debug(s"Received ScheduleWithProxy ")
       if (!denyWorkBeforeShutdown) {
 
         if (isIdle) {
           idleState += 1
         }
-        val allocated = launch(scheduleTask, proxies)
+        val allocated = launch(scheduleTask)
         sender ! Ack(allocated)
         askForWork
       }
