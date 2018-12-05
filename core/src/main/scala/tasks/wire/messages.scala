@@ -42,8 +42,6 @@ private[tasks] case class AskForWork(resources: VersionedResourceAvailable)
 
 case object HowLoadedAreYou extends StaticMessage
 
-case object GetBackResult extends StaticMessage
-
 private[tasks] case class InternalMessageFromTask(actor: ActorRef,
                                                   result: UntypedResult)
     extends StaticMessage

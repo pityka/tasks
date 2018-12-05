@@ -28,26 +28,12 @@
 package tasks.queue
 
 import akka.actor.{Actor, PoisonPill, ActorRef}
-import akka.util.Timeout
-import akka.pattern.ask
-
-import scala.concurrent.duration._
-import scala.concurrent.Future
 
 import tasks.fileservice._
 import tasks.shared._
 import tasks._
 import tasks.wire._
-
-private[tasks] object ProxyTask {
-
-  def askForResult(actor: ActorRef, timeoutp: FiniteDuration): Future[Any] = {
-    implicit val timout = Timeout(timeoutp)
-    (actor ? GetBackResult)
-
-  }
-
-}
+import scala.concurrent.Promise
 
 /* Local proxy of the remotely executed task */
 class ProxyTask[Input, Output](
@@ -61,52 +47,44 @@ class ProxyTask[Input, Output](
     fileServiceComponent: FileServiceComponent,
     fileServicePrefix: FileServicePrefix,
     cacheActor: ActorRef,
-    priority: Priority
+    priority: Priority,
+    promise: Promise[Output]
 ) extends Actor
     with akka.actor.ActorLogging {
 
-  private var listeners: Set[ActorRef] = Set[ActorRef]()
-
-  private var result: Option[Any] = None
-
-  private def distributeResult(): Unit = {
-    log.debug(s"Distributing result to listeners: $listeners")
-    result.foreach { result =>
-      listeners.foreach { listener =>
-        listener ! result
-      }
-    }
+  private def distributeResult(result: Output): Unit = {
+    log.debug("Completing promise.")
+    promise.success(result)
   }
 
   private def notifyListenersOnFailure(cause: Throwable): Unit =
-    listeners.foreach(_ ! akka.actor.Status.Failure(cause))
+    promise.failure(cause)
 
-  private def startTask(cache: Boolean): Unit =
-    if (result.isEmpty) {
+  private def startTask(cache: Boolean): Unit = {
 
-      val persisted: Option[Input] = input match {
-        case x: HasPersistent[Input] => Some(x.persistent)
-        case _                       => None
-      }
-
-      val scheduleTask = ScheduleTask(
-        TaskDescription(taskId,
-                        Base64DataHelpers(writer(input)),
-                        persisted.map(x => Base64DataHelpers(writer(x)))),
-        runTaskClass.getName,
-        resourceConsumed,
-        queueActor,
-        fileServiceComponent.actor,
-        fileServicePrefix,
-        cacheActor,
-        cache,
-        priority
-      )
-
-      log.debug("proxy submitting ScheduleTask object to queue.")
-
-      queueActor ! scheduleTask
+    val persisted: Option[Input] = input match {
+      case x: HasPersistent[Input] => Some(x.persistent)
+      case _                       => None
     }
+
+    val scheduleTask = ScheduleTask(
+      TaskDescription(taskId,
+                      Base64DataHelpers(writer(input)),
+                      persisted.map(x => Base64DataHelpers(writer(x)))),
+      runTaskClass.getName,
+      resourceConsumed,
+      queueActor,
+      fileServiceComponent.actor,
+      fileServicePrefix,
+      cacheActor,
+      cache,
+      priority
+    )
+
+    log.debug("proxy submitting ScheduleTask object to queue.")
+
+    queueActor ! scheduleTask
+  }
 
   override def preStart() = {
     log.debug("ProxyTask prestart.")
@@ -122,26 +100,16 @@ class ProxyTask[Input, Output](
     case MessageFromTask(untypedOutput) =>
       reader(Base64DataHelpers.toBytes(untypedOutput.data)) match {
         case Right(output) =>
-          log.debug("MessageFromTask received from: {}, {}, {},{}",
+          log.debug("MessageFromTask received from: {}, {}, {}",
                     sender,
                     untypedOutput,
-                    result,
                     output)
-          if (result.isEmpty) {
-            result = Some(output)
-            distributeResult()
-          }
+          distributeResult(output)
         case Left(error) =>
           log.error(
-            s"MessageFromTask received from and failed to decode: $sender, $untypedOutput, $result, $error. Task is rescheduled without caching.")
+            s"MessageFromTask received from and failed to decode: $sender, $untypedOutput, $error. Task is rescheduled without caching.")
           startTask(cache = false)
       }
-
-    case GetBackResult =>
-      log.debug(
-        "GetBackResult message received. Registering for notification: " + sender.toString)
-      listeners += sender
-      distributeResult()
 
     case TaskFailedMessageToProxy(_, cause) =>
       log.error(cause, "Execution failed. ")

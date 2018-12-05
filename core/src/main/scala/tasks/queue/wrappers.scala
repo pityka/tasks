@@ -29,26 +29,11 @@ package tasks.queue
 
 import akka.actor._
 
-import scala.concurrent.Future
-import scala.concurrent.duration._
-
 case class NodeLocalCacheActor(actor: ActorRef)
 
 case class QueueActor(actor: ActorRef)
 
 case class LauncherActor(actor: ActorRef)
-
-case class ProxyTaskActorRef[B, T](private[tasks] val actor: ActorRef) {
-
-  def ? =
-    ProxyTask
-      .askForResult(actor, 1680 hours)
-      .asInstanceOf[Future[T]]
-
-  def ?(timeoutp: FiniteDuration) =
-    ProxyTask.askForResult(actor, timeoutp).asInstanceOf[Future[T]]
-
-}
 
 case class Proxy(actor: ActorRef)
 

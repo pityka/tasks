@@ -86,7 +86,7 @@ package object queue {
       priority: Priority
   )(implicit components: TaskSystemComponents,
     writer1: Serializer[B],
-    reader2: Deserializer[A]): ProxyTaskActorRef[B, A] = {
+    reader2: Deserializer[A]): Future[A] = {
     implicit val queue = components.queue
     implicit val fileService = components.fs
     implicit val cache = components.cache
@@ -95,24 +95,32 @@ package object queue {
 
     val taskId1 = taskId
 
-    ProxyTaskActorRef[B, A](
-      context.actorOf(
-        Props(
-          new ProxyTask[B, A](
-            taskId = taskId1,
-            runTaskClass = function.getClass,
-            input = prerequisitives,
-            writer = writer1,
-            reader = reader2,
-            resourceConsumed = resource,
-            queueActor = queue.actor,
-            fileServiceComponent = fileService,
-            fileServicePrefix = prefix,
-            cacheActor = cache.actor,
-            priority = priority
-          )
-        ).withDispatcher("proxytask-dispatcher")
-      )
+    val promise = Promise[A]
+
+    val actor = context.actorOf(
+      Props(
+        new ProxyTask[B, A](
+          taskId = taskId1,
+          runTaskClass = function.getClass,
+          input = prerequisitives,
+          writer = writer1,
+          reader = reader2,
+          resourceConsumed = resource,
+          queueActor = queue.actor,
+          fileServiceComponent = fileService,
+          fileServicePrefix = prefix,
+          cacheActor = cache.actor,
+          priority = priority,
+          promise = promise
+        )
+      ).withDispatcher("proxytask-dispatcher")
     )
+
+    promise.future
+      .andThen {
+        case _ =>
+          actor ! PoisonPill
+      }(components.executionContext)
+
   }
 }
