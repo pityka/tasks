@@ -97,13 +97,12 @@ case class UIQueueState(
     negotiation: Option[(UILauncherActor, TaskDescription)],
     failedTasks: List[(TaskDescription,
                           (UILauncherActor, VersionedResourceAllocated))],
-    completedTasks: List[(TaskDescription,
-                          (UILauncherActor, VersionedResourceAllocated), UIUntypedResult)],  
-    recoveredTasks : List[(TaskDescription, UIUntypedResult)]                                              
+    completedTasks: Set[(TaskId,Int)],  
+    recoveredTasks : Set[(TaskId,Int)]                                             
 )
 
 object UIQueueState {
-  val empty = UIQueueState(Nil, Nil, Set(), None, Nil,Nil, Nil)
+  val empty = UIQueueState(Nil, Nil, Set(), None, Nil,Set(), Set())
   implicit val encoder: Encoder[UIQueueState] = deriveEncoder[UIQueueState]
   implicit val decoder: Decoder[UIQueueState] = deriveDecoder[UIQueueState]
 }

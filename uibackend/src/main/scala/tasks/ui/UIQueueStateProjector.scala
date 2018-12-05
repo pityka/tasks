@@ -26,23 +26,11 @@ package tasks.ui
 
 import tasks.queue._
 import tasks.queue.TaskQueue._
-import tasks.fileservice._
 
 object UIQueueStateProjector {
 
   private def uiLauncherActor(launcher: LauncherActor) =
     UILauncherActor(launcher.actor.path.toString)
-
-  private def uiResult(result: UntypedResult): UIUntypedResult =
-    UIUntypedResult(result.files.map(uiFile), result.data)
-
-  private def uiFile(sharedFile: SharedFile): UISharedFile =
-    UISharedFile(uiPath(sharedFile.path), sharedFile.byteSize, sharedFile.hash)
-
-  private def uiPath(path: FilePath): UIFilePath = path match {
-    case RemoteFilePath(uri)    => UIRemoteFilePath(uri.toString)
-    case ManagedFilePath(elems) => UIManagedFilePath(elems)
-  }
 
   def project(state: UIQueueState,
               taskQueueEvent: TaskQueue.Event): UIQueueState = {
@@ -69,13 +57,22 @@ object UIQueueStateProjector {
             (sch.description, (uiLauncherActor(launcher), allocated)) :: state.scheduledTasks
         )
 
-      case TaskDone(sch, result) =>
-        val updatedCompletedTasks = state.scheduledTasks
-          .filter(_._1 == sch.description)
-          .map {
-            case (description, launcher) =>
-              (description, launcher, uiResult(result))
-          } ::: state.completedTasks
+      case TaskDone(sch, _) =>
+        val updatedCompletedTasks = {
+          val scheduled = state.scheduledTasks
+            .find(_._1 == sch.description)
+            .isDefined
+          if (scheduled) {
+            val map = state.completedTasks.toMap
+            val key = sch.description.taskId
+            val updatedMap = map.get(key) match {
+              case None        => map.updated(key, 1)
+              case Some(count) => map.updated(key, count + 1)
+            }
+            updatedMap.toSet
+          } else state.completedTasks
+        }
+
         state.copy(scheduledTasks =
                      state.scheduledTasks.filterNot(_._1 == sch.description),
                    completedTasks = updatedCompletedTasks)
@@ -95,8 +92,16 @@ object UIQueueStateProjector {
           knownLaunchers =
             state.knownLaunchers.filterNot(_ == uiLauncherActor(launcher)))
       case _: CacheQueried => state
-      case CacheHit(sch, result) =>
-        val updatedRecoveredTasks = (sch.description, uiResult(result)) :: state.recoveredTasks
+      case CacheHit(sch, _) =>
+        val updatedRecoveredTasks = {
+          val map = state.recoveredTasks.toMap
+          val key = sch.description.taskId
+          val updatedMap = map.get(key) match {
+            case None        => map.updated(key, 1)
+            case Some(count) => map.updated(key, count + 1)
+          }
+          updatedMap.toSet
+        }
         state.copy(recoveredTasks = updatedRecoveredTasks)
 
     }

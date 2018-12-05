@@ -140,59 +140,33 @@ object Helpers {
       }
     ).render
 
-  val CompletedTasksTableHeader = tr(th("ID"),
-                                     th("Input"),
-                                     th("Launcher"),
-                                     th("CodeVersion"),
-                                     th("CPU"),
-                                     th("RAM"),
-                                     th("ResultFiles"))
+  val CompletedTasksTableHeader =
+    tr(th("ID"), th("Count"))
 
   val RecoveredTasksTableHeader =
-    tr(th("ID"), th("Input"), th("ResultFiles"))
+    tr(th("ID"), th("Count"))
 
-  def renderTableBodyWithCompletedTasks(
-      completedTasks: List[(TaskDescription,
-                            (UILauncherActor, VersionedResourceAllocated),
-                            UIUntypedResult)]) =
+  def renderTableBodyWithCompletedTasks(completedTasks: Set[(TaskId, Int)]) =
     tbody(
       completedTasks.toSeq.map {
-        case ((taskDescription, (launcher, resource), result)) =>
+        case ((taskId, count)) =>
           tr(
             td(`class` := "collapsing")(
-              taskDescription.taskId.id + " @" + taskDescription.taskId.version
+              taskId.id + " @" + taskId.version
             ),
-            td(
-              code(prettyJson(taskDescription.input))
-            ),
-            td(showUILauncher(launcher)),
-            td(resource.codeVersion),
-            td(resource.cpu),
-            td(resource.memory),
-            td(
-              code(
-                result.files.map(_.path.toString).toSeq.sorted.mkString(", ")))
+            td(count)
           )
       }
     ).render
 
-  def renderTableBodyWithRecoveredTasks(
-      recoveredTasks: List[(TaskDescription, UIUntypedResult)]) =
+  def renderTableBodyWithRecoveredTasks(recoveredTasks: Set[(TaskId, Int)]) =
     tbody(
       recoveredTasks.toSeq.map {
-        case ((taskDescription, result)) =>
-          tr(
-            td(`class` := "collapsing")(
-              taskDescription.taskId.id + " @" + taskDescription.taskId.version
-            ),
-            td(
-              code(prettyJson(taskDescription.input))
-            ),
-            td(code(prettyJson(result.data))),
-            td(
-              code(
-                result.files.map(_.path.toString).toSeq.sorted.mkString(", ")))
-          )
+        case (taskId, count) =>
+          tr(td(`class` := "collapsing")(
+               taskId.id + " @" + taskId.version
+             ),
+             td(count))
       }
     ).render
 
