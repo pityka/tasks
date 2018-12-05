@@ -143,12 +143,16 @@ package object tasks {
     val configuration = () => {
       ConfigFactory.invalidateCaches
 
-      (extraConf.map { extraConf =>
+      val loaded = (extraConf.map { extraConf =>
         ConfigFactory.defaultOverrides
           .withFallback(extraConf)
           .withFallback(ConfigFactory.load)
       } getOrElse
         ConfigFactory.load)
+
+      ConfigFactory.invalidateCaches
+
+      loaded
     }
 
     implicit val tconfig = tasks.util.config.parse(configuration)
