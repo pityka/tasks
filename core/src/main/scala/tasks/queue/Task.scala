@@ -105,25 +105,27 @@ private class Task(
     auxExecutionContext: ExecutionContext,
     actorMaterializer: Materializer,
     tasksConfig: TasksConfig,
-    priority: Priority
+    priority: Priority,
+    input: Base64Data
 ) extends Actor
     with akka.actor.ActorLogging {
 
+  private case object Start
+
   override def preStart: Unit = {
     log.debug("Prestart of Task class")
+    self ! Start
   }
 
   override def postStop: Unit = {
     fjp.shutdown
-    log.debug(s"Task stopped. Input was: $input.")
+    log.debug(s"Task stopped. Input was: ${input.value}.")
   }
 
   val fjp = tasks.util.concurrent
     .newJavaForkJoinPoolWithNamePrefix("tasks-ec", resourceAllocated.cpu)
   val executionContextOfTask =
     scala.concurrent.ExecutionContext.fromExecutorService(fjp)
-
-  private var input: Option[String] = None
 
   private def handleError(exception: Throwable): Unit = {
     exception.printStackTrace()
@@ -142,8 +144,7 @@ private class Task(
       case Failure(error) => handleError(error)
     }(executionContextOfTask)
 
-  private def executeTaskAsynchronously(
-      msg: Base64Data): Future[UntypedResult] =
+  private def executeTaskAsynchronously(): Future[UntypedResult] =
     try {
       val ce = ComputationEnvironment(
         resourceAllocated,
@@ -168,9 +169,9 @@ private class Task(
       )
 
       log.debug(
-        s"Starting task with computation environment $ce and with input data $msg.")
+        s"Starting task with computation environment $ce and with input data $input.")
 
-      Future(runTask(msg)(ce))(executionContextOfTask)
+      Future(runTask(input)(ce))(executionContextOfTask)
         .flatMap(identity)(executionContextOfTask)
     } catch {
       case exception: Exception =>
@@ -180,10 +181,8 @@ private class Task(
     }
 
   def receive = {
-    case bd: Base64Data =>
-      log.debug("Received input data.")
-      input = Some(bd.value)
-      handleCompletion(executeTaskAsynchronously(bd))
+    case Start =>
+      handleCompletion(executeTaskAsynchronously())
 
     case other => log.error("received unknown message" + other)
   }

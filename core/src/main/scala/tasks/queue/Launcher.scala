@@ -138,16 +138,14 @@ class Launcher(
         auxExecutionContext,
         actorMaterializer,
         config,
-        scheduleTask.priority
+        scheduleTask.priority,
+        scheduleTask.description.input
       ).withDispatcher("task-worker-dispatcher")
     )
     log.debug("Actor constructed")
 
     runningTasks = (taskActor, scheduleTask, allocatedResource) :: runningTasks
 
-    log.debug("Sending input to actor.")
-    taskActor ! scheduleTask.description.input
-    log.debug("startdata sent.")
     allocatedResource
   }
 
