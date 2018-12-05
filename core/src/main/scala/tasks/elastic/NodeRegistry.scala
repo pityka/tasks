@@ -239,7 +239,7 @@ class NodeRegistry(
       }
     case InitFailed(pending) =>
       if (state.pending.contains(pending)) {
-        log.error("Node init failed: " + pending)
+        log.warning("Node init failed: " + pending)
         try {
           become(state.update(InitFailed(pending)))
           shutdownNode.shutdownPendingNode(pending)
