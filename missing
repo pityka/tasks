@@ -3,10 +3,7 @@ what is missing from tasks:
 - federated logging
 - resource enforcement in kube [1]
 - repl [1]
-- avro [2]
+- avro [2] and schema migration
 - persisted queue [2]
 - single point of failure [2]
-- non greedy resource allocation [4]
-- resource enforcement in jvm [4]
 - operation fusion in EColl [4]
-- platform independent interface [4]
