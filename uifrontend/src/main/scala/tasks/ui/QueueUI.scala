@@ -75,7 +75,9 @@ class QueueUI(container: Node) {
         thead(
           tr(
             th(colspan := "8")(
-              "Completed tasks, total: " + uiState.completedTasks.size)),
+              "Completed tasks, total: " + uiState.completedTasks.toSeq
+                .map(_._2)
+                .sum)),
           CompletedTasksTableHeader
         ).render,
         renderTableBodyWithCompletedTasks(uiState.completedTasks)
@@ -86,8 +88,11 @@ class QueueUI(container: Node) {
     uiState =>
       List(
         thead(
-          tr(th(colspan := "4")(
-            "Previously completed tasks, total: " + uiState.recoveredTasks.size)),
+          tr(
+            th(colspan := "4")(
+              "Previously completed tasks, total: " + uiState.recoveredTasks
+                .map(_._2)
+                .sum)),
           RecoveredTasksTableHeader
         ).render,
         renderTableBodyWithRecoveredTasks(uiState.recoveredTasks)
@@ -139,10 +144,10 @@ class QueueUI(container: Node) {
     div(`class` := "ui grid container")(
       div(`class` := "two wide column")(knownLaunchersTable),
       div(`class` := "eight wide column")(queuedTasksTable),
-      div(`class` := "twelve wide column centered")(failedTasksTable),
-      div(`class` := "twelve wide column centered")(scheduledTasksTable),
       div(`class` := "twelve wide column centered")(completedTasksTable),
-      div(`class` := "twelve wide column centered")(recoveredTasksTable)
+      div(`class` := "twelve wide column centered")(recoveredTasksTable),
+      div(`class` := "twelve wide column centered")(failedTasksTable),
+      div(`class` := "twelve wide column centered")(scheduledTasksTable)
     )
   )
 
