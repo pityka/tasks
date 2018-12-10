@@ -65,8 +65,8 @@ class QueueUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
     get {
       path("states") {
         val source = Source
-          .actorRef[UIQueueState](bufferSize = 1000000,
-                                  overflowStrategy = OverflowStrategy.fail)
+          .actorRef[UIQueueState](bufferSize = 100,
+                                  overflowStrategy = OverflowStrategy.dropTail)
           .mapMaterializedValue { actorRef =>
             multiplex ! actorRef
             actorRef
