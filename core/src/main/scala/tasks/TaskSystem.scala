@@ -199,7 +199,7 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
 
       val localFileServiceActor = system.actorOf(
         Props(new FileService(managedFileStorage.get, threadpoolsize))
-          .withDispatcher("my-pinned-dispatcher"),
+          .withDispatcher("fileservice-pinned"),
         "fileservice")
       reaperActor ! WatchMe(localFileServiceActor)
       localFileServiceActor
@@ -247,7 +247,7 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
 
       val localCacheActor = system.actorOf(
         Props(new TaskResultCacheActor(cache, fileServiceComponent))
-          .withDispatcher("my-pinned-dispatcher"),
+          .withDispatcher("cache-pinned"),
         "cache")
       reaperActor ! WatchMe(localCacheActor)
       localCacheActor
@@ -337,7 +337,7 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
       val props = Props(elasticSupportFactory.get.createRegistry.get)
 
       val localActor = system
-        .actorOf(props.withDispatcher("my-pinned-dispatcher"), "noderegistry")
+        .actorOf(props.withDispatcher("noderegistry-pinned"), "noderegistry")
 
       reaperActor ! WatchMe(localActor)
 
@@ -439,7 +439,7 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
 
     system.actorOf(
       Props(elasticSupportFactory.get.createSelfShutdown)
-        .withDispatcher("my-pinned-dispatcher"))
+        .withDispatcher("selfshutdown-pinned"))
 
   } else {
     tasksystemlog.info("This is not a slave node.")

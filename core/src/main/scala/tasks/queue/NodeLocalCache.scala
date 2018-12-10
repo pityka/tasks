@@ -38,7 +38,7 @@ import tasks.wire._
 object NodeLocalCache {
   def start(implicit AS: ActorRefFactory) =
     NodeLocalCacheActor(
-      AS.actorOf(Props[NodeLocalCache].withDispatcher("my-pinned-dispatcher")))
+      AS.actorOf(Props[NodeLocalCache].withDispatcher("nodelocalcache-pinned")))
 
   def getItemAsync[A](key: String)(orElse: => Future[A])(
       implicit tsc: TaskSystemComponents): Future[A] =

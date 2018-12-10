@@ -219,7 +219,7 @@ class NodeRegistry(
                                  LauncherActor(node.launcherActor),
                                targetNode = node,
                                listener = self))
-                .withDispatcher("my-pinned-dispatcher")
+                .withDispatcher("nodekiller-pinned")
             )
           case None =>
             log.error(
