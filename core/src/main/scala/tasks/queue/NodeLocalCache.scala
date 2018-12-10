@@ -42,27 +42,28 @@ object NodeLocalCache {
 
   def getItemAsync[A](key: String)(orElse: => Future[A])(
       implicit tsc: TaskSystemComponents): Future[A] =
-    _getItemAsync(key)(orElse)
+    _getItemAsync(key, dropAfterSave = false)(orElse)
 
   def getItem[A](key: String)(orElse: => A)(
-      implicit tsc: TaskSystemComponents): Future[A] = _getItem(key)(orElse)
+      implicit tsc: TaskSystemComponents): Future[A] =
+    _getItem(key, dropAfterSave = false)(orElse)
 
   def drop(key: String)(implicit tsc: TaskSystemComponents) =
     tsc.nodeLocalCache.actor ! Drop(key)
 
-  private[tasks] def _getItemAsync[A](key: String)(orElse: => Future[A])(
-      implicit nlc: NodeLocalCacheActor,
-      ec: ExecutionContext): Future[A] =
-    _getItem(key)(orElse).flatMap(identity)
+  private[tasks] def _getItemAsync[A](key: String, dropAfterSave: Boolean)(
+      orElse: => Future[A])(implicit nlc: NodeLocalCacheActor,
+                            ec: ExecutionContext): Future[A] =
+    _getItem(key, dropAfterSave)(orElse).flatMap(identity)
 
-  private[tasks] def _getItem[A](key: String)(orElse: => A)(
-      implicit nlc: NodeLocalCacheActor,
-      ec: ExecutionContext): Future[A] = {
+  private[tasks] def _getItem[A](key: String, dropAfterSave: Boolean)(
+      orElse: => A)(implicit nlc: NodeLocalCacheActor,
+                    ec: ExecutionContext): Future[A] = {
     implicit val to = akka.util.Timeout(168 hours)
     (nlc.actor ? LookUp(key)).map {
       case YouShouldSetIt => {
         val computed = orElse
-        nlc.actor ! Save(key, computed)
+        nlc.actor ! Save(key, computed, dropAfterSave)
         computed
       }
       case other => other.asInstanceOf[A]
@@ -92,14 +93,24 @@ object NodeLocalCache {
             waitingList += key -> sender
         }
 
-      case Save(key, value) =>
+      case Save(key, value, dropAfterSave) =>
         log.debug(s"Save($key): Distributing to waiting list.")
-        map += key -> Some(value)
-        waitingList.filter(_._1 == key).map(_._2).foreach(_ ! value)
+        val listeners = waitingList.filter(_._1 == key).map(_._2)
+        if (!dropAfterSave) {
+          map += key -> Some(value)
+        } else {
+          map -= key
+          waitingList --= waitingList.filter(_._1 == key)
+        }
+
+        listeners.foreach(_ ! value)
 
       case Drop(key) =>
-        log.debug(s"Drop $key")
-        map -= key
+        if (!map.get(key).exists(_.isEmpty)) {
+          log.debug(s"Drop $key")
+          map -= key
+          waitingList --= waitingList.filter(_._1 == key)
+        }
     }
 
   }

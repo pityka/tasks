@@ -122,7 +122,8 @@ private[tasks] object SharedFileHelper extends StrictLogging {
                                     nlc: NodeLocalCacheActor,
                                     ec: ExecutionContext): Future[File] =
     NodeLocalCache
-      ._getItemAsync("fs::" + sf)(getPathToFileUncached(sf))
+      ._getItemAsync("fs::" + sf, dropAfterSave = false)(
+        getPathToFileUncached(sf))
       .recoverWith {
         case _: java.nio.file.NoSuchFileException => getPathToFileUncached(sf)
       }
@@ -284,7 +285,8 @@ private[tasks] object SharedFileHelper extends StrictLogging {
       mat: Materializer,
       nlc: NodeLocalCacheActor) =
     NodeLocalCache
-      ._getItemAsync("fsCreateFromFile::" + prefix.propose(name)) {
+      ._getItemAsync("fsCreateFromFile::" + prefix.propose(name),
+                     dropAfterSave = true) {
         val sharedFile = if (service.storage.isDefined) {
           val proposedPath = prefix.propose(name)
           service.storage.get.importFile(file, proposedPath).map { f =>
@@ -330,7 +332,8 @@ private[tasks] object SharedFileHelper extends StrictLogging {
       historyContext: HistoryContext,
       nlc: NodeLocalCacheActor) =
     NodeLocalCache
-      ._getItemAsync("fsCreateFromSource::" + prefix.propose(name)) {
+      ._getItemAsync("fsCreateFromSource::" + prefix.propose(name),
+                     dropAfterSave = true) {
         val sharedFile = if (service.storage.isDefined) {
           val proposedPath = prefix.propose(name)
           service.storage.get.importSource(source, proposedPath).map { x =>

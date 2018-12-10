@@ -112,7 +112,7 @@ class FolderFileStorage(val basePath: File)(implicit
 
       if (!pass) {
         logger.debug(
-          s"$this does not contain $path due to: canRead:$canRead, sizeMatch:$sizeMatch   ($sizeOnDiskNow vs $size), contentMatch:$contentMatch ")
+          s"$this does not contain $path due to: canRead:$canRead, sizeMatch:$sizeMatch   (sizeOnDisk:$sizeOnDiskNow vs expected:$size), contentMatch:$contentMatch. FileOnDisk: $f ")
       }
 
       pass

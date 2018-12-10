@@ -13,7 +13,8 @@ import tasks.fileservice._
 import tasks.queue._
 import tasks.elastic._
 
-case class Save(s: String, v: Any) extends java.io.Serializable
+case class Save(s: String, v: Any, dropAfterSave: Boolean)
+    extends java.io.Serializable
 
 sealed trait StaticMessage extends java.io.Serializable
 
