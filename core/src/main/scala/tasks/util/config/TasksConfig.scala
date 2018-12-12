@@ -57,6 +57,15 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   val cacheEnabled = raw.getBoolean("tasks.cache.enabled")
 
+  val cachePath =
+    raw.getString("tasks.cache.sharefilecache.path").toLowerCase match {
+      case "prefix" => None
+      case other =>
+        Some(
+          tasks.fileservice.FileServicePrefix(
+            other.split("/").toVector.filter(_.nonEmpty)))
+    }
+
   val askInterval: FD = raw.getDuration("tasks.askInterval")
 
   val launcherActorHeartBeatInterval: FD =

@@ -71,10 +71,16 @@ class TaskResultCacheActor(
 
   def receive = {
     case PoisonPillToCacheActor => self ! PoisonPill
-    case SaveResult(description, result, prefix) =>
+    case SaveResult(description, result, prefixFromTask) =>
       log.debug("SavingResult")
       context.become(waitUntilSavingIsDone(description.taskId),
                      discardOld = false)
+
+      val prefix = config.cachePath match {
+        case None => prefixFromTask
+        case Some(path) =>
+          path.append(description.taskId.id)
+      }
       cacheMap
         .set(description, result)(prefix)
         .map(_ => SetDone)
@@ -90,7 +96,11 @@ class TaskResultCacheActor(
       val savedSender = sender
       val taskId = scheduleTask.description.taskId
       val queryFileServicePrefix =
-        scheduleTask.fileServicePrefix.append(taskId.id)
+        config.cachePath match {
+          case None => scheduleTask.fileServicePrefix.append(taskId.id)
+          case Some(path) =>
+            path.append(taskId.id)
+        }
 
       def lookup =
         cacheMap
