@@ -430,16 +430,31 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
     tasksystemlog.info(
       "This is a worker node. ElasticNodeAllocation is enabled. Notifying remote node registry about this node. Node name: " + nodeName + ". Launcher actor address is: " + launcherActor.get)
 
-    remoteNodeRegistry.get ! NodeComingUp(
-      Node(RunningJobId(nodeName),
-           ResourceAvailable(hostConfig.availableCPU,
-                             hostConfig.availableMemory,
-                             hostConfig.availableScratch),
-           launcherActor.get))
+    val tempFolderWriteable =
+      if (!config.checkTempFolderOnSlaveInitialization) true
+      else
+        Try {
+          val testFile = tasks.util.TempFile.createTempFile("test")
+          testFile.delete
+        }.isSuccess
 
-    system.actorOf(
-      Props(elasticSupportFactory.get.createSelfShutdown)
-        .withDispatcher("selfshutdown-pinned"))
+    if (!tempFolderWriteable) {
+      tasksystemlog.error(
+        s"Temp folder is not writeable (${System.getProperty("java.io.tmpdir")}). Failing slave init.")
+      initFailed()
+    } else {
+
+      remoteNodeRegistry.get ! NodeComingUp(
+        Node(RunningJobId(nodeName),
+             ResourceAvailable(hostConfig.availableCPU,
+                               hostConfig.availableMemory,
+                               hostConfig.availableScratch),
+             launcherActor.get))
+
+      system.actorOf(
+        Props(elasticSupportFactory.get.createSelfShutdown)
+          .withDispatcher("selfshutdown-pinned"))
+    }
 
   } else {
     tasksystemlog.info("This is not a slave node.")

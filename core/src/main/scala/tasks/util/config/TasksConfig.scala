@@ -225,4 +225,7 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   def pendingNodeTimeout = raw.getDuration("tasks.elastic.pendingNodeTimeout")
 
+  val checkTempFolderOnSlaveInitialization =
+    raw.getBoolean("tasks.elastic.checktempfolder")
+
 }
