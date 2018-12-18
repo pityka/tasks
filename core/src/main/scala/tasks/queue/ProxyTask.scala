@@ -48,7 +48,8 @@ class ProxyTask[Input, Output](
     fileServicePrefix: FileServicePrefix,
     cacheActor: ActorRef,
     priority: Priority,
-    promise: Promise[Output]
+    promise: Promise[Output],
+    labels: Labels
 ) extends Actor
     with akka.actor.ActorLogging {
 
@@ -78,7 +79,8 @@ class ProxyTask[Input, Output](
       fileServicePrefix,
       cacheActor,
       cache,
-      priority
+      priority,
+      labels
     )
 
     log.debug("proxy submitting ScheduleTask object to queue.")

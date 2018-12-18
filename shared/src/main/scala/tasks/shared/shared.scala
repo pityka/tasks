@@ -179,3 +179,12 @@ object PendingJobId {
   implicit val decoder: Decoder[PendingJobId] = deriveDecoder[PendingJobId]
   implicit val encoder: Encoder[PendingJobId] = deriveEncoder[PendingJobId]
 }
+
+case class Labels(values: List[(String,String)]) {
+  def ++(other:Labels) = Labels(values ++ other.values)
+}
+object Labels {
+  implicit val decoder: Decoder[Labels] = deriveDecoder[Labels]
+  implicit val encoder: Encoder[Labels] = deriveEncoder[Labels] 
+  val empty = Labels(Nil)
+}

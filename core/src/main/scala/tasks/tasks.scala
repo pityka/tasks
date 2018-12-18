@@ -28,7 +28,7 @@
 package tasks
 
 import tasks.queue._
-import tasks.shared.Priority
+import tasks.shared.{Priority, Labels}
 import scala.concurrent._
 
 trait HasSharedFiles extends Product {
@@ -55,7 +55,8 @@ class TaskDefinition[A: Serializer, B: Deserializer](val computation: CompFun2,
                                                      val taskId: TaskId) {
 
   def apply(a: A)(resource: ResourceRequest,
-                  priorityBase: Priority = Priority(0))(
+                  priorityBase: Priority = Priority(0),
+                  labels: Labels = Labels.empty)(
       implicit components: TaskSystemComponents): Future[B] =
     tasks.queue
       .newTask[B, A](
@@ -63,6 +64,7 @@ class TaskDefinition[A: Serializer, B: Deserializer](val computation: CompFun2,
         resource,
         computation,
         taskId,
-        Priority(priorityBase.toInt + components.priority.toInt + 1))
+        Priority(priorityBase.toInt + components.priority.toInt + 1),
+        components.labels ++ labels)
 
 }

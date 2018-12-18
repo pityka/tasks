@@ -21,44 +21,32 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package tasks.ui
+package tasks.tracker
 
 import tasks.queue.TaskQueue
-import tasks.elastic.NodeRegistry
 import tasks.util.reflectivelyInstantiateObject
 import tasks.util.config.TasksConfig
-import akka.actor.{ActorSystem, ActorRef}
+import akka.actor.ActorSystem
+import tasks.ui.EventListener
 
-trait EventListener[-E] {
-  def receive(event: E): Unit
-  def close(): Unit
-  def watchable: ActorRef
+trait TrackerBootstrap {
+  def start(implicit actorSystem: ActorSystem, config: TasksConfig): Tracker
 }
 
-trait UIComponentBootstrap {
-  def startQueueUI(implicit actorSystem: ActorSystem,
-                   config: TasksConfig): QueueUI
-  def startAppUI(implicit actorSystem: ActorSystem, config: TasksConfig): AppUI
+trait Tracker {
+  def eventListener: EventListener[TaskQueue.Event]
 }
 
-trait QueueUI {
-  def tasksQueueEventListener: EventListener[TaskQueue.Event]
-}
-
-trait AppUI {
-  def nodeRegistryEventListener: EventListener[NodeRegistry.Event]
-}
-
-object UIComponentBootstrap {
-  def load(implicit config: TasksConfig): Option[UIComponentBootstrap] =
-    config.uiFqcn match {
+object TrackerBootstrap {
+  def load(implicit config: TasksConfig): Option[TrackerBootstrap] =
+    config.trackerFqcn match {
       case ""     => None
-      case "NOUI" => None
+      case "none" => None
       case "default" =>
         Some(
-          reflectivelyInstantiateObject[UIComponentBootstrap](
-            "tasks.ui.BackendUIBootstrap"))
+          reflectivelyInstantiateObject[TrackerBootstrap](
+            "tasks.tracker.TrackerBootstrapImpl"))
       case other =>
-        Some(reflectivelyInstantiateObject[UIComponentBootstrap](other))
+        Some(reflectivelyInstantiateObject[TrackerBootstrap](other))
     }
 }

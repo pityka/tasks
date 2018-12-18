@@ -27,7 +27,10 @@ case class LookUp(s: String) extends StaticMessage
 private[tasks] case class QueryTask(sch: ScheduleTask, ac: ActorRef)
     extends StaticMessage
 
-private[tasks] case class TaskDone(sch: ScheduleTask, result: UntypedResult)
+private[tasks] case class TaskDone(sch: ScheduleTask,
+                                   result: UntypedResult,
+                                   elapsedTime: ElapsedTimeNanoSeconds,
+                                   resourceAllocated: ResourceAllocated)
     extends StaticMessage
 
 private[tasks] case class TaskFailedMessageToQueue(sch: ScheduleTask,
@@ -43,8 +46,10 @@ private[tasks] case class AskForWork(resources: VersionedResourceAvailable)
 
 case object HowLoadedAreYou extends StaticMessage
 
-private[tasks] case class InternalMessageFromTask(actor: ActorRef,
-                                                  result: UntypedResult)
+private[tasks] case class InternalMessageFromTask(
+    actor: ActorRef,
+    result: UntypedResult,
+    elapsedTime: ElapsedTimeNanoSeconds)
     extends StaticMessage
 
 private[tasks] case class InternalMessageTaskFailed(actor: ActorRef,

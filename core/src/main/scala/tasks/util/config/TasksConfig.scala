@@ -228,4 +228,8 @@ class TasksConfig(load: () => Config) extends StrictLogging {
   val checkTempFolderOnSlaveInitialization =
     raw.getBoolean("tasks.elastic.checktempfolder")
 
+  val trackerFqcn = raw.getString("tasks.tracker.fqcn")
+
+  val resourceUtilizationLogFile = raw.getString("tasks.tracker.logFile")
+
 }

@@ -21,44 +21,25 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 package tasks.ui
 
-import tasks.queue.TaskQueue
-import tasks.elastic.NodeRegistry
-import tasks.util.reflectivelyInstantiateObject
-import tasks.util.config.TasksConfig
-import akka.actor.{ActorSystem, ActorRef}
+import akka.actor._
 
-trait EventListener[-E] {
-  def receive(event: E): Unit
-  def close(): Unit
-  def watchable: ActorRef
+private class Multiplex extends Actor {
+  var listeners = List[ActorRef]()
+  var last: Option[Any] = None
+  def receive = {
+    case actor: ActorRef =>
+      listeners = actor :: listeners
+      last.foreach(last => actor ! last)
+    case Multiplex.Unsubscribe(actor) =>
+      listeners = listeners.filterNot(_ == actor)
+    case other =>
+      listeners.foreach(_ ! other)
+      last = Some(other)
+  }
 }
-
-trait UIComponentBootstrap {
-  def startQueueUI(implicit actorSystem: ActorSystem,
-                   config: TasksConfig): QueueUI
-  def startAppUI(implicit actorSystem: ActorSystem, config: TasksConfig): AppUI
-}
-
-trait QueueUI {
-  def tasksQueueEventListener: EventListener[TaskQueue.Event]
-}
-
-trait AppUI {
-  def nodeRegistryEventListener: EventListener[NodeRegistry.Event]
-}
-
-object UIComponentBootstrap {
-  def load(implicit config: TasksConfig): Option[UIComponentBootstrap] =
-    config.uiFqcn match {
-      case ""     => None
-      case "NOUI" => None
-      case "default" =>
-        Some(
-          reflectivelyInstantiateObject[UIComponentBootstrap](
-            "tasks.ui.BackendUIBootstrap"))
-      case other =>
-        Some(reflectivelyInstantiateObject[UIComponentBootstrap](other))
-    }
+object Multiplex {
+  case class Unsubscribe(ac: ActorRef)
 }

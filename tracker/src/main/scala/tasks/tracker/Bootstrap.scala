@@ -21,44 +21,16 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package tasks.ui
 
-import tasks.queue.TaskQueue
-import tasks.elastic.NodeRegistry
-import tasks.util.reflectivelyInstantiateObject
+package tasks.tracker
+
+import akka.actor._
 import tasks.util.config.TasksConfig
-import akka.actor.{ActorSystem, ActorRef}
 
-trait EventListener[-E] {
-  def receive(event: E): Unit
-  def close(): Unit
-  def watchable: ActorRef
-}
+/* Do not change the fqcn of this object! See core/Tracker.scala */
+object TrackerBootstrapImpl extends TrackerBootstrap {
+  def start(implicit actorSystem: ActorSystem,
+            config: TasksConfig): TrackerImpl =
+    new TrackerImpl
 
-trait UIComponentBootstrap {
-  def startQueueUI(implicit actorSystem: ActorSystem,
-                   config: TasksConfig): QueueUI
-  def startAppUI(implicit actorSystem: ActorSystem, config: TasksConfig): AppUI
-}
-
-trait QueueUI {
-  def tasksQueueEventListener: EventListener[TaskQueue.Event]
-}
-
-trait AppUI {
-  def nodeRegistryEventListener: EventListener[NodeRegistry.Event]
-}
-
-object UIComponentBootstrap {
-  def load(implicit config: TasksConfig): Option[UIComponentBootstrap] =
-    config.uiFqcn match {
-      case ""     => None
-      case "NOUI" => None
-      case "default" =>
-        Some(
-          reflectivelyInstantiateObject[UIComponentBootstrap](
-            "tasks.ui.BackendUIBootstrap"))
-      case other =>
-        Some(reflectivelyInstantiateObject[UIComponentBootstrap](other))
-    }
 }

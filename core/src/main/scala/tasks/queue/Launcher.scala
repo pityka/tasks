@@ -65,7 +65,8 @@ case class ScheduleTask(
     fileServicePrefix: FileServicePrefix,
     cacheActor: ActorRef,
     tryCache: Boolean,
-    priority: Priority
+    priority: Priority,
+    labels: Labels
 )
 
 object ScheduleTask {
@@ -101,7 +102,10 @@ class Launcher(
   private var denyWorkBeforeShutdown = false
 
   private var runningTasks
-    : List[(ActorRef, ScheduleTask, VersionedResourceAllocated)] = Nil
+    : List[(ActorRef, ScheduleTask, VersionedResourceAllocated, Long)] =
+    Nil
+
+  private var resourceDeallocatedAt: Map[ActorRef, Long] = Map()
 
   private var freed = Set[ActorRef]()
 
@@ -139,12 +143,13 @@ class Launcher(
         actorMaterializer,
         config,
         scheduleTask.priority,
+        scheduleTask.labels,
         scheduleTask.description.input
       ).withDispatcher("task-worker-dispatcher")
     )
     log.debug("Actor constructed")
 
-    runningTasks = (taskActor, scheduleTask, allocatedResource) :: runningTasks
+    runningTasks = (taskActor, scheduleTask, allocatedResource, System.nanoTime) :: runningTasks
 
     allocatedResource
   }
@@ -195,6 +200,9 @@ class Launcher(
       .getOrElse(throw new RuntimeException(
         "Wrong message received. No such taskActor."))
     val scheduleTask = elem._2
+    val resourceAllocated = elem._3
+    val elapsedTime = ElapsedTimeNanoSeconds(
+      resourceDeallocatedAt.get(taskActor).getOrElse(System.nanoTime) - elem._4)
     import akka.pattern.ask
     import context.dispatcher
     (
@@ -208,14 +216,18 @@ class Launcher(
         )
       )
       .foreach { _ =>
-        queueActor ! TaskDone(scheduleTask, receivedResult)
+        queueActor ! TaskDone(scheduleTask,
+                              receivedResult,
+                              elapsedTime,
+                              resourceAllocated.cpuMemoryAllocated)
       }
 
     runningTasks = runningTasks.filterNot(_ == elem)
     if (!freed.contains(taskActor)) {
-      availableResources = availableResources.addBack(elem._3)
+      availableResources = availableResources.addBack(resourceAllocated)
     } else {
       freed -= taskActor
+      resourceDeallocatedAt -= taskActor
     }
   }
 
@@ -233,6 +245,7 @@ class Launcher(
       availableResources = availableResources.addBack(elem._3)
     } else {
       freed -= taskActor
+      resourceDeallocatedAt -= taskActor
     }
 
     queueActor ! TaskFailedMessageToQueue(sch, cause)
@@ -252,8 +265,8 @@ class Launcher(
         askForWork
       }
 
-    case InternalMessageFromTask(actor, result) =>
-      taskFinished(actor, result);
+    case InternalMessageFromTask(actor, result, _) =>
+      taskFinished(actor, result)
       askForWork
 
     case InternalMessageTaskFailed(actor, cause) =>
@@ -286,6 +299,8 @@ class Launcher(
       else {
         availableResources = availableResources.addBack(allocated.get)
         freed = freed + taskActor
+        resourceDeallocatedAt = resourceDeallocatedAt + ((taskActor,
+                                                          System.nanoTime))
       }
       askForWork
 

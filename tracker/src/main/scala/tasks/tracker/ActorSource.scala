@@ -21,44 +21,31 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package tasks.ui
 
-import tasks.queue.TaskQueue
-import tasks.elastic.NodeRegistry
-import tasks.util.reflectivelyInstantiateObject
-import tasks.util.config.TasksConfig
-import akka.actor.{ActorSystem, ActorRef}
+package tasks.tracker
 
-trait EventListener[-E] {
-  def receive(event: E): Unit
-  def close(): Unit
-  def watchable: ActorRef
-}
+import akka.actor._
+import akka.stream.scaladsl._
+import akka.stream._
 
-trait UIComponentBootstrap {
-  def startQueueUI(implicit actorSystem: ActorSystem,
-                   config: TasksConfig): QueueUI
-  def startAppUI(implicit actorSystem: ActorSystem, config: TasksConfig): AppUI
-}
-
-trait QueueUI {
-  def tasksQueueEventListener: EventListener[TaskQueue.Event]
-}
-
-trait AppUI {
-  def nodeRegistryEventListener: EventListener[NodeRegistry.Event]
-}
-
-object UIComponentBootstrap {
-  def load(implicit config: TasksConfig): Option[UIComponentBootstrap] =
-    config.uiFqcn match {
-      case ""     => None
-      case "NOUI" => None
-      case "default" =>
-        Some(
-          reflectivelyInstantiateObject[UIComponentBootstrap](
-            "tasks.ui.BackendUIBootstrap"))
-      case other =>
-        Some(reflectivelyInstantiateObject[UIComponentBootstrap](other))
+object ActorSource {
+  private class Forwarder extends Actor {
+    var listener: Option[ActorRef] = None
+    def receive = {
+      case actorRef: ActorRef =>
+        listener = Some(actorRef)
+      case other => listener.foreach(_ ! other)
     }
+  }
+  def make[T](implicit AS: ActorSystem) = {
+    val fw = AS.actorOf(Props[Forwarder])
+    val source = Source
+      .actorRef[T](bufferSize = 1000000,
+                   overflowStrategy = OverflowStrategy.fail)
+      .mapMaterializedValue { actorRef =>
+        fw ! actorRef
+
+      }
+    (fw, source)
+  }
 }

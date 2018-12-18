@@ -27,7 +27,7 @@ package tasks
 
 import akka.actor._
 import scala.concurrent._
-import tasks.shared.Priority
+import tasks.shared.{Priority, Labels}
 
 package object queue {
 
@@ -83,7 +83,8 @@ package object queue {
       resource: shared.VersionedResourceRequest,
       function: CompFun2,
       taskId: TaskId,
-      priority: Priority
+      priority: Priority,
+      labels: Labels
   )(implicit components: TaskSystemComponents,
     writer1: Serializer[B],
     reader2: Deserializer[A]): Future[A] = {
@@ -111,7 +112,8 @@ package object queue {
           fileServicePrefix = prefix,
           cacheActor = cache.actor,
           priority = priority,
-          promise = promise
+          promise = promise,
+          labels = labels
         )
       ).withDispatcher("proxytask-dispatcher")
     )

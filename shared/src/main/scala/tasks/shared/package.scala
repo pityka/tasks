@@ -24,4 +24,12 @@ package object shared {
     Encoder.encodeInt.contramap(identity)
   implicit val priorityDecoder: Decoder[Priority] =
     Decoder.decodeInt.map(Priority(_))
+
+  trait ElapsedTimeTag
+  type ElapsedTimeNanoSeconds = Long @@ ElapsedTimeTag
+  def ElapsedTimeNanoSeconds(s: Long): ElapsedTimeNanoSeconds = tag[ElapsedTimeTag][Long](s)
+  implicit val ElapsedTimeNanoSecondsEncoder: Encoder[ElapsedTimeNanoSeconds] =
+    Encoder.encodeLong.contramap(identity)
+  implicit val ElapsedTimeNanoSecondsDecoder: Decoder[ElapsedTimeNanoSeconds] =
+    Decoder.decodeLong.map(ElapsedTimeNanoSeconds(_))
 }

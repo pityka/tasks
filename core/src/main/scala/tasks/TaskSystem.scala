@@ -62,7 +62,8 @@ case class TaskSystemComponents(
     actorMaterializer: Materializer,
     tasksConfig: TasksConfig,
     historyContext: HistoryContext,
-    priority: Priority
+    priority: Priority,
+    labels: Labels
 ) {
 
   def withChildPrefix(name: String) =
@@ -267,16 +268,27 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
 
   val uiBootstrap = tasks.ui.UIComponentBootstrap.load
 
+  val trackerBootstrap = tasks.tracker.TrackerBootstrap.load
+
+  val trackerEventListener =
+    if (hostConfig.isQueue)
+      trackerBootstrap.map(_.start.eventListener)
+    else None
+
+  trackerEventListener.foreach(ev => reaperActor ! WatchMe(ev.watchable))
+
   val queueActor = try {
     if (hostConfig.isQueue) {
 
       val uiComponent = uiBootstrap.map(_.startQueueUI)
 
+      val eventListeners = uiComponent.map(_.tasksQueueEventListener).toList ++
+        trackerEventListener.toList
+
       val localActor =
-        system.actorOf(
-          Props(new TaskQueue(uiComponent.map(_.tasksQueueEventListener)))
-            .withDispatcher("taskqueue"),
-          "queue")
+        system.actorOf(Props(new TaskQueue(eventListeners))
+                         .withDispatcher("taskqueue"),
+                       "queue")
       reaperActor ! WatchMe(localActor)
       localActor
     } else {
@@ -395,7 +407,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
     actorMaterializer = AM,
     tasksConfig = config,
     historyContext = rootHistory,
-    priority = Priority(0)
+    priority = Priority(0),
+    labels = Labels.empty
   )
 
   private val launcherActor =
@@ -479,6 +492,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
 
         val latch = new java.util.concurrent.CountDownLatch(1)
         reaperActor ! Latch(latch)
+
+        trackerEventListener.foreach(_.close)
 
         if (hostConfig.isQueue) {
           val cacheReaper = system.actorOf(Props(new CallbackReaper({

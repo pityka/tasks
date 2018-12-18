@@ -115,6 +115,8 @@ class AppUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
 
   def nodeRegistryEventListener: EventListener[NodeRegistry.Event] =
     new EventListener[NodeRegistry.Event] {
+      def watchable = eventListener
+      def close = eventListener ! PoisonPill
       def receive(event: NodeRegistry.Event): Unit = {
         eventListener ! event
       }

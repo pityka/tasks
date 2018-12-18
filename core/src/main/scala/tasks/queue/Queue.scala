@@ -53,7 +53,11 @@ object TaskQueue {
                            launcher: LauncherActor,
                            allocated: VersionedResourceAllocated)
       extends Event
-  case class TaskDone(sch: ScheduleTask, result: UntypedResult) extends Event
+  case class TaskDone(sch: ScheduleTask,
+                      result: UntypedResult,
+                      elapsedTime: ElapsedTimeNanoSeconds,
+                      resourceAllocated: ResourceAllocated)
+      extends Event
   case class TaskFailed(sch: ScheduleTask) extends Event
   case class TaskLauncherStoppedFor(sch: ScheduleTask) extends Event
   case class LauncherCrashed(crashedLauncher: LauncherActor) extends Event
@@ -61,7 +65,7 @@ object TaskQueue {
   case class CacheHit(sch: ScheduleTask, result: UntypedResult) extends Event
 }
 
-class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
+class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
     implicit config: TasksConfig)
     extends Actor
     with ActorLogging {
@@ -112,7 +116,7 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
                scheduledTasks = scheduledTasks
                  .updated(sch, (launcher, allocated, proxies)))
 
-        case TaskDone(sch, _) =>
+        case TaskDone(sch, _, _, _) =>
           copy(scheduledTasks = scheduledTasks - sch)
         case TaskFailed(sch) =>
           copy(scheduledTasks = scheduledTasks - sch)
@@ -252,14 +256,16 @@ class TaskQueue(eventListener: Option[EventListener[TaskQueue.Event]])(
             .update(NegotiationDone)
             .update(TaskScheduled(sch, LauncherActor(sender), allocated))))
 
-    case wire.TaskDone(sch, result) =>
+    case wire.TaskDone(sch, result, elapsedTime, resourceAllocated) =>
       log.debug(s"TaskDone $sch $result")
 
       state.scheduledTasks.get(sch).foreach {
         case (_, _, proxies) =>
           proxies.foreach(_.actor ! MessageFromTask(result))
       }
-      context.become(running(state.update(TaskDone(sch, result))))
+      context.become(
+        running(
+          state.update(TaskDone(sch, result, elapsedTime, resourceAllocated))))
 
       if (state.queuedTasks.contains(sch)) {
         log.error("Should not be queued. {}", state.queuedTasks(sch))

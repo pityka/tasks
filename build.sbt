@@ -146,6 +146,17 @@ lazy val kubernetes = project
   )
   .dependsOn(core % "compile->compile;test->test")
 
+lazy val tracker = project
+  .in(file("tracker"))
+  .settings(commonSettings: _*)
+  .settings(
+    name := "tasks-tracker",
+    libraryDependencies ++= Seq(
+      "org.scalatest" %% "scalatest" % "3.0.0" % "test"),
+    resources in Compile += (fastOptJS in Compile in uifrontend).value.data
+  )
+  .dependsOn(core % "compile->compile;test->test")
+
 lazy val uibackend = project
   .in(file("uibackend"))
   .settings(commonSettings: _*)
@@ -231,6 +242,7 @@ lazy val root = (project in file("."))
              uibackend,
              uifrontend,
              kubernetes,
+             tracker,
              example)
 
 scalafmtOnCompile in ThisBuild := true

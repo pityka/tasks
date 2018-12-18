@@ -106,6 +106,7 @@ private class Task(
     actorMaterializer: Materializer,
     tasksConfig: TasksConfig,
     priority: Priority,
+    labels: Labels,
     input: Base64Data
 ) extends Actor
     with akka.actor.ActorLogging {
@@ -134,11 +135,14 @@ private class Task(
     self ! PoisonPill
   }
 
-  private def handleCompletion(future: Future[UntypedResult]) =
+  private def handleCompletion(future: Future[UntypedResult], start: Long) =
     future.onComplete {
       case Success(result) =>
         log.debug("Task success. ")
-        launcherActor ! InternalMessageFromTask(self, result)
+        launcherActor ! InternalMessageFromTask(
+          self,
+          result,
+          ElapsedTimeNanoSeconds(System.nanoTime - start))
         self ! PoisonPill
 
       case Failure(error) => handleError(error)
@@ -159,7 +163,8 @@ private class Task(
           actorMaterializer,
           tasksConfig,
           NoHistory,
-          priority
+          priority,
+          labels
         ),
         akka.event.Logging(context.system.eventStream,
                            "usertasks." + fileServicePrefix.list.mkString(".")),
@@ -182,7 +187,7 @@ private class Task(
 
   def receive = {
     case Start =>
-      handleCompletion(executeTaskAsynchronously())
+      handleCompletion(executeTaskAsynchronously(), start = System.nanoTime)
 
     case other => log.error("received unknown message" + other)
   }

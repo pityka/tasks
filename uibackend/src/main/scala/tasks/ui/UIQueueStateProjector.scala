@@ -57,7 +57,7 @@ object UIQueueStateProjector {
             (sch.description, (uiLauncherActor(launcher), allocated)) :: state.scheduledTasks
         )
 
-      case TaskDone(sch, _) =>
+      case TaskDone(sch, _, _, _) =>
         val updatedCompletedTasks = {
           val scheduled = state.scheduledTasks
             .find(_._1 == sch.description)
