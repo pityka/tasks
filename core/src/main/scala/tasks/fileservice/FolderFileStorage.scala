@@ -148,7 +148,13 @@ class FolderFileStorage(val basePath: File)(implicit
     parentFolder.mkdirs
     val tmp = new File(parentFolder, destination.getName + ".tmp")
 
-    com.google.common.io.Files.copy(source, tmp)
+    try {
+      com.google.common.io.Files.copy(source, tmp)
+    } catch {
+      case e: java.io.IOException =>
+        logger.error(e, s"Exception while copying $source to $tmp")
+        throw e
+    }
 
     destination.delete
 
