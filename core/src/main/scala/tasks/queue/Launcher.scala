@@ -39,6 +39,7 @@ import akka.stream.Materializer
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
+import scala.util.{Failure, Success}
 
 import java.lang.Class
 
@@ -212,14 +213,17 @@ class Launcher(
                      receivedResult,
                      scheduleTask.fileServicePrefix.append(
                        scheduleTask.description.taskId.id)))(
-          timeout = 5 seconds
+          timeout = 600 seconds
         )
       )
-      .foreach { _ =>
-        queueActor ! TaskDone(scheduleTask,
-                              receivedResult,
-                              elapsedTime,
-                              resourceAllocated.cpuMemoryAllocated)
+      .onComplete {
+        case Failure(e) =>
+          log.error(e, s"Failed to save ${scheduleTask.description}")
+        case Success(_) =>
+          queueActor ! TaskDone(scheduleTask,
+                                receivedResult,
+                                elapsedTime,
+                                resourceAllocated.cpuMemoryAllocated)
       }
 
     runningTasks = runningTasks.filterNot(_ == elem)
