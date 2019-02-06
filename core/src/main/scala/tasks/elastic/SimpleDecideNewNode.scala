@@ -30,10 +30,12 @@ import tasks.shared._
 import tasks.util._
 import tasks.util.eq._
 import tasks.util.config._
+import com.typesafe.scalalogging.StrictLogging
 
 class SimpleDecideNewNode(codeVersion: CodeVersion)(
     implicit config: TasksConfig)
-    extends DecideNewNode {
+    extends DecideNewNode
+    with StrictLogging {
 
   def needNewNode(
       q: QueueStat,
@@ -64,6 +66,8 @@ class SimpleDecideNewNode(codeVersion: CodeVersion)(
     val nonAllocatedResources: Map[ResourceRequest, Int] = {
       val map1 = resourceNeeded.groupBy(x => x).map(x => x._1 -> x._2.size)
       val map2 = allocatedResources.groupBy(x => x).map(x => x._1 -> x._2.size)
+      logger.info(
+        s"Resources needed: $map1. Resources allocable with current running or pending nodes: $map2. Current nodes: $availableResources")
       (addMaps(map1, map2)(_ - _)).filter(x => { assert(x._2 >= 0); x._2 > 0 })
 
     }
