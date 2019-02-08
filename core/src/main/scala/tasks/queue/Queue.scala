@@ -72,12 +72,21 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
 
   import TaskQueue._
 
+  case class ScheduleTaskEqualityProjection(
+      description: TaskDescription
+  )
+
+  def project(sch: ScheduleTask) =
+    ScheduleTaskEqualityProjection(sch.description)
+
   case class State(
-      queuedTasks: Map[ScheduleTask, List[Proxy]],
-      scheduledTasks: Map[ScheduleTask,
+      queuedTasks: Map[ScheduleTaskEqualityProjection,
+                       (ScheduleTask, List[Proxy])],
+      scheduledTasks: Map[ScheduleTaskEqualityProjection,
                           (LauncherActor,
                            VersionedResourceAllocated,
-                           List[Proxy])],
+                           List[Proxy],
+                           ScheduleTask)],
       knownLaunchers: Set[LauncherActor],
       /*This is non empty while waiting for response from the tasklauncher
        *during that, no other tasks are started*/
@@ -88,57 +97,62 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
       eventListener.foreach(_.receive(e))
       e match {
         case Enqueued(sch, proxies) =>
-          if (!scheduledTasks.contains(sch)) {
-            queuedTasks.get(sch) match {
-              case None => copy(queuedTasks = queuedTasks.updated(sch, proxies))
-              case Some(existingProxies) =>
+          if (!scheduledTasks.contains(project(sch))) {
+            queuedTasks.get(project(sch)) match {
+              case None =>
                 copy(
-                  queuedTasks.updated(sch,
-                                      (proxies ::: existingProxies).distinct))
+                  queuedTasks =
+                    queuedTasks.updated(project(sch), (sch, proxies)))
+              case Some((_, existingProxies)) =>
+                copy(
+                  queuedTasks.updated(
+                    project(sch),
+                    (sch, (proxies ::: existingProxies).distinct)))
             }
           } else update(ProxyAddedToScheduledMessage(sch, proxies))
 
         case ProxyAddedToScheduledMessage(sch, newProxies) =>
-          val (launcher, allocation, proxies) = scheduledTasks(sch)
+          val (launcher, allocation, proxies, _) = scheduledTasks(project(sch))
           copy(
             scheduledTasks = scheduledTasks
               .updated(
-                sch,
-                (launcher, allocation, (newProxies ::: proxies).distinct)))
+                project(sch),
+                (launcher, allocation, (newProxies ::: proxies).distinct, sch)))
         case Negotiating(launcher, sch) =>
           copy(negotiation = Some((launcher, sch)))
         case LauncherJoined(launcher) =>
           copy(knownLaunchers = knownLaunchers + launcher)
         case NegotiationDone => copy(negotiation = None)
         case TaskScheduled(sch, launcher, allocated) =>
-          val proxies = queuedTasks(sch)
-          copy(queuedTasks = queuedTasks - sch,
+          val (_, proxies) = queuedTasks(project(sch))
+          copy(queuedTasks = queuedTasks - project(sch),
                scheduledTasks = scheduledTasks
-                 .updated(sch, (launcher, allocated, proxies)))
+                 .updated(project(sch), (launcher, allocated, proxies, sch)))
 
         case TaskDone(sch, _, _, _) =>
-          copy(scheduledTasks = scheduledTasks - sch)
+          copy(scheduledTasks = scheduledTasks - project(sch))
         case TaskFailed(sch) =>
-          copy(scheduledTasks = scheduledTasks - sch)
+          copy(scheduledTasks = scheduledTasks - project(sch))
         case TaskLauncherStoppedFor(sch) =>
-          copy(scheduledTasks = scheduledTasks - sch)
+          copy(scheduledTasks = scheduledTasks - project(sch))
         case LauncherCrashed(launcher) =>
           copy(knownLaunchers = knownLaunchers - launcher)
         case CacheHit(sch, _) =>
-          copy(scheduledTasks = scheduledTasks - sch)
+          copy(scheduledTasks = scheduledTasks - project(sch))
         case _: CacheQueried => this
 
       }
     }
 
     def queuedButSentByADifferentProxy(sch: ScheduleTask, proxy: Proxy) =
-      (queuedTasks.contains(sch) && (!queuedTasks(sch).has(proxy)))
+      (queuedTasks.contains(project(sch)) && (!queuedTasks(project(sch))._2
+        .has(proxy)))
 
     def scheduledButSentByADifferentProxy(sch: ScheduleTask, proxy: Proxy) =
       scheduledTasks
-        .get(sch)
+        .get(project(sch))
         .map {
-          case (_, _, proxies) =>
+          case (_, _, proxies, _) =>
             !proxies.isEmpty && !proxies.contains(proxy)
         }
         .getOrElse(false)
@@ -202,16 +216,16 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
           sender,
           availableResource,
           state.negotiation,
-          state.queuedTasks
-            .map(x => (x._1.description.taskId, x._1.resource))
-            .toSeq
+          state.queuedTasks.map {
+            case (_, (sch, _)) => (sch.description.taskId, sch.resource)
+          }.toSeq
         )
 
         val launcher = LauncherActor(sender)
 
         state.queuedTasks
           .filter {
-            case (sch, _) =>
+            case (_, (sch, _)) =>
               val ret = availableResource.canFulfillRequest(sch.resource)
               if (!ret) {
                 log.debug(
@@ -220,10 +234,13 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
               ret
           }
           .toSeq
-          .sortBy(_._1.priority.toInt)
+          .sortBy {
+            case (_, (sch, _)) =>
+              sch.priority.toInt
+          }
           .headOption
           .foreach {
-            case (sch, _) =>
+            case (_, (sch, _)) =>
               val withNegotiation = state.update(Negotiating(launcher, sch))
               log.debug(
                 s"Dequeued. Sending task to $launcher. Negotation: ${state.negotiation}")
@@ -246,7 +263,7 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
 
     case Ack(allocated) if state.negotiatingWithCurrentSender =>
       val sch = state.negotiation.get._2
-      if (state.scheduledTasks.contains(sch)) {
+      if (state.scheduledTasks.contains(project(sch))) {
         log.error(
           "Routed messages already contains task. This is unexpected and can lead to lost messages.")
       }
@@ -259,21 +276,21 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
     case wire.TaskDone(sch, result, elapsedTime, resourceAllocated) =>
       log.debug(s"TaskDone $sch $result")
 
-      state.scheduledTasks.get(sch).foreach {
-        case (_, _, proxies) =>
+      state.scheduledTasks.get(project(sch)).foreach {
+        case (_, _, proxies, _) =>
           proxies.foreach(_.actor ! MessageFromTask(result))
       }
       context.become(
         running(
           state.update(TaskDone(sch, result, elapsedTime, resourceAllocated))))
 
-      if (state.queuedTasks.contains(sch)) {
-        log.error("Should not be queued. {}", state.queuedTasks(sch))
+      if (state.queuedTasks.contains(project(sch))) {
+        log.error("Should not be queued. {}", state.queuedTasks(project(sch)))
       }
 
     case TaskFailedMessageToQueue(sch, cause) =>
-      val updated = state.scheduledTasks.get(sch).foldLeft(state) {
-        case (state, (_, _, proxies)) =>
+      val updated = state.scheduledTasks.get(project(sch)).foldLeft(state) {
+        case (state, (_, _, proxies, _)) =>
           val removed = state.update(TaskFailed(sch))
           if (config.resubmitFailedTask) {
             log.error(
@@ -294,8 +311,8 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
       log.info(s"LauncherStopped: $launcher")
       val msgs =
         state.scheduledTasks.toSeq.filter(_._2._1 === launcher).map(_._1)
-      val updated = msgs.foldLeft(state) { (state, sch) =>
-        val proxies = state.scheduledTasks(sch)._3
+      val updated = msgs.foldLeft(state) { (state, schProjection) =>
+        val (_, _, proxies, sch) = state.scheduledTasks(schProjection)
         state.update(TaskLauncherStoppedFor(sch)).update(Enqueued(sch, proxies))
       }
       context.become(running(updated.update(LauncherCrashed(launcher))))
@@ -307,10 +324,9 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
 
     case HowLoadedAreYou =>
       val qs = QueueStat(
-        state.queuedTasks.toList
-          .map(_._1)
-          .map(x => (x.description.taskId.toString, x.resource))
-          .toList,
+        state.queuedTasks.toList.map {
+          case (_, (sch, _)) => (sch.description.taskId.toString, sch.resource)
+        }.toList,
         state.scheduledTasks.toSeq
           .map(x => x._1.description.taskId.toString -> x._2._2)
           .toList

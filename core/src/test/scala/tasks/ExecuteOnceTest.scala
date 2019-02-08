@@ -45,7 +45,6 @@ object ExecOnceTest extends TestHelpers with Matchers {
     case Input(c) =>
       implicit computationEnvironment =>
         sideEffect += "executed"
-        Thread.sleep(10000)
         Future(c + 1)
   }
 
@@ -58,8 +57,10 @@ object ExecOnceTest extends TestHelpers with Matchers {
           s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}"
         ))) { implicit ts =>
       import scala.concurrent.ExecutionContext.Implicits.global
-      await(Future.traverse(1 to 10000) { _ =>
-        increment(Input(0))(ResourceRequest(1, 500))
+      await(Future.traverse(1 to 10000) { input =>
+        increment(Input(0))(
+          ResourceRequest(1, 500),
+          labels = tasks.shared.Labels(List(input.toString -> input.toString)))
       })
 
     }
