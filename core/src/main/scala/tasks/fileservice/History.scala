@@ -21,19 +21,18 @@ case class HistoryContextImpl(
             cursor.dependencies.foldLeft((filesSeen, List.empty[History])) {
               case ((filesSeen, accumulator), nextElem) =>
                 if (filesSeen.contains(nextElem.self))
-                  (filesSeen + nextElem.self,
-                   nextElem.copy(context = None) :: accumulator)
+                  (filesSeen, nextElem.copy(context = None) :: accumulator)
                 else {
                   nextElem.context match {
                     case None =>
                       (filesSeen, nextElem :: accumulator)
                     case Some(context) =>
-                      val filesSeenIncludingThis = filesSeen + nextElem.self
                       val (deduplicatedContext, fileSeenInContext) =
-                        loop(context, filesSeenIncludingThis)
+                        loop(context, filesSeen + nextElem.self)
 
-                      (filesSeenIncludingThis ++ fileSeenInContext,
-                       nextElem.copy(context = Some(deduplicatedContext)) :: accumulator)
+                      (fileSeenInContext,
+                       nextElem
+                         .copy(context = Some(deduplicatedContext)) :: accumulator)
                   }
 
                 }
