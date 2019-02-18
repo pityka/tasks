@@ -99,6 +99,25 @@ class QueueUI(container: Node) {
     )
   )
 
+  val (scheduledTasksSummaryTable, scheudledTasksSummaryTableSink) =
+    renderTable { uiState =>
+      val counts = uiState.scheduledTasks
+        .map { case (taskDescription, _) => taskDescription.taskId }
+        .groupBy(identity)
+        .map { case (key, group) => (key, group.size) }
+      List(
+        thead(
+          tr(
+            th(colspan := "4")(
+              "Scheduled tasks, total: " + counts
+                .map(_._2)
+                .sum)),
+          RecoveredTasksTableHeader
+        ).render,
+        renderTableBodyWithRecoveredTasks(counts.toSet)
+      )
+    }
+
   val (failedTasksTable, failedTasksTableSink) = renderTable(
     uiState =>
       List(
@@ -141,13 +160,14 @@ class QueueUI(container: Node) {
   )
 
   val root = div(
-    div(`class` := "ui grid container")(
-      div(`class` := "two wide column")(knownLaunchersTable),
-      div(`class` := "eight wide column")(queuedTasksTable),
-      div(`class` := "twelve wide column centered")(completedTasksTable),
-      div(`class` := "twelve wide column centered")(recoveredTasksTable),
-      div(`class` := "twelve wide column centered")(failedTasksTable),
-      div(`class` := "twelve wide column centered")(scheduledTasksTable)
+    div(`class` := "ui")(
+      div(`class` := "")(knownLaunchersTable),
+      div(`class` := "")(scheduledTasksSummaryTable),
+      div(`class` := "")(completedTasksTable),
+      div(`class` := "")(recoveredTasksTable),
+      div(`class` := "")(queuedTasksTable),
+      div(`class` := "")(failedTasksTable),
+      div(`class` := "")(scheduledTasksTable)
     )
   )
 
@@ -165,12 +185,15 @@ class QueueUI(container: Node) {
   keepAliveTicks.runWith(wsSink)
 
   val combinedUIStateSinks = Sink
-    .combine(knownLaunchersSink,
-             queuedTasksTableSink,
-             scheduledTasksTableSink,
-             completedTasksTableSink,
-             failedTasksTableSink,
-             recoveredTasksTableSink)(Broadcast[UIQueueState](_))
+    .combine(
+      knownLaunchersSink,
+      queuedTasksTableSink,
+      scheduledTasksTableSink,
+      scheudledTasksSummaryTableSink,
+      completedTasksTableSink,
+      failedTasksTableSink,
+      recoveredTasksTableSink
+    )(Broadcast[UIQueueState](_))
 
   uiStateSource.runWith(combinedUIStateSinks)
 
