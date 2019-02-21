@@ -408,7 +408,7 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
     tasksConfig = config,
     historyContext = rootHistory,
     priority = Priority(0),
-    labels = Labels.empty
+    labels = Labels.root
   )
 
   private val launcherActor =
