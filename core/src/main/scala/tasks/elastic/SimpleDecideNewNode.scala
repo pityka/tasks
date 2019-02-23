@@ -44,12 +44,17 @@ class SimpleDecideNewNode(codeVersion: CodeVersion)(
     val resourceNeeded: List[ResourceRequest] = q.queued.map(_._2).collect {
       case VersionedResourceRequest(v, request) if v === codeVersion => request
     }
+    val resourcesUsedByRunningJobs: List[ResourceRequest] = q.running.map(_._2).collect {
+      case VersionedResourceAllocated(v, allocated) if v === codeVersion =>
+        allocated.toRequest
+    }
 
     val availableResources: List[ResourceAvailable] =
       (registeredNodes ++ pendingNodes).toList
 
     val (_, allocatedResources) =
-      resourceNeeded.foldLeft((availableResources, List[ResourceRequest]())) {
+      (resourceNeeded ++ resourcesUsedByRunningJobs).foldLeft(
+        (availableResources, List[ResourceRequest]())) {
         case ((available, allocated), request) =>
           val (prefix, suffix) =
             available.span(x => !x.canFulfillRequest(request))
