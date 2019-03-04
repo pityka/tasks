@@ -44,10 +44,11 @@ class SimpleDecideNewNode(codeVersion: CodeVersion)(
     val resourceNeeded: List[ResourceRequest] = q.queued.map(_._2).collect {
       case VersionedResourceRequest(v, request) if v === codeVersion => request
     }
-    val resourcesUsedByRunningJobs: List[ResourceRequest] = q.running.map(_._2).collect {
-      case VersionedResourceAllocated(v, allocated) if v === codeVersion =>
-        allocated.toRequest
-    }
+    val resourcesUsedByRunningJobs: List[ResourceRequest] =
+      q.running.map(_._2).collect {
+        case VersionedResourceAllocated(v, allocated) if v === codeVersion =>
+          allocated.toRequest
+      }
 
     val availableResources: List[ResourceAvailable] =
       (registeredNodes ++ pendingNodes).toList
