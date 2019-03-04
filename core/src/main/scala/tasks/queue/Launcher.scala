@@ -97,7 +97,7 @@ class Launcher(
   private val maxResources: VersionedResourceAvailable = slots
   private var availableResources: VersionedResourceAvailable = maxResources
 
-  private def isIdle = maxResources == availableResources
+  private def isIdle = runningTasks.isEmpty
   private var idleState: Long = 0L
 
   private var denyWorkBeforeShutdown = false
