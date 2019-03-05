@@ -70,11 +70,11 @@ class SimpleDecideNewNode(codeVersion: CodeVersion)(
       }
 
     val nonAllocatedResources: Map[ResourceRequest, Int] = {
-      val map1 = resourceNeeded.groupBy(x => x).map(x => x._1 -> x._2.size)
-      val map2 = allocatedResources.groupBy(x => x).map(x => x._1 -> x._2.size)
+      val need = (resourceNeeded ++ resourcesUsedByRunningJobs).groupBy(x => x).map(x => x._1 -> x._2.size)
+      val fulfilled = allocatedResources.groupBy(x => x).map(x => x._1 -> x._2.size)
       logger.info(
-        s"Resources needed: $map1. Resources allocable with current running or pending nodes: $map2. Current nodes: $availableResources")
-      (addMaps(map1, map2)(_ - _)).filter(x => { assert(x._2 >= 0); x._2 > 0 })
+        s"Resources needed: $need. Resources allocable with current running or pending nodes: $fulfilled. Current nodes: $availableResources")
+      (addMaps(need, fulfilled)(_ - _)).filter(x => x._2 > 0 )
 
     }
 
