@@ -258,6 +258,7 @@ class FileService(
     case IsPathAccessible(managedPath) =>
       sender ! storage.contains(managedPath)
     case GetUri(managedPath) => sender ! storage.uri(managedPath)
-    case Delete(managedPath) => storage.delete(managedPath).pipeTo(sender)
+    case Delete(managedPath, size, hash) =>
+      storage.delete(managedPath, size, hash).pipeTo(sender)
   }
 }

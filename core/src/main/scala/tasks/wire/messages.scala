@@ -124,7 +124,8 @@ case class IsPathAccessible(sf: ManagedFilePath) extends StaticMessage
 
 case class GetUri(sf: ManagedFilePath) extends StaticMessage
 
-case class Delete(sf: ManagedFilePath) extends StaticMessage
+case class Delete(sf: ManagedFilePath, size: Long, hash: Int)
+    extends StaticMessage
 
 // Messages related to elastic
 

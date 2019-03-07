@@ -80,11 +80,23 @@ class FolderFileStorage(val basePath: File)(implicit
 
   }
 
-  def delete(mp: ManagedFilePath) =
+  def delete(mp: ManagedFilePath, expectedSize: Long, expectedHash: Int) =
     if (config.allowDeletion) {
       val file = assemblePath(mp)
-      file.delete
-      logger.warning(s"File deleted $file $mp")
+      val sizeOnDiskNow = file.length
+      val sizeMatch = sizeOnDiskNow == expectedSize
+      val canRead = file.canRead
+      def contentMatch =
+        canRead && FolderFileStorage.getContentHash(file) === expectedHash
+      val canDelete = canRead && (expectedSize < 0 || (sizeMatch && contentMatch))
+      if (canDelete) {
+        file.delete
+        logger.warning(s"File deleted $file $mp")
+      } else {
+        logger.warning(
+          s"Not deleting file because its size or hash is different than expectation. $file $mp $sizeMatch $contentMatch")
+        Future.successful(false)
+      }
       Future.successful(true)
     } else {
       logger.warning(s"File deletion disabled. Would have deleted $mp")

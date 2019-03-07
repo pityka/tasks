@@ -205,10 +205,11 @@ private[tasks] object SharedFileHelper extends StrictLogging {
       case RemoteFilePath(_) => Future.successful(false)
       case path: ManagedFilePath => {
         if (service.storage.isDefined)
-          service.storage.get.delete(path)
+          service.storage.get.delete(path, sf.byteSize, sf.hash)
         else {
           implicit val timout = akka.util.Timeout(1441 minutes)
-          (service.actor ? Delete(path)).asInstanceOf[Future[Boolean]]
+          (service.actor ? Delete(path, sf.byteSize, sf.hash))
+            .asInstanceOf[Future[Boolean]]
         }
       }
     }
