@@ -72,7 +72,9 @@ private[tasks] class SharedFileCache(
     SharedFileHelper
       .getByNameUnchecked(fileName)
       .flatMap {
-        case None => Future.successful(None)
+        case None =>
+          logger.debug(s"Not found $prefix $fileName for $taskDescription")
+          Future.successful(None)
         case Some(sf) =>
           SharedFileHelper
             .getSourceToFile(sf)
