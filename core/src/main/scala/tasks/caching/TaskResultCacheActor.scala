@@ -127,7 +127,9 @@ class TaskResultCacheActor(
           case Some(cacheLookup) =>
             log.debug(
               s"Checking: $taskId. Got something $cacheLookup, verifying..")
-            forallFutures(cacheLookup.files.map(SharedFileHelper.isAccessible))
+            Future
+              .traverse(cacheLookup.files)(SharedFileHelper.isAccessible)
+              .map(_.forall(identity))
               .recover {
                 case e =>
                   log.warning(
@@ -159,6 +161,4 @@ class TaskResultCacheActor(
 
   }
 
-  private def forallFutures(futures: Set[Future[Boolean]]) =
-    Future.sequence(futures).map(_.forall(identity))
 }
