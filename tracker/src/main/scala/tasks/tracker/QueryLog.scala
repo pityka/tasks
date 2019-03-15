@@ -32,6 +32,7 @@ object QueryLog {
       .filter(elem =>
         if (includeTaskIds.isEmpty) true
         else includeTaskIds.contains(elem.description.taskId.id))
+      .filter(elem => elem.labels.values.find(_._1 == Labels.traceKey).nonEmpty)
       .map(elem =>
         Node(
           elem.description.taskId.id,

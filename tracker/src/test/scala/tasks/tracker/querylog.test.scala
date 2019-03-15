@@ -116,7 +116,6 @@ class QueryLogTestSuite extends FunSuite with Matchers {
 
       QueryLog.trees(nodes).size shouldBe 1
 
-
       val collapsed = QueryLog.collapseMultiEdges(nodes) { nodes =>
         (nodes.head.resource,
          tasks.shared.ElapsedTimeNanoSeconds(
