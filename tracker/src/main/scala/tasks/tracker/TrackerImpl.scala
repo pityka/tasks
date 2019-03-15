@@ -30,24 +30,28 @@ import akka.stream._
 import tasks.queue.TaskQueue
 import tasks.ui.EventListener
 import tasks.util.config.TasksConfig
-import io.circe.Encoder
-import io.circe.generic.semiauto.deriveEncoder
+import io.circe.{Encoder, Decoder}
+import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 import tasks.queue.TaskDescription
 import tasks.shared.ResourceAllocated
 import tasks.shared.{ElapsedTimeNanoSeconds, Labels}
+
+case class ResourceUtilizationRecord(description: TaskDescription,
+                                     labels: Labels,
+                                     elapsedTime: ElapsedTimeNanoSeconds,
+                                     resource: ResourceAllocated)
+
+object ResourceUtilizationRecord {
+  implicit val encoder: Encoder[ResourceUtilizationRecord] =
+    deriveEncoder[ResourceUtilizationRecord]
+  implicit val decoder: Decoder[ResourceUtilizationRecord] =
+    deriveDecoder[ResourceUtilizationRecord]
+}
 
 class TrackerImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
     extends Tracker {
 
   implicit val AM = ActorMaterializer()
-
-  case class ResourceUtilizationRecord(description: TaskDescription,
-                                       labels: Labels,
-                                       elapsedTime: ElapsedTimeNanoSeconds,
-                                       resource: ResourceAllocated)
-
-  implicit val encoder: Encoder[ResourceUtilizationRecord] =
-    deriveEncoder[ResourceUtilizationRecord]
 
   val log = akka.event.Logging(actorSystem.eventStream, getClass)
   log.info("Instantiating resource tracking")
