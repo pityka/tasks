@@ -32,11 +32,11 @@ import tasks.ui.EventListener
 import tasks.util.config.TasksConfig
 import io.circe.{Encoder, Decoder}
 import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
-import tasks.queue.TaskDescription
+import tasks.queue.TaskId
 import tasks.shared.ResourceAllocated
 import tasks.shared.{ElapsedTimeNanoSeconds, Labels}
 
-case class ResourceUtilizationRecord(description: TaskDescription,
+case class ResourceUtilizationRecord(taskId: TaskId,
                                      labels: Labels,
                                      elapsedTime: ElapsedTimeNanoSeconds,
                                      resource: ResourceAllocated)
@@ -65,24 +65,23 @@ class TrackerImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
 
   private val sink = Flow[TaskQueue.TaskDone]
     .map { td =>
-      val dto = ResourceUtilizationRecord(td.sch.description,
+      val dto = ResourceUtilizationRecord(td.sch.description.taskId,
                                           td.sch.labels,
                                           td.elapsedTime,
                                           td.resourceAllocated)
       import io.circe.syntax._
       akka.util.ByteString(dto.asJson.noSpaces + "\n")
     }
-    .to(
-      FileIO
-        .toPath(
-          new java.io.File(config.resourceUtilizationLogFile).toPath,
-          options = Set(
-            java.nio.file.StandardOpenOption.APPEND,
-            java.nio.file.StandardOpenOption.WRITE,
-            java.nio.file.StandardOpenOption.CREATE,
-            java.nio.file.StandardOpenOption.SYNC
-          )
-        ))
+    .to(FileIO
+      .toPath(
+        new java.io.File(config.resourceUtilizationLogFile).toPath,
+        options = Set(
+          java.nio.file.StandardOpenOption.APPEND,
+          java.nio.file.StandardOpenOption.WRITE,
+          java.nio.file.StandardOpenOption.CREATE,
+          java.nio.file.StandardOpenOption.SYNC
+        )
+      ))
 
   private val (eventListenerActor, eventSource) =
     ActorSource.make[TaskQueue.Event]
