@@ -162,9 +162,15 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
   private def createSourceS3(uri: Uri): Source[ByteString, _] =
     s3stream.get.getData(s3Loc(uri), parallelism = 1)
 
+  private def createSourceFile(uri: Uri): Source[ByteString, _] = {
+    val file = new java.io.File(uri.path)
+    FileIO.fromPath(file.toPath, chunkSize = 65536)
+  }
+
   def createSource(uri: Uri) = uri.scheme match {
     case "http" | "https" => createSourceHttp(uri)
     case "s3"             => createSourceS3(uri)
+    case "file"           => createSourceFile(uri)
   }
 
   private def getContentLengthAndETagHttp(
