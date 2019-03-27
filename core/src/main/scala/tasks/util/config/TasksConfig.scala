@@ -220,6 +220,8 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   def allowDeletion = raw.getBoolean("tasks.fileservice.allowDeletion")
 
+  def allowOverwrite = raw.getBoolean("tasks.fileservice.allowOverwrite")
+
   def folderFileStorageCompleteFileCheck =
     raw.getBoolean("tasks.fileservice.folderFileStorageCompleteFileCheck")
 

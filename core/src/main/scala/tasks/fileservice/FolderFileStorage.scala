@@ -247,31 +247,34 @@ class FolderFileStorage(val basePath: File)(implicit
           (size, hash, finalFile, managed)
         else {
           logger.debug(s"Equality failed. Importing file. $file to $finalFile")
-          def candidates(i: Int, past: List[File]): List[File] = {
-            val candidate = assemblePath(managed, ".old." + i)
-            if (candidate.canRead) candidates(i + 1, candidate :: past)
-            else past
-          }
 
-          def parseVersion(f: File): Int =
-            f.getName.split("\\.").last.toInt
-
-          val oldFiles = candidates(0, Nil)
-
-          logger.debug(s"Moving $oldFiles away.")
-
-          oldFiles
-            .map(f => (parseVersion(f) + 1, f))
-            .sortBy(_._1)
-            .reverse
-            .foreach {
-              case (newversion, f) =>
-                com.google.common.io.Files
-                  .move(f, assemblePath(managed, ".old." + newversion))
+          if (!config.allowOverwrite) {
+            def candidates(i: Int, past: List[File]): List[File] = {
+              val candidate = assemblePath(managed, ".old." + i)
+              if (candidate.canRead) candidates(i + 1, candidate :: past)
+              else past
             }
 
-          com.google.common.io.Files
-            .move(finalFile, assemblePath(managed, ".old.0"))
+            def parseVersion(f: File): Int =
+              f.getName.split("\\.").last.toInt
+
+            val oldFiles = candidates(0, Nil)
+
+            logger.debug(s"Moving $oldFiles away.")
+
+            oldFiles
+              .map(f => (parseVersion(f) + 1, f))
+              .sortBy(_._1)
+              .reverse
+              .foreach {
+                case (newversion, f) =>
+                  com.google.common.io.Files
+                    .move(f, assemblePath(managed, ".old." + newversion))
+              }
+
+            com.google.common.io.Files
+              .move(finalFile, assemblePath(managed, ".old.0"))
+          }
 
           copyFile(file, finalFile)
           (size, hash, finalFile, managed)
