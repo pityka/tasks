@@ -99,7 +99,7 @@ class ProxyTask[Input, Output](
   }
 
   def receive = {
-    case MessageFromTask(untypedOutput) =>
+    case MessageFromTask(untypedOutput, retrievedFromCache) =>
       reader(Base64DataHelpers.toBytes(untypedOutput.data)) match {
         case Right(output) =>
           log.debug("MessageFromTask received from: {}, {}, {}",
@@ -108,10 +108,16 @@ class ProxyTask[Input, Output](
                     output)
           distributeResult(output)
           self ! PoisonPill
+        case Left(error) if retrievedFromCache =>
+          log.error(
+            s"MessageFromTask received from cache and failed to decode: $sender, $untypedOutput, $error. Task is rescheduled without caching.")
+          startTask(cache = false)
         case Left(error) =>
           log.error(
-            s"MessageFromTask received from and failed to decode: $sender, $untypedOutput, $error. Task is rescheduled without caching.")
-          startTask(cache = false)
+            error,
+            s"MessageFromTask received not from cache and failed to decode: $sender, $untypedOutput, $error. Execution failed.")
+          notifyListenersOnFailure(new RuntimeException(error))
+          self ! PoisonPill
       }
 
     case TaskFailedMessageToProxy(_, cause) =>

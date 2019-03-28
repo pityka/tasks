@@ -196,7 +196,7 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
         case Right(Some(result)) => {
           log.debug("Replying with a Result found in cache.")
           context.become(running(state.update(CacheHit(sch, result))))
-          proxy.actor ! MessageFromTask(result)
+          proxy.actor ! MessageFromTask(result, retrievedFromCache = true)
         }
         case Right(None) => {
           log.debug("Task is not found in cache. Enqueue. ")
@@ -278,7 +278,8 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
 
       state.scheduledTasks.get(project(sch)).foreach {
         case (_, _, proxies, _) =>
-          proxies.foreach(_.actor ! MessageFromTask(result))
+          proxies.foreach(
+            _.actor ! MessageFromTask(result, retrievedFromCache = false))
       }
       context.become(
         running(

@@ -59,7 +59,8 @@ private[tasks] case class InternalMessageTaskFailed(actor: ActorRef,
 private[tasks] case class FailureMessageFromProxyToProxy(cause: Throwable)
     extends StaticMessage
 
-case class MessageFromTask(result: UntypedResult) extends StaticMessage
+case class MessageFromTask(result: UntypedResult, retrievedFromCache: Boolean)
+    extends StaticMessage
 
 case object SaveDone extends StaticMessage
 
