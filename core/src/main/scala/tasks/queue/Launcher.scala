@@ -145,7 +145,8 @@ class Launcher(
         config,
         scheduleTask.priority,
         scheduleTask.labels,
-        scheduleTask.description.input
+        scheduleTask.description.input,
+        scheduleTask.description.taskId
       ).withDispatcher("task-worker-dispatcher")
     )
     log.debug("Actor constructed")
@@ -195,7 +196,7 @@ class Launcher(
   }
 
   private def taskFinished(taskActor: ActorRef,
-                           receivedResult: UntypedResult): Unit = {
+                           receivedResult: UntypedResultWithMetadata): Unit = {
     val elem = runningTasks
       .find(_._1 == taskActor)
       .getOrElse(throw new RuntimeException(
@@ -210,7 +211,7 @@ class Launcher(
       scheduleTask.cacheActor
         .?(
           SaveResult(scheduleTask.description,
-                     receivedResult,
+                     receivedResult.untypedResult,
                      scheduleTask.fileServicePrefix.append(
                        scheduleTask.description.taskId.id)))(
           timeout = 600 seconds
@@ -269,7 +270,7 @@ class Launcher(
         askForWork
       }
 
-    case InternalMessageFromTask(actor, result, _) =>
+    case InternalMessageFromTask(actor, result) =>
       taskFinished(actor, result)
       askForWork
 

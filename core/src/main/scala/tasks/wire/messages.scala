@@ -28,7 +28,7 @@ private[tasks] case class QueryTask(sch: ScheduleTask, ac: ActorRef)
     extends StaticMessage
 
 private[tasks] case class TaskDone(sch: ScheduleTask,
-                                   result: UntypedResult,
+                                   result: UntypedResultWithMetadata,
                                    elapsedTime: ElapsedTimeNanoSeconds,
                                    resourceAllocated: ResourceAllocated)
     extends StaticMessage
@@ -48,9 +48,8 @@ case object HowLoadedAreYou extends StaticMessage
 
 private[tasks] case class InternalMessageFromTask(
     actor: ActorRef,
-    result: UntypedResult,
-    elapsedTime: ElapsedTimeNanoSeconds)
-    extends StaticMessage
+    result: UntypedResultWithMetadata
+) extends StaticMessage
 
 private[tasks] case class InternalMessageTaskFailed(actor: ActorRef,
                                                     cause: Throwable)

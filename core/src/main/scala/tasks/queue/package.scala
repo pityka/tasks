@@ -28,55 +28,25 @@ package tasks
 import akka.actor._
 import scala.concurrent._
 import tasks.shared.{Priority, Labels}
+import tasks.fileservice.Dependencies
 
 package object queue {
 
-  def updateHistoryOfComputationEnvironment[T](
-      computationEnvironment: ComputationEnvironment,
-      deserializedInputData: T,
-      taskID: String,
-      taskVersion: Int
-  )(implicit tsc: TaskSystemComponents): Future[ComputationEnvironment] = {
-    implicit val ec = tsc.executionContext
-    val newHistory = deserializedInputData match {
-      case hasSharedFiles: HasSharedFiles =>
-        val dependencies =
-          Future
-            .traverse(hasSharedFiles.files)(_.history)
-
-        dependencies.map { dependencies =>
-          fileservice
-            .HistoryContextImpl(
-              dependencies = dependencies.toList.sorted,
-              task = fileservice.History.TaskVersion(taskID, taskVersion),
-              codeVersion =
-                computationEnvironment.components.tasksConfig.codeVersion,
-              timestamp = java.time.Instant.now
-            )
-            .deduplicate
-        }
-
-      case _ =>
-        Future.successful(
-          fileservice
-            .HistoryContextImpl(
-              dependencies = Nil,
-              task = fileservice.History.TaskVersion(taskID, taskVersion),
-              codeVersion =
-                computationEnvironment.components.tasksConfig.codeVersion,
-              timestamp = java.time.Instant.now
-            )
-            .deduplicate)
-    }
-
-    newHistory.map { newHistory =>
-      computationEnvironment.copy(
-        components =
-          computationEnvironment.components.copy(historyContext = newHistory))
-    }
+  def extractDataDependencies[T](
+      deserializedInputData: T
+  )(implicit tsc: TaskSystemComponents): Future[Dependencies] = {
+    if (tsc.tasksConfig.trackDataFlow) {
+      implicit val ec = tsc.executionContext
+      val files = HasSharedFiles.files(deserializedInputData)
+      for {
+        histories <- Future.traverse(files.toSeq)(_.history)
+      } yield Dependencies(histories)
+    } else Future.successful(Dependencies(Nil))
   }
 
-  type CompFun2 = Base64Data => ComputationEnvironment => Future[UntypedResult]
+  type CompFun2 =
+    Base64Data => ComputationEnvironment => Future[
+      (UntypedResult, Dependencies)]
 
   def newTask[A, B](
       prerequisitives: B,

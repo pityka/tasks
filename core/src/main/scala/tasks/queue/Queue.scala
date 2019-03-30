@@ -54,7 +54,7 @@ object TaskQueue {
                            allocated: VersionedResourceAllocated)
       extends Event
   case class TaskDone(sch: ScheduleTask,
-                      result: UntypedResult,
+                      result: UntypedResultWithMetadata,
                       elapsedTime: ElapsedTimeNanoSeconds,
                       resourceAllocated: ResourceAllocated)
       extends Event
@@ -273,17 +273,22 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
             .update(NegotiationDone)
             .update(TaskScheduled(sch, LauncherActor(sender), allocated))))
 
-    case wire.TaskDone(sch, result, elapsedTime, resourceAllocated) =>
-      log.debug(s"TaskDone $sch $result")
+    case wire.TaskDone(sch,
+                       resultWithMetadata,
+                       elapsedTime,
+                       resourceAllocated) =>
+      log.debug(s"TaskDone $sch $resultWithMetadata")
 
       state.scheduledTasks.get(project(sch)).foreach {
         case (_, _, proxies, _) =>
           proxies.foreach(
-            _.actor ! MessageFromTask(result, retrievedFromCache = false))
+            _.actor ! MessageFromTask(resultWithMetadata.untypedResult,
+                                      retrievedFromCache = false))
       }
       context.become(
         running(
-          state.update(TaskDone(sch, result, elapsedTime, resourceAllocated))))
+          state.update(
+            TaskDone(sch, resultWithMetadata, elapsedTime, resourceAllocated))))
 
       if (state.queuedTasks.contains(project(sch))) {
         log.error("Should not be queued. {}", state.queuedTasks(project(sch)))

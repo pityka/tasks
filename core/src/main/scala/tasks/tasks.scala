@@ -35,6 +35,16 @@ trait HasSharedFiles extends Product {
   def files: Seq[SharedFile]
 }
 
+object HasSharedFiles {
+  def files(r: Any): Set[SharedFile] = r match {
+    case hasSharedFiles: HasSharedFiles =>
+      hasSharedFiles.files.toSet ++ hasSharedFiles.productIterator
+        .flatMap(member => files(member))
+        .toSet
+    case _ => Set()
+  }
+}
+
 abstract class ResultWithSharedFiles(sf: SharedFile*)
     extends Product
     with HasSharedFiles {

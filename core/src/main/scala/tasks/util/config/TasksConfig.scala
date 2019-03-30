@@ -234,4 +234,6 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   val resourceUtilizationLogFile = raw.getString("tasks.tracker.logFile")
 
+  def trackDataFlow = raw.getBoolean("tasks.queue.trackDataFlow")
+
 }

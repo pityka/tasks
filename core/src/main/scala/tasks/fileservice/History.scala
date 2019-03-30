@@ -3,64 +3,15 @@ package tasks.fileservice
 import io.circe.generic.semiauto._
 import io.circe.{Encoder, Decoder}
 
-sealed trait HistoryContext {
-  def dependencies: List[History]
-}
+sealed trait HistoryContext
 case class HistoryContextImpl(
-    dependencies: List[History],
     task: History.TaskVersion,
-    codeVersion: String,
-    timestamp: java.time.Instant
-) extends HistoryContext {
-  def deduplicate = {
-    def loop(cursor: HistoryContext,
-             filesSeen: Set[SharedFile]): (HistoryContext, Set[SharedFile]) =
-      cursor match {
-        case cursor: HistoryContextImpl =>
-          val (updatedFilesSeen, modifiedDependencyList) =
-            cursor.dependencies.foldLeft((filesSeen, List.empty[History])) {
-              case ((filesSeen, accumulator), nextElem) =>
-                if (filesSeen.contains(nextElem.self))
-                  (filesSeen, nextElem.copy(context = None) :: accumulator)
-                else {
-                  nextElem.context match {
-                    case None =>
-                      (filesSeen, nextElem :: accumulator)
-                    case Some(context) =>
-                      val (deduplicatedContext, fileSeenInContext) =
-                        loop(context, filesSeen + nextElem.self)
+    codeVersion: String
+) extends HistoryContext
 
-                      (fileSeenInContext,
-                       nextElem
-                         .copy(context = Some(deduplicatedContext)) :: accumulator)
-                  }
+case object NoHistory extends HistoryContext
 
-                }
-
-            }
-
-          (cursor.copy(dependencies = modifiedDependencyList.reverse),
-           updatedFilesSeen)
-        case NoHistory =>
-          (NoHistory, Set.empty)
-
-      }
-
-    loop(this, Set())._1
-  }
-}
-
-case object NoHistory extends HistoryContext {
-  def dependencies = Nil
-}
-
-case class History(self: SharedFile, context: Option[HistoryContext]) {
-  def deduplicate =
-    copy(context = context.map {
-      case ctx: HistoryContextImpl => ctx.deduplicate
-      case NoHistory               => NoHistory
-    })
-}
+case class History(self: SharedFile, context: Option[HistoryContext])
 
 object History {
 
@@ -82,14 +33,19 @@ object History {
 }
 
 object HistoryContext {
-  implicit val instantEncoder =
-    Encoder.encodeLong.contramap[java.time.Instant](i => i.toEpochMilli)
-
-  implicit val instantDecoder =
-    Decoder.decodeLong.map(i => java.time.Instant.ofEpochMilli(i))
-
   implicit val encoder: Encoder[HistoryContext] =
     deriveEncoder[HistoryContext]
   implicit val decoder: Decoder[HistoryContext] =
     deriveDecoder[HistoryContext]
+}
+
+case class Dependencies(
+    dependencies: Seq[History]
+)
+
+object Dependencies {
+  implicit val encoder: Encoder[Dependencies] =
+    deriveEncoder[Dependencies]
+  implicit val decoder: Decoder[Dependencies] =
+    deriveDecoder[Dependencies]
 }

@@ -43,7 +43,34 @@ import tasks.wire._
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.semiauto._
 
+import java.time.Instant
+
 case class UntypedResult(files: Set[SharedFile], data: Base64Data)
+
+case class ResultMetadata(
+    dependencies: Dependencies,
+    started: Instant,
+    ended: Instant
+)
+
+object ResultMetadata {
+  implicit val encoder: Encoder[ResultMetadata] =
+    deriveEncoder[ResultMetadata]
+
+  implicit val decoder: Decoder[ResultMetadata] =
+    deriveDecoder[ResultMetadata]
+}
+
+case class UntypedResultWithMetadata(untypedResult: UntypedResult,
+                                     metadata: ResultMetadata)
+
+object UntypedResultWithMetadata {
+  implicit val encoder: Encoder[UntypedResultWithMetadata] =
+    deriveEncoder[UntypedResultWithMetadata]
+
+  implicit val decoder: Decoder[UntypedResultWithMetadata] =
+    deriveDecoder[UntypedResultWithMetadata]
+}
 
 object UntypedResult {
 
@@ -107,7 +134,8 @@ private class Task(
     tasksConfig: TasksConfig,
     priority: Priority,
     labels: Labels,
-    input: Base64Data
+    input: Base64Data,
+    taskId: TaskId
 ) extends Actor
     with akka.actor.ActorLogging {
 
@@ -135,21 +163,31 @@ private class Task(
     self ! PoisonPill
   }
 
-  private def handleCompletion(future: Future[UntypedResult], start: Long) =
+  private def handleCompletion(future: Future[(UntypedResult, Dependencies)],
+                               startTimeStamp: Instant) =
     future.onComplete {
-      case Success(result) =>
+      case Success((result, dependencies)) =>
         log.debug("Task success. ")
+        val endTimeStamp = Instant.now
         launcherActor ! InternalMessageFromTask(
           self,
-          result,
-          ElapsedTimeNanoSeconds(System.nanoTime - start))
+          UntypedResultWithMetadata(result,
+                                    ResultMetadata(dependencies,
+                                                   started = startTimeStamp,
+                                                   ended = endTimeStamp))
+        )
         self ! PoisonPill
 
       case Failure(error) => handleError(error)
     }(executionContextOfTask)
 
-  private def executeTaskAsynchronously(): Future[UntypedResult] =
+  private def executeTaskAsynchronously()
+    : Future[(UntypedResult, Dependencies)] =
     try {
+      val history = HistoryContextImpl(
+        task = History.TaskVersion(taskId.id, taskId.version),
+        codeVersion = tasksConfig.codeVersion
+      )
       val ce = ComputationEnvironment(
         resourceAllocated,
         TaskSystemComponents(
@@ -162,7 +200,7 @@ private class Task(
           auxExecutionContext,
           actorMaterializer,
           tasksConfig,
-          NoHistory,
+          history,
           priority,
           labels
         ),
@@ -187,7 +225,8 @@ private class Task(
 
   def receive = {
     case Start =>
-      handleCompletion(executeTaskAsynchronously(), start = System.nanoTime)
+      handleCompletion(executeTaskAsynchronously(),
+                       startTimeStamp = java.time.Instant.now)
 
     case other => log.error("received unknown message" + other)
   }

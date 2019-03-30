@@ -32,14 +32,18 @@ import tasks.ui.EventListener
 import tasks.util.config.TasksConfig
 import io.circe.{Encoder, Decoder}
 import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
-import tasks.queue.TaskId
+import tasks.queue.{TaskId, ResultMetadata}
 import tasks.shared.ResourceAllocated
 import tasks.shared.{ElapsedTimeNanoSeconds, Labels}
+import tasks.fileservice.SharedFile
 
 case class ResourceUtilizationRecord(taskId: TaskId,
                                      labels: Labels,
                                      elapsedTime: ElapsedTimeNanoSeconds,
-                                     resource: ResourceAllocated)
+                                     resource: ResourceAllocated,
+                                     metadata: Option[ResultMetadata],
+                                     resultFiles: Option[Set[SharedFile]],
+                                     codeVersion: Option[String])
 
 object ResourceUtilizationRecord {
   implicit val encoder: Encoder[ResourceUtilizationRecord] =
@@ -65,10 +69,15 @@ class TrackerImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
 
   private val sink = Flow[TaskQueue.TaskDone]
     .map { td =>
-      val dto = ResourceUtilizationRecord(td.sch.description.taskId,
-                                          td.sch.labels,
-                                          td.elapsedTime,
-                                          td.resourceAllocated)
+      val dto = ResourceUtilizationRecord(
+        td.sch.description.taskId,
+        td.sch.labels,
+        td.elapsedTime,
+        td.resourceAllocated,
+        Some(td.result.metadata),
+        Some(td.result.untypedResult.files),
+        Some(config.codeVersion)
+      )
       import io.circe.syntax._
       akka.util.ByteString(dto.asJson.noSpaces + "\n")
     }

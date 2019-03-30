@@ -50,8 +50,8 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
         sf2 <- SharedFile(Source.single(ByteString("abcd")), "f2")
         sf2History <- sf2.history
         _ = {
-          println(sf2History.context.get.dependencies)
-          sf2History.context.get.dependencies.size shouldBe 1
+          println(sf2History.context.get)
+          sf2History.context.get
         }
         r <- Future(sf2)
       } yield r
@@ -74,19 +74,6 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
         sideEffect += "execution of task 3"
         for {
           sf3 <- SharedFile(Source.single(ByteString("abcd")), "f3")
-          sf3History <- sf3.history
-          _ = {
-            sf3History.context.get
-              .dependencies(1)
-              .context
-              .get
-              .dependencies(0)
-              .context shouldBe None
-
-            sf3History.context.get
-              .dependencies(2)
-              .context shouldBe None
-          }
           r <- Future(sf3)
         } yield r
   }
@@ -96,18 +83,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
       sideEffect += "execution of task 4"
       for {
         sf4 <- SharedFile(Source.single(ByteString("abcd")), "f4")
-        sf4History <- sf4.history
-        _ = {
-          sf4History.context.get
-            .dependencies(0)
-            .context
-            .get
-            .dependencies(1)
-            .context
-            .get
-            .dependencies(0)
-            .context shouldBe None
-        }
+
         r <- Future(sf4)
       } yield r
 

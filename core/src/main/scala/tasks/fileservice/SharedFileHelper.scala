@@ -225,7 +225,7 @@ private[tasks] object SharedFileHelper extends StrictLogging {
     historyContext match {
       case NoHistory => Future.successful(())
       case ctx: HistoryContextImpl =>
-        val history = History(sf, Some(ctx.deduplicate))
+        val history = History(sf, Some(ctx))
         val serialized =
           History.encoder.apply(history).noSpaces.getBytes("UTF-8")
 
@@ -262,7 +262,7 @@ private[tasks] object SharedFileHelper extends StrictLogging {
                 io.circe.parser.decode[History](string) match {
                   case Left(e) =>
                     throw e
-                  case Right(history) => history.deduplicate
+                  case Right(history) => history
                 }
               }
             }

@@ -47,7 +47,7 @@ object Macros {
     }
 
     val t =
-      tq"Function1[tasks.queue.Base64Data,Function1[tasks.queue.ComputationEnvironment,scala.concurrent.Future[tasks.queue.UntypedResult]]]"
+      tq"Function1[tasks.queue.Base64Data,Function1[tasks.queue.ComputationEnvironment,scala.concurrent.Future[(tasks.queue.UntypedResult,tasks.fileservice.Dependencies)]]]"
     val r = q"""
     class $h extends $t {
       private[this] val r = implicitly[tasks.queue.Deserializer[$a]]
@@ -56,10 +56,13 @@ object Macros {
       def apply(j:tasks.queue.Base64Data) =
           (ce:tasks.queue.ComputationEnvironment) => {
             val deserializedInputData = r(tasks.queue.Base64DataHelpers.toBytes(j)).right.get
-            val ceWithUpdatedHistory = tasks.queue.updateHistoryOfComputationEnvironment(ce,deserializedInputData, $taskID, $taskVersion)(ce.components)
-            ceWithUpdatedHistory.flatMap{ ceWithUpdatedHistory =>
-            (c(deserializedInputData)(ceWithUpdatedHistory)).map(x => tasks.queue.UntypedResult.make(x)(w))(ce.executionContext)
+            
+            tasks.queue.extractDataDependencies(deserializedInputData)(ce.components).flatMap{ dataDependencies =>
+              (c(deserializedInputData)(ce)).map{ result => 
+                (tasks.queue.UntypedResult.make(result)(w),dataDependencies)
+              }(ce.executionContext)
             }(ce.executionContext)
+            
           }
 
     }
