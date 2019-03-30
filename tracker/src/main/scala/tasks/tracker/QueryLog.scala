@@ -15,7 +15,7 @@ object QueryLog {
                   pathFromRoot: Seq[String],
                   resource: ResourceAllocated,
                   elapsedTime: ElapsedTimeNanoSeconds,
-                  dependencies: Seq[String] ) {
+                  dependencies: Seq[String]) {
     def id = pathFromRoot.last
 
     /* The root is not present */
@@ -46,7 +46,10 @@ object QueryLog {
           elem.labels.values.toMap.apply(Labels.traceKey).split("::").toList,
           elem.resource,
           elem.elapsedTime,
-          Nil
+          elem.metadata.toSeq.flatMap(
+            _.dependencies.dependencies.flatMap(_.context.toSeq.collect {
+              case h: tasks.fileservice.HistoryContextImpl => h.task.taskID
+            }))
       ))
       .toList
 
