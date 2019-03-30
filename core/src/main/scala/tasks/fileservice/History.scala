@@ -38,14 +38,3 @@ object HistoryContext {
   implicit val decoder: Decoder[HistoryContext] =
     deriveDecoder[HistoryContext]
 }
-
-case class Dependencies(
-    dependencies: Seq[History]
-)
-
-object Dependencies {
-  implicit val encoder: Encoder[Dependencies] =
-    deriveEncoder[Dependencies]
-  implicit val decoder: Decoder[Dependencies] =
-    deriveDecoder[Dependencies]
-}

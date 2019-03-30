@@ -28,25 +28,25 @@ package tasks
 import akka.actor._
 import scala.concurrent._
 import tasks.shared.{Priority, Labels}
-import tasks.fileservice.Dependencies
 
 package object queue {
 
   def extractDataDependencies[T](
       deserializedInputData: T
-  )(implicit tsc: TaskSystemComponents): Future[Dependencies] = {
-    if (tsc.tasksConfig.trackDataFlow) {
-      implicit val ec = tsc.executionContext
+  )(implicit ce: ComputationEnvironment)
+    : Future[DependenciesAndRuntimeMetadata] = {
+    val logs = ce.currentLogRecords
+    if (ce.components.tasksConfig.trackDataFlow) {
       val files = HasSharedFiles.files(deserializedInputData)
       for {
         histories <- Future.traverse(files.toSeq)(_.history)
-      } yield Dependencies(histories)
-    } else Future.successful(Dependencies(Nil))
+      } yield DependenciesAndRuntimeMetadata(histories, logs)
+    } else Future.successful(DependenciesAndRuntimeMetadata(Nil, logs))
   }
 
   type CompFun2 =
     Base64Data => ComputationEnvironment => Future[
-      (UntypedResult, Dependencies)]
+      (UntypedResult, DependenciesAndRuntimeMetadata)]
 
   def newTask[A, B](
       prerequisitives: B,

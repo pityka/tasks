@@ -47,10 +47,23 @@ import java.time.Instant
 
 case class UntypedResult(files: Set[SharedFile], data: Base64Data)
 
+case class DependenciesAndRuntimeMetadata(
+    dependencies: Seq[History],
+    logs: Seq[LogRecord]
+)
+
+object DependenciesAndRuntimeMetadata {
+  implicit val encoder: Encoder[DependenciesAndRuntimeMetadata] =
+    deriveEncoder[DependenciesAndRuntimeMetadata]
+  implicit val decoder: Decoder[DependenciesAndRuntimeMetadata] =
+    deriveDecoder[DependenciesAndRuntimeMetadata]
+}
+
 case class ResultMetadata(
-    dependencies: Dependencies,
+    dependencies: Seq[History],
     started: Instant,
-    ended: Instant
+    ended: Instant,
+    logs: Seq[LogRecord]
 )
 
 object ResultMetadata {
@@ -98,6 +111,16 @@ case class ComputationEnvironment(
     implicit val executionContext: ExecutionContext,
     val taskActor: ActorRef
 ) {
+
+  private val logQueue =
+    new java.util.concurrent.ConcurrentLinkedQueue[LogRecord]()
+
+  def appendLog(l: LogRecord) = logQueue.add(l)
+
+  def currentLogRecords = {
+    import scala.collection.JavaConverters._
+    logQueue.iterator.asScala.toList
+  }
 
   def withFilePrefix[B](prefix: Seq[String])(
       fun: ComputationEnvironment => B): B =
@@ -163,8 +186,9 @@ private class Task(
     self ! PoisonPill
   }
 
-  private def handleCompletion(future: Future[(UntypedResult, Dependencies)],
-                               startTimeStamp: Instant) =
+  private def handleCompletion(
+      future: Future[(UntypedResult, DependenciesAndRuntimeMetadata)],
+      startTimeStamp: Instant) =
     future.onComplete {
       case Success((result, dependencies)) =>
         log.debug("Task success. ")
@@ -172,9 +196,10 @@ private class Task(
         launcherActor ! InternalMessageFromTask(
           self,
           UntypedResultWithMetadata(result,
-                                    ResultMetadata(dependencies,
+                                    ResultMetadata(dependencies.dependencies,
                                                    started = startTimeStamp,
-                                                   ended = endTimeStamp))
+                                                   ended = endTimeStamp,
+                                                   logs = dependencies.logs))
         )
         self ! PoisonPill
 
@@ -182,7 +207,7 @@ private class Task(
     }(executionContextOfTask)
 
   private def executeTaskAsynchronously()
-    : Future[(UntypedResult, Dependencies)] =
+    : Future[(UntypedResult, DependenciesAndRuntimeMetadata)] =
     try {
       val history = HistoryContextImpl(
         task = History.TaskVersion(taskId.id, taskId.version),

@@ -57,10 +57,12 @@ object PiTasks {
   val batchCalc = AsyncTask[BatchInput, BatchResult]("batch", 1) {
 
     /* Input of task, does not need to be a pattern match */
-    case BatchInput(sizeFile: SharedFile, _: Int) =>
+    case BatchInput(sizeFile: SharedFile, id: Int) =>
       implicit ctx =>
         /* SharedFile#file downloads the file to the local tmp folder */
         val localFile: Future[java.io.File] = sizeFile.file
+
+        audit(s"Computing pi, part $id")
 
         localFile.map { localFile =>
           // Body of the task

@@ -27,6 +27,7 @@ package tasks.shared
 
 import io.circe._
 import io.circe.generic.semiauto._
+import java.time.Instant
 
 
 
@@ -195,4 +196,14 @@ object Labels {
   val traceKey = "__trace"
   val empty = Labels(Nil)
   private[tasks] val root = Labels(List((traceKey,java.util.UUID.randomUUID.toString)))
+}
+
+case class LogRecord(
+  data:String,
+  timestamp: Instant
+)
+
+object LogRecord{
+  implicit val decoder: Decoder[LogRecord] = deriveDecoder[LogRecord]
+  implicit val encoder: Encoder[LogRecord] = deriveEncoder[LogRecord] 
 }

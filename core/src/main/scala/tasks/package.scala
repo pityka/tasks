@@ -38,6 +38,7 @@ import tasks.queue._
 import tasks.fileservice._
 import tasks.util.config.TasksConfig
 import tasks.deploy._
+import tasks.shared.LogRecord
 
 import scala.language.experimental.macros
 
@@ -109,6 +110,9 @@ package object tasks {
     component.resourceAllocated
 
   implicit def log(implicit component: ComputationEnvironment) = component.log
+
+  def audit(data: String)(implicit component: ComputationEnvironment) =
+    component.appendLog(LogRecord(data, java.time.Instant.now))
 
   def withTaskSystem[T](f: TaskSystemComponents => T): Option[T] =
     withTaskSystem(None)(f)
