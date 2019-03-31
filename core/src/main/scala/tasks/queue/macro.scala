@@ -56,14 +56,11 @@ object Macros {
       def apply(j:tasks.queue.Base64Data) =
           (ce:tasks.queue.ComputationEnvironment) => {
             val deserializedInputData = r(tasks.queue.Base64DataHelpers.toBytes(j)).right.get
-            implicit val executionContext = ce.executionContext
-            for {
-              result <- c(deserializedInputData)(ce)
-              meta <- tasks.queue.extractDataDependencies(deserializedInputData)(ce)
-            } yield (tasks.queue.UntypedResult.make(result)(w),meta)
-            
-           
-            
+            c(deserializedInputData)(ce).flatMap{ result =>
+              tasks.queue.extractDataDependencies(deserializedInputData)(ce).map{ meta =>
+                (tasks.queue.UntypedResult.make(result)(w),meta)
+              }(ce.executionContext)
+            }(ce.executionContext)
           }
 
     }
