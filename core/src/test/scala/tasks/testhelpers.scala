@@ -42,6 +42,13 @@ trait TestHelpers {
     implicit val dec: Decoder[Input] = deriveDecoder[Input]
   }
 
+  case class InputSF(files1: List[SharedFile])
+      extends WithSharedFiles(files1: _*)
+  object InputSF {
+    implicit val enc: Encoder[InputSF] = deriveEncoder[InputSF]
+    implicit val dec: Decoder[InputSF] = deriveDecoder[InputSF]
+  }
+
   def testConfig = {
     val tmp = tasks.util.TempFile.createTempFile(".temp")
     tmp.delete

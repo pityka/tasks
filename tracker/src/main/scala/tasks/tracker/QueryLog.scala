@@ -21,6 +21,12 @@ object QueryLog {
     /* The root is not present */
     def parent = pathFromRoot.dropRight(1).last
     def root = pathFromRoot.head
+
+    def cpuNeed =
+      labels.values.find(_._1 == cpuNeedKey).map(_._2.toDouble.toInt)
+    def cpuTime = labels.values.find(_._1 == cpuTimeKey).map(_._2.toDouble)
+    def wallClockTime =
+      labels.values.find(_._1 == wallClockTimeKey).map(_._2.toDouble)
   }
 
   def readNodes(source: InputStream,
@@ -47,7 +53,7 @@ object QueryLog {
           elem.resource,
           elem.elapsedTime,
           elem.metadata.toSeq.flatMap(
-            _.dependencies.dependencies.flatMap(_.context.toSeq.collect {
+            _.dependencies.flatMap(_.context.toSeq.collect {
               case h: tasks.fileservice.HistoryContextImpl => h.task.taskID
             }))
       ))
@@ -82,8 +88,48 @@ object QueryLog {
 
   }
 
-  def aggregateRuntime(tree: Seq[Node],
-                       dependentSiblings: Map[String, List[String]]) = {
+  def filterDataDependenciesForSiblings(
+      tree: Seq[Node],
+      extraDependencies: Map[String, List[String]]) = {
+    val forwardEdges = tree.groupBy(_.parent)
+    val siblings = forwardEdges.flatMap {
+      case (_, siblings) =>
+        siblings.map(n => n.id -> siblings)
+    }
+    val byTaskId = tree.groupBy(_.taskId)
+    extraDependencies
+      .map {
+        case (taskId, taskIdChildren) =>
+          val siblingTaskIds = byTaskId(taskId).flatMap { n =>
+            siblings.get(n.id).toSeq.flatten.map(_.taskId)
+          }
+          taskId -> taskIdChildren.filter(siblingTaskIds.toSet)
+      }
+      .filter(_._2.nonEmpty)
+  }
+
+  def addDependencyAmongSiblings(
+      tree: Seq[Node],
+      dependentSiblings: Map[String, List[String]]) = {
+    val forwardEdges = tree.groupBy(_.parent)
+    val sorted = topologicalSort(tree, forwardEdges).reverse
+    sorted.map { node =>
+      val parent = node.parent
+      val siblings = forwardEdges(parent)
+      val dependsOnSibling = siblings.find(s =>
+        dependentSiblings.get(s.taskId).toSeq.flatten.contains(node.taskId))
+      dependsOnSibling match {
+        case None => node
+        case Some(newParent) =>
+          node.copy(
+            pathFromRoot = node.pathFromRoot
+              .dropRight(2) :+ newParent.id :+ node.id)
+      }
+
+    }
+  }
+
+  def aggregateRuntime(tree: Seq[Node]) = {
     val forwardEdges = tree.groupBy(_.parent)
     val sorted = topologicalSort(tree, forwardEdges).reverse
     val wallClockTime = scala.collection.mutable.Map[String, Double]()
@@ -94,28 +140,6 @@ object QueryLog {
 
     sorted.foreach { node =>
       val children = forwardEdges.get(node.id).toSeq.flatten
-      val childrenByTaskId = children.groupBy(_.taskId)
-
-      // graph among siblings
-      // edges in this graph are of `dependentSiblings`
-      val childrenGraph = children
-        .map { ch =>
-          val outTaskIds = dependentSiblings.get(ch.taskId).toList.flatten
-          val outNodes =
-            outTaskIds.flatMap(t => childrenByTaskId.get(t).toSeq).flatten
-          (ch.id, outNodes)
-        }
-        .filter(_._2.nonEmpty)
-        .toMap
-      val childrenTopologicalOrder =
-        topologicalSort(children, childrenGraph).reverse
-
-      childrenTopologicalOrder.foreach { node =>
-        val children = childrenGraph.get(node.id).toSeq.flatten
-        val wallClockTime1 = wallClockTime(node.id) + max(
-          children.map(ch => wallClockTime(ch.id))).getOrElse(0d)
-        wallClockTime.update(node.id, wallClockTime1)
-      }
 
       val maxWallClockTimeOfChildren = max(
         children
@@ -179,12 +203,13 @@ object QueryLog {
         ids.contains(id) || node.pathFromRoot.head == id))
   }
 
-  def formatTime(nanos: Double) = {
-    val hours = nanos * 1E-9 / 3600
+  def formatTime(nanos: Double, seconds: Boolean = false) = {
+    val div = if (seconds) 1 else 3600
+    val hours = nanos * 1E-9 / div
     f"$hours%.1f"
   }
 
-  def dot(s: Seq[Node], extraEdges: List[(String, String)]) = {
+  def dot(s: Seq[Node], seconds: Boolean) = {
     val nodelist = s
       .map { node =>
         val labels = node.labels.values.toMap
@@ -192,9 +217,13 @@ object QueryLog {
         val wallClockTime = labels(wallClockTimeKey).toDouble
         val cpuNeed = labels(cpuNeedKey).toDouble
 
+        val timeUnit = if (seconds) "s" else "h"
+
         s""""${node.id}" [label="${node.taskId}(${formatTime(
-          node.elapsedTime.toDouble)}h,${formatTime(wallClockTime)}wch,${formatTime(
-          cpuTime)}ch,${node.resource.cpu}c,${cpuNeed}C)"] """
+          node.elapsedTime.toDouble,
+          seconds)}$timeUnit,${formatTime(wallClockTime, seconds)}wc$timeUnit,${formatTime(
+          cpuTime,
+          seconds)}c$timeUnit,${node.resource.cpu}c,${cpuNeed}C)"] """
       }
       .mkString(";")
     val edgelist = s
@@ -209,19 +238,10 @@ object QueryLog {
       }
       .mkString(";")
 
-    val extraEdgeList = extraEdges
-      .map {
-        case (from, to) =>
-          s""""${from}" -> "${to}" [color="red"] """
-      }
-      .mkString(";")
-
-    s"""digraph tasks {$nodelist;$edgelist;$extraEdgeList}"""
+    s"""digraph tasks {$nodelist;$edgelist}"""
   }
 
-  def plotDependencyGraph(allNodes: Seq[Node],
-                          subtree: Option[String],
-                          extraDependencies: Map[String, List[String]]) = {
+  def computeRuntimes(allNodes: Seq[Node], subtree: Option[String]) = {
     val selectedTree = {
       val onlyFinished = ancestorsFinished(allNodes)
 
@@ -231,16 +251,31 @@ object QueryLog {
       }
     }
 
-    val timesComputed = aggregateRuntime(
-      selectedTree,
-      extraDependencies
+    val extraDependencies = selectedTree
+      .flatMap { n =>
+        n.dependencies.map { d =>
+          (d, n.taskId)
+        }
+      }
+      .distinct
+      .groupBy(_._1)
+      .map { case (id, group) => (id, group.map(_._2).toList) }
+
+    val filteredExtraDependencies =
+      filterDataDependenciesForSiblings(selectedTree, extraDependencies)
+
+    val augmented =
+      addDependencyAmongSiblings(selectedTree, filteredExtraDependencies)
+
+    aggregateRuntime(
+      augmented
     )
 
+  }
+
+  def plotTimes(timesComputed: Seq[Node], seconds: Boolean) = {
     val collapsed = collapseMultiEdges(timesComputed)
-    dot(collapsed,
-        extraDependencies.toSeq
-          .flatMap(x => x._2.map(y => x._1 -> y))
-          .toList)
+    dot(collapsed, seconds)
   }
 
 }

@@ -32,7 +32,8 @@ import tasks.circesupport._
 import com.typesafe.config.ConfigFactory
 import scala.concurrent._
 import scala.concurrent.duration._
-
+import akka.stream.scaladsl.Source
+import akka.util.ByteString
 import tasks._
 
 object QueryLogTest extends TestHelpers {
@@ -41,32 +42,40 @@ object QueryLogTest extends TestHelpers {
     input => implicit computationEnvironment =>
       releaseResources
       for {
-        _ <- scatter(input)(ResourceRequest(1, 500))
+        files <- Future.traverse(0 to input.i) { i =>
+          SharedFile(Source.single(ByteString("abcd")), i.toString)
+        }
+        _ <- scatter(InputSF(files.toList))(ResourceRequest(1, 500))
       } yield {
         log.info("ALL DONE")
         1
       }
   }
 
-  val gather = AsyncTask[Input, Int]("gather", 1) {
+  val gather = AsyncTask[InputSF, Int]("gather", 1) {
     input => implicit computationEnvironment =>
+      log.info("gather")
+      Thread.sleep(1000)
       Future(1)
   }
-  val work = AsyncTask[Input, Int]("work", 1) {
+  val work = AsyncTask[SharedFile, SharedFile]("work", 1) {
     input => implicit computationEnvironment =>
-      Future(1)
+      log.info("work " + input.name)
+      Thread.sleep(500)
+      SharedFile(Source.single(ByteString("abcd")), input.name + ".worked")
   }
 
-  val scatter = AsyncTask[Input, Int]("scatter", 1) {
+  val scatter = AsyncTask[InputSF, Int]("scatter", 1) {
     input => implicit computationEnvironment =>
       releaseResources
+      log.info("scatter")
       for {
-        _ <- Future.traverse(1 to 3) { i =>
-          work(Input(i))(ResourceRequest(1, 500))
+        scatteredFiles <- Future.traverse(input.files1) { i =>
+          work(i)(ResourceRequest(1, 500))
         }
-        _ <- gather(Input(0))(ResourceRequest(1, 500))
+        gathered <- gather(InputSF(scatteredFiles))(ResourceRequest(1, 500))
 
-      } yield 1
+      } yield gathered
 
   }
 
@@ -88,9 +97,8 @@ object QueryLogTest extends TestHelpers {
     withTaskSystem(testConfig2) { implicit ts =>
       import scala.concurrent.ExecutionContext.Implicits.global
 
-      val f1 = task1(Input(1))(ResourceRequest(1, 500))
       val future = for {
-        t1 <- f1
+        t1 <- task1(Input(1))(ResourceRequest(1, 500))
       } yield t1
 
       Await.result(future, atMost = 30 seconds)
@@ -102,26 +110,27 @@ object QueryLogTest extends TestHelpers {
 
 class QueryLogTestSuite extends FunSuite with Matchers {
 
-  test("should create log") {
+  test("should query log") {
     QueryLogTest.run.get
     Thread.sleep(1000)
-    QueryLogTest.file.length > 0 shouldBe true
     QueryLogTest.file.canRead shouldBe true
     println(QueryLogTest.file)
     tasks.util.openFileInputStream(QueryLogTest.file) { inputStream =>
       val nodes = QueryLog.readNodes(inputStream,
                                      excludeTaskIds = Set.empty,
                                      includeTaskIds = Set.empty)
-      nodes.size shouldBe 6
+      nodes.size shouldBe 5
 
       QueryLog.trees(nodes).size shouldBe 1
 
-      val collapsed = QueryLog.collapseMultiEdges(nodes) { nodes =>
-        (nodes.head.resource,
-         tasks.shared.ElapsedTimeNanoSeconds(
-           nodes.map(_.elapsedTime.toLong).max))
-      }
-      QueryLog.dot(collapsed) shouldBe """digraph tasks {"work" [label="work(0.0h,1c)"] ;"gather" [label="gather(0.0h,1c)"] ;"scatter" [label="scatter(0.0h,1c)"] ;"task1" [label="task1(0.0h,1c)"] ;"scatter" -> "work" [label= "3x"] ;"scatter" -> "gather"  ;"task1" -> "scatter"  ;"root" -> "task1"  ;}"""
+      val runtimes = QueryLog.computeRuntimes(nodes, subtree = None)
+
+      val root = runtimes.find(_.taskId == "task1").get
+      root.cpuNeed.get shouldBe 2
+      root.cpuTime.get > 2.0 shouldBe true
+      root.wallClockTime.get > 1.5 shouldBe true
+
+      println(QueryLog.plotTimes(runtimes, seconds = true))
 
     }
 
