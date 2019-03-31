@@ -6,7 +6,8 @@ import io.circe.{Encoder, Decoder}
 sealed trait HistoryContext
 case class HistoryContextImpl(
     task: History.TaskVersion,
-    codeVersion: String
+    codeVersion: String,
+    traceId: Option[String]
 ) extends HistoryContext
 
 case object NoHistory extends HistoryContext

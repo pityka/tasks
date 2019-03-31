@@ -35,7 +35,7 @@ import scala.concurrent.duration._
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
 import tasks._
-
+import tasks.fileservice.HistoryContextImpl
 object QueryLogTest extends TestHelpers {
 
   val task1 = AsyncTask[Input, Int]("task1", 1) {
@@ -116,23 +116,24 @@ class QueryLogTestSuite extends FunSuite with Matchers {
     Thread.sleep(1000)
     QueryLogTest.file.canRead shouldBe true
     println(QueryLogTest.file)
-    tasks.util.openFileInputStream(QueryLogTest.file) { inputStream =>
-      val nodes = QueryLog.readNodes(inputStream,
-                                     excludeTaskIds = Set.empty,
-                                     includeTaskIds = Set.empty)
-      nodes.size shouldBe 5
+    val nodes = tasks.util.openFileInputStream(QueryLogTest.file) {
+      inputStream =>
+        val nodes = QueryLog.readNodes(inputStream,
+                                       excludeTaskIds = Set.empty,
+                                       includeTaskIds = Set.empty)
+        nodes.size shouldBe 5
 
-      QueryLog.trees(nodes).size shouldBe 1
+        QueryLog.trees(nodes).size shouldBe 1
 
-      val runtimes = QueryLog.computeRuntimes(nodes, subtree = None)
+        val runtimes = QueryLog.computeRuntimes(nodes, subtree = None)
 
-      val root = runtimes.find(_.taskId == "task1").get
-      root.cpuNeed.get shouldBe 2
-      root.cpuTime.get > 2.0 shouldBe true
-      root.wallClockTime.get > 1.5 shouldBe true
+        val root = runtimes.find(_.taskId == "task1").get
+        root.cpuNeed.get shouldBe 2
+        root.cpuTime.get > 2.0 shouldBe true
+        root.wallClockTime.get > 1.5 shouldBe true
 
-      println(QueryLog.plotTimes(runtimes, seconds = true))
-
+        println(QueryLog.plotTimes(runtimes, seconds = true))
+        nodes
     }
     tasks.util.openFileInputStream(QueryLogTest.file) { inputStream =>
       val workerLogs = scala.io.Source
@@ -141,11 +142,20 @@ class QueryLogTestSuite extends FunSuite with Matchers {
         .map { line =>
           io.circe.parser.decode[ResourceUtilizationRecord](line).right.get
         }
-        .filter(_.taskId.id == "worker")
+        .filter(_.taskId.id == "work")
         .toList
+
+      workerLogs.size shouldBe 2
 
       workerLogs.foreach { record =>
         record.metadata.get.logs.nonEmpty shouldBe true
+        val traceId = record.metadata.get.dependencies.head.context.get
+          .asInstanceOf[HistoryContextImpl]
+          .traceId
+          .get
+        val task = nodes.filter(_.id == traceId)
+        task.size shouldBe 1
+        task.head.taskId shouldBe "task1"
       }
 
     }

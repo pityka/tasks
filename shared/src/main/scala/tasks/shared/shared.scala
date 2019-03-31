@@ -196,6 +196,7 @@ object Labels {
   val traceKey = "__trace"
   val empty = Labels(Nil)
   private[tasks] val root = Labels(List((traceKey,java.util.UUID.randomUUID.toString)))
+  private[tasks] def leaf(l:Labels) = l.values.find(_._1 == traceKey).flatMap(_._2.split("::").lastOption)
 }
 
 case class LogRecord(

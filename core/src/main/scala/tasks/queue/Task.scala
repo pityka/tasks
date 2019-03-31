@@ -211,7 +211,8 @@ private class Task(
     try {
       val history = HistoryContextImpl(
         task = History.TaskVersion(taskId.id, taskId.version),
-        codeVersion = tasksConfig.codeVersion
+        codeVersion = tasksConfig.codeVersion,
+        traceId = Labels.leaf(labels)
       )
       val ce = ComputationEnvironment(
         resourceAllocated,
