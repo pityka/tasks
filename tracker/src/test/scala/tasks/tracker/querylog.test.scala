@@ -61,6 +61,7 @@ object QueryLogTest extends TestHelpers {
   val work = AsyncTask[SharedFile, SharedFile]("work", 1) {
     input => implicit computationEnvironment =>
       log.info("work " + input.name)
+      audit("work " + input.name)
       Thread.sleep(500)
       SharedFile(Source.single(ByteString("abcd")), input.name + ".worked")
   }
@@ -131,6 +132,21 @@ class QueryLogTestSuite extends FunSuite with Matchers {
       root.wallClockTime.get > 1.5 shouldBe true
 
       println(QueryLog.plotTimes(runtimes, seconds = true))
+
+    }
+    tasks.util.openFileInputStream(QueryLogTest.file) { inputStream =>
+      val workerLogs = scala.io.Source
+        .fromInputStream(inputStream)
+        .getLines
+        .map { line =>
+          io.circe.parser.decode[ResourceUtilizationRecord](line).right.get
+        }
+        .filter(_.taskId.id == "worker")
+        .toList
+
+      workerLogs.foreach { record =>
+        record.metadata.get.logs.nonEmpty shouldBe true
+      }
 
     }
 
