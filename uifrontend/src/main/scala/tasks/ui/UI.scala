@@ -148,7 +148,7 @@ object Helpers {
 
   def renderTableBodyWithCompletedTasks(completedTasks: Set[(TaskId, Int)]) =
     tbody(
-      completedTasks.toSeq.map {
+      completedTasks.toSeq.sortBy(_._1.toString).map {
         case ((taskId, count)) =>
           tr(
             td(`class` := "collapsing")(
@@ -161,7 +161,7 @@ object Helpers {
 
   def renderTableBodyWithRecoveredTasks(recoveredTasks: Set[(TaskId, Int)]) =
     tbody(
-      recoveredTasks.toSeq.map {
+      recoveredTasks.toSeq.sortBy(_._1.toString).map {
         case (taskId, count) =>
           tr(td(`class` := "collapsing")(
                taskId.id + " @" + taskId.version
