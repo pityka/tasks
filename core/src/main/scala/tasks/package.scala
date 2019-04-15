@@ -224,4 +224,41 @@ package object tasks {
       implicit ce: ComputationEnvironment): (ComputationEnvironment => T) => T =
     ce.withFilePrefix[T](elements) _
 
+  def fromFileList[I, O](files: Seq[Seq[String]])(
+      fromFiles: Seq[SharedFile] => O)(full: => Future[O])(
+      implicit tsc: TaskSystemComponents): Future[O] = {
+    import tsc.actorsystem.dispatcher
+    val filesWithNonEmptyPath = files.filter(_.nonEmpty)
+    val logger = akka.event.Logging(tsc.actorsystem, getClass)
+    for {
+      maybeSharedFiles <- Future
+        .sequence(filesWithNonEmptyPath.map { path =>
+          val prefix = tsc.filePrefix.append(path.dropRight(1))
+          SharedFileHelper.getByNameUnchecked(path.last)(tsc.fs,
+                                                         tsc.actorsystem,
+                                                         tsc.nodeLocalCache,
+                                                         prefix,
+                                                         tsc.executionContext)
+        })
+
+      validSharedFiles = (maybeSharedFiles zip filesWithNonEmptyPath)
+        .map {
+          case (None, path) =>
+            logger.debug(s"Can't find ${path.mkString("/")}")
+            None
+          case (valid, _) => valid
+        }
+        .filter(_.isDefined)
+        .map(_.get)
+
+      result <- if (filesWithNonEmptyPath.size == validSharedFiles.size) {
+        Future.successful(fromFiles(validSharedFiles))
+      } else {
+        full
+      }
+
+    } yield result
+
+  }
+
 }

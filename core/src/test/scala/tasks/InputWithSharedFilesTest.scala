@@ -89,6 +89,16 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
 
   }
 
+  val task5 = AsyncTask[Input, SharedFile]("sharedfileinput2", 2) {
+    input => implicit computationEnvironment =>
+      fromFileList(Seq(Seq("f2")))(filelist => filelist.head) {
+
+        sideEffect += "execution of task 5"
+
+        SharedFile(Source.single(ByteString("abcd")), "f2")
+      }
+  }
+
   def run = {
     withTaskSystem(testConfig) { implicit ts =>
       import scala.concurrent.ExecutionContext.Implicits.global
@@ -100,7 +110,8 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
         t22 <- task2(t12)(ResourceRequest(1, 500))
         t31 <- task3(Input3(t11, t21, t21))(ResourceRequest(1, 500))
         t41 <- task4(t31)(ResourceRequest(1, 500))
-      } yield t41
+        t51 <- task5(Input(1))(ResourceRequest(1, 500))
+      } yield t51
 
       await(future)
 
@@ -116,6 +127,7 @@ class InputWithSharedFilesTestSuite extends FunSuite with Matchers {
     InputWithSharedFilesTest.run
     InputWithSharedFilesTest.sideEffect.count(_ == "execution of task 1") shouldBe 2
     InputWithSharedFilesTest.sideEffect.count(_ == "execution of task 2") shouldBe 1
+    InputWithSharedFilesTest.sideEffect.count(_ == "execution of task 5") shouldBe 0
   }
 
 }
