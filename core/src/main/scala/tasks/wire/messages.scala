@@ -120,7 +120,8 @@ case class NewRemote(uri: Uri) extends StaticMessage
 case class IsAccessible(sf: ManagedFilePath, size: Long, hash: Int)
     extends StaticMessage
 
-case class IsPathAccessible(sf: ManagedFilePath) extends StaticMessage
+case class IsPathAccessible(sf: ManagedFilePath, retrieveSizeAndHash: Boolean)
+    extends StaticMessage
 
 case class GetUri(sf: ManagedFilePath) extends StaticMessage
 

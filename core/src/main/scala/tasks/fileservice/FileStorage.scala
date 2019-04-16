@@ -116,7 +116,8 @@ trait ManagedFileStorage {
 
   def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean]
 
-  def contains(path: ManagedFilePath): Future[Boolean]
+  def contains(path: ManagedFilePath,
+               retrieveSizeAndHash: Boolean): Future[Option[SharedFile]]
 
   def importFile(
       f: File,

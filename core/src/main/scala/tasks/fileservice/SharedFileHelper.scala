@@ -46,22 +46,11 @@ import com.typesafe.scalalogging.StrictLogging
 
 private[tasks] object SharedFileHelper extends StrictLogging {
 
-  def getByNameUnchecked(name: String)(
+  def getByName(name: String, retrieveSizeAndHash: Boolean)(
       implicit service: FileServiceComponent,
-      context: ActorRefFactory,
-      nlc: NodeLocalCacheActor,
-      prefix: FileServicePrefix,
-      ec: ExecutionContext): Future[Option[SharedFile]] = {
-    val sf = new SharedFile(prefix.propose(name).toManaged, -1L, 0)
-    getPathToFile(sf)
-      .map { _ =>
-        Some(sf)
-      }
-      .recover {
-        case _: java.nio.file.NoSuchFileException =>
-          None
-      }
-  }
+      prefix: FileServicePrefix): Future[Option[SharedFile]] =
+    recreateFromManagedPath(prefix.propose(name).toManaged, retrieveSizeAndHash)
+
   def createForTesting(name: String) =
     new SharedFile(ManagedFilePath(Vector(name)), 0, 0)
   def createForTesting(name: String, size: Long, hash: Int) =
@@ -174,17 +163,6 @@ private[tasks] object SharedFileHelper extends StrictLogging {
 
     }
 
-  def isAccessible(managed: ManagedFilePath)(
-      implicit service: FileServiceComponent): Future[Boolean] =
-    if (service.storage.isDefined) {
-      service.storage.get.contains(managed)
-    } else {
-      implicit val timout = akka.util.Timeout(1441 minutes)
-
-      (service.actor ? IsPathAccessible(managed))
-        .asInstanceOf[Future[Boolean]]
-    }
-
   def getUri(sf: SharedFile)(
       implicit service: FileServiceComponent): Future[Uri] =
     sf.path match {
@@ -268,13 +246,25 @@ private[tasks] object SharedFileHelper extends StrictLogging {
             }
 
         for {
-          fileIsPresent <- isAccessible(historyManagedPath)
-          history <- if (fileIsPresent) readFile
+          fileIsPresent <- recreateFromManagedPath(historyManagedPath, false)
+          history <- if (fileIsPresent.isDefined) readFile
           else Future.successful(History(sf, None))
         } yield history
 
     }
   }
+
+  def recreateFromManagedPath(managed: ManagedFilePath,
+                              retrieveSizeAndHash: Boolean)(
+      implicit service: FileServiceComponent): Future[Option[SharedFile]] =
+    if (service.storage.isDefined) {
+      service.storage.get.contains(managed, retrieveSizeAndHash)
+    } else {
+      implicit val timout = akka.util.Timeout(1441 minutes)
+
+      (service.actor ? IsPathAccessible(managed, retrieveSizeAndHash))
+        .asInstanceOf[Future[Option[SharedFile]]]
+    }
 
   def createFromFile(file: File, name: String, deleteFile: Boolean)(
       implicit prefix: FileServicePrefix,

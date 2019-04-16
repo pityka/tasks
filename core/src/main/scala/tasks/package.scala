@@ -234,11 +234,8 @@ package object tasks {
       maybeSharedFiles <- Future
         .sequence(filesWithNonEmptyPath.map { path =>
           val prefix = tsc.filePrefix.append(path.dropRight(1))
-          SharedFileHelper.getByNameUnchecked(path.last)(tsc.fs,
-                                                         tsc.actorsystem,
-                                                         tsc.nodeLocalCache,
-                                                         prefix,
-                                                         tsc.executionContext)
+          SharedFileHelper
+            .getByName(path.last, retrieveSizeAndHash = true)(tsc.fs, prefix)
         })
 
       validSharedFiles = (maybeSharedFiles zip filesWithNonEmptyPath)

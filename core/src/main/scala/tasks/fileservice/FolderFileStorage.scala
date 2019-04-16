@@ -130,7 +130,8 @@ class FolderFileStorage(val basePath: File)(implicit
       pass
     }
 
-  def contains(path: ManagedFilePath): Future[Boolean] =
+  def contains(path: ManagedFilePath,
+               retrieveSizeAndHash: Boolean): Future[Option[SharedFile]] =
     Future.successful {
       val f = assemblePath(path)
       val canRead = f.canRead
@@ -138,9 +139,15 @@ class FolderFileStorage(val basePath: File)(implicit
 
       if (!pass) {
         logger.debug(s"$this does not contain $path due to: canRead:$canRead")
+        None
+      } else {
+        if (retrieveSizeAndHash) {
+          val size = f.length
+          val hash = FolderFileStorage.getContentHash((f))
+          Some(SharedFileHelper.create(size, hash, path))
+        } else Some(SharedFileHelper.create(size = -1L, hash = 0, path))
       }
 
-      pass
     }
 
   def createSource(path: ManagedFilePath): Source[ByteString, _] =

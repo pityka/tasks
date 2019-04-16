@@ -70,7 +70,7 @@ private[tasks] class SharedFileCache(
     val hash = getHash(taskDescriptionBytes)
     val fileName = "__meta__result__" + hash
     SharedFileHelper
-      .getByNameUnchecked(fileName)
+      .getByName(fileName, retrieveSizeAndHash = false)
       .flatMap {
         case None =>
           logger.debug(s"Not found $prefix $fileName for $taskDescription")

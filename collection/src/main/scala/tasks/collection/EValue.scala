@@ -28,7 +28,7 @@ object EValue {
       implicit
       tsc: TaskSystemComponents): Future[Option[EValue[T]]] =
     SharedFile
-      .getByNameUnchecked(name)
+      .getByName(name)
       .map(sf => sf.map(EValue.apply[T]))(
         tsc.actorMaterializer.executionContext)
 

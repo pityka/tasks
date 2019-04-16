@@ -254,9 +254,9 @@ class FileService(
 
     case GetListOfFilesInStorage(regexp) => sender ! storage.list(regexp)
     case IsAccessible(managedPath, size, hash) =>
-      sender ! storage.contains(managedPath, size, hash)
-    case IsPathAccessible(managedPath) =>
-      sender ! storage.contains(managedPath)
+      storage.contains(managedPath, size, hash).pipeTo(sender)
+    case IsPathAccessible(managedPath, retrieveSizeAndHash) =>
+      storage.contains(managedPath, retrieveSizeAndHash).pipeTo(sender)
     case GetUri(managedPath) => sender ! storage.uri(managedPath)
     case Delete(managedPath, size, hash) =>
       storage.delete(managedPath, size, hash).pipeTo(sender)
