@@ -127,23 +127,27 @@ class TaskResultCacheActor(
           case Some(cacheLookup) =>
             log.debug(
               s"Checking: $taskId. Got something $cacheLookup, verifying..")
+            val files = cacheLookup.files.toSeq
             Future
-              .traverse(cacheLookup.files)(SharedFileHelper.isAccessible)
-              .map(_.forall(identity))
+              .traverse(files)(SharedFileHelper.isAccessible)
+              .map(seq => (seq, seq.forall(identity)))
               .recover {
                 case e =>
                   log.warning(
                     s"Checking: $taskId. Got something ($cacheLookup), but failed to verify after cache with error: $e.")
-                  false
+                  (Nil, false)
               }
               .map {
-                case false =>
+                case (accessibility, false) =>
+                  val inaccessibleFiles =
+                    (files zip accessibility).filterNot(_._2)
                   log.warning(
-                    s"Checking: $taskId. Got something ($cacheLookup), but failed to verify after cache.")
+                    s"Checking: $taskId. Got something ($cacheLookup), but failed to verify after cache. Inaccessible files: ${inaccessibleFiles.size} : ${inaccessibleFiles
+                      .mkString(", ")}")
                   AnswerFromCache(Left("TaskNotFoundInCache"),
                                   originalSender,
                                   scheduleTask)
-                case true =>
+                case (_, true) =>
                   log.debug(s"Checking: $taskId. Got something (verified).")
                   AnswerFromCache(Right(Some(cacheLookup)),
                                   originalSender,
