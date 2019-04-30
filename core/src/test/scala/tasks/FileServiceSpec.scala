@@ -175,7 +175,8 @@ class FileServiceSpec
       val path = Await.result(SharedFileHelper.getPathToFile(t), 50 seconds)
       readBinaryFile(path.getCanonicalPath).deep should equal(data.deep)
 
-      Await.result(SharedFileHelper.isAccessible(t), 30 seconds) should be(true)
+      Await.result(SharedFileHelper.isAccessible(t, true), 30 seconds) should be(
+        true)
 
     }
   }

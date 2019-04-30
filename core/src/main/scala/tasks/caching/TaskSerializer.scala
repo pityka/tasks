@@ -40,9 +40,18 @@ trait TaskSerializer {
   }
 
   def serializeResult(original: UntypedResult): Array[Byte] = {
-    val js = Json.obj(
+    val mutableFilesField =
+      if (original.mutableFiles.isEmpty) Nil
+      else
+        List(
+          "mutablefiles" -> implicitly[Encoder[Set[SharedFile]]]
+            .apply(original.mutableFiles.get))
+
+    val fields = List(
       "files" -> implicitly[Encoder[Set[SharedFile]]].apply(original.files),
-      "data" -> Json.fromString(original.data.value))
+      "data" -> Json.fromString(original.data.value)) ++ mutableFilesField
+
+    val js = Json.obj(fields: _*)
     js.noSpaces.getBytes("UTF8")
   }
 
@@ -59,6 +68,17 @@ trait TaskSerializer {
         .decodeJson(map("files").get)
         .right
         .get
-    UntypedResult(files, Base64Data(map("data").get.asString.get))
+
+    val mutableFiles = map.apply("mutableFiles") match {
+      case None => None
+      case Some(js) =>
+        Some(
+          implicitly[Decoder[Set[SharedFile]]]
+            .decodeJson(js)
+            .right
+            .get)
+    }
+
+    UntypedResult(files, Base64Data(map("data").get.asString.get), mutableFiles)
   }
 }

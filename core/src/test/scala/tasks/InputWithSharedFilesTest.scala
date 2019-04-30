@@ -99,6 +99,25 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
       }
   }
 
+  case class MutableResult(sf: SharedFile)
+      extends WithMutableSharedFiles(mutables = List(sf), immutables = Nil)
+
+  object MutableResult {
+    import io.circe.generic.semiauto._
+    import io.circe._
+    implicit val enc: Encoder[MutableResult] = deriveEncoder[MutableResult]
+    implicit val dec: Decoder[MutableResult] = deriveDecoder[MutableResult]
+  }
+
+  val taskWithMutable = AsyncTask[Input, MutableResult]("mutabletask", 2) {
+    input => implicit computationEnvironment =>
+      sideEffect += "execution of task 6"
+
+      SharedFile(Source.single(ByteString("abcd")), "mutable")
+        .map(MutableResult(_))
+
+  }
+
   def run = {
     withTaskSystem(testConfig) { implicit ts =>
       import scala.concurrent.ExecutionContext.Implicits.global
@@ -111,6 +130,13 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
         t31 <- task3(Input3(t11, t21, t21))(ResourceRequest(1, 500))
         t41 <- task4(t31)(ResourceRequest(1, 500))
         t51 <- task5(Input(1))(ResourceRequest(1, 500))
+        tmut1 <- taskWithMutable(Input(1))(ResourceRequest(1, 500))
+        path <- tmut1.sf.uri
+        _ = {
+          util.writeBinaryToFile(new java.io.File(path.path),
+                                 Array[Byte](1, 2, 3))
+        }
+        tmut2 <- taskWithMutable(Input(1))(ResourceRequest(1, 500))
       } yield t51
 
       await(future)
@@ -128,6 +154,7 @@ class InputWithSharedFilesTestSuite extends FunSuite with Matchers {
     InputWithSharedFilesTest.sideEffect.count(_ == "execution of task 1") shouldBe 2
     InputWithSharedFilesTest.sideEffect.count(_ == "execution of task 2") shouldBe 1
     InputWithSharedFilesTest.sideEffect.count(_ == "execution of task 5") shouldBe 0
+    InputWithSharedFilesTest.sideEffect.count(_ == "execution of task 6") shouldBe 1
   }
 
 }

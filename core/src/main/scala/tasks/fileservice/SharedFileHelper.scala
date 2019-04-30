@@ -146,18 +146,20 @@ private[tasks] object SharedFileHelper extends StrictLogging {
         }
     }
 
-  def isAccessible(sf: SharedFile)(
+  def isAccessible(sf: SharedFile, verifyContent: Boolean)(
       implicit service: FileServiceComponent): Future[Boolean] =
     sf.path match {
       case x: RemoteFilePath =>
-        service.remote.contains(x, sf.byteSize, sf.hash)
+        val byteSize = if (verifyContent) sf.byteSize else -1L
+        service.remote.contains(x, byteSize, sf.hash)
       case path: ManagedFilePath =>
         if (service.storage.isDefined) {
-          service.storage.get.contains(path, sf.byteSize, sf.hash)
+          val byteSize = if (verifyContent) sf.byteSize else -1L
+          service.storage.get.contains(path, byteSize, sf.hash)
         } else {
           implicit val timout = akka.util.Timeout(1441 minutes)
-
-          (service.actor ? IsAccessible(path, sf.byteSize, sf.hash))
+          val byteSize = if (verifyContent) sf.byteSize else -1L
+          (service.actor ? IsAccessible(path, byteSize, sf.hash))
             .asInstanceOf[Future[Boolean]]
         }
 

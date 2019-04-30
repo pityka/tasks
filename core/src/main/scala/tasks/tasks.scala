@@ -33,6 +33,7 @@ import scala.concurrent._
 
 trait HasSharedFiles extends Product {
   def files: Seq[SharedFile]
+  def mutableFiles: Seq[SharedFile]
 }
 
 object HasSharedFiles {
@@ -49,12 +50,21 @@ abstract class ResultWithSharedFiles(sf: SharedFile*)
     extends Product
     with HasSharedFiles {
   def files = sf
+  def mutableFiles: Seq[SharedFile] = Nil
 }
 
 abstract class WithSharedFiles(sf: SharedFile*)
     extends Product
     with HasSharedFiles {
   def files = sf
+  def mutableFiles: Seq[SharedFile] = Nil
+}
+abstract class WithMutableSharedFiles(mutables: Seq[SharedFile],
+                                      immutables: Seq[SharedFile])
+    extends Product
+    with HasSharedFiles {
+  def files = immutables
+  def mutableFiles = mutables
 }
 
 trait HasPersistent[+A] extends Serializable { self: A =>

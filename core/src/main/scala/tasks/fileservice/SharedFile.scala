@@ -61,6 +61,8 @@ case class SharedFile(
     hash: Int
 ) extends HasSharedFiles {
 
+  def mutableFiles = Nil
+
   def files = List(this)
 
   override def toString =
@@ -76,7 +78,7 @@ case class SharedFile(
     SharedFileHelper.getSourceToFile(this)
 
   def isAccessible(implicit tsc: TaskSystemComponents) =
-    SharedFileHelper.isAccessible(this)
+    SharedFileHelper.isAccessible(this, true)
 
   def uri(implicit tsc: TaskSystemComponents): Future[Uri] =
     SharedFileHelper.getUri(this)

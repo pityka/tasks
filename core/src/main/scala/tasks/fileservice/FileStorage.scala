@@ -87,7 +87,7 @@ class RemoteFileStorage(implicit mat: Materializer,
     getSizeAndHash(path)
       .map {
         case (size1, hash1) =>
-          size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1)
+          size < 0 || (size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1))
       }
       .recover {
         case e =>
@@ -114,6 +114,9 @@ trait ManagedFileStorage {
 
   def createSource(path: ManagedFilePath): Source[ByteString, _]
 
+  /* If size < 0 then it must not check the size and the hash
+   *  but must return true iff the file is readable
+   */
   def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean]
 
   def contains(path: ManagedFilePath,

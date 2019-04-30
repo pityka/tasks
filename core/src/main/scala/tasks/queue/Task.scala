@@ -45,7 +45,9 @@ import io.circe.generic.semiauto._
 
 import java.time.Instant
 
-case class UntypedResult(files: Set[SharedFile], data: Base64Data)
+case class UntypedResult(files: Set[SharedFile],
+                         data: Base64Data,
+                         mutableFiles: Option[Set[SharedFile]])
 
 case class DependenciesAndRuntimeMetadata(
     dependencies: Seq[History],
@@ -95,8 +97,20 @@ object UntypedResult {
     case _ => Set()
   }
 
-  def make[A](r: A)(implicit ser: Serializer[A]): UntypedResult =
-    UntypedResult(files(r), Base64DataHelpers(ser(r)))
+  private def mutableFiles(r: Any): Set[SharedFile] = r match {
+    case resultWithSharedFiles: HasSharedFiles =>
+      resultWithSharedFiles.mutableFiles.toSet ++ resultWithSharedFiles.productIterator
+        .flatMap(member => mutableFiles(member))
+        .toSet
+    case _ => Set()
+  }
+
+  def make[A](r: A)(implicit ser: Serializer[A]): UntypedResult = {
+    val mut = mutableFiles(r)
+    val immut = files(r) &~ mut
+    val m = if (mut.isEmpty) None else Some(mut)
+    UntypedResult(immut, Base64DataHelpers(ser(r)), m)
+  }
 
   implicit val encoder: Encoder[UntypedResult] = deriveEncoder[UntypedResult]
 

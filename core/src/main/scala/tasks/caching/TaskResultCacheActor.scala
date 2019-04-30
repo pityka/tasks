@@ -127,9 +127,14 @@ class TaskResultCacheActor(
           case Some(cacheLookup) =>
             log.debug(
               s"Checking: $taskId. Got something $cacheLookup, verifying..")
-            val files = cacheLookup.files.toSeq
+            val files = cacheLookup.files.toSeq.map(sf => (sf, true))
+            val mutableFiles =
+              cacheLookup.mutableFiles.toSeq.flatten.map(sf => (sf, false))
             Future
-              .traverse(files)(SharedFileHelper.isAccessible)
+              .traverse(files ++ mutableFiles) {
+                case (sf, checkContent) =>
+                  SharedFileHelper.isAccessible(sf, checkContent)
+              }
               .map(seq => (seq, seq.forall(identity)))
               .recover {
                 case e =>
