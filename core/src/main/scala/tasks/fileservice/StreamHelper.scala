@@ -164,7 +164,7 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
 
   private def createSourceFile(uri: Uri): Source[ByteString, _] = {
     val file = new java.io.File(uri.path)
-    FileIO.fromPath(file.toPath, chunkSize = 65536)
+    FileIO.fromPath(file.toPath, chunkSize = 8192)
   }
 
   def createSource(uri: Uri) = uri.scheme match {
