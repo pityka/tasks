@@ -2,6 +2,7 @@ package tasks.queue
 
 import io.circe._
 import io.circe.generic.semiauto._
+ 
 
 case class TaskId(id: String, version: Int)
 object TaskId {
@@ -15,10 +16,11 @@ object Base64Data {
   implicit val decoder: Decoder[Base64Data] = deriveDecoder[Base64Data]
 }
 
+
+
 case class TaskDescription(taskId: TaskId,
                            input: Base64Data,
-                           persistentInput: Option[Base64Data])
-
+                           persistentInput: Option[Base64Data]) 
 object TaskDescription {
   implicit val encoder: Encoder[TaskDescription] =
     deriveEncoder[TaskDescription]

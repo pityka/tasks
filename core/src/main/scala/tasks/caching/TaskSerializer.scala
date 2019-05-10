@@ -32,12 +32,6 @@ import tasks.fileservice.SharedFile._
 import io.circe._
 
 trait TaskSerializer {
-  def serializeTaskDescription(original: TaskDescription): Array[Byte] = {
-    val base64TaskDescription =
-      original.persistentInput.getOrElse(original.input).value
-
-    (original.taskId + "\n" + base64TaskDescription).getBytes("UTF8")
-  }
 
   def serializeResult(original: UntypedResult): Array[Byte] = {
     val mutableFilesField =

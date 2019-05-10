@@ -183,20 +183,12 @@ object PendingJobId {
 
 case class Labels(values: List[(String,String)]) {
   def ++(other:Labels) = Labels(values ++ other.values)
-  private[tasks] def inherit = Labels(values.map{
-    pair =>
-    if (pair._1 == Labels.traceKey)
-      (pair._1,pair._2+"::"+java.util.UUID.randomUUID.toString)
-    else pair 
-  })
+  
 }
 object Labels {
   implicit val decoder: Decoder[Labels] = deriveDecoder[Labels]
   implicit val encoder: Encoder[Labels] = deriveEncoder[Labels] 
-  val traceKey = "__trace"
   val empty = Labels(Nil)
-  private[tasks] val root = Labels(List((traceKey,java.util.UUID.randomUUID.toString)))
-  private[tasks] def leaf(l:Labels) = l.values.find(_._1 == traceKey).flatMap(_._2.split("::").lastOption)
 }
 
 case class LogRecord(

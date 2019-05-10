@@ -43,8 +43,6 @@ import tasks.fileservice.{
   SharedFileHelper
 }
 
-import com.google.common.hash.Hashing
-
 private[tasks] class SharedFileCache(
     implicit fileServiceComponent: FileServiceComponent,
     nodeLocalCacheActor: NodeLocalCacheActor,
@@ -55,9 +53,6 @@ private[tasks] class SharedFileCache(
     extends Cache
     with TaskSerializer {
 
-  private def getHash(a: Array[Byte]): String =
-    Hashing.murmur3_128.hashBytes(a).toString
-
   private val logger = akka.event.Logging(AS, getClass)
 
   override def toString = "SharedFileCache"
@@ -66,8 +61,8 @@ private[tasks] class SharedFileCache(
 
   def get(taskDescription: TaskDescription)(
       implicit prefix: FileServicePrefix): Future[Option[UntypedResult]] = {
-    val taskDescriptionBytes = serializeTaskDescription(taskDescription)
-    val hash = getHash(taskDescriptionBytes)
+
+    val hash = SerializedTaskDescription(taskDescription).hash.hash
     val fileName = "__meta__result__" + hash
     SharedFileHelper
       .getByName(fileName, retrieveSizeAndHash = false)
@@ -101,10 +96,10 @@ private[tasks] class SharedFileCache(
       implicit p: FileServicePrefix) = {
     try {
       implicit val historyContext = tasks.fileservice.NoHistory
-      val serializedTaskDescription = serializeTaskDescription(taskDescription)
-      val hash = getHash(serializedTaskDescription)
+      val serializedTaskDescription = SerializedTaskDescription(taskDescription)
+      val hash = serializedTaskDescription.hash.hash
       val value = serializeResult(untypedResult)
-      val key = serializedTaskDescription
+      val key = serializedTaskDescription.value
       for {
         _ <- SharedFileHelper
           .createFromSource(Source.single(ByteString(value)),

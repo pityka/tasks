@@ -83,7 +83,8 @@ package object queue {
           cacheActor = cache.actor,
           priority = priority,
           promise = promise,
-          labels = labels
+          labels = labels,
+          lineage = components.lineage
         )
       ).withDispatcher("proxytask-dispatcher")
     )

@@ -76,7 +76,7 @@ class TrackerImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
         td.resourceAllocated,
         Some(td.result.metadata),
         Some(td.result.untypedResult.files),
-        Some(config.codeVersion)
+        Some(config.codeVersion),
       )
       import io.circe.syntax._
       akka.util.ByteString(dto.asJson.noSpaces + "\n")

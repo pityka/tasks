@@ -63,7 +63,8 @@ case class TaskSystemComponents(
     tasksConfig: TasksConfig,
     historyContext: HistoryContext,
     priority: Priority,
-    labels: Labels
+    labels: Labels,
+    lineage: TaskLineage
 ) {
 
   def withChildPrefix(name: String) =
@@ -408,7 +409,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
     tasksConfig = config,
     historyContext = rootHistory,
     priority = Priority(0),
-    labels = Labels.root
+    labels = Labels.empty,
+    lineage = TaskLineage.root
   )
 
   private val launcherActor =

@@ -67,7 +67,8 @@ case class ScheduleTask(
     cacheActor: ActorRef,
     tryCache: Boolean,
     priority: Priority,
-    labels: Labels
+    labels: Labels,
+    lineage: TaskLineage
 )
 
 object ScheduleTask {
@@ -146,7 +147,8 @@ class Launcher(
         scheduleTask.priority,
         scheduleTask.labels,
         scheduleTask.description.input,
-        scheduleTask.description.taskId
+        scheduleTask.description.taskId,
+        scheduleTask.lineage.inherit(scheduleTask.description)
       ).withDispatcher("task-worker-dispatcher")
     )
     log.debug("Actor constructed")

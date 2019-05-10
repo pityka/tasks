@@ -10,12 +10,21 @@ object QueryLog {
   val cpuNeedKey = "__cpuNeed"
   val multiplicityKey = "__multiplicity"
 
+  object Node {
+    import io.circe._
+    import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
+    implicit val encoder: Encoder[Node] =
+      deriveEncoder[Node]
+    implicit val decoder: Decoder[Node] =
+      deriveDecoder[Node]
+  }
+
   case class Node(taskId: String,
                   labels: Labels,
                   pathFromRoot: Seq[String],
                   resource: ResourceAllocated,
                   elapsedTime: ElapsedTimeNanoSeconds,
-                  dependencies: Seq[String]) {
+                  dataDependencies: Seq[String]) {
     def id = pathFromRoot.last
 
     /* The root is not present */
@@ -36,26 +45,33 @@ object QueryLog {
       .fromInputStream(source)
       .getLines
       .map { line =>
-        io.circe.parser.decode[ResourceUtilizationRecord](line).right.get
+        val parsed = io.circe.parser.decode[ResourceUtilizationRecord](line)
+        // if (parsed.isLeft) {
+        // println(parsed.left.get + " " + line)
+        // }
+        parsed.right
       }
+      .filter(_.toOption.isDefined)
+      .map(_.get)
       .filterNot(elem =>
         if (excludeTaskIds.isEmpty) false
         else excludeTaskIds.contains(elem.taskId.id))
       .filter(elem =>
         if (includeTaskIds.isEmpty) true
         else includeTaskIds.contains(elem.taskId.id))
-      .filter(elem => elem.labels.values.find(_._1 == Labels.traceKey).nonEmpty)
+      .filter(elem => elem.metadata.isDefined)
       .map(elem =>
         Node(
           elem.taskId.id,
-          Labels(elem.labels.values.filterNot(_._1 == Labels.traceKey)),
-          elem.labels.values.toMap.apply(Labels.traceKey).split("::").toList,
+          elem.labels,
+          "root" +: elem.metadata.get.lineage.lineage.map(_.toString),
           elem.resource,
           elem.elapsedTime,
-          elem.metadata.toSeq.flatMap(
-            _.dependencies.flatMap(_.context.toSeq.collect {
-              case h: tasks.fileservice.HistoryContextImpl => h.task.taskID
-            }))
+          elem.metadata.toSeq
+            .flatMap(_.dependencies.flatMap(_.context.toSeq.collect {
+              case h: tasks.fileservice.HistoryContextImpl => h.traceId.toList
+            }.flatten))
+            .distinct
       ))
       .toList
 
@@ -68,14 +84,22 @@ object QueryLog {
                       forwardEdges: Map[String, Seq[Node]]): Seq[Node] = {
     var order = List.empty[Node]
     var marks = Set.empty[String]
+    var currentParents = Set.empty[String]
 
     def visit(n: Node): Unit =
       if (marks.contains(n.id)) ()
       else {
-        val children = forwardEdges.get(n.id).toSeq.flatten
-        children.foreach(visit)
-        marks = marks + n.id
-        order = n :: order
+        if (currentParents.contains(n.id)) {
+          println(s"error: loop to ${n.id}")
+          ()
+        } else {
+          currentParents = currentParents + n.id
+          val children = forwardEdges.get(n.id).toSeq.flatten
+          children.foreach(visit)
+          currentParents = currentParents - n.id
+          marks = marks + n.id
+          order = n :: order
+        }
       }
 
     tree.foreach { node =>
@@ -96,34 +120,36 @@ object QueryLog {
       case (_, siblings) =>
         siblings.map(n => n.id -> siblings)
     }
-    val byTaskId = tree.groupBy(_.taskId)
     extraDependencies
       .map {
-        case (taskId, taskIdChildren) =>
-          val siblingTaskIds = byTaskId(taskId).flatMap { n =>
-            siblings.get(n.id).toSeq.flatten.map(_.taskId)
-          }
-          taskId -> taskIdChildren.filter(siblingTaskIds.toSet)
+        case (id, dependencyId) =>
+          val siblingsOfThisNode = siblings.get(id).getOrElse(Seq.empty)
+          id -> dependencyId.filter(siblingsOfThisNode.toSet)
       }
       .filter(_._2.nonEmpty)
   }
 
-  def addDependencyAmongSiblings(
+  def addForwardEdgesAmongSiblings(
       tree: Seq[Node],
-      dependentSiblings: Map[String, List[String]]) = {
+      extraForwardEdgesAmongSiblings: Map[String, List[String]]) = {
     val forwardEdges = tree.groupBy(_.parent)
     val sorted = topologicalSort(tree, forwardEdges).reverse
     sorted.map { node =>
       val parent = node.parent
       val siblings = forwardEdges(parent)
-      val dependsOnSibling = siblings.find(s =>
-        dependentSiblings.get(s.taskId).toSeq.flatten.contains(node.taskId))
+      val dependsOnSibling = siblings.find(
+        s =>
+          extraForwardEdgesAmongSiblings
+            .get(s.id)
+            .toSeq
+            .flatten
+            .contains(node.id))
       dependsOnSibling match {
         case None => node
         case Some(newParent) =>
-          node.copy(
-            pathFromRoot = node.pathFromRoot
-              .dropRight(2) :+ newParent.id :+ node.id)
+          node.copy(pathFromRoot = node.pathFromRoot
+                      .dropRight(2) :+ newParent.id :+ node.id,
+                    dataDependencies = Nil)
       }
 
     }
@@ -251,21 +277,19 @@ object QueryLog {
       }
     }
 
-    val extraDependencies = selectedTree
+    val forwardEdgesFromDataDependencies = selectedTree
       .flatMap { n =>
-        n.dependencies.map { d =>
-          (d, n.taskId)
+        n.dataDependencies.map { d =>
+          (d, n.id)
         }
       }
       .distinct
       .groupBy(_._1)
       .map { case (id, group) => (id, group.map(_._2).toList) }
 
-    val filteredExtraDependencies =
-      filterDataDependenciesForSiblings(selectedTree, extraDependencies)
-
     val augmented =
-      addDependencyAmongSiblings(selectedTree, filteredExtraDependencies)
+      addForwardEdgesAmongSiblings(selectedTree,
+                                   forwardEdgesFromDataDependencies)
 
     aggregateRuntime(
       augmented

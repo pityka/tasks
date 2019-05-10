@@ -61,11 +61,40 @@ object DependenciesAndRuntimeMetadata {
     deriveDecoder[DependenciesAndRuntimeMetadata]
 }
 
+case class TaskInvocationId(id: TaskId, description: HashedTaskDescription) {
+  override def toString = id.id + "_" + description.hash
+}
+object TaskInvocationId {
+  implicit val encoder: Encoder[TaskInvocationId] =
+    deriveEncoder[TaskInvocationId]
+
+  implicit val decoder: Decoder[TaskInvocationId] =
+    deriveDecoder[TaskInvocationId]
+}
+
+case class TaskLineage(lineage: Seq[TaskInvocationId]) {
+  def leaf = lineage.last
+  def inherit(td: TaskDescription) =
+    TaskLineage(
+      lineage :+ TaskInvocationId(td.taskId,
+                                  SerializedTaskDescription(td).hash))
+}
+
+object TaskLineage {
+  def root = TaskLineage(Seq.empty)
+  implicit val encoder: Encoder[TaskLineage] =
+    deriveEncoder[TaskLineage]
+
+  implicit val decoder: Decoder[TaskLineage] =
+    deriveDecoder[TaskLineage]
+}
+
 case class ResultMetadata(
     dependencies: Seq[History],
     started: Instant,
     ended: Instant,
-    logs: Seq[LogRecord]
+    logs: Seq[LogRecord],
+    lineage: TaskLineage
 )
 
 object ResultMetadata {
@@ -172,7 +201,8 @@ private class Task(
     priority: Priority,
     labels: Labels,
     input: Base64Data,
-    taskId: TaskId
+    taskId: TaskId,
+    lineage: TaskLineage
 ) extends Actor
     with akka.actor.ActorLogging {
 
@@ -213,7 +243,8 @@ private class Task(
                                     ResultMetadata(dependencies.dependencies,
                                                    started = startTimeStamp,
                                                    ended = endTimeStamp,
-                                                   logs = dependencies.logs))
+                                                   logs = dependencies.logs,
+                                                   lineage = lineage))
         )
         self ! PoisonPill
 
@@ -226,7 +257,7 @@ private class Task(
       val history = HistoryContextImpl(
         task = History.TaskVersion(taskId.id, taskId.version),
         codeVersion = tasksConfig.codeVersion,
-        traceId = Labels.leaf(labels)
+        traceId = Some(lineage.leaf.toString)
       )
       val ce = ComputationEnvironment(
         resourceAllocated,
@@ -242,7 +273,8 @@ private class Task(
           tasksConfig,
           history,
           priority,
-          labels
+          labels,
+          lineage
         ),
         akka.event.Logging(context.system.eventStream,
                            "usertasks." + fileServicePrefix.list.mkString(".")),

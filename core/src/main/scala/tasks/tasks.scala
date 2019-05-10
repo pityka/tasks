@@ -85,6 +85,6 @@ class TaskDefinition[A: Serializer, B: Deserializer](val computation: CompFun2,
         computation,
         taskId,
         Priority(priorityBase.toInt + components.priority.toInt + 1),
-        components.labels.inherit ++ labels)
+        components.labels ++ labels)
 
 }
