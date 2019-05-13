@@ -36,7 +36,7 @@ object EarlyShutdownTest extends TestHelpers {
   val sideEffect = scala.collection.mutable.ArrayBuffer[String]()
 
   val task = AsyncTask[Input, Int]("earlyshutdowntest", 1) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       sideEffect += "execution of task"
       Thread.sleep(2000)
       Future(1)

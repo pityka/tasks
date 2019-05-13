@@ -83,7 +83,7 @@ object PiTasks {
 
   val piCalc = AsyncTask[PiInput, PiResult]("reduce", 1) {
     case PiInput(in, out) =>
-      implicit ctx =>
+      _ =>
         Future.successful(PiResult(in.toDouble / (in + out) * 4d))
   }
 }
@@ -104,7 +104,7 @@ object Fib {
 
   val reduce = AsyncTask[FibReduce, Int]("fibreduce", 1) {
     case FibReduce(f1, f2) =>
-      implicit ce =>
+      _ =>
         Future.successful(f1 + f2)
   }
 
@@ -171,8 +171,8 @@ object PiApp extends App {
 
   val count =
     EColl.fold("count", 1)((_: Int) => "fold")(
-      (b: Int) => ctx => Future.successful(b),
-      (x: Int, y: Seq[Option[Int]]) => x + 1)
+      (b: Int) => _ => Future.successful(b),
+      (x: Int, _: Seq[Option[Int]]) => x + 1)
 
   val sum = EColl.reduce("sum", 1)((x: Int, y: Int) => x + y)
 
@@ -222,9 +222,9 @@ object PiApp extends App {
       e2 <- twice(e1)(ResourceRequest(1, 1, 1))
       e3 <- odd(e2)(ResourceRequest(1, 1, 1))
       e4 <- sort(e3)(ResourceRequest(1, 1, 1))
-      e5 <- group(e4)(ResourceRequest(1, 1, 1))
+      _ <- group(e4)(ResourceRequest(1, 1, 1))
       e6 <- join(List(e1, e2, e3))(ResourceRequest(1, 1, 1))
-      e7 <- count(e6 -> 0)(ResourceRequest(1, 1, 1))
+      _ <- count(e6 -> 0)(ResourceRequest(1, 1, 1))
       e8 <- sum(e4)(ResourceRequest(1, 1, 1))
     } yield e8
 

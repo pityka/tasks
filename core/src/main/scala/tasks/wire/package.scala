@@ -17,7 +17,7 @@ package object wire {
       str =>
         Either
           .catchNonFatal(as.provider.resolveActorRef(str))
-          .leftMap(t => "ActorRef"))
+          .leftMap(_ => "ActorRef"))
 
   implicit val throwableEncoder: Encoder[Throwable] =
     Encoder
@@ -41,12 +41,12 @@ package object wire {
         }.toArray)
         Either
           .catchNonFatal(exc)
-          .leftMap(t => "Throwable")
+          .leftMap(_ => "Throwable")
     }
 
   implicit val fileEncoder: Encoder[File] =
     Encoder.encodeString.contramap[File](_.getAbsolutePath)
   implicit val fileDecoder: Decoder[File] = Decoder.decodeString.emap(str =>
-    Either.catchNonFatal(new File(str)).leftMap(t => "File"))
+    Either.catchNonFatal(new File(str)).leftMap(_ => "File"))
 
 }

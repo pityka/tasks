@@ -35,7 +35,7 @@ import akka.util.ByteString
 object FolderFileStorageTest extends TestHelpers with Matchers {
 
   val task1 = AsyncTask[Input, Boolean]("sharedfileinput1", 1) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       for {
 
         sf <- SharedFile(Source.single(ByteString("abcd")), "f1")

@@ -35,7 +35,7 @@ import com.typesafe.config.ConfigFactory
 object NodeAllocationTest extends TestHelpers {
 
   val testTask = AsyncTask[Input, Int]("nodeallocationtest", 1) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       log.info("Hello from task")
       Future(1)
   }

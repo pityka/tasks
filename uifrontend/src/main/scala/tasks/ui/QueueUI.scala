@@ -201,7 +201,7 @@ class QueueUI(container: Node) {
 
 }
 
-@JSExportTopLevel("tasks.ui.QueueMain")
+@JSExportTopLevel("QueueMain")
 object QueueMain {
 
   @JSExport

@@ -41,7 +41,7 @@ object TestSlave extends App {
 object SHTest extends TestHelpers {
 
   val testTask = AsyncTask[Input, Int]("shtest", 1) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       log.info("Hello from task")
       Future(1)
   }

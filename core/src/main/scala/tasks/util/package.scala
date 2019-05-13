@@ -209,8 +209,8 @@ package object util extends StrictLogging {
     * @param pb Description of the executable process
     * @return Exit code of the process.
     */
-  def exec(pb: ProcessBuilder)(stdOutFunc: String => Unit = { x: String =>
-    })(implicit stdErrFunc: String => Unit = (x: String) => ()): Int =
+  def exec(pb: ProcessBuilder)(stdOutFunc: String => Unit = { _: String =>
+    })(implicit stdErrFunc: String => Unit = (_: String) => ()): Int =
     pb.run(ProcessLogger(stdOutFunc, stdErrFunc)).exitValue
 
   /**

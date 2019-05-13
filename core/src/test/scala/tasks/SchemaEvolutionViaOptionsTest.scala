@@ -61,13 +61,13 @@ object SchemaEvolutionViaOptionsTest extends TestHelpers {
   }
 
   val task1 = AsyncTask[Input1, Int]("schemaevolutionviaoptions", 1) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       sideEffect += "execution of task"
       Future(1)
   }
 
   val task2 = AsyncTask[Input2, Int]("schemaevolutionviaoptions", 1) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       sideEffect += "execution of task"
       Future(1)
   }

@@ -50,7 +50,7 @@ object FailingTasksTest extends TestHelpers {
   class TestException extends RuntimeException("boom")
 
   val fail = AsyncTask[Input, String]("failingtasktest-fail", 1) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       sideEffect += "execution of fail task"
       val `true` = true
       if (`true`) {
@@ -60,7 +60,7 @@ object FailingTasksTest extends TestHelpers {
   }
 
   val success = AsyncTask[Input, String]("failingtasktest-success", 1) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       sideEffect += "execution of success task"
       Future("succeeded")
   }

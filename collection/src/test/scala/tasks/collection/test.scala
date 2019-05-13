@@ -53,13 +53,13 @@ object Tests {
 
   val count =
     EColl.fold("count", 1)((_: Int) => "fold")(
-      (b: Int) => ctx => Future.successful(b),
-      (x: Int, y: Seq[Option[Int]]) => x + 1)
+      (b: Int) => _ => Future.successful(b),
+      (x: Int, _: Seq[Option[Int]]) => x + 1)
 
   val scan = {
     EColl.scan("scan", 1)((_: Int) => "scan")(
       4L,
-      (b: Int) => ctx => Future.successful(b),
+      (b: Int) => _ => Future.successful(b),
       (_: Int) + (_: Int))
   }
 
@@ -80,9 +80,9 @@ object Tests {
         e2 <- twice(e1)(ResourceRequest(1, 1))
         e3 <- odd(e2)(ResourceRequest(1, 1))
         e4 <- sort(e3)(ResourceRequest(1, 1))
-        e5 <- group(e4)(ResourceRequest(1, 1))
+        _ <- group(e4)(ResourceRequest(1, 1))
         e6 <- join(List(e1, e2, e3))(ResourceRequest(1, 1))
-        e7 <- count(e6 -> 0)(ResourceRequest(1, 1))
+        _ <- count(e6 -> 0)(ResourceRequest(1, 1))
         e8 <- sum(e4)(ResourceRequest(1, 1))
         e9 <- scan((e1, 1))(ResourceRequest(1, 1))
         e10 <- toSeq(e9)(ResourceRequest(1, 1))

@@ -55,7 +55,7 @@ object ResultWithSharedFilesTest extends TestHelpers {
   }
 
   val testTask = AsyncTask[Input, Output]("resultwithsharedfilestest", 1) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       sideEffect += "execution of task"
       val source = Source.single(ByteString("abcd"))
       val f1 = SharedFile(source, "f1")

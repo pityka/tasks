@@ -107,7 +107,7 @@ class AppUI(container: Node) {
 
 }
 
-@JSExportTopLevel("tasks.ui.AppMain")
+@JSExportTopLevel("AppMain")
 object AppMain {
 
   @JSExport

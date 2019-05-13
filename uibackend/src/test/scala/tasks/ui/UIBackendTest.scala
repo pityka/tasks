@@ -38,7 +38,7 @@ import tasks._
 object UIBackendTest extends TestHelpers {
 
   val testTask = AsyncTask[Input, Int]("nodeallocationtest", 1) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       log.info("Hello from task")
       Thread.sleep(1000)
       Future(1)

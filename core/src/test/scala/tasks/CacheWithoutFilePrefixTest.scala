@@ -37,7 +37,7 @@ object CacheWithoutFilePrefixTest extends TestHelpers {
   val sideEffect = scala.collection.mutable.ArrayBuffer[String]()
 
   val task = AsyncTask[Input, Int]("cachewithoutfileprefix", 1) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       sideEffect += "execution of task"
       Future(1)
   }

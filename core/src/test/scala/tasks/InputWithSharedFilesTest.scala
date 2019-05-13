@@ -38,13 +38,13 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
   val sideEffect = scala.collection.mutable.ArrayBuffer[String]()
 
   val task1 = AsyncTask[Input, SharedFile]("sharedfileinput1", 1) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       sideEffect += "execution of task 1"
       SharedFile(Source.single(ByteString("abcd")), "f1")
   }
 
   val task2 = AsyncTask[SharedFile, SharedFile]("sharedfileinput2", 1) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       sideEffect += "execution of task 2"
       for {
         sf2 <- SharedFile(Source.single(ByteString("abcd")), "f2")
@@ -79,7 +79,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
   }
 
   val task4 = AsyncTask[SharedFile, SharedFile]("sharedfileinput4", 1) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       sideEffect += "execution of task 4"
       for {
         sf4 <- SharedFile(Source.single(ByteString("abcd")), "f4")
@@ -90,7 +90,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
   }
 
   val task5 = AsyncTask[Input, SharedFile]("sharedfileinput2", 2) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       fromFileList(Seq(Seq("f2")))(filelist => filelist.head) {
 
         sideEffect += "execution of task 5"
@@ -110,7 +110,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
   }
 
   val taskWithMutable = AsyncTask[Input, MutableResult]("mutabletask", 2) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       sideEffect += "execution of task 6"
 
       SharedFile(Source.single(ByteString("abcd")), "mutable")
@@ -126,9 +126,9 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
         t11 <- task1(Input(1))(ResourceRequest(1, 500))
         t21 <- task2(t11)(ResourceRequest(1, 500))
         t12 <- task1(Input(2))(ResourceRequest(1, 500))
-        t22 <- task2(t12)(ResourceRequest(1, 500))
+        _ <- task2(t12)(ResourceRequest(1, 500))
         t31 <- task3(Input3(t11, t21, t21))(ResourceRequest(1, 500))
-        t41 <- task4(t31)(ResourceRequest(1, 500))
+        _ <- task4(t31)(ResourceRequest(1, 500))
         t51 <- task5(Input(1))(ResourceRequest(1, 500))
         tmut1 <- taskWithMutable(Input(1))(ResourceRequest(1, 500))
         path <- tmut1.sf.uri
@@ -136,7 +136,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
           util.writeBinaryToFile(new java.io.File(path.path),
                                  Array[Byte](1, 2, 3))
         }
-        tmut2 <- taskWithMutable(Input(1))(ResourceRequest(1, 500))
+        _ <- taskWithMutable(Input(1))(ResourceRequest(1, 500))
       } yield t51
 
       await(future)

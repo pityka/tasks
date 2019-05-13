@@ -53,7 +53,7 @@ object QueryLogTest extends TestHelpers {
   }
 
   val gather = AsyncTask[InputSF, Int]("gather", 1) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       log.info("gather")
       Thread.sleep(1000)
       Future(1)

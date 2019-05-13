@@ -47,7 +47,7 @@ object InputWithHasPersistentTest extends TestHelpers {
   }
 
   val task = AsyncTask[InputWithHasPersistent, Int]("haspersistenttest", 1) {
-    input => implicit computationEnvironment =>
+    _ => implicit computationEnvironment =>
       sideEffect += "execution of task"
       Future(1)
   }
