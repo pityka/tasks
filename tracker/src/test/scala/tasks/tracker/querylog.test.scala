@@ -123,16 +123,14 @@ class QueryLogTestSuite extends FunSuite with Matchers {
                                        includeTaskIds = Set.empty)
         nodes.size shouldBe 5
 
-        QueryLog.trees(nodes).size shouldBe 1
-
         val runtimes = QueryLog.computeRuntimes(nodes, subtree = None)
+        println(QueryLog.plotTimes(runtimes, seconds = true))
 
         val root = runtimes.find(_.taskId == "task1").get
         root.cpuNeed.get shouldBe 2
         root.cpuTime.get > 2.0 shouldBe true
         root.wallClockTime.get > 1.5 shouldBe true
 
-        println(QueryLog.plotTimes(runtimes, seconds = true))
         nodes
     }
     tasks.util.openFileInputStream(QueryLogTest.file) { inputStream =>
