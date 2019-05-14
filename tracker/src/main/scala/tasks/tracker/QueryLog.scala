@@ -170,9 +170,11 @@ object QueryLog {
 
       val edgesNotIntroducingCycles =
         candidateDataChildren.filterNot { ch =>
-          val allDirectDependencies = children(ch).toSet
-
-          allDirectDependencies.contains(node.id)
+          children.get(ch) match {
+            case None => true
+            case Some(allDirectDependencies) =>
+              allDirectDependencies.toSet.contains(node.id)
+          }
         }
 
       node.copy(dataChildren = edgesNotIntroducingCycles)
