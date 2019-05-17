@@ -325,6 +325,15 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
       log.info(
         "Requeued " + msgs.size + " messages. Queue size: " + updated.queuedTasks.keys.size)
 
+      val negotiatingWithStoppedLauncher = state.negotiation.exists {
+        case (negotiatingLauncher, _) =>
+          (negotiatingLauncher: LauncherActor) == (launcher: LauncherActor)
+      }
+      if (negotiatingWithStoppedLauncher) {
+        log.error(
+          "Launcher stopped during negotiation phase. Automatic recovery from this is not implemented. The scheduler is deadlocked and it should be restarted.")
+      }
+
     case Ping =>
       sender ! Pong
 
