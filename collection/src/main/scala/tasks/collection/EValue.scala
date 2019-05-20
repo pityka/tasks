@@ -5,6 +5,7 @@ import tasks._
 import akka.stream.scaladsl._
 import akka.util.ByteString
 import scala.concurrent.Future
+import com.typesafe.scalalogging.StrictLogging
 
 case class EValue[T](data: SharedFile) extends ResultWithSharedFiles(data) {
   def basename: String =
@@ -14,8 +15,13 @@ case class EValue[T](data: SharedFile) extends ResultWithSharedFiles(data) {
           tsc: TaskSystemComponents): Future[T] =
     data.source
       .runFold(ByteString())(_ ++ _)(tsc.actorMaterializer)
-      .map(bs => decoder(bs.toArray).right.get)(
-        tsc.actorMaterializer.executionContext)
+      .map { bs =>
+        val decoded = decoder(bs.toArray)
+        decoded.left.foreach { error =>
+          EValue.log.error(s"Can't deserialize $data. $error")
+        }
+        decoded.right.get
+      }(tsc.actorMaterializer.executionContext)
 
   def source(implicit decoder: Deserializer[T],
              tsc: TaskSystemComponents): Source[T, _] =
@@ -23,7 +29,10 @@ case class EValue[T](data: SharedFile) extends ResultWithSharedFiles(data) {
 
 }
 
-object EValue {
+object EValue extends StrictLogging {
+
+  def log = logger
+
   def getByName[T](name: String)(
       implicit
       tsc: TaskSystemComponents): Future[Option[EValue[T]]] =
