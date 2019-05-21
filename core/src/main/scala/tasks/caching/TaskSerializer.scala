@@ -63,7 +63,7 @@ trait TaskSerializer {
         .right
         .get
 
-    val mutableFiles = map.apply("mutableFiles") match {
+    val mutableFiles = map.apply("mutablefiles") match {
       case None => None
       case Some(js) =>
         Some(
