@@ -61,9 +61,9 @@ case class SharedFile(
     hash: Int
 ) extends HasSharedFiles {
 
-  def mutableFiles = Nil
+  private[tasks] def mutableFiles = Nil
 
-  def files = List(this)
+  private[tasks] def immutableFiles = List(this)
 
   override def toString =
     s"SharedFile($path, size=$byteSize, hash=$hash)"

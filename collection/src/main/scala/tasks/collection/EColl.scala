@@ -7,7 +7,7 @@ import akka.stream.scaladsl._
 import akka.util.ByteString
 
 case class EColl[T](partitions: List[SharedFile], length: Long)
-    extends ResultWithSharedFiles(partitions: _*) {
+    extends WithSharedFiles(partitions) {
 
   def basename: String =
     partitions.head.name.split(".part\\.").dropRight(1).mkString(".part.")

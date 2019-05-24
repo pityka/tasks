@@ -37,7 +37,7 @@ package object queue {
     : Future[DependenciesAndRuntimeMetadata] = {
     val logs = ce.currentLogRecords
     if (ce.components.tasksConfig.trackDataFlow) {
-      val files = HasSharedFiles.files(deserializedInputData)
+      val files = HasSharedFiles.allFiles(deserializedInputData)
       for {
         histories <- Future.traverse(files.toSeq)(_.history)
       } yield DependenciesAndRuntimeMetadata(histories, logs)

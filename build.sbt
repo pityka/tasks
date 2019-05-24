@@ -2,7 +2,7 @@ import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.12.8",
-  version := "0.0.54",
+  version := "0.0.55",
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.

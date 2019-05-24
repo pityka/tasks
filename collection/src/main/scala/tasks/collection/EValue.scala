@@ -7,7 +7,7 @@ import akka.util.ByteString
 import scala.concurrent.Future
 import com.typesafe.scalalogging.StrictLogging
 
-case class EValue[T](data: SharedFile) extends ResultWithSharedFiles(data) {
+case class EValue[T](data: SharedFile) extends WithSharedFiles() {
   def basename: String =
     data.name
 

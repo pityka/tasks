@@ -32,39 +32,56 @@ import tasks.shared.{Priority, Labels}
 import scala.concurrent._
 
 trait HasSharedFiles extends Product {
-  def files: Seq[SharedFile]
-  def mutableFiles: Seq[SharedFile]
+  private[tasks] def immutableFiles: Seq[SharedFile]
+  private[tasks] def mutableFiles: Seq[SharedFile]
+  private[tasks] def allFiles: Seq[SharedFile] = immutableFiles ++ mutableFiles
 }
 
 object HasSharedFiles {
-  def files(r: Any): Set[SharedFile] = r match {
-    case hasSharedFiles: HasSharedFiles =>
-      hasSharedFiles.files.toSet ++ hasSharedFiles.productIterator
-        .flatMap(member => files(member))
-        .toSet
-    case _ => Set()
+  def allFiles(r: Any): Set[SharedFile] = recurse(r)(_.allFiles).toSet
+
+  private[tasks] def recurse(a: Any)(
+      f: HasSharedFiles => Seq[SharedFile]): Seq[SharedFile] = a match {
+    case t: HasSharedFiles => f(t)
+    case t: Traversable[_] => t.flatMap(r => recurse(r)(f)).toSeq
+    case t: Product        => t.productIterator.flatMap(r => recurse(r)(f)).toSeq
+    case _                 => Nil
   }
+
 }
 
-abstract class ResultWithSharedFiles(sf: SharedFile*)
+/* Marker trait for case classes with SharedFile members
+ *
+ * Discovered SharedFile members are verified after the object is recovered from the cache.
+ * Discovered SharedFile members are also used to trace data dependencies between tasks.
+ *
+ * Classes extending this abstract class have to list all their members as follows.
+ * - `mutables` argument list forces all files listed there to be treated as mutable
+ * - non autodiscoverable HasSharedFiles should be listed in `members`
+ * - direct members, instances of Traversable or Product are automatically discovered
+ *   with simple runtime type checks (without reflection)
+ *
+ * See the WithSharedFilesTestSuite.scala for examples
+ */
+abstract class WithSharedFiles(members: Seq[Any] = Nil,
+                               mutables: Seq[Any] = Nil)
     extends Product
     with HasSharedFiles {
-  def files = sf
-  def mutableFiles: Seq[SharedFile] = Nil
-}
 
-abstract class WithSharedFiles(sf: SharedFile*)
-    extends Product
-    with HasSharedFiles {
-  def files = sf
-  def mutableFiles: Seq[SharedFile] = Nil
-}
-abstract class WithMutableSharedFiles(mutables: Seq[SharedFile],
-                                      immutables: Seq[SharedFile])
-    extends Product
-    with HasSharedFiles {
-  def files = immutables
-  def mutableFiles = mutables
+  import HasSharedFiles.recurse
+
+  private[tasks] def immutableFiles = {
+    val mutables = mutableFiles.toSet
+    (members
+      .flatMap(m => recurse(m)(_.immutableFiles)) ++ this.productIterator
+      .flatMap(p => recurse(p)(_.immutableFiles))).distinct.filterNot(mutables)
+  }
+
+  private[tasks] def mutableFiles =
+    (members
+      .flatMap(m => recurse(m)(_.mutableFiles)) ++ this.productIterator.flatMap(
+      p => recurse(p)(_.mutableFiles)) ++ mutables.flatMap(m =>
+      recurse(m)(_.allFiles))).distinct
 }
 
 trait HasPersistent[+A] extends Serializable { self: A =>

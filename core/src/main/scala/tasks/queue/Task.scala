@@ -118,25 +118,15 @@ object UntypedResultWithMetadata {
 
 object UntypedResult {
 
-  private def files(r: Any): Set[SharedFile] = r match {
-    case resultWithSharedFiles: HasSharedFiles =>
-      resultWithSharedFiles.files.toSet ++ resultWithSharedFiles.productIterator
-        .flatMap(member => files(member))
-        .toSet
-    case _ => Set()
-  }
+  private def immutableFiles(r: Any): Set[SharedFile] =
+    HasSharedFiles.recurse(r)(_.immutableFiles).toSet
 
-  private def mutableFiles(r: Any): Set[SharedFile] = r match {
-    case resultWithSharedFiles: HasSharedFiles =>
-      resultWithSharedFiles.mutableFiles.toSet ++ resultWithSharedFiles.productIterator
-        .flatMap(member => mutableFiles(member))
-        .toSet
-    case _ => Set()
-  }
+  private def mutableFiles(r: Any): Set[SharedFile] =
+    HasSharedFiles.recurse(r)(_.mutableFiles).toSet
 
   def make[A](r: A)(implicit ser: Serializer[A]): UntypedResult = {
     val mut = mutableFiles(r)
-    val immut = files(r) &~ mut
+    val immut = immutableFiles(r) &~ mut
     val m = if (mut.isEmpty) None else Some(mut)
     UntypedResult(immut, Base64DataHelpers(ser(r)), m)
   }

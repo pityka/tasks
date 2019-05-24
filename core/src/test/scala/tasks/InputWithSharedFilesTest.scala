@@ -59,7 +59,6 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
   }
 
   case class Input3(t1: SharedFile, t2: SharedFile, t3: SharedFile)
-      extends WithSharedFiles(t1, t2, t3)
 
   object Input3 {
     import io.circe.generic.semiauto._
@@ -100,7 +99,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
   }
 
   case class MutableResult(sf: SharedFile)
-      extends WithMutableSharedFiles(mutables = List(sf), immutables = Nil)
+      extends WithSharedFiles(mutables = List(sf))
 
   object MutableResult {
     import io.circe.generic.semiauto._
