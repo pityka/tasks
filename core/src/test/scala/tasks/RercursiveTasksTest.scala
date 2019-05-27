@@ -65,7 +65,7 @@ object RercursiveTasksTest {
             releaseResources
             for {
               r1 <- f1
-              r2 <- f2
+              r2 = f2.awaitIndefinitely
             } yield FibOut(r1.n + r2.n)
           }
 

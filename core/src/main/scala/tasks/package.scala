@@ -111,6 +111,23 @@ package object tasks {
 
   implicit def log(implicit component: ComputationEnvironment) = component.log
 
+  implicit class AwaitableFuture[T](future: Future[T]) {
+    /* Await for a future indefinitely from inside a task
+     *
+     * This is a convenience method for having less Future chaining in task code
+     * As the number of concurrently executed task is relatively low and each
+     * task receives its own threadpool with at least one thread, the implementor
+     * of the task can freely decide to block the thread executing the task.
+     *
+     * To make this safe the following method is provided which only compiles from
+     * a task body.
+     */
+    def awaitIndefinitely(implicit ce: ComputationEnvironment) = {
+      val _ = ce // suppressing unused warning
+      Await.result(future, atMost = scala.concurrent.duration.Duration.Inf)
+    }
+  }
+
   def audit(data: String)(implicit component: ComputationEnvironment) =
     component.appendLog(LogRecord(data, java.time.Instant.now))
 
