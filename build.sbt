@@ -2,7 +2,7 @@ import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.12.8",
-  version := "0.0.59",
+  version := "0.0.60-SNAPSHOT",
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -211,8 +211,10 @@ lazy val jsoniter = project
   .settings(commonSettings: _*)
   .settings(
     name := "tasks-jsoniter",
-    libraryDependencies +=
-      "com.github.plokhotnyuk.jsoniter-scala" %% "macros" % "0.23.0"
+    libraryDependencies ++= Seq(
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % "0.50.0" % Compile,
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "0.50.0" % Provided
+    )
   )
   .dependsOn(core)
 

@@ -72,7 +72,8 @@ object ResultWithSharedFilesTest extends TestHelpers {
                     collectionMut: Seq[IntermediateMutable],
                     option1: Option[SharedFile],
                     option2: Option[Intermediate],
-                    mut2: IntermediateMutable)
+                    mut2: IntermediateMutable,
+                    map: Map[String, Intermediate])
       extends WithSharedFiles(members = List(collection3.sf),
                               mutables = List(mut, mut2, collection3Mut))
 
@@ -103,7 +104,7 @@ object ResultWithSharedFilesTest extends TestHelpers {
         SharedFile(source, "f15"),
         SharedFile(source, "f16"),
         SharedFile(source, "f17"),
-        SharedFile(source, "f18"),
+        SharedFile(source, "f18")
       )
 
       for {
@@ -123,7 +124,8 @@ object ResultWithSharedFilesTest extends TestHelpers {
           Seq(IntermediateMutable(l(9), Some(l(10)))),
           Some(l(11)),
           Some(Intermediate(l(12))),
-          IntermediateMutable(l(13), Some(l(14)))
+          IntermediateMutable(l(13), Some(l(14))),
+          Map("1" -> Intermediate(l(17)))
         )
   }
 
@@ -162,7 +164,7 @@ class WithSharedFilesTestSuite extends FunSuite with Matchers {
   test("task output <: ResultWithSharedFiles should be cached ") {
     val (t1Files, t2Files, t1MutablesFiles, t1ImmutablesFiles) =
       ResultWithSharedFilesTest.run.get
-    t1Files.distinct.size shouldBe 17
+    t1Files.distinct.size shouldBe 18
     (t1Files zip t2Files) foreach {
       case (f1, f2) =>
         f1 shouldBe f2
@@ -176,6 +178,7 @@ class WithSharedFilesTestSuite extends FunSuite with Matchers {
                                           "f12",
                                           "f13",
                                           "f17",
+                                          "f18",
                                           "f2",
                                           "f4",
                                           "f5",
