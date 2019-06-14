@@ -25,7 +25,6 @@
 package example
 
 import tasks._
-import tasks.collection._
 import tasks.circesupport._
 
 import scala.concurrent._
@@ -148,33 +147,10 @@ object Fib {
 
 }
 
-// object Twice {
-//   val twice = MacroPlay.map((_: Int) * 3)
-// }
-
 object PiApp extends App {
 
   import PiTasks._
   import Fib._
-
-  val twice =
-    EColl.map("twice", 1)((_: Int) * 3)
-
-  val odd = EColl.filter("odd", 1)((_: Int) % 1 == 0)
-
-  val sort = EColl.sortBy("sortByToString", 1)(10, (_: Int).toString)
-
-  val group = EColl.groupBy("groupByToConstant", 1)(10, (_: Int) => "a", None)
-
-  val join =
-    EColl.outerJoinBy("outerjoinByToString", 1)(10, (_: Int).toString, None)
-
-  val count =
-    EColl.fold("count", 1)((_: Int) => "fold")(
-      (b: Int) => _ => Future.successful(b),
-      (x: Int, _: Seq[Option[Int]]) => x + 1)
-
-  val sum = EColl.reduce("sum", 1)((x: Int, y: Int) => x + y)
 
   /**
     *Opens and closes a TaskSystem with default configuration
@@ -215,20 +191,6 @@ object PiApp extends App {
     /* Block and wait for the futures */
     println(Await.result(pi, atMost = 10 minutes))
     println(Await.result(fibResult, atMost = 10 minutes))
-
-    val mappedEColl = for {
-      e1 <- EColl.fromSource(akka.stream.scaladsl.Source(List(3, 2, 1)),
-                             name = "ecollint")
-      e2 <- twice(e1)(ResourceRequest(1, 1, 1))
-      e3 <- odd(e2)(ResourceRequest(1, 1, 1))
-      e4 <- sort(e3)(ResourceRequest(1, 1, 1))
-      _ <- group(e4)(ResourceRequest(1, 1, 1))
-      e6 <- join(List(e1, e2, e3))(ResourceRequest(1, 1, 1))
-      _ <- count(e6 -> 0)(ResourceRequest(1, 1, 1))
-      e8 <- sum(e4)(ResourceRequest(1, 1, 1))
-    } yield e8
-
-    println(Await.result(mappedEColl, atMost = 10 minutes))
 
   }
 

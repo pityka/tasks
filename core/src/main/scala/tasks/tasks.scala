@@ -88,20 +88,90 @@ trait HasPersistent[+A] extends Serializable { self: A =>
   def persistent: A
 }
 
-class TaskDefinition[A: Serializer, B: Deserializer](val computation: CompFun2,
-                                                     val taskId: TaskId) {
+case class UntypedTaskDefinition[A, C](
+    rs: Spore[Unit, Deserializer[A]],
+    ws: Spore[Unit, Serializer[C]],
+    fs: Spore[A, ComputationEnvironment => Future[C]]) {
 
-  def apply(a: A)(resource: ResourceRequest,
-                  priorityBase: Priority = Priority(0),
-                  labels: Labels = Labels.empty)(
-      implicit components: TaskSystemComponents): Future[B] =
-    tasks.queue
-      .newTask[B, A](
-        a,
-        resource,
-        computation,
-        taskId,
-        Priority(priorityBase.toInt + components.priority.toInt + 1),
-        components.labels ++ labels)
+  def apply(j: Base64Data) =
+    (ce: ComputationEnvironment) => {
+      val r = rs(())
+      val w = ws(())
+
+      val deserializedInputData =
+        r(Base64DataHelpers.toBytes(j)) match {
+          case Right(value) => value
+          case Left(error) =>
+            val logMessage =
+              s"Could not deserialize input. Error: $error. Raw data (as utf8): ${new String(
+                Base64DataHelpers.toBytes(j))}"
+            ce.log.error(logMessage)
+            throw new RuntimeException(logMessage)
+        }
+      fs(deserializedInputData)(ce).flatMap { result =>
+        tasks.queue
+          .extractDataDependencies(deserializedInputData)(ce)
+          .map { meta =>
+            (UntypedResult.make(result)(w), meta)
+          }(ce.executionContext)
+      }(ce.executionContext)
+    }
+
+}
+
+case class TaskDefinition[A: Serializer, B: Deserializer](
+    rs: Spore[Unit, Deserializer[A]],
+    ws: Spore[Unit, Serializer[B]],
+    fs: Spore[A, ComputationEnvironment => Future[B]],
+    taskId: TaskId
+) {
+
+  def writer1 = implicitly[Serializer[A]]
+  def reader2 = implicitly[Deserializer[B]]
+
+  def apply(a: A)(
+      resource: ResourceRequest,
+      priorityBase: Priority = Priority(0),
+      labels: Labels = Labels.empty
+  )(implicit components: TaskSystemComponents): Future[B] = {
+    implicit val queue = components.queue
+    implicit val fileService = components.fs
+    implicit val cache = components.cache
+    implicit val context = components.actorsystem
+    implicit val prefix = components.filePrefix
+
+    import akka.actor.Props
+
+    val taskId1 = taskId
+
+    val promise = Promise[B]
+
+    context.actorOf(
+      Props(
+        new ProxyTask[A, B](
+          taskId = taskId1,
+          inputDeserializer = rs,
+          outputSerializer = ws,
+          function = fs,
+          input = a,
+          writer = writer1,
+          reader = reader2,
+          resourceConsumed = resource,
+          queueActor = queue.actor,
+          fileServiceComponent = fileService,
+          fileServicePrefix = prefix,
+          cacheActor = cache.actor,
+          priority =
+            Priority(priorityBase.toInt + components.priority.toInt + 1),
+          promise = promise,
+          labels = components.labels ++ labels,
+          lineage = components.lineage
+        )
+      ).withDispatcher("proxytask-dispatcher")
+    )
+
+    promise.future
+
+  }
 
 }

@@ -41,8 +41,6 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
-import java.lang.Class
-
 import tasks.util._
 import tasks.util.config._
 import tasks.shared._
@@ -59,7 +57,9 @@ object Base64DataHelpers {
 
 case class ScheduleTask(
     description: TaskDescription,
-    taskImplementation: String,
+    inputDeserializer: Spore[AnyRef, AnyRef],
+    outputSerializer: Spore[AnyRef, AnyRef],
+    function: Spore[AnyRef, AnyRef],
     resource: VersionedResourceRequest,
     queueActor: ActorRef,
     fileServiceActor: ActorRef,
@@ -127,11 +127,9 @@ class Launcher(
     val taskActor = context.actorOf(
       Props(
         classOf[Task],
-        Class
-          .forName(scheduleTask.taskImplementation)
-          .asInstanceOf[java.lang.Class[_]]
-          .getConstructor()
-          .newInstance(),
+        scheduleTask.inputDeserializer,
+        scheduleTask.outputSerializer,
+        scheduleTask.function,
         self,
         scheduleTask.queueActor,
         FileServiceComponent(scheduleTask.fileServiceActor,

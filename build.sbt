@@ -2,7 +2,7 @@ import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.12.8",
-  version := "0.0.60-SNAPSHOT",
+  version := "0.1.1",
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -30,7 +30,7 @@ lazy val commonSettings = Seq(
     "-Xlint:unsound-match", // Pattern match may not be typesafe.
     "-Yno-adapted-args", // Do not adapt an argument list (either by inserting () or creating a tuple) to match the receiver.
     "-Ypartial-unification", // Enable partial unification in type constructor inference
-    "-Ywarn-dead-code", // Warn when dead code is identified.
+    // "-Ywarn-dead-code", // Warn when dead code is identified.
     "-Ywarn-extra-implicit", // Warn when more than one implicit parameter section is defined.
     "-Ywarn-inaccessible", // Warn about inaccessible types in method signatures.
     "-Ywarn-infer-any", // Warn when a type argument is inferred to be `Any`.
@@ -47,8 +47,7 @@ lazy val commonSettings = Seq(
 ) ++ Seq(
   organization := "io.github.pityka",
   licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
-  publishTo := Some(
-    "whatever" at "http://10.6.38.2:31080/artifactory/internal-maven/"),
+  publishTo := sonatypePublishTo.value,
   pomExtra in Global := {
     <url>https://pityka.github.io/tasks/</url>
       <scm>
@@ -68,15 +67,19 @@ lazy val commonSettings = Seq(
   cancelable in Global := true
 )
 
+lazy val circeVersion = "0.11.1"
+lazy val jsoniterVersion = "0.51.4"
+lazy val akkaVersion = "2.5.18"
+
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
   .crossType(sbtcrossproject.CrossPlugin.autoImport.CrossType.Pure)
   .in(file("shared"))
   .settings(
     name := "tasks-shared",
     libraryDependencies ++= Seq(
-      "io.circe" %% "circe-core" % "0.10.1",
-      "io.circe" %% "circe-generic" % "0.10.1",
-      "io.circe" %% "circe-parser" % "0.10.1"
+      "io.circe" %% "circe-core" % circeVersion,
+      "io.circe" %% "circe-generic" % circeVersion,
+      "io.circe" %% "circe-parser" % circeVersion
     )
   )
   .settings(commonSettings: _*)
@@ -88,6 +91,18 @@ lazy val sharedJS = shared.js
 
 resolvers += Resolver.jcenterRepo
 
+lazy val spores = project
+  .in(file("spores"))
+  .settings(commonSettings: _*)
+  .settings(
+    name := "tasks-spores",
+    libraryDependencies ++= Seq(
+      "org.scala-lang" % "scala-reflect" % scalaVersion.value,
+      "io.circe" %% "circe-core" % circeVersion,
+      "io.circe" %% "circe-generic" % circeVersion,
+      "io.circe" %% "circe-parser" % circeVersion
+    )
+  )
 lazy val core = project
   .in(file("core"))
   .settings(commonSettings: _*)
@@ -99,9 +114,9 @@ lazy val core = project
     ),
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "22.0",
-      "com.typesafe.akka" %% "akka-actor" % "2.5.18",
-      "com.typesafe.akka" %% "akka-remote" % "2.5.18",
-      "com.typesafe.akka" %% "akka-testkit" % "2.5.18" % "test",
+      "com.typesafe.akka" %% "akka-actor" % akkaVersion,
+      "com.typesafe.akka" %% "akka-remote" % akkaVersion,
+      "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe.akka" %% "akka-http-core" % "10.1.1",
       "com.typesafe" % "config" % "1.3.3",
       "io.github.pityka" %% "selfpackage" % "1.2.3",
@@ -112,7 +127,7 @@ lazy val core = project
       "org.scala-lang" % "scala-reflect" % scalaVersion.value
     )
   )
-  .dependsOn(sharedJVM)
+  .dependsOn(sharedJVM, spores)
 
 lazy val ec2 = project
   .in(file("ec2"))
@@ -177,9 +192,9 @@ lazy val uifrontend = project
     libraryDependencies ++= Seq(
       "com.lihaoyi" %%% "scalatags" % "0.6.7",
       "org.scala-js" %%% "scalajs-dom" % "0.9.5",
-      "io.circe" %%% "circe-core" % "0.10.1",
-      "io.circe" %%% "circe-parser" % "0.10.1",
-      "io.circe" %%% "circe-generic" % "0.10.1",
+      "io.circe" %%% "circe-core" % circeVersion,
+      "io.circe" %%% "circe-parser" % circeVersion,
+      "io.circe" %%% "circe-generic" % circeVersion,
       "net.pishen" %%% "akka-ui" % "0.1.1"
     ),
     fork := false
@@ -190,11 +205,12 @@ lazy val uifrontend = project
 lazy val example = project
   .in(file("example"))
   .settings(commonSettings: _*)
-  .dependsOn(core, collection, ssh)
+  .dependsOn(core, ecoll, ssh)
   .enablePlugins(JavaAppPackaging)
   .settings(
     executableScriptName := "entrypoint",
-    topLevelDirectory := None
+    topLevelDirectory := None,
+    publishArtifact := false
   )
 
 lazy val upicklesupport = project
@@ -212,20 +228,23 @@ lazy val jsoniter = project
   .settings(
     name := "tasks-jsoniter",
     libraryDependencies ++= Seq(
-      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % "0.50.0" % Compile,
-      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "0.50.0" % Provided
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % jsoniterVersion % Compile,
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % Provided,
+      "org.scalatest" %% "scalatest" % "3.0.0" % "test"
     )
   )
   .dependsOn(core)
 
-lazy val collection = project
+lazy val ecoll = project
   .in(file("collection"))
   .settings(commonSettings: _*)
   .settings(
-    name := "tasks-collection",
+    name := "tasks-ecoll",
     libraryDependencies ++= Seq(
-      "io.github.pityka" %% "flatjoin-akka-stream" % "0.0.12",
-      "org.scalatest" %% "scalatest" % "3.0.0" % "test")
+      "io.github.pityka" %% "flatjoin-akka-stream" % "0.0.13",
+      "io.github.pityka" %% "lame-bgzip-index" % "0.0.1",
+      "org.scalatest" %% "scalatest" % "3.0.0" % "test"
+    )
   )
   .dependsOn(core)
 
@@ -234,8 +253,9 @@ lazy val root = (project in file("."))
   .settings(
     publishArtifact := false
   )
-  .aggregate(core,
-             collection,
+  .aggregate(spores,
+             core,
+             ecoll,
              upicklesupport,
              jsoniter,
              sharedJVM,

@@ -1,8 +1,8 @@
-package tasks.collection
+package tasks.ecoll
 
 import tasks.queue._
 import tasks._
-import tasks.util.AkkaStreamComponents
+import tasks.util.rightOrThrow
 import akka.stream.scaladsl._
 import akka.util.ByteString
 import scala.concurrent.ExecutionContext
@@ -10,27 +10,36 @@ import scala.concurrent.ExecutionContext
 trait Framing { self: Constants =>
   def decodeFrame =
     Flow[ByteString]
-      .via(AkkaStreamComponents
-        .strictBatchWeighted[ByteString](BufferSize, _.size.toLong)(_ ++ _))
-      .via(Compression.gunzip())
-      .via(AkkaStreamComponents.delimiter(Eol.head,
-                                          maximumFrameLength = Int.MaxValue))
+      .via(
+        lame.Framing.delimiter(Eol.head,
+                               maximumFrameLength = Int.MaxValue,
+                               allowTruncation = true))
 
-  def decodeFileForFlatJoin[T](decoder: Deserializer[T],
-                               stringKey: flatjoin.StringKey[T],
-                               parallelism: Int)(file: java.io.File)(
-      implicit ec: ExecutionContext): Source[(String, ByteString), _] =
-    FileIO
-      .fromPath(file.toPath)
+  def decodeFileForFlatJoin[T](
+      decoder: Deserializer[T],
+      stringKey: flatjoin.StringKey[T],
+      parallelism: Int
+  )(
+      ecoll: SharedFile
+  )(
+      implicit ec: ExecutionContext,
+      tsc: TaskSystemComponents
+  ): Source[(String, T), _] =
+    lame.BlockGunzip
+      .sourceFromFactory(virtualFilePointer = 0L, customInflater = None) { _ =>
+        ecoll.source
+      }
       .via(decodeFrame)
       .via(
-        AkkaStreamComponents
-          .parallelize[ByteString, (String, ByteString)](parallelism,
-                                                         ElemBufferSize) {
-            line =>
-              val t = decoder.apply(line.toArray).right.get
-              val k = stringKey.key(t)
-              List((k, line))
-          })
+        lame.Parallel
+          .mapAsync[ByteString, (String, T)](
+            parallelism,
+            ElemBufferSize
+          ) { line =>
+            val t = rightOrThrow(decoder.apply(line.toArray))
+            val k = stringKey.key(t)
+            (k, t)
+          }
+      )
 
 }

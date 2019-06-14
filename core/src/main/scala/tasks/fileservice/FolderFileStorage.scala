@@ -27,7 +27,6 @@
 
 package tasks.fileservice
 
-import akka.stream._
 import scala.concurrent.{Future, ExecutionContext}
 import java.io.File
 import tasks.util._
@@ -150,8 +149,13 @@ class FolderFileStorage(val basePath: File)(implicit
 
     }
 
-  def createSource(path: ManagedFilePath): Source[ByteString, _] =
-    FileIO.fromPath(assemblePath(path).toPath, chunkSize = 8192)
+  def createSource(path: ManagedFilePath,
+                   fromOffset: Long): Source[ByteString, _] =
+    Source.lazily(
+      () =>
+        FileIO.fromPath(assemblePath(path).toPath,
+                        chunkSize = 8192,
+                        startPosition = fromOffset))
 
   def exportFile(path: ManagedFilePath): Future[File] = {
     val file = assemblePath(path)
@@ -212,15 +216,35 @@ class FolderFileStorage(val basePath: File)(implicit
         File.separator) + str)
   }
 
-  def importSource(s: Source[ByteString, _], path: ProposedManagedFilePath)(
-      implicit mat: Materializer): Future[(Long, Int, ManagedFilePath)] = {
-    val tmp = TempFile.createTempFile("foldertmp")
-    s.runWith(FileIO.toPath(tmp.toPath)).flatMap { _ =>
-      val r = importFile(tmp, path)
-      tmp.delete
-      r.map(x => (x._1, x._2, x._4))
+  def sink(path: ProposedManagedFilePath)
+    : Sink[ByteString, Future[(Long, Int, ManagedFilePath)]] = {
+    val createSink = () => {
+      val tmp = TempFile.createTempFile("foldertmp")
+      Future.successful(
+        FileIO
+          .toPath(tmp.toPath)
+          .mapMaterializedValue(_.flatMap { ioResult =>
+            if (ioResult.wasSuccessful) {
+              val r = importFile(tmp, path)
+              tmp.delete
+              r.map(x => (x._1, x._2, x._4))
+            } else {
+              throw ioResult.status.failed.get
+            }
+          }))
     }
 
+    Sink
+      .lazyInitAsync(createSink)
+      .mapMaterializedValue(_.flatMap {
+        case None =>
+          // empty file, upstream terminated without emitting an element
+          val tmp = TempFile.createTempFile("foldertmp")
+          val r = importFile(tmp, path)
+          tmp.delete
+          r.map(x => (x._1, x._2, x._4))
+        case Some(value) => value
+      })
   }
 
   private def checkContentEquality(file1: File, file2: File) =

@@ -242,4 +242,10 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   def trackDataFlow = raw.getBoolean("tasks.queue.trackDataFlow")
 
+  val saveTaskDescriptionInCache =
+    raw.getBoolean("tasks.cache.saveTaskDescription")
+
+  val writeFileHistories =
+    raw.getBoolean("tasks.fileservice.writeFileHistories")
+
 }

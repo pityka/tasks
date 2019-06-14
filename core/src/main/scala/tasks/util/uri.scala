@@ -31,7 +31,7 @@ case class Uri(uri: String) {
   def akka = AUri(uri)
   def jUri = new java.net.URI(uri)
   override def toString = uri
-  def scheme = jUri.getScheme
+  def scheme = if (jUri.getScheme == null) "file" else jUri.getScheme
   def authority = jUri.getAuthority
   def path = jUri.getPath
 }

@@ -45,7 +45,6 @@ import tasks.fileservice.{
 
 private[tasks] class SharedFileCache(
     implicit fileServiceComponent: FileServiceComponent,
-    nodeLocalCacheActor: NodeLocalCacheActor,
     AS: ActorSystem,
     EC: ExecutionContext,
     MAT: Materializer,
@@ -72,7 +71,7 @@ private[tasks] class SharedFileCache(
           Future.successful(None)
         case Some(sf) =>
           SharedFileHelper
-            .getSourceToFile(sf)
+            .getSourceToFile(sf, fromOffset = 0L)
             .runFold(ByteString.empty)(_ ++ _)
             .map { byteString =>
               val t = Try(deserializeResult(byteString.toArray))
@@ -104,9 +103,11 @@ private[tasks] class SharedFileCache(
         _ <- SharedFileHelper
           .createFromSource(Source.single(ByteString(value)),
                             name = "__meta__result__" + hash)
-        _ <- SharedFileHelper
-          .createFromSource(Source.single(ByteString(key)),
-                            name = "__meta__input__" + hash)
+        _ <- if (config.saveTaskDescriptionInCache)
+          SharedFileHelper
+            .createFromSource(Source.single(ByteString(key)),
+                              name = "__meta__input__" + hash)
+        else Future.successful(())
       } yield ()
 
     } catch {

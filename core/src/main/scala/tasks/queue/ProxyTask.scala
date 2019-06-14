@@ -33,12 +33,14 @@ import tasks.fileservice._
 import tasks.shared._
 import tasks._
 import tasks.wire._
-import scala.concurrent.Promise
+import scala.concurrent.{Promise, Future}
 
 /* Local proxy of the remotely executed task */
 class ProxyTask[Input, Output](
     taskId: TaskId,
-    runTaskClass: java.lang.Class[_ <: CompFun2],
+    inputDeserializer: Spore[Unit, Deserializer[Input]],
+    outputSerializer: Spore[Unit, Serializer[Output]],
+    function: Spore[Input, ComputationEnvironment => Future[Output]],
     input: Input,
     writer: Serializer[Input],
     reader: Deserializer[Output],
@@ -73,7 +75,9 @@ class ProxyTask[Input, Output](
       TaskDescription(taskId,
                       Base64DataHelpers(writer(input)),
                       persisted.map(x => Base64DataHelpers(writer(x)))),
-      runTaskClass.getName,
+      inputDeserializer.as[AnyRef, AnyRef],
+      outputSerializer.as[AnyRef, AnyRef],
+      function.as[AnyRef, AnyRef],
       resourceConsumed,
       queueActor,
       fileServiceComponent.actor,

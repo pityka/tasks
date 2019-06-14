@@ -1,8 +1,9 @@
-package tasks.collection
+package tasks.ecoll
 
 import flatjoin._
 import tasks.queue._
 import java.nio._
+import tasks.util.rightOrThrow
 
 trait FlatjoinSupport {
 
@@ -14,7 +15,7 @@ trait FlatjoinSupport {
       while (ba.hasRemaining) {
         ba.put(bb.get)
       }
-      implicitly[Deserializer[T]].apply(ba.array).right.get
+      rightOrThrow(implicitly[Deserializer[T]].apply(ba.array))
     }
   }
 }

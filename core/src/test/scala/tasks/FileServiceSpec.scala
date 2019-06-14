@@ -87,6 +87,64 @@ class FileServiceSpec
   implicit val prefix = FileServicePrefix(Vector())
 
   describe("fileservice new file folderstorage ") {
+    it("add new empty file from source") {
+      val data = Array[Byte]()
+      val input = TempFile.createTempFile(".in")
+      writeBinaryToFile(input.getCanonicalPath, data)
+
+      val folder =
+        new File(new java.io.File(getClass.getResource("/").getPath),
+                 "test-empty-source")
+      folder.mkdir
+      val folder2 =
+        new File(new java.io.File(getClass.getResource("/").getPath),
+                 "test-empty-sourcef")
+      folder2.mkdir
+
+      val fs = new FolderFileStorage(folder)
+      val service = system.actorOf(
+        Props(
+          new FileService(
+            fs
+          )))
+      implicit val serviceimpl =
+        FileServiceComponent(service, Some(fs), remoteStore)
+      implicit val historyContext = tasks.fileservice.NoHistory
+      SharedFileHelper.createFromSource(
+        akka.stream.scaladsl.Source(List.empty[akka.util.ByteString]),
+        "proba")
+
+      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
+        data.deep)
+    }
+    it("add new empty file") {
+      val data = Array[Byte]()
+      val input = TempFile.createTempFile(".in")
+      writeBinaryToFile(input.getCanonicalPath, data)
+
+      val folder =
+        new File(new java.io.File(getClass.getResource("/").getPath), "test1")
+      folder.mkdir
+      val folder2 =
+        new File(new java.io.File(getClass.getResource("/").getPath), "test1f")
+      folder2.mkdir
+
+      val fs = new FolderFileStorage(folder)
+      val service = system.actorOf(
+        Props(
+          new FileService(
+            fs
+          )))
+      implicit val serviceimpl =
+        FileServiceComponent(service, Some(fs), remoteStore)
+      implicit val historyContext = tasks.fileservice.NoHistory
+      scala.concurrent.Await.result(
+        SharedFileHelper.createFromFile(input, "proba", false),
+        atMost = Duration.Inf)
+
+      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
+        data.deep)
+    }
     it("add new file") {
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
       val input = TempFile.createTempFile(".in")
@@ -98,8 +156,7 @@ class FileServiceSpec
       val folder2 =
         new File(new java.io.File(getClass.getResource("/").getPath), "test1f")
       folder2.mkdir
-      implicit val nlc =
-        NodeLocalCache.start
+
       val fs = new FolderFileStorage(folder)
       val service = system.actorOf(
         Props(
@@ -110,6 +167,36 @@ class FileServiceSpec
         FileServiceComponent(service, Some(fs), remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
       SharedFileHelper.createFromFile(input, "proba", false)
+
+      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
+        data.deep)
+    }
+    it("add new file - from source") {
+      val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
+      val input = TempFile.createTempFile(".in")
+      writeBinaryToFile(input.getCanonicalPath, data)
+
+      val folder =
+        new File(new java.io.File(getClass.getResource("/").getPath),
+                 "test1-from-source")
+      folder.mkdir
+      val folder2 =
+        new File(new java.io.File(getClass.getResource("/").getPath),
+                 "test1f-fro-source")
+      folder2.mkdir
+
+      val fs = new FolderFileStorage(folder)
+      val service = system.actorOf(
+        Props(
+          new FileService(
+            fs
+          )))
+      implicit val serviceimpl =
+        FileServiceComponent(service, Some(fs), remoteStore)
+      implicit val historyContext = tasks.fileservice.NoHistory
+      SharedFileHelper.createFromSource(
+        akka.stream.scaladsl.Source.single(akka.util.ByteString(data)),
+        "proba")
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
         data.deep)

@@ -41,7 +41,8 @@ import tasks.wire._
 
 class FileUserSource(sf: ManagedFilePath,
                      service: ActorRef,
-                     isLocal: java.io.File => Boolean)
+                     isLocal: java.io.File => Boolean,
+                     fromOffset: Long)
     extends AbstractFileUser[Source[ByteString, _]](sf, 0, 0, service, isLocal) {
 
   private var writeableChannel: Option[WritableByteChannel] = None
@@ -74,7 +75,8 @@ class FileUserSource(sf: ManagedFilePath,
 
   def finishLocalFile(f: File): Unit = {
     log.debug("Readable")
-    result = Some(Success(FileIO.fromPath(f.toPath)))
+    result = Some(Success(
+      FileIO.fromPath(f.toPath, chunkSize = 8192, startPosition = fromOffset)))
     finish
   }
 

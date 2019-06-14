@@ -1,4 +1,4 @@
-package tasks.collection
+package tasks.ecoll
 
 import akka.util.ByteString
 

@@ -177,7 +177,9 @@ case class ComputationEnvironment(
 }
 
 private class Task(
-    runTask: CompFun2,
+    inputDeserializer: Spore[AnyRef, AnyRef],
+    outputSerializer: Spore[AnyRef, AnyRef],
+    function: Spore[AnyRef, AnyRef],
     launcherActor: ActorRef,
     queueActor: ActorRef,
     fileServiceComponent: FileServiceComponent,
@@ -276,7 +278,15 @@ private class Task(
       log.debug(
         s"Starting task with computation environment $ce and with input data $input.")
 
-      Future(runTask(input)(ce))(executionContextOfTask)
+      Future {
+        val untyped =
+          UntypedTaskDefinition[AnyRef, AnyRef](
+            inputDeserializer.as[Unit, Deserializer[AnyRef]],
+            outputSerializer.as[Unit, Serializer[AnyRef]],
+            function.as[AnyRef, ComputationEnvironment => Future[AnyRef]]
+          )
+        untyped.apply(input)(ce)
+      }(executionContextOfTask)
         .flatMap(identity)(executionContextOfTask)
     } catch {
       case exception: Exception =>

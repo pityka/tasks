@@ -3,6 +3,7 @@ package tasks.wire
 import akka.serialization.Serializer
 import akka.actor.ExtendedActorSystem
 import tasks.queue.ScheduleTask
+import tasks.util.rightOrThrow
 
 class StaticMessageSerializer(system: ExtendedActorSystem) extends Serializer {
   import io.circe.Encoder
@@ -29,7 +30,8 @@ class StaticMessageSerializer(system: ExtendedActorSystem) extends Serializer {
 
   override def fromBinary(bytes: Array[Byte],
                           manifest: Option[Class[_]]): AnyRef = {
-    val r = io.circe.parser.decode[StaticMessage](new String(bytes)).right.get
+    val r = rightOrThrow(
+      io.circe.parser.decode[StaticMessage](new String(bytes)))
     log.debug(s"Decoding {} as {}", new String(bytes), r)
     r
   }
@@ -61,7 +63,8 @@ class ScheduleTaskSerializer(system: ExtendedActorSystem) extends Serializer {
 
   override def fromBinary(bytes: Array[Byte],
                           manifest: Option[Class[_]]): AnyRef = {
-    val r = io.circe.parser.decode[ScheduleTask](new String(bytes)).right.get
+    val r = rightOrThrow(
+      io.circe.parser.decode[ScheduleTask](new String(bytes)))
     log.debug(s"Decoding {} as {}", new String(bytes), r)
     r
   }

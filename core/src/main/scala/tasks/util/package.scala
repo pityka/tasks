@@ -293,4 +293,10 @@ package object util extends StrictLogging {
 
   }
 
+  def rightOrThrow[A, E](e: Either[E, A]): A = e match {
+    case Right(a)           => a
+    case Left(e: Throwable) => throw e
+    case Left(e)            => throw new RuntimeException(e.toString)
+  }
+
 }

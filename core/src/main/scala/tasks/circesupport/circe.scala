@@ -10,7 +10,7 @@ package object circesupport extends StrictLogging {
     new Serializer[A] {
       def apply(a: A) = printer.pretty(enc(a)).getBytes("UTF-8")
     }
-  implicit def deserielizer[A](implicit dec: Decoder[A]): Deserializer[A] =
+  implicit def deserializer[A](implicit dec: Decoder[A]): Deserializer[A] =
     new Deserializer[A] {
       def apply(b: Array[Byte]) =
         io.circe.parser.decode[A](new String(b)).left.map(_.toString)
@@ -21,4 +21,5 @@ package object circesupport extends StrictLogging {
 
   implicit val sharedFileEncoder =
     io.circe.generic.semiauto.deriveEncoder[tasks.fileservice.SharedFile]
+
 }

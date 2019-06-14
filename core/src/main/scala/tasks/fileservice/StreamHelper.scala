@@ -51,8 +51,11 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
     S3Location(bucket, key)
   }
 
-  private def createSourceHttp(uri: Uri): Source[ByteString, _] = {
-
+  private def createSourceHttp(uri: Uri,
+                               fromOffset: Long): Source[ByteString, _] = {
+    assert(
+      fromOffset == 0L,
+      "Seeking into http not implemented yet. Use Range request header or drop the stream to implement it.")
     val partSize = 5242880L * 10L
     val retries = 3
     val parallelism = 4
@@ -159,18 +162,24 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
 
   }
 
-  private def createSourceS3(uri: Uri): Source[ByteString, _] =
+  private def createSourceS3(uri: Uri,
+                             fromOffset: Long): Source[ByteString, _] = {
+    assert(
+      fromOffset == 0L,
+      "Seeking into S3 file not implemented. Use GetObjectMetaData.range to implement it.")
     s3stream.get.getData(s3Loc(uri), parallelism = 1)
-
-  private def createSourceFile(uri: Uri): Source[ByteString, _] = {
-    val file = new java.io.File(uri.path)
-    FileIO.fromPath(file.toPath, chunkSize = 8192)
   }
 
-  def createSource(uri: Uri) = uri.scheme match {
-    case "http" | "https" => createSourceHttp(uri)
-    case "s3"             => createSourceS3(uri)
-    case "file"           => createSourceFile(uri)
+  private def createSourceFile(uri: Uri,
+                               fromOffset: Long): Source[ByteString, _] = {
+    val file = new java.io.File(uri.path)
+    FileIO.fromPath(file.toPath, chunkSize = 8192, startPosition = fromOffset)
+  }
+
+  def createSource(uri: Uri, fromOffset: Long) = uri.scheme match {
+    case "http" | "https" => createSourceHttp(uri, fromOffset)
+    case "s3"             => createSourceS3(uri, fromOffset)
+    case "file"           => createSourceFile(uri, fromOffset)
   }
 
   private def getContentLengthAndETagHttp(

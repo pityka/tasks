@@ -1,157 +1,110 @@
-package tasks.collection
+package tasks.ecoll
 
 import tasks.queue._
 import tasks._
-import tasks.util.AkkaStreamComponents
 import akka.stream.scaladsl._
 import akka.util.ByteString
 import scala.concurrent.Future
-import java.io._
+import com.typesafe.scalalogging.StrictLogging
 
-trait FactoryMethods { self: Constants =>
+trait FactoryMethods extends StrictLogging { self: Constants =>
 
-  def fromSource[T](source: Source[T, _],
-                    name: String,
-                    partitionSize: Long = Long.MaxValue,
-                    parallelism: Int = 1)(
+  def concatenate[T](ecolls: Seq[EColl[T]], name: Option[String] = None)(
+      implicit tsc: TaskSystemComponents
+  ): Future[EColl[T]] = {
+    implicit val mat = tsc.actorMaterializer
+    implicit val ec = tsc.executionContext
+    val dataName = name.getOrElse(java.util.UUID.randomUUID.toString)
+    val indexName = dataName + ".bidx"
+    val source = ecolls.map(_.data.source).reduce(_ ++ _)
+    val dataFile = SharedFile(source, name = dataName)
+    val concatenatedIndex = for {
+      seq <- Future.traverse(ecolls) { ecoll =>
+        val dataLength = ecoll.data.byteSize
+        val index = ecoll.indexData.source.runFold(ByteString.empty)(_ ++ _)
+        index.map(i => (dataLength, i))
+      }
+      concatenated = lame.index.Index.concatenate(seq.iterator)
+      file <- SharedFile(Source.single(concatenated), indexName)
+    } yield file
+
+    for {
+      dataFile <- dataFile
+      concatenatedIndex <- concatenatedIndex
+    } yield EColl(dataFile, concatenatedIndex, name)
+  }
+
+  def fromSource[T](
+      source: Source[T, _],
+      name: Option[String] = None,
+      parallelism: Int = 1
+  )(
       implicit encoder: Serializer[T],
       tsc: TaskSystemComponents
   ): Future[EColl[T]] = {
     implicit val mat = tsc.actorMaterializer
+    source.runWith(sink[T](name, parallelism))
+  }
+
+  def sink[T](name: Option[String] = None, parallelism: Int = 1)(
+      implicit encoder: Serializer[T],
+      tsc: TaskSystemComponents
+  ): Sink[T, Future[EColl[T]]] = {
+    implicit val mat = tsc.actorMaterializer
     implicit val ec = mat.executionContext
 
-    def gzip(data: Array[Byte]) = {
-      val bos = new ByteArrayOutputStream(data.length)
-      val gzip = new java.util.zip.GZIPOutputStream(bos)
-      gzip.write(data);
-      gzip.close
-      val compressed = bos.toByteArray
-      bos.close()
-      compressed
-    }
-
-    val gzipPar = if (parallelism == 1) 1 else parallelism / 2
+    val gzipPar = 1 //if (parallelism == 1) 1 else parallelism / 2
     val encoderPar = if (parallelism == 1) 1 else parallelism - gzipPar
 
-    val gzipFlow =
-      if (gzipPar == 1)
-        Flow[ByteString].map(bs => ByteString(gzip(bs.toArray)))
-      else
-        Flow[ByteString].mapAsync(gzipPar)(bs =>
-          Future(ByteString(gzip(bs.toArray))))
-
-    val sink = {
-      val dedicatedDispatcher =
-        tsc.actorsystem.dispatchers.lookup("task-dedicated-io")
-
-      def createSharedFile(file: File, part: Int) =
-        SharedFile(file, name = name + ".part." + part, deleteFile = true)(
-          tsc.withChildPrefix(name + ".ecoll")).map(f => part -> f)
-
-      def write(os: OutputStream, bs: ByteString): Future[Unit] =
-        Future {
-          val ba = bs.toArray
-          os.write(ba, 0, ba.size)
-        }(dedicatedDispatcher)
-
-      val unbufferedSink = Sink
-        .foldAsync[(Long,
-                    Int,
-                    Option[(OutputStream, File)],
-                    List[Future[(Int, SharedFile)]]),
-                   ByteString]((partitionSize, -1, None, Nil)) {
-          case ((counter, partCount, os, files), elem) =>
-            if (elem.size >= partitionSize - counter) {
-              val f =
-                File.createTempFile("part_" + (partCount + 1) + "_", "part")
-              f.deleteOnExit
-
-              val currentOS = new java.io.FileOutputStream(f)
-              val closeFileAndStartUpload = Future(os.map {
-                case (os, file) =>
-                  os.close
-                  createSharedFile(file, partCount)
-              })(dedicatedDispatcher)
-
-              for {
-                sf <- closeFileAndStartUpload
-                _ <- write(currentOS, elem)
-              } yield {
-                (elem.size.toLong,
-                 partCount + 1,
-                 Some(currentOS -> f),
-                 sf.toList ::: files)
-              }
-            } else {
-              write(os.get._1, elem).map(_ =>
-                (elem.size.toLong + counter, partCount, os, files))
-            }
-        }
-        .mapMaterializedValue(foldedFuture =>
-          for {
-            (_, partCount, os, files) <- foldedFuture
-            lastPartition <- Future(os.map {
-              case (os, file) =>
-                os.close
-                createSharedFile(file, partCount)
-            })(dedicatedDispatcher)
-            partitions <- (Future
-              .sequence(lastPartition.toList ::: files))
-              .map(_.sortBy(_._1).map(_._2))
-          } yield partitions)
-
-      Flow[ByteString]
-        .via(AkkaStreamComponents
-          .strictBatchWeighted[ByteString](BufferSize, _.size.toLong)(_ ++ _))
-        .async
-        .toMat(unbufferedSink)(Keep.right)
-    }
-
     val encoderFlow =
-      AkkaStreamComponents
-        .parallelize[T, ByteString](encoderPar, ElemBufferSize)(elem =>
-          List(ByteString(encoder.apply(elem)) ++ Eol))
+      lame.Parallel
+        .mapAsync[T, ByteString](encoderPar, ElemBufferSize)(
+          elem => ByteString(encoder.apply(elem)) ++ Eol
+        )
 
-    var count = 0L
-    source
-      .map {
-        case elem =>
-          count += 1
-          elem
-      }
-      .via(encoderFlow)
-      .via(AkkaStreamComponents
-        .strictBatchWeighted[ByteString](BufferSize, _.size.toLong)(_ ++ _))
-      .via(gzipFlow)
-      .runWith(
-        sink
-          .mapMaterializedValue(
-            _.flatMap { sfs =>
-              EColl[T](sfs.toList, count).writeLength(name)
-            }
-          )
-      )
+    val dataFileName = name.getOrElse(java.util.UUID.randomUUID.toString)
+    val indexFileName = dataFileName + ".bidx"
+
+    val dataSink = SharedFile
+      .sink(dataFileName)
+      .getOrElse(throw new RuntimeException(
+        "No sink created because sinks without a centralized storage are not implemented. Use a centralized storage to support this."))
+    val indexSink = SharedFile
+      .sink(indexFileName)
+      .getOrElse(throw new RuntimeException(
+        "No sink created because sinks without a centralized storage are not implemented. Use a centralized storage to support this."))
+
+    val bgzipSink = lame.BlockGzip.sinkWithIndex(
+      dataSink,
+      indexSink,
+      compressionLevel = 1,
+      customDeflater = None
+    )
+
+    encoderFlow.toMat(bgzipSink)(Keep.right).mapMaterializedValue {
+      case (dataSF, indexSF) =>
+        for {
+          dataSF <- dataSF
+          indexSF <- indexSF
+        } yield EColl(dataSF, indexSF, name)
+
+    }
 
   }
 
-  def fromSourceAsPartition[T](source: Source[T, _], name: String, idx: Int)(
+  def single[T](t: T, name: Option[String] = None)(
       implicit encoder: Serializer[T],
-      tsc: TaskSystemComponents): Future[EColl[T]] = {
-    var count = 0L
-    val s2 =
-      source
-        .map { x =>
-          count += 1
-          x
-        }
-        .map(t => ByteString(encoder.apply(t)) ++ Eol)
-        .via(AkkaStreamComponents
-          .strictBatchWeighted[ByteString](512 * 1024, _.size.toLong)(_ ++ _))
-        .via(Compression.gzip)
+      tsc: TaskSystemComponents
+  ): Future[EColl[T]] =
+    fromSource(Source.single(t), name)
 
-    SharedFile(s2, name + ".part." + idx)(tsc.withChildPrefix(name + ".ecoll"))
-      .map(sf => EColl[T](sf :: Nil, count))(tsc.executionContext)
-
+  def fromIterator[T: Serializer](
+      it: Iterator[T],
+      name: Option[String] = None,
+      parallelism: Int = 1
+  )(implicit tsc: TaskSystemComponents) = {
+    val source = Source.fromIterator(() => it)
+    fromSource(source, name, parallelism)
   }
 
 }

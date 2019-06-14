@@ -26,10 +26,10 @@ package tasks.queue
 
 import scala.concurrent.Future
 
-object Macros {
+object TaskDefinitionMacros {
   import scala.reflect.macros.blackbox.Context
 
-  def asyncTaskDefinitionImpl[A: cxt.WeakTypeTag, C: cxt.WeakTypeTag](
+  def taskDefinitionFromTree[A: cxt.WeakTypeTag, C: cxt.WeakTypeTag](
       cxt: Context)(
       taskID: cxt.Expr[String],
       taskVersion: cxt.Expr[Int]
@@ -39,32 +39,15 @@ object Macros {
     import cxt.universe._
     val a = weakTypeOf[A]
     val c = weakTypeOf[C]
-    val h = {
-      // evaluates the tree. taskID should not depend on runtime values
-      val taskIDEval =
-        cxt.eval(cxt.Expr[String](cxt.untypecheck(taskID.tree.duplicate)))
-      TypeName(taskIDEval)
-    }
+    val name1 = cxt.freshName(TermName("task"))
+    val name2 = cxt.freshName(TermName("task"))
+    val name3 = cxt.freshName(TermName("task"))
 
-    val t =
-      tq"Function1[tasks.queue.Base64Data,Function1[tasks.queue.ComputationEnvironment,scala.concurrent.Future[(tasks.queue.UntypedResult,tasks.queue.DependenciesAndRuntimeMetadata)]]]"
     val r = q"""
-    class $h extends $t {
-      private[this] val r = implicitly[tasks.queue.Deserializer[$a]]
-      private[this] val w = implicitly[tasks.queue.Serializer[$c]]
-      private[this] val c = $comp
-      def apply(j:tasks.queue.Base64Data) =
-          (ce:tasks.queue.ComputationEnvironment) => {
-            val deserializedInputData = r(tasks.queue.Base64DataHelpers.toBytes(j)).right.get
-            c(deserializedInputData)(ce).flatMap{ result =>
-              tasks.queue.extractDataDependencies(deserializedInputData)(ce).map{ meta =>
-                (tasks.queue.UntypedResult.make(result)(w),meta)
-              }(ce.executionContext)
-            }(ce.executionContext)
-          }
-
-    }
-    new TaskDefinition[$a,$c](new $h,tasks.queue.TaskId($taskID,$taskVersion))
+      val $name1 = _root_.tasks.spore{() => implicitly[_root_.tasks.queue.Deserializer[$a]]}
+      val $name2 = _root_.tasks.spore{() => implicitly[_root_.tasks.queue.Serializer[$c]]}
+      val $name3 = _root_.tasks.spore{$comp}
+      _root_.tasks.TaskDefinition[$a,$c]($name1,$name2,$name3,_root_.tasks.queue.TaskId($taskID,$taskVersion))
     """
     r
   }

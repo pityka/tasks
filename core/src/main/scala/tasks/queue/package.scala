@@ -25,9 +25,7 @@
 
 package tasks
 
-import akka.actor._
-import scala.concurrent._
-import tasks.shared.{Priority, Labels}
+import scala.concurrent.Future
 
 package object queue {
 
@@ -44,52 +42,4 @@ package object queue {
     } else Future.successful(DependenciesAndRuntimeMetadata(Nil, logs))
   }
 
-  type CompFun2 =
-    Base64Data => ComputationEnvironment => Future[
-      (UntypedResult, DependenciesAndRuntimeMetadata)]
-
-  def newTask[A, B](
-      prerequisitives: B,
-      resource: shared.VersionedResourceRequest,
-      function: CompFun2,
-      taskId: TaskId,
-      priority: Priority,
-      labels: Labels
-  )(implicit components: TaskSystemComponents,
-    writer1: Serializer[B],
-    reader2: Deserializer[A]): Future[A] = {
-    implicit val queue = components.queue
-    implicit val fileService = components.fs
-    implicit val cache = components.cache
-    implicit val context = components.actorsystem
-    implicit val prefix = components.filePrefix
-
-    val taskId1 = taskId
-
-    val promise = Promise[A]
-
-    context.actorOf(
-      Props(
-        new ProxyTask[B, A](
-          taskId = taskId1,
-          runTaskClass = function.getClass,
-          input = prerequisitives,
-          writer = writer1,
-          reader = reader2,
-          resourceConsumed = resource,
-          queueActor = queue.actor,
-          fileServiceComponent = fileService,
-          fileServicePrefix = prefix,
-          cacheActor = cache.actor,
-          priority = priority,
-          promise = promise,
-          labels = labels,
-          lineage = components.lineage
-        )
-      ).withDispatcher("proxytask-dispatcher")
-    )
-
-    promise.future
-
-  }
 }

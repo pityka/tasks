@@ -41,6 +41,7 @@ import tasks.deploy._
 import tasks.shared.LogRecord
 
 import scala.language.experimental.macros
+import scala.language.implicitConversions
 
 package object tasks {
 
@@ -225,12 +226,34 @@ package object tasks {
     new TaskSystem(hostConfig, system, elasticSupport)
   }
 
-  type CompFun[A, B] = A => ComputationEnvironment => B
-
   def AsyncTask[A <: AnyRef, C](taskID: String, taskVersion: Int)(
-      comp: CompFun[A, Future[C]]): TaskDefinition[A, C] =
-    macro Macros
-      .asyncTaskDefinitionImpl[A, C]
+      comp: A => ComputationEnvironment => Future[C]): TaskDefinition[A, C] =
+    macro TaskDefinitionMacros
+      .taskDefinitionFromTree[A, C]
+
+  def spore[A, B](value: A => B): Spore[A, B] =
+    macro tasks.queue.SporeMacros
+      .sporeImpl[A, B]
+
+  def spore[B](value: () => B): Spore[Unit, B] =
+    macro tasks.queue.SporeMacros
+      .sporeImpl0[B]
+
+  implicit def functionToSporeConversion[A, B](value: A => B): Spore[A, B] =
+    macro tasks.queue.SporeMacros
+      .sporeImpl[A, B]
+
+  implicit def functionToSporeConversion0[B](value: () => B): Spore[Unit, B] =
+    macro tasks.queue.SporeMacros
+      .sporeImpl0[B]
+
+  def makeSerDe[A]: SerDe[A] = macro SerdeMacro.create[A]
+
+  type SSerializer[T] = Spore[Unit, Serializer[T]]
+  type SDeserializer[T] = Spore[Unit, Deserializer[T]]
+
+  implicit def serde2ser[A](a: SerDe[A]): SSerializer[A] = a.ser
+  implicit def serde2deser[A](a: SerDe[A]): SDeserializer[A] = a.deser
 
   def MasterSlaveGridEngineChosenFromConfig(
       implicit config: TasksConfig): HostConfiguration =

@@ -13,19 +13,16 @@ package object jsonitersupport {
   implicit def deser[A: JsonValueCodec]: Deserializer[A] =
     new Deserializer[A] {
       def apply(b: Array[Byte]) =
-        scala.util.Try(readFromArray[A](b)).toEither.left.map(_.toString)
+        scala.util
+          .Try(readFromArray[A](b))
+          .toEither
+          .left
+          .map(e => e.toString + "\n" + e.getStackTrace.mkString(";\n"))
     }
-
-  implicit val mPathCodec =
-    JsonCodecMaker.make[fileservice.ManagedFilePath](CodecMakerConfig())
-
-  implicit val rPathCodec =
-    JsonCodecMaker.make[fileservice.RemoteFilePath](CodecMakerConfig())
-
-  implicit val fPathCodec =
-    JsonCodecMaker.make[fileservice.FilePath](CodecMakerConfig())
 
   implicit val sharedFileCodec: JsonValueCodec[SharedFile] =
     JsonCodecMaker.make[SharedFile](CodecMakerConfig())
+
+  implicit val serdeSharedFile = tasks.makeSerDe[SharedFile]
 
 }

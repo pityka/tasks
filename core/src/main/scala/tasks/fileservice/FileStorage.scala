@@ -63,8 +63,9 @@ class RemoteFileStorage(implicit mat: Materializer,
 
   def uri(mp: RemoteFilePath): Uri = mp.uri
 
-  def createSource(path: RemoteFilePath): Source[ByteString, _] =
-    streamHelper.createSource(uri(path))
+  def createSource(path: RemoteFilePath,
+                   fromOffset: Long): Source[ByteString, _] =
+    streamHelper.createSource(uri(path), fromOffset)
 
   def getSizeAndHash(path: RemoteFilePath): Future[(Long, Int)] =
     path.uri.scheme match {
@@ -101,7 +102,9 @@ class RemoteFileStorage(implicit mat: Materializer,
     if (localFile) Future.successful(new File(path.uri.akka.path.toString))
     else {
       val file = TempFile.createTempFile("")
-      createSource(path).runWith(FileIO.toPath(file.toPath)).map(_ => file)
+      createSource(path, fromOffset = 0L)
+        .runWith(FileIO.toPath(file.toPath))
+        .map(_ => file)
     }
 
   }
@@ -112,7 +115,8 @@ trait ManagedFileStorage {
 
   def uri(mp: ManagedFilePath): Uri
 
-  def createSource(path: ManagedFilePath): Source[ByteString, _]
+  def createSource(path: ManagedFilePath,
+                   fromOffset: Long): Source[ByteString, _]
 
   /* If size < 0 then it must not check the size and the hash
    *  but must return true iff the file is readable
@@ -126,8 +130,8 @@ trait ManagedFileStorage {
       f: File,
       path: ProposedManagedFilePath): Future[(Long, Int, File, ManagedFilePath)]
 
-  def importSource(s: Source[ByteString, _], path: ProposedManagedFilePath)(
-      implicit am: Materializer): Future[(Long, Int, ManagedFilePath)]
+  def sink(path: ProposedManagedFilePath)
+    : Sink[ByteString, Future[(Long, Int, ManagedFilePath)]]
 
   def exportFile(path: ManagedFilePath): Future[File]
 

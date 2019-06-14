@@ -75,7 +75,10 @@ case class SharedFile(
     SharedFileHelper.getHistory(this)
 
   def source(implicit tsc: TaskSystemComponents) =
-    SharedFileHelper.getSourceToFile(this)
+    SharedFileHelper.getSourceToFile(this, 0L)
+
+  def source(fromOffset: Long)(implicit tsc: TaskSystemComponents) =
+    SharedFileHelper.getSourceToFile(this, fromOffset)
 
   def isAccessible(implicit tsc: TaskSystemComponents) =
     SharedFileHelper.isAccessible(this, true)
@@ -122,6 +125,10 @@ object SharedFile {
   def apply(source: Source[ByteString, _], name: String)(
       implicit tsc: TaskSystemComponents): Future[SharedFile] =
     SharedFileHelper.createFromSource(source, name)
+
+  def sink(name: String)(implicit tsc: TaskSystemComponents)
+    : Option[Sink[ByteString, Future[SharedFile]]] =
+    SharedFileHelper.sink(name)
 
   def fromFolder(callback: File => List[File])(
       implicit tsc: TaskSystemComponents): Future[Seq[SharedFile]] =

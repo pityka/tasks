@@ -102,19 +102,20 @@ class S3Storage(bucketName: String,
       .map(x => if (x.endsWith("/")) x.dropRight(1) else x)
       .mkString("/")
 
-  def importSource(s: Source[ByteString, _], path: ProposedManagedFilePath)(
-      implicit mat: Materializer): Future[(Long, Int, ManagedFilePath)] = {
+  def sink(path: ProposedManagedFilePath)
+    : Sink[ByteString, Future[(Long, Int, ManagedFilePath)]] = {
     val managed = path.toManaged
     val key = assembleName(managed)
     val s3loc = S3Location(bucketName, key)
+
     val sink = s3stream.multipartUpload(s3loc, params = putObjectParams)
-    val future = s.runWith(sink)
 
-    future.flatMap(_ => s3stream.getMetadata(s3loc)).map { metadata =>
-      val (size1, hash1) = getLengthAndHash(metadata)
+    sink.mapMaterializedValue(_.flatMap(_ => s3stream.getMetadata(s3loc)).map {
+      metadata =>
+        val (size1, hash1) = getLengthAndHash(metadata)
+        (size1, hash1, managed)
+    })
 
-      (size1, hash1, managed)
-    }
   }
 
   def importFile(f: File, path: ProposedManagedFilePath)
@@ -142,9 +143,12 @@ class S3Storage(bucketName: String,
 
   }
 
-  def createSource(path: ManagedFilePath): Source[ByteString, _] =
+  def createSource(path: ManagedFilePath,
+                   fromOffset: Long): Source[ByteString, _] = {
+    assert(fromOffset == 0L, "seeking into s3 not implemented ")
     s3stream.getData(S3Location(bucketName, assembleName(path)),
                      parallelism = 1)
+  }
 
   def exportFile(path: ManagedFilePath): Future[File] = {
     val file = TempFile.createTempFile("")

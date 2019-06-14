@@ -240,7 +240,6 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
       val cache: Cache =
         if (config.cacheEnabled)
           new SharedFileCache()(fileServiceComponent,
-                                nodeLocalCache,
                                 system,
                                 system.dispatcher,
                                 AM,
