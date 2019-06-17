@@ -242,8 +242,8 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
           .foreach {
             case (_, (sch, _)) =>
               val withNegotiation = state.update(Negotiating(launcher, sch))
-              log.debug(
-                s"Dequeued. Sending task to $launcher. Negotation: ${state.negotiation}")
+              log.info(
+                s"Dequeued task ${sch.description.taskId.id} with priority ${sch.priority}. Sending task to $launcher. (Negotation state of queue: ${state.negotiation})")
 
               val newState = if (!state.knownLaunchers.contains(launcher)) {
                 HeartBeatActor.watch(launcher.actor,
