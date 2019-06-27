@@ -51,8 +51,10 @@ object Deployment {
       slaveHostname: Option[String],
       background: Boolean
   )(implicit config: TasksConfig): String = {
+    val packageFileFolder = config.slaveWorkingDirectory
+    val packageFileName = config.slavePackageName
     val downloadScript =
-      s"cd $$TMPDIR && curl -m 60 $download > package && chmod u+x package"
+      s"cd $packageFileFolder && curl -m 60 $download > $packageFileName && chmod u+x $packageFileName"
 
     val hostnameString = slaveHostname match {
       case None       => ""
@@ -60,7 +62,7 @@ object Deployment {
     }
 
     val edited =
-      s"./package -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $hostnameString"
+      s"./$packageFileName -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $hostnameString"
         .replaceAllLiterally(
           "{RAM}",
           math

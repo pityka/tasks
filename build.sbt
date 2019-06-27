@@ -2,7 +2,7 @@ import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.12.8",
-  version := "0.0.57",
+  version := "0.0.59",
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -47,7 +47,8 @@ lazy val commonSettings = Seq(
 ) ++ Seq(
   organization := "io.github.pityka",
   licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
-  publishTo := sonatypePublishTo.value,
+  publishTo := Some(
+    "whatever" at "http://10.6.38.2:31080/artifactory/internal-maven/"),
   pomExtra in Global := {
     <url>https://pityka.github.io/tasks/</url>
       <scm>

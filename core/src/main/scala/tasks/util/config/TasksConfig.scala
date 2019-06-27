@@ -79,6 +79,12 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   val disableRemoting = raw.getBoolean("tasks.disableRemoting")
 
+  val slaveWorkingDirectory =
+    raw.getString("tasks.elastic.workerWorkingDirectory")
+
+  val slavePackageName =
+    raw.getString("tasks.elastic.workerPackageName")
+
   def skipContentHashVerificationAfterCache =
     raw.getBoolean("tasks.skipContentHashVerificationAfterCache")
 
