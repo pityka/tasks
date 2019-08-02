@@ -2,7 +2,7 @@ import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.12.8",
-  version := "0.1.1",
+  version := "0.1.2",
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -68,7 +68,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val circeVersion = "0.11.1"
-lazy val jsoniterVersion = "0.51.4"
+lazy val jsoniterVersion = "0.54.0"
 lazy val akkaVersion = "2.5.18"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
@@ -241,7 +241,7 @@ lazy val ecoll = project
   .settings(
     name := "tasks-ecoll",
     libraryDependencies ++= Seq(
-      "io.github.pityka" %% "flatjoin-akka-stream" % "0.0.13",
+      "io.github.pityka" %% "flatjoin-akka-stream" % "0.0.14",
       "io.github.pityka" %% "lame-bgzip-index" % "0.0.1",
       "org.scalatest" %% "scalatest" % "3.0.0" % "test"
     )
