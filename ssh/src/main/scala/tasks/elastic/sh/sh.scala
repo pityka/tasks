@@ -46,43 +46,61 @@ object SHShutdown extends ShutdownNode {
 
 class SHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
     implicit config: TasksConfig,
-    elasticSupport: ElasticSupportFqcn)
-    extends CreateNode {
+    elasticSupport: ElasticSupportFqcn
+) extends CreateNode {
 
-  def requestOneNewJobFromJobScheduler(requestSize: ResourceRequest)
-    : Try[Tuple2[PendingJobId, ResourceAvailable]] = {
+  def requestOneNewJobFromJobScheduler(
+      requestSize: ResourceRequest
+  ): Try[Tuple2[PendingJobId, ResourceAvailable]] = {
     val script = Deployment.script(
       memory = requestSize.memory,
       cpu = requestSize.cpu._2,
       scratch = requestSize.scratch,
       elasticSupport = elasticSupport,
       masterAddress = masterAddress,
-      download = new java.net.URL("http",
-                                  codeAddress.address.getHostName,
-                                  codeAddress.address.getPort,
-                                  "/"),
+      download = new java.net.URL(
+        "http",
+        codeAddress.address.getHostName,
+        codeAddress.address.getPort,
+        "/"
+      ),
       slaveHostname = None,
       background = true
     )
 
+    val wd = new java.io.File(config.shWorkDir)
+
     val (stdout, _, _) = execGetStreamsAndCode(
-      Process(Seq("bash", "-c", script + "echo $!;exit;")))
+      Process(
+        Seq(
+          "bash",
+          "-c",
+          s"cd ${wd.getCanonicalPath};" + script + "echo $!;exit;"
+        )
+      )
+    )
 
     val pid = stdout.mkString("").trim.toInt
 
     Try(
-      (PendingJobId(pid.toString),
-       ResourceAvailable(cpu = requestSize.cpu._1,
-                         memory = requestSize.memory,
-                         scratch = requestSize.scratch)))
+      (
+        PendingJobId(pid.toString),
+        ResourceAvailable(
+          cpu = requestSize.cpu._1,
+          memory = requestSize.memory,
+          scratch = requestSize.scratch
+        )
+      )
+    )
 
   }
 
 }
 
-class SHCreateNodeFactory(implicit config: TasksConfig,
-                          fqcn: ElasticSupportFqcn)
-    extends CreateNodeFactory {
+class SHCreateNodeFactory(
+    implicit config: TasksConfig,
+    fqcn: ElasticSupportFqcn
+) extends CreateNodeFactory {
   def apply(master: InetSocketAddress, codeAddress: CodeAddress) =
     new SHCreateNode(master, codeAddress)
 }

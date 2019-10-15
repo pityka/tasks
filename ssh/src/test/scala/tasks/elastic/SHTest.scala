@@ -57,6 +57,7 @@ object SHTest extends TestHelpers {
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
       tasks.slave-main-class = "tasks.TestSlave"
+      tasks.elastic.sh.workdir = ${tmp.getAbsolutePath}
       """
     )
   }

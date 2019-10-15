@@ -62,8 +62,9 @@ class TasksConfig(load: () => Config) extends StrictLogging {
       case "prefix" => None
       case other =>
         Some(
-          tasks.fileservice.FileServicePrefix(
-            other.split("/").toVector.filter(_.nonEmpty)))
+          tasks.fileservice
+            .FileServicePrefix(other.split("/").toVector.filter(_.nonEmpty))
+        )
     }
 
   val askInterval: FD = raw.getDuration("tasks.askInterval")
@@ -247,5 +248,7 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   val writeFileHistories =
     raw.getBoolean("tasks.fileservice.writeFileHistories")
+
+  val shWorkDir = raw.getString("tasks.elastic.sh.workdir")
 
 }
