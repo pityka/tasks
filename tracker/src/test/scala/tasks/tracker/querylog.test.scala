@@ -35,7 +35,6 @@ import scala.concurrent.duration._
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
 import tasks._
-import tasks.fileservice.HistoryContextImpl
 object QueryLogTest extends TestHelpers {
 
   val task1 = AsyncTask[Input, Int]("task1", 1) {
@@ -90,6 +89,7 @@ object QueryLogTest extends TestHelpers {
       hosts.numCPU=1      
       tasks.tracker.fqcn = default
       tasks.tracker.logFile = ${file.getAbsolutePath}
+      tasks.fileservice.writeFileHistories = true
       """
     )
   }
@@ -118,18 +118,20 @@ class QueryLogTestSuite extends FunSuite with Matchers {
     println(QueryLogTest.file)
     val nodes = tasks.util.openFileInputStream(QueryLogTest.file) {
       inputStream =>
-        val nodes = QueryLog.readNodes(inputStream,
-                                       excludeTaskIds = Set.empty,
-                                       includeTaskIds = Set.empty)
+        val nodes = QueryLog.readNodes(
+          inputStream,
+          excludeTaskIds = Set.empty,
+          includeTaskIds = Set.empty
+        )
         nodes.size shouldBe 5
 
         val runtimes = QueryLog.computeRuntimes(nodes, subtree = None)
         println(QueryLog.plotTimes(runtimes, seconds = true))
 
         val root = runtimes.find(_.taskId == "task1").get
-        root.cpuNeed.get shouldBe 2
+        root.cpuNeed.get shouldBe 3
         root.cpuTime.get > 2.0 shouldBe true
-        root.wallClockTime.get > 1.5 shouldBe true
+        root.wallClockTime.get > 1.0 shouldBe true
 
         nodes
     }
@@ -147,10 +149,7 @@ class QueryLogTestSuite extends FunSuite with Matchers {
 
       workerLogs.foreach { record =>
         record.metadata.get.logs.nonEmpty shouldBe true
-        val traceId = record.metadata.get.dependencies.head.context.get
-          .asInstanceOf[HistoryContextImpl]
-          .traceId
-          .get
+        val traceId = record.metadata.get.lineage.lineage.head.toString
         val task = nodes.filter(_.id == traceId)
         task.size shouldBe 1
         task.head.taskId shouldBe "task1"
