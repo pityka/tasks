@@ -2,7 +2,6 @@ import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.12.8",
-  version := "0.1.2",
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -47,7 +46,6 @@ lazy val commonSettings = Seq(
 ) ++ Seq(
   organization := "io.github.pityka",
   licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
-  publishTo := sonatypePublishTo.value,
   pomExtra in Global := {
     <url>https://pityka.github.io/tasks/</url>
       <scm>

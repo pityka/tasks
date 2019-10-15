@@ -6,12 +6,10 @@ addSbtPlugin("com.thesamet" % "sbt-protoc" % "0.99.15")
 
 libraryDependencies += "com.thesamet.scalapb" %% "compilerplugin" % "0.7.0"
 
-addSbtPlugin("org.xerial.sbt" % "sbt-sonatype" % "2.3")
-
-addSbtPlugin("com.jsuereth" % "sbt-pgp" % "1.1.0")
-
-addSbtPlugin("org.scoverage" % "sbt-scoverage" % "1.5.1")
+addSbtPlugin("org.scoverage" % "sbt-scoverage" % "1.6.0")
 
 addSbtPlugin("org.scala-js" % "sbt-scalajs" % "0.6.27")
 
 addSbtPlugin("org.portable-scala" % "sbt-scalajs-crossproject" % "0.6.0")
+
+addSbtPlugin("com.geirsson" % "sbt-ci-release" % "1.4.31")
