@@ -65,8 +65,10 @@ class QueueUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
     get {
       path("states") {
         val source = Source
-          .actorRef[UIQueueState](bufferSize = 100,
-                                  overflowStrategy = OverflowStrategy.dropTail)
+          .actorRef[UIQueueState](
+            bufferSize = 100,
+            overflowStrategy = OverflowStrategy.dropTail
+          )
           .mapMaterializedValue { actorRef =>
             multiplex ! actorRef
             actorRef
@@ -108,7 +110,8 @@ class QueueUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
   bindingFuture.andThen {
     case scala.util.Success(serverBinding) =>
       log.info(
-        s"Started UI queue backend http server at ${serverBinding.localAddress}")
+        s"Started UI queue backend http server at ${serverBinding.localAddress}"
+      )
   }
 
   def tasksQueueEventListener: EventListener[TaskQueue.Event] =

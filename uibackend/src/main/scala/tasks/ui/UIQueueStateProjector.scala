@@ -32,8 +32,10 @@ object UIQueueStateProjector {
   private def uiLauncherActor(launcher: LauncherActor) =
     UILauncherActor(launcher.actor.path.toString)
 
-  def project(state: UIQueueState,
-              taskQueueEvent: TaskQueue.Event): UIQueueState = {
+  def project(
+      state: UIQueueState,
+      taskQueueEvent: TaskQueue.Event
+  ): UIQueueState = {
     val scheduledTasksMap = state.scheduledTasks.toMap
     taskQueueEvent match {
       case Enqueued(sch, _) =>
@@ -45,10 +47,12 @@ object UIQueueStateProjector {
         state
       case Negotiating(launcher, sch) =>
         state.copy(
-          negotiation = Some((uiLauncherActor(launcher), sch.description)))
+          negotiation = Some((uiLauncherActor(launcher), sch.description))
+        )
       case LauncherJoined(launcher) =>
         state.copy(
-          knownLaunchers = state.knownLaunchers + uiLauncherActor(launcher))
+          knownLaunchers = state.knownLaunchers + uiLauncherActor(launcher)
+        )
       case NegotiationDone => state.copy(negotiation = None)
       case TaskScheduled(sch, launcher, allocated) =>
         state.copy(
@@ -73,24 +77,31 @@ object UIQueueStateProjector {
           } else state.completedTasks
         }
 
-        state.copy(scheduledTasks =
-                     state.scheduledTasks.filterNot(_._1 == sch.description),
-                   completedTasks = updatedCompletedTasks)
+        state.copy(
+          scheduledTasks =
+            state.scheduledTasks.filterNot(_._1 == sch.description),
+          completedTasks = updatedCompletedTasks
+        )
       case TaskFailed(sch) =>
         val updatedFailedTasks = state.scheduledTasks.filter(
-          _._1 == sch.description) ::: state.failedTasks
+          _._1 == sch.description
+        ) ::: state.failedTasks
 
-        state.copy(scheduledTasks =
-                     state.scheduledTasks.filterNot(_._1 == sch.description),
-                   failedTasks = updatedFailedTasks)
+        state.copy(
+          scheduledTasks =
+            state.scheduledTasks.filterNot(_._1 == sch.description),
+          failedTasks = updatedFailedTasks
+        )
       case TaskLauncherStoppedFor(sch) =>
         state.copy(
           scheduledTasks =
-            state.scheduledTasks.filterNot(_._1 == sch.description))
+            state.scheduledTasks.filterNot(_._1 == sch.description)
+        )
       case LauncherCrashed(launcher) =>
         state.copy(
           knownLaunchers =
-            state.knownLaunchers.filterNot(_ == uiLauncherActor(launcher)))
+            state.knownLaunchers.filterNot(_ == uiLauncherActor(launcher))
+        )
       case _: CacheQueried => state
       case CacheHit(sch, _) =>
         val updatedRecoveredTasks = {

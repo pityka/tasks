@@ -56,24 +56,28 @@ object KubernetesHelpers {
   def newName = Random.alphanumeric.take(170).mkString.toLowerCase
 }
 
-class K8SCreateNode(masterAddress: InetSocketAddress,
-                    codeAddress: CodeAddress,
-                    k8s: KubernetesClient)(implicit config: TasksConfig,
-                                           elasticSupport: ElasticSupportFqcn)
+class K8SCreateNode(
+    masterAddress: InetSocketAddress,
+    codeAddress: CodeAddress,
+    k8s: KubernetesClient
+)(implicit config: TasksConfig, elasticSupport: ElasticSupportFqcn)
     extends CreateNode {
 
   def requestOneNewJobFromJobScheduler(
-      requestSize: ResourceRequest): Try[(PendingJobId, ResourceAvailable)] = {
+      requestSize: ResourceRequest
+  ): Try[(PendingJobId, ResourceAvailable)] = {
     val script = Deployment.script(
       memory = requestSize.memory,
       cpu = requestSize.cpu._2,
       scratch = requestSize.scratch,
       elasticSupport = elasticSupport,
       masterAddress = masterAddress,
-      download = new java.net.URL("http",
-                                  codeAddress.address.getHostName,
-                                  codeAddress.address.getPort,
-                                  "/"),
+      download = new java.net.URL(
+        "http",
+        codeAddress.address.getHostName,
+        codeAddress.address.getPort,
+        "/"
+      ),
       slaveHostname = None,
       background = false
     )
@@ -110,9 +114,10 @@ class K8SCreateNode(masterAddress: InetSocketAddress,
 
 }
 
-class K8SCreateNodeFactory(k8s: KubernetesClient)(implicit config: TasksConfig,
-                                                  fqcn: ElasticSupportFqcn)
-    extends CreateNodeFactory {
+class K8SCreateNodeFactory(k8s: KubernetesClient)(
+    implicit config: TasksConfig,
+    fqcn: ElasticSupportFqcn
+) extends CreateNodeFactory {
   def apply(master: InetSocketAddress, codeAddress: CodeAddress) =
     new K8SCreateNode(master, codeAddress, k8s)
 }
@@ -123,7 +128,8 @@ object K8SGetNodeName extends GetNodeName {
 
 object K8SElasticSupport extends ElasticSupportFromConfig {
   implicit val fqcn = ElasticSupportFqcn(
-    "tasks.elastic.kubernetes.K8SElasticSupport")
+    "tasks.elastic.kubernetes.K8SElasticSupport"
+  )
   def apply(implicit config: TasksConfig) = {
     val k8s =
       (new DefaultKubernetesClient).inNamespace(config.kubernetesNamespace)

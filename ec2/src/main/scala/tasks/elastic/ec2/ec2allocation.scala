@@ -60,7 +60,8 @@ class EC2Shutdown(ec2: AmazonEC2Client) extends ShutdownNode {
 
   def shutdownPendingNode(nodeName: PendingJobId): Unit = {
     val request = new CancelSpotInstanceRequestsRequest(
-      List(nodeName.value).asJava)
+      List(nodeName.value).asJava
+    )
     ec2.cancelSpotInstanceRequests(request)
   }
 
@@ -70,7 +71,8 @@ class EC2CreateNode(
     masterAddress: InetSocketAddress,
     codeAddress: CodeAddress,
     ec2: AmazonEC2Client,
-    elasticSupport: ElasticSupportFqcn)(implicit config: TasksConfig)
+    elasticSupport: ElasticSupportFqcn
+)(implicit config: TasksConfig)
     extends CreateNode {
 
   private def gzipBase64(str: String): String = {
@@ -84,7 +86,8 @@ class EC2CreateNode(
   }
 
   def requestOneNewJobFromJobScheduler(
-      requestSize: ResourceRequest): Try[(PendingJobId, ResourceAvailable)] =
+      requestSize: ResourceRequest
+  ): Try[(PendingJobId, ResourceAvailable)] =
     Try {
       val (requestid, instancetype) = requestSpotInstance
       val jobid = PendingJobId(requestid)
@@ -97,12 +100,15 @@ class EC2CreateNode(
     ec2.createTags(
       new CreateTagsRequest(
         List(node.name.value).asJava,
-        config.instanceTags.map(t => new Tag(t._1, t._2)).asJava))
+        config.instanceTags.map(t => new Tag(t._1, t._2)).asJava
+      )
+    )
 
   }
 
   override def convertRunningToPending(
-      p: RunningJobId): Option[PendingJobId] = {
+      p: RunningJobId
+  ): Option[PendingJobId] = {
     val describeResult = ec2.describeSpotInstanceRequests();
     val spotInstanceRequests = describeResult.getSpotInstanceRequests();
 
@@ -142,7 +148,8 @@ class EC2CreateNode(
     blockDeviceMappingSDC.setVirtualName("ephemeral1");
 
     launchSpecification.setBlockDeviceMappings(
-      List(blockDeviceMappingSDB, blockDeviceMappingSDC).asJava)
+      List(blockDeviceMappingSDB, blockDeviceMappingSDC).asJava
+    )
 
     config.iamRole.foreach { iamRole =>
       val iamprofile = new IamInstanceProfileSpecification()
@@ -162,10 +169,12 @@ class EC2CreateNode(
       scratch = selectedInstanceType._2.scratch,
       elasticSupport = elasticSupport,
       masterAddress = masterAddress,
-      download = new java.net.URL("http",
-                                  codeAddress.address.getHostName,
-                                  codeAddress.address.getPort,
-                                  "/"),
+      download = new java.net.URL(
+        "http",
+        codeAddress.address.getHostName,
+        codeAddress.address.getPort,
+        "/"
+      ),
       slaveHostname = None,
       background = true
     )
@@ -192,10 +201,12 @@ class EC2CreateNode(
     // Call the RequestSpotInstance API.
     val requestResult = ec2.requestSpotInstances(requestRequest)
 
-    (requestResult.getSpotInstanceRequests.asScala
-       .map(_.getSpotInstanceRequestId)
-       .head,
-     selectedInstanceType)
+    (
+      requestResult.getSpotInstanceRequests.asScala
+        .map(_.getSpotInstanceRequestId)
+        .head,
+      selectedInstanceType
+    )
 
   }
 
@@ -217,10 +228,11 @@ class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig)
   }
 }
 
-class EC2CreateNodeFactory(implicit config: TasksConfig,
-                           ec2: AmazonEC2Client,
-                           elasticSupport: ElasticSupportFqcn)
-    extends CreateNodeFactory {
+class EC2CreateNodeFactory(
+    implicit config: TasksConfig,
+    ec2: AmazonEC2Client,
+    elasticSupport: ElasticSupportFqcn
+) extends CreateNodeFactory {
   def apply(master: InetSocketAddress, codeAddress: CodeAddress) =
     new EC2CreateNode(master, codeAddress, ec2, elasticSupport)
 }
@@ -231,8 +243,10 @@ object EC2GetNodeName extends GetNodeName {
 
 object EC2ReaperFactory extends ReaperFactory {
   def apply(implicit system: ActorSystem, config: TasksConfig): ActorRef =
-    system.actorOf(Props(new EC2Reaper(config.terminateMaster)),
-                   name = "reaper")
+    system.actorOf(
+      Props(new EC2Reaper(config.terminateMaster)),
+      name = "reaper"
+    )
 }
 
 object EC2ElasticSupport extends ElasticSupportFromConfig {

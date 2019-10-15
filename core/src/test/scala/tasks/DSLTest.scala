@@ -60,7 +60,9 @@ object DSLTest extends TestHelpers with Matchers {
       Some(
         ConfigFactory.parseString(
           s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}"
-        ))) { implicit ts =>
+        )
+      )
+    ) { implicit ts =>
       (await(increment(Input(0))(ResourceRequest(1, 500))))
 
     }

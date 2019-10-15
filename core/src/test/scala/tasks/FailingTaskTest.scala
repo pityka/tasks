@@ -73,10 +73,12 @@ object FailingTasksTest extends TestHelpers {
         case _: TestException => "recovered"
       }
       val f2 = success(Input(2))(ResourceRequest(1, 500))
-      val f3 = f1.flatMap(_ =>
-        fail(Input(1))(ResourceRequest(1, 500)).recover {
-          case _: TestException => "recovered"
-      })
+      val f3 = f1.flatMap(
+        _ =>
+          fail(Input(1))(ResourceRequest(1, 500)).recover {
+            case _: TestException => "recovered"
+          }
+      )
       val future = for {
         t1 <- f1
         t2 <- f2
@@ -93,7 +95,8 @@ object FailingTasksTest extends TestHelpers {
 class FailingTasksTestSuite extends FunSuite with Matchers {
 
   test(
-    "a failing task should propagate its exception and not interfere with other tasks") {
+    "a failing task should propagate its exception and not interfere with other tasks"
+  ) {
     FailingTasksTest.run.get shouldBe (("recovered", "succeeded", "recovered"))
   }
 

@@ -55,12 +55,15 @@ object ExecOnceTest extends TestHelpers with Matchers {
       Some(
         ConfigFactory.parseString(
           s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}"
-        ))) { implicit ts =>
+        )
+      )
+    ) { implicit ts =>
       import scala.concurrent.ExecutionContext.Implicits.global
       await(Future.traverse(1 to 10000) { input =>
         increment(Input(0))(
           ResourceRequest(1, 500),
-          labels = tasks.shared.Labels(List(input.toString -> input.toString)))
+          labels = tasks.shared.Labels(List(input.toString -> input.toString))
+        )
       })
 
     }

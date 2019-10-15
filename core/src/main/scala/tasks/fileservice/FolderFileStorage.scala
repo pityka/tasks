@@ -46,11 +46,12 @@ object FolderFileStorage {
 
 }
 
-class FolderFileStorage(val basePath: File)(implicit
-                                            ec: ExecutionContext,
-                                            config: TasksConfig,
-                                            as: akka.actor.ActorSystem)
-    extends ManagedFileStorage {
+class FolderFileStorage(val basePath: File)(
+    implicit
+    ec: ExecutionContext,
+    config: TasksConfig,
+    as: akka.actor.ActorSystem
+) extends ManagedFileStorage {
 
   if (basePath.exists && !basePath.isDirectory)
     throw new IllegalArgumentException(s"$basePath exists and not a folder")
@@ -93,7 +94,8 @@ class FolderFileStorage(val basePath: File)(implicit
         logger.warning(s"File deleted $file $mp")
       } else {
         logger.warning(
-          s"Not deleting file because its size or hash is different than expectation. $file $mp $sizeMatch $contentMatch")
+          s"Not deleting file because its size or hash is different than expectation. $file $mp $sizeMatch $contentMatch"
+        )
         Future.successful(false)
       }
       Future.successful(true)
@@ -104,8 +106,9 @@ class FolderFileStorage(val basePath: File)(implicit
 
   def sharedFolder(prefix: Seq[String]): Option[File] = {
     val folder = new File(
-      basePath.getAbsolutePath + File.separator + prefix.mkString(
-        File.separator))
+      basePath.getAbsolutePath + File.separator + prefix
+        .mkString(File.separator)
+    )
     folder.mkdirs
     Some(folder)
   }
@@ -123,14 +126,17 @@ class FolderFileStorage(val basePath: File)(implicit
 
       if (!pass) {
         logger.debug(
-          s"$this does not contain $path due to: canRead:$canRead, sizeMatch:$sizeMatch   (sizeOnDisk:$sizeOnDiskNow vs expected:$size), contentMatch:$contentMatch. FileOnDisk: $f ")
+          s"$this does not contain $path due to: canRead:$canRead, sizeMatch:$sizeMatch   (sizeOnDisk:$sizeOnDiskNow vs expected:$size), contentMatch:$contentMatch. FileOnDisk: $f "
+        )
       }
 
       pass
     }
 
-  def contains(path: ManagedFilePath,
-               retrieveSizeAndHash: Boolean): Future[Option[SharedFile]] =
+  def contains(
+      path: ManagedFilePath,
+      retrieveSizeAndHash: Boolean
+  ): Future[Option[SharedFile]] =
     Future.successful {
       val f = assemblePath(path)
       val canRead = f.canRead
@@ -149,13 +155,18 @@ class FolderFileStorage(val basePath: File)(implicit
 
     }
 
-  def createSource(path: ManagedFilePath,
-                   fromOffset: Long): Source[ByteString, _] =
+  def createSource(
+      path: ManagedFilePath,
+      fromOffset: Long
+  ): Source[ByteString, _] =
     Source.lazily(
       () =>
-        FileIO.fromPath(assemblePath(path).toPath,
-                        chunkSize = 8192,
-                        startPosition = fromOffset))
+        FileIO.fromPath(
+          assemblePath(path).toPath,
+          chunkSize = 8192,
+          startPosition = fromOffset
+        )
+    )
 
   def exportFile(path: ManagedFilePath): Future[File] = {
     val file = assemblePath(path)
@@ -163,7 +174,9 @@ class FolderFileStorage(val basePath: File)(implicit
     else {
       Future.failed(
         new java.nio.file.NoSuchFileException(
-          file.getAbsolutePath + " " + System.nanoTime))
+          file.getAbsolutePath + " " + System.nanoTime
+        )
+      )
     }
   }
   private def copyFile(source: File, destination: File): Unit = {
@@ -186,11 +199,13 @@ class FolderFileStorage(val basePath: File)(implicit
       if (success) success
       else if (i > 0) {
         logger.warning(
-          s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}. Try $i more times.")
+          s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}. Try $i more times."
+        )
         tryRename(i - 1)
       } else {
         logger.error(
-          s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}")
+          s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}"
+        )
         false
       }
     }
@@ -201,23 +216,27 @@ class FolderFileStorage(val basePath: File)(implicit
 
     } else
       throw new RuntimeException(
-        s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}")
+        s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}"
+      )
   }
 
   private def assemblePath(path: ManagedFilePath): File = {
     new File(
-      basePath.getAbsolutePath + File.separator + path.pathElements.mkString(
-        File.separator))
+      basePath.getAbsolutePath + File.separator + path.pathElements
+        .mkString(File.separator)
+    )
   }
 
   private def assemblePath(path: ManagedFilePath, str: String): File = {
     new File(
-      basePath.getAbsolutePath + File.separator + path.pathElements.mkString(
-        File.separator) + str)
+      basePath.getAbsolutePath + File.separator + path.pathElements
+        .mkString(File.separator) + str
+    )
   }
 
-  def sink(path: ProposedManagedFilePath)
-    : Sink[ByteString, Future[(Long, Int, ManagedFilePath)]] = {
+  def sink(
+      path: ProposedManagedFilePath
+  ): Sink[ByteString, Future[(Long, Int, ManagedFilePath)]] = {
     val createSink = () => {
       val tmp = TempFile.createTempFile("foldertmp")
       Future.successful(
@@ -231,7 +250,8 @@ class FolderFileStorage(val basePath: File)(implicit
             } else {
               throw ioResult.status.failed.get
             }
-          }))
+          })
+      )
     }
 
     Sink
@@ -254,8 +274,10 @@ class FolderFileStorage(val basePath: File)(implicit
       file1.length == file2.length && FolderFileStorage.getContentHash(file1) == FolderFileStorage
         .getContentHash(file2)
 
-  def importFile(file: File, proposed: ProposedManagedFilePath)
-    : Future[(Long, Int, File, ManagedFilePath)] =
+  def importFile(
+      file: File,
+      proposed: ProposedManagedFilePath
+  ): Future[(Long, Int, File, ManagedFilePath)] =
     Future.successful({
       logger.debug(s"Importing file $file under name $proposed")
       val size = file.length
@@ -273,7 +295,8 @@ class FolderFileStorage(val basePath: File)(implicit
       } else if (assemblePath(managed).canRead) {
         val finalFile = assemblePath(managed)
         logger.debug(
-          s"Found a file already in storage with the same name ($finalFile). Check for equality.")
+          s"Found a file already in storage with the same name ($finalFile). Check for equality."
+        )
         if (checkContentEquality(finalFile, file))
           (size, hash, finalFile, managed)
         else {
@@ -332,15 +355,18 @@ class FolderFileStorage(val basePath: File)(implicit
         val file = path.toFile
         val l = file.length
         val h = FolderFileStorage.getContentHash(file)
-        new SharedFile(ManagedFilePath(
-                         basePath.toPath
-                           .relativize(path)
-                           .asScala
-                           .iterator
-                           .map(_.toString)
-                           .toVector),
-                       l,
-                       h)
+        new SharedFile(
+          ManagedFilePath(
+            basePath.toPath
+              .relativize(path)
+              .asScala
+              .iterator
+              .map(_.toString)
+              .toVector
+          ),
+          l,
+          h
+        )
       }
     } catch {
       case x: Throwable => throw x

@@ -43,24 +43,29 @@ class AppUI(container: Node) {
 
   val TableHeader = tr(th("ID"), th("CPU"), th("RAM"))
 
-  def makeTable(header: String,
-                project: UIAppState => Seq[(UIJobId, ResourceAvailable)]) = {
+  def makeTable(
+      header: String,
+      project: UIAppState => Seq[(UIJobId, ResourceAvailable)]
+  ) = {
     val body = tbody().render
     val bodySink = Flow[UIAppState]
       .map { uiState =>
         project(uiState)
           .map {
             case (UIJobId(jobId), resource) =>
-              tr(td(`class` := "collapsing")(jobId),
-                 td(resource.cpu),
-                 td(resource.memory)).render
+              tr(
+                td(`class` := "collapsing")(jobId),
+                td(resource.cpu),
+                td(resource.memory)
+              ).render
           }
       }
       .to(body.childrenSink)
     val element =
       table(`class` := "ui celled table")(
         thead(tr(th(colspan := "3")(header)), TableHeader),
-        body)
+        body
+      )
     (element, bodySink)
   }
 
@@ -72,24 +77,30 @@ class AppUI(container: Node) {
     val sink = Flow[UIAppState]
       .map(state => Seq(span(state.cumulativeRequested.toString).render))
       .to(elem.childrenSink)
-    (div(`class` := "ui red horizontal label")("Cumulative requested nodes: ",
-                                               elem),
-     sink)
+    (
+      div(`class` := "ui red horizontal label")(
+        "Cumulative requested nodes: ",
+        elem
+      ),
+      sink
+    )
   }
 
   val root = div(
     div(`class` := "ui grid container")(
       div(`class` := "two wide column")(cumulativeCountElem),
       div(`class` := "eight wide column")(runningTable),
-      div(`class` := "eight wide column")(pendingTable),
+      div(`class` := "eight wide column")(pendingTable)
     )
   )
 
   val (wsSource, wsSink) = WebSocketHelper.open(s"ws://$host/states")
 
   val uiStateSource = wsSource
-    .map(wsMessage =>
-      io.circe.parser.decode[UIAppState](wsMessage.data.toString).right.get)
+    .map(
+      wsMessage =>
+        io.circe.parser.decode[UIAppState](wsMessage.data.toString).right.get
+    )
 
   val keepAliveTicks = {
     import scala.concurrent.duration._

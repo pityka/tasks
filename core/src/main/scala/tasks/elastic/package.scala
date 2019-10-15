@@ -11,7 +11,8 @@ package object elastic {
         Some(
           tasks.util
             .reflectivelyInstantiateObject[ElasticSupportFromConfig](reflective)
-            .apply(config))
+            .apply(config)
+        )
 
     }
 }

@@ -33,14 +33,15 @@ import tasks.util.config._
 import com.typesafe.scalalogging.StrictLogging
 
 class SimpleDecideNewNode(codeVersion: CodeVersion)(
-    implicit config: TasksConfig)
-    extends DecideNewNode
+    implicit config: TasksConfig
+) extends DecideNewNode
     with StrictLogging {
 
   def needNewNode(
       q: QueueStat,
       registeredNodes: Seq[ResourceAvailable],
-      pendingNodes: Seq[ResourceAvailable]): Map[ResourceRequest, Int] = {
+      pendingNodes: Seq[ResourceAvailable]
+  ): Map[ResourceRequest, Int] = {
     val resourceNeeded: List[ResourceRequest] = q.queued.map(_._2).collect {
       case VersionedResourceRequest(v, request) if v === codeVersion => request
     }
@@ -55,7 +56,8 @@ class SimpleDecideNewNode(codeVersion: CodeVersion)(
 
     val (_, allocatedResources) =
       (resourceNeeded ++ resourcesUsedByRunningJobs).foldLeft(
-        (availableResources, List[ResourceRequest]())) {
+        (availableResources, List[ResourceRequest]())
+      ) {
         case ((available, allocated), request) =>
           val (prefix, suffix) =
             available.span(x => !x.canFulfillRequest(request))
@@ -76,7 +78,8 @@ class SimpleDecideNewNode(codeVersion: CodeVersion)(
       val fulfilled =
         allocatedResources.groupBy(x => x).map(x => x._1 -> x._2.size)
       logger.info(
-        s"Resources needed: $need. Resources allocable with current running or pending nodes: $fulfilled. Current nodes: $availableResources")
+        s"Resources needed: $need. Resources allocable with current running or pending nodes: $fulfilled. Current nodes: $availableResources"
+      )
       (addMaps(need, fulfilled)(_ - _)).filter(x => x._2 > 0)
 
     }

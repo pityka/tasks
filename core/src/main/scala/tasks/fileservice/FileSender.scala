@@ -38,10 +38,12 @@ import tasks.util._
 import tasks.util.config._
 import tasks.wire._
 
-class FileSender(file: File,
-                 proposedPath: ProposedManagedFilePath,
-                 deleteLocalFile: Boolean,
-                 service: ActorRef)(implicit config: TasksConfig)
+class FileSender(
+    file: File,
+    proposedPath: ProposedManagedFilePath,
+    deleteLocalFile: Boolean,
+    service: ActorRef
+)(implicit config: TasksConfig)
     extends Actor
     with akka.actor.ActorLogging {
 
@@ -69,7 +71,8 @@ class FileSender(file: File,
       val chunksize = config.fileSendChunkSize
       context.actorOf(
         Props(new TransferOut(readablechannel, transferin, chunksize))
-          .withDispatcher("transferout"))
+          .withDispatcher("transferout")
+      )
 
     case WaitingForSharedFile =>
       listener = Some(sender)
@@ -93,9 +96,11 @@ class FileSender(file: File,
 
 }
 
-class SourceSender(file: Source[ByteString, _],
-                   proposedPath: ProposedManagedFilePath,
-                   service: ActorRef)(implicit config: TasksConfig)
+class SourceSender(
+    file: Source[ByteString, _],
+    proposedPath: ProposedManagedFilePath,
+    service: ActorRef
+)(implicit config: TasksConfig)
     extends Actor
     with akka.actor.ActorLogging {
 
@@ -123,7 +128,8 @@ class SourceSender(file: Source[ByteString, _],
       val chunksize = config.fileSendChunkSize
       context.actorOf(
         Props(new TransferOut(readablechannel, transferin, chunksize))
-          .withDispatcher("transferout"))
+          .withDispatcher("transferout")
+      )
 
     case WaitingForSharedFile =>
       listener = Some(sender)

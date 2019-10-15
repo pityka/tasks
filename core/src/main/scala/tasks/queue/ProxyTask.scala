@@ -72,9 +72,11 @@ class ProxyTask[Input, Output](
     }
 
     val scheduleTask = ScheduleTask(
-      TaskDescription(taskId,
-                      Base64DataHelpers(writer(input)),
-                      persisted.map(x => Base64DataHelpers(writer(x)))),
+      TaskDescription(
+        taskId,
+        Base64DataHelpers(writer(input)),
+        persisted.map(x => Base64DataHelpers(writer(x)))
+      ),
       inputDeserializer.as[AnyRef, AnyRef],
       outputSerializer.as[AnyRef, AnyRef],
       function.as[AnyRef, AnyRef],
@@ -108,20 +110,24 @@ class ProxyTask[Input, Output](
     case MessageFromTask(untypedOutput, retrievedFromCache) =>
       reader(Base64DataHelpers.toBytes(untypedOutput.data)) match {
         case Right(output) =>
-          log.debug("MessageFromTask received from: {}, {}, {}",
-                    sender,
-                    untypedOutput,
-                    output)
+          log.debug(
+            "MessageFromTask received from: {}, {}, {}",
+            sender,
+            untypedOutput,
+            output
+          )
           distributeResult(output)
           self ! PoisonPill
         case Left(error) if retrievedFromCache =>
           log.error(
-            s"MessageFromTask received from cache and failed to decode: $sender, $untypedOutput, $error. Task is rescheduled without caching.")
+            s"MessageFromTask received from cache and failed to decode: $sender, $untypedOutput, $error. Task is rescheduled without caching."
+          )
           startTask(cache = false)
         case Left(error) =>
           log.error(
             error,
-            s"MessageFromTask received not from cache and failed to decode: $sender, $untypedOutput, $error. Execution failed.")
+            s"MessageFromTask received not from cache and failed to decode: $sender, $untypedOutput, $error. Execution failed."
+          )
           notifyListenersOnFailure(new RuntimeException(error))
           self ! PoisonPill
       }

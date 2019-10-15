@@ -49,12 +49,13 @@ trait ElasticSupport {
     def getNodeName: String
   }
 
-  def apply(masterAddress: InetSocketAddress,
-            queueActor: QueueActor,
-            resource: ResourceAvailable,
-            codeAddress: Option[CodeAddress],
-            eventListener: Option[EventListener[NodeRegistry.Event]])(
-      implicit config: TasksConfig): Inner
+  def apply(
+      masterAddress: InetSocketAddress,
+      queueActor: QueueActor,
+      resource: ResourceAvailable,
+      codeAddress: Option[CodeAddress],
+      eventListener: Option[EventListener[NodeRegistry.Event]]
+  )(implicit config: TasksConfig): Inner
 
 }
 
@@ -64,23 +65,25 @@ trait ElasticSupportFromConfig {
 
 }
 
-case class SimpleElasticSupport(val fqcn: ElasticSupportFqcn,
-                                val hostConfig: Option[HostConfiguration],
-                                reaperFactory: Option[ReaperFactory],
-                                shutdown: ShutdownNode,
-                                createNodeFactory: CreateNodeFactory,
-                                val getNodeName: GetNodeName)
-    extends ElasticSupport { self =>
+case class SimpleElasticSupport(
+    val fqcn: ElasticSupportFqcn,
+    val hostConfig: Option[HostConfiguration],
+    reaperFactory: Option[ReaperFactory],
+    shutdown: ShutdownNode,
+    createNodeFactory: CreateNodeFactory,
+    val getNodeName: GetNodeName
+) extends ElasticSupport { self =>
 
   def selfShutdownNow =
     shutdown.shutdownRunningNode(RunningJobId(getNodeName.getNodeName))
 
-  def apply(masterAddress: InetSocketAddress,
-            queueActor: QueueActor,
-            resource: ResourceAvailable,
-            codeAddress: Option[CodeAddress],
-            eventListener: Option[EventListener[NodeRegistry.Event]])(
-      implicit config: TasksConfig) =
+  def apply(
+      masterAddress: InetSocketAddress,
+      queueActor: QueueActor,
+      resource: ResourceAvailable,
+      codeAddress: Option[CodeAddress],
+      eventListener: Option[EventListener[NodeRegistry.Event]]
+  )(implicit config: TasksConfig) =
     new Inner {
       def getNodeName = self.getNodeName.getNodeName
       def createRegistry =
@@ -93,11 +96,14 @@ case class SimpleElasticSupport(val fqcn: ElasticSupportFqcn,
               shutdownNode = shutdown,
               targetQueue = queueActor,
               eventListener = eventListener
-          ))
+            )
+        )
       def createSelfShutdown =
-        new SelfShutdown(shutdownRunningNode = shutdown,
-                         id = RunningJobId(this.getNodeName),
-                         queueActor = queueActor)
+        new SelfShutdown(
+          shutdownRunningNode = shutdown,
+          id = RunningJobId(this.getNodeName),
+          queueActor = queueActor
+        )
     }
 
 }

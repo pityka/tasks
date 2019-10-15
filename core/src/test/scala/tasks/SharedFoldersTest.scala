@@ -63,7 +63,9 @@ object SharedFoldersTest extends TestHelpers {
       Some(
         ConfigFactory.parseString(
           s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}"
-        ))) { implicit ts =>
+        )
+      )
+    ) { implicit ts =>
       (await(increment(Input(0))(ResourceRequest(1, 500))))
 
     }
@@ -76,11 +78,13 @@ class SharedFoldersTestSuite extends FunSuite with Matchers {
   test("SharedFile.fromFolder should import intermediate folders ") {
     val sf = SharedFoldersTest.run.get
     val expectedFile = new File(
-      SharedFoldersTest.tmp.getAbsolutePath + "/sharedFolders/intermediate/fileName")
+      SharedFoldersTest.tmp.getAbsolutePath + "/sharedFolders/intermediate/fileName"
+    )
     sf.path.asInstanceOf[ManagedFilePath].pathElements shouldBe Vector(
       "sharedFolders",
       "intermediate",
-      "fileName")
+      "fileName"
+    )
     expectedFile.canRead shouldBe true
     scala.io.Source.fromFile(expectedFile).mkString shouldBe "345"
   }

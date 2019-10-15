@@ -38,8 +38,10 @@ object SporeMacros {
       case _                => false
     })
     if (!noOuterClass) {
-      cxt.abort(cxt.enclosingPosition,
-                "spore must not be defined in an inner class")
+      cxt.abort(
+        cxt.enclosingPosition,
+        "spore must not be defined in an inner class"
+      )
     }
   }
 

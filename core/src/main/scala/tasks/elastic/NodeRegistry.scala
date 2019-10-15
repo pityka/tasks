@@ -39,9 +39,10 @@ object NodeRegistry {
 
   sealed trait Event
   case object NodeRequested extends Event
-  case class NodeIsPending(pendingJobId: PendingJobId,
-                           resource: ResourceAvailable)
-      extends Event
+  case class NodeIsPending(
+      pendingJobId: PendingJobId,
+      resource: ResourceAvailable
+  ) extends Event
   case class NodeIsUp(node: Node, pendingJobId: PendingJobId) extends Event
   case class NodeIsDown(node: Node) extends Event
   case class InitFailed(pending: PendingJobId) extends Event
@@ -143,13 +144,15 @@ class NodeRegistry(
         log.info(
           s"Queued tasks: ${queueStat.queued.size}. Running tasks: ${queueStat.running.size}. Pending nodes: ${state.pending.size} . Running nodes: ${state.running.size}. Largest request: ${queueStat.queued
             .sortBy(_._2.cpu)
-            .lastOption}/${queueStat.queued.sortBy(_._2.memory).lastOption}")
+            .lastOption}/${queueStat.queued.sortBy(_._2.memory).lastOption}"
+        )
       }
       try {
         val neededNodes = decideNewNode.needNewNode(
           queueStat,
           state.running.toSeq.map(_._2) ++ Seq(unmanagedResource),
-          state.pending.toSeq.map(_._2))
+          state.pending.toSeq.map(_._2)
+        )
 
         val skip = neededNodes.values.sum == 0
         if (!skip) {
@@ -157,17 +160,20 @@ class NodeRegistry(
             state.cumulativeRequested <= config.maxNodesCumulative
           if (!canRequest) {
             log.info(
-              "New node request will not proceed: pending nodes or reached max nodes. max: " + config.maxNodes + ", pending: " + state.pending.size + ", running: " + state.running.size)
+              "New node request will not proceed: pending nodes or reached max nodes. max: " + config.maxNodes + ", pending: " + state.pending.size + ", running: " + state.running.size
+            )
           } else {
 
             val allowedNewNodes = math.min(
               config.maxNodes - (state.running.size + state.pending.size),
-              config.maxNodesCumulative - state.cumulativeRequested)
+              config.maxNodesCumulative - state.cumulativeRequested
+            )
 
             val requestedNodes = neededNodes.take(allowedNewNodes)
 
             log.info(
-              "Request " + requestedNodes.size + " node. One from each: " + requestedNodes.keySet)
+              "Request " + requestedNodes.size + " node. One from each: " + requestedNodes.keySet
+            )
 
             val updatedState = requestedNodes.foldLeft(state) {
               case (state, (request, _)) =>
@@ -214,16 +220,18 @@ class NodeRegistry(
             createNode.initializeNode(node)
             context.actorOf(
               Props(
-                new NodeKiller(shutdownNode = shutdownNode,
-                               targetLauncherActor =
-                                 LauncherActor(node.launcherActor),
-                               targetNode = node,
-                               listener = self))
-                .withDispatcher("nodekiller-pinned")
+                new NodeKiller(
+                  shutdownNode = shutdownNode,
+                  targetLauncherActor = LauncherActor(node.launcherActor),
+                  targetNode = node,
+                  listener = self
+                )
+              ).withDispatcher("nodekiller-pinned")
             )
           case None =>
             log.error(
-              s"Failed to find running job id from pending job id. $node")
+              s"Failed to find running job id from pending job id. $node"
+            )
         }
 
       } catch {

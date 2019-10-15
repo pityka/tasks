@@ -29,10 +29,14 @@ import tasks.util.config.TasksConfig
 
 /* Do not change the fqcn of this object! See core/UIComponent.scala */
 object BackendUIBootstrap extends UIComponentBootstrap {
-  def startQueueUI(implicit actorSystem: ActorSystem,
-                   config: TasksConfig): QueueUIBackendImpl =
+  def startQueueUI(
+      implicit actorSystem: ActorSystem,
+      config: TasksConfig
+  ): QueueUIBackendImpl =
     new QueueUIBackendImpl
 
-  def startAppUI(implicit actorSystem: ActorSystem,
-                 config: TasksConfig): AppUI = new AppUIBackendImpl
+  def startAppUI(
+      implicit actorSystem: ActorSystem,
+      config: TasksConfig
+  ): AppUI = new AppUIBackendImpl
 }

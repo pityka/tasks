@@ -87,10 +87,11 @@ trait HostConfigurationFromConfig extends HostConfiguration {
 
 }
 
-class LocalConfiguration(val availableCPU: Int,
-                         val availableMemory: Int,
-                         val availableScratch: Int)
-    extends HostConfiguration {
+class LocalConfiguration(
+    val availableCPU: Int,
+    val availableMemory: Int,
+    val availableScratch: Int
+) extends HostConfiguration {
 
   override lazy val myRoles = Set(App, Queue, Worker)
 
@@ -100,9 +101,11 @@ class LocalConfiguration(val availableCPU: Int,
 }
 
 class LocalConfigurationFromConfig(implicit config: TasksConfig)
-    extends LocalConfiguration(config.hostNumCPU,
-                               config.hostRAM,
-                               config.hostScratch)
+    extends LocalConfiguration(
+      config.hostNumCPU,
+      config.hostRAM,
+      config.hostScratch
+    )
 
 class MasterSlaveFromConfig(implicit val config: TasksConfig)
     extends HostConfigurationFromConfig

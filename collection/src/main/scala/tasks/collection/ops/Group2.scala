@@ -148,27 +148,28 @@ trait Group2Ops {
   ): Partial[(EColl[AA], EColl[BB]), EColl[C]] =
     Partial({
       case (data1, data2) =>
-        resourceRequest => tsc =>
-          Group2.task(taskID, taskVersion)(
-            Group2.Input[AA, A, BB, B, C](
-              data1,
-              data2,
-              implicitly[SerDe[AA]],
-              implicitly[SerDe[BB]],
-              implicitly[SerDe[(Option[A], Option[B])]],
-              implicitly[SerDe[C]],
-              keyA,
-              keyB,
-              preTransformA,
-              preTransformB,
-              postTransform,
-              maxParallelJoins,
-              numberOfShards,
-              outName,
-              taskID,
-              taskVersion
-            )
-          )(resourceRequest)(tsc)
+        resourceRequest =>
+          tsc =>
+            Group2.task(taskID, taskVersion)(
+              Group2.Input[AA, A, BB, B, C](
+                data1,
+                data2,
+                implicitly[SerDe[AA]],
+                implicitly[SerDe[BB]],
+                implicitly[SerDe[(Option[A], Option[B])]],
+                implicitly[SerDe[C]],
+                keyA,
+                keyB,
+                preTransformA,
+                preTransformB,
+                postTransform,
+                maxParallelJoins,
+                numberOfShards,
+                outName,
+                taskID,
+                taskVersion
+              )
+            )(resourceRequest)(tsc)
     })
 
 }

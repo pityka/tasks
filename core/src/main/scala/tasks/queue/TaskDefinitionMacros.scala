@@ -30,7 +30,8 @@ object TaskDefinitionMacros {
   import scala.reflect.macros.blackbox.Context
 
   def taskDefinitionFromTree[A: cxt.WeakTypeTag, C: cxt.WeakTypeTag](
-      cxt: Context)(
+      cxt: Context
+  )(
       taskID: cxt.Expr[String],
       taskVersion: cxt.Expr[Int]
   )(

@@ -102,7 +102,7 @@ private[ecoll] object Sort {
                   .decodeFileForFlatJoin(r, sk, resourceAllocated.cpu)(f)(
                     ctx.components.actorMaterializer.executionContext,
                     ctx.components
-                )
+                  )
 
               val source = {
                 implicit val ordering: Ordering[(String, A)] =
@@ -122,7 +122,8 @@ private[ecoll] object Sort {
 
                   EColl.fromSource(source, outName, resourceAllocated.cpu)(
                     w,
-                    ctx.components)
+                    ctx.components
+                  )
                 }
                 _ <- Future.traverse(sortedPartitions)(_.data.delete)
               } yield merged
@@ -142,19 +143,20 @@ trait SortOps {
   )(fun: Spore[A, String]): Partial[EColl[A], EColl[A]] =
     Partial({
       case unsorted =>
-        resourceRequest => tsc =>
-          Sort.task(taskID, taskVersion)(
-            Sort
-              .Input(
-                unsorted,
-                implicitly[SerDe[A]],
-                None,
-                fun,
-                outName,
-                taskID,
-                taskVersion
-              )
-          )(resourceRequest)(tsc)
+        resourceRequest =>
+          tsc =>
+            Sort.task(taskID, taskVersion)(
+              Sort
+                .Input(
+                  unsorted,
+                  implicitly[SerDe[A]],
+                  None,
+                  fun,
+                  outName,
+                  taskID,
+                  taskVersion
+                )
+            )(resourceRequest)(tsc)
     })
 
 }

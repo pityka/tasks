@@ -59,23 +59,26 @@ object ResultWithSharedFilesTest extends TestHelpers {
     implicit val dec = deriveDecoder[OtherCollection]
   }
 
-  case class Output(sf1: SharedFile,
-                    sf2: SharedFile,
-                    mut: SharedFile,
-                    recursive: Intermediate,
-                    collection: Seq[Intermediate],
-                    collection2: Seq[Seq[Intermediate]],
-                    collection3: OtherCollection,
-                    collection3Unlisted: OtherCollection,
-                    collection3Mut: OtherCollection,
-                    recursiveMut: IntermediateMutable,
-                    collectionMut: Seq[IntermediateMutable],
-                    option1: Option[SharedFile],
-                    option2: Option[Intermediate],
-                    mut2: IntermediateMutable,
-                    map: Map[String, Intermediate])
-      extends WithSharedFiles(members = List(collection3.sf),
-                              mutables = List(mut, mut2, collection3Mut))
+  case class Output(
+      sf1: SharedFile,
+      sf2: SharedFile,
+      mut: SharedFile,
+      recursive: Intermediate,
+      collection: Seq[Intermediate],
+      collection2: Seq[Seq[Intermediate]],
+      collection3: OtherCollection,
+      collection3Unlisted: OtherCollection,
+      collection3Mut: OtherCollection,
+      recursiveMut: IntermediateMutable,
+      collectionMut: Seq[IntermediateMutable],
+      option1: Option[SharedFile],
+      option2: Option[Intermediate],
+      mut2: IntermediateMutable,
+      map: Map[String, Intermediate]
+  ) extends WithSharedFiles(
+        members = List(collection3.sf),
+        mutables = List(mut, mut2, collection3Mut)
+      )
 
   object Output {
     implicit val enc = deriveEncoder[Output]
@@ -147,10 +150,12 @@ object ResultWithSharedFilesTest extends TestHelpers {
         t2 <- f2
         t2Files <- Future.sequence(getFiles(t2))
       } yield
-        (t1Files,
-         t2Files,
-         t1.mutableFiles.map(_.name),
-         t1.immutableFiles.map(_.name))
+        (
+          t1Files,
+          t2Files,
+          t1.mutableFiles.map(_.name),
+          t1.immutableFiles.map(_.name)
+        )
 
       await(future)
 
@@ -173,18 +178,20 @@ class WithSharedFilesTestSuite extends FunSuite with Matchers {
     }
     ResultWithSharedFilesTest.sideEffect.count(_ == "execution of task") shouldBe 1
     t1MutablesFiles.sorted shouldBe Seq("f11", "f14", "f15", "f16", "f3", "f9")
-    t1ImmutablesFiles.sorted shouldBe Seq("f1",
-                                          "f10",
-                                          "f12",
-                                          "f13",
-                                          "f17",
-                                          "f18",
-                                          "f2",
-                                          "f4",
-                                          "f5",
-                                          "f6",
-                                          "f7",
-                                          "f8")
+    t1ImmutablesFiles.sorted shouldBe Seq(
+      "f1",
+      "f10",
+      "f12",
+      "f13",
+      "f17",
+      "f18",
+      "f2",
+      "f4",
+      "f5",
+      "f6",
+      "f7",
+      "f8"
+    )
 
   }
 

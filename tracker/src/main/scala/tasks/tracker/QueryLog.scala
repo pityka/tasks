@@ -19,12 +19,14 @@ object QueryLog {
       deriveDecoder[Node]
   }
 
-  case class RawNode(taskId: String,
-                     labels: Labels,
-                     pathFromRoot: Seq[String],
-                     resource: ResourceAllocated,
-                     elapsedTime: ElapsedTimeNanoSeconds,
-                     dataDependencies: Seq[String]) {
+  case class RawNode(
+      taskId: String,
+      labels: Labels,
+      pathFromRoot: Seq[String],
+      resource: ResourceAllocated,
+      elapsedTime: ElapsedTimeNanoSeconds,
+      dataDependencies: Seq[String]
+  ) {
     def id = pathFromRoot.last
   }
 
@@ -37,13 +39,15 @@ object QueryLog {
       deriveDecoder[RawNode]
   }
 
-  case class Node(taskId: String,
-                  id: String,
-                  labels: Labels,
-                  dataChildren: Seq[String],
-                  directChildren: Seq[String],
-                  resource: ResourceAllocated,
-                  elapsedTime: ElapsedTimeNanoSeconds) {
+  case class Node(
+      taskId: String,
+      id: String,
+      labels: Labels,
+      dataChildren: Seq[String],
+      directChildren: Seq[String],
+      resource: ResourceAllocated,
+      elapsedTime: ElapsedTimeNanoSeconds
+  ) {
 
     def bothChildren = (dataChildren ++ directChildren).distinct
 
@@ -54,9 +58,11 @@ object QueryLog {
       labels.values.find(_._1 == wallClockTimeKey).map(_._2.toDouble)
   }
 
-  def readNodes(source: InputStream,
-                excludeTaskIds: Set[String],
-                includeTaskIds: Set[String]): Seq[RawNode] =
+  def readNodes(
+      source: InputStream,
+      excludeTaskIds: Set[String],
+      includeTaskIds: Set[String]
+  ): Seq[RawNode] =
     scala.io.Source
       .fromInputStream(source)
       .getLines
@@ -69,26 +75,32 @@ object QueryLog {
       }
       .filter(_.toOption.isDefined)
       .map(_.get)
-      .filterNot(elem =>
-        if (excludeTaskIds.isEmpty) false
-        else excludeTaskIds.contains(elem.taskId.id))
-      .filter(elem =>
-        if (includeTaskIds.isEmpty) true
-        else includeTaskIds.contains(elem.taskId.id))
+      .filterNot(
+        elem =>
+          if (excludeTaskIds.isEmpty) false
+          else excludeTaskIds.contains(elem.taskId.id)
+      )
+      .filter(
+        elem =>
+          if (includeTaskIds.isEmpty) true
+          else includeTaskIds.contains(elem.taskId.id)
+      )
       .filter(elem => elem.metadata.isDefined)
-      .map(elem =>
-        RawNode(
-          elem.taskId.id,
-          elem.labels,
-          "root" +: elem.metadata.get.lineage.lineage.map(_.toString),
-          elem.resource,
-          elem.elapsedTime,
-          elem.metadata.toSeq
-            .flatMap(_.dependencies.flatMap(_.context.toSeq.collect {
-              case h: tasks.fileservice.HistoryContextImpl => h.traceId.toList
-            }.flatten))
-            .distinct
-      ))
+      .map(
+        elem =>
+          RawNode(
+            elem.taskId.id,
+            elem.labels,
+            "root" +: elem.metadata.get.lineage.lineage.map(_.toString),
+            elem.resource,
+            elem.elapsedTime,
+            elem.metadata.toSeq
+              .flatMap(_.dependencies.flatMap(_.context.toSeq.collect {
+                case h: tasks.fileservice.HistoryContextImpl => h.traceId.toList
+              }.flatten))
+              .distinct
+          )
+      )
       .toList
 
   def subtree(tree: Seq[RawNode], root: String) =
@@ -158,7 +170,8 @@ object QueryLog {
 
   private def addDataEdgesIfNotCausingCycles(
       tree: Seq[Node],
-      extraForwardEdges: Map[String, List[String]]) = {
+      extraForwardEdges: Map[String, List[String]]
+  ) = {
     val children = recursiveChildren(tree)
 
     tree.map { node =>
@@ -185,8 +198,9 @@ object QueryLog {
     val sorted = topologicalSort(tree).reverse
     sorted.foldLeft(Map.empty[String, Seq[String]]) {
       case (map, elem) =>
-        val allChildren = (elem.bothChildren ++ elem.bothChildren.flatMap(ch =>
-          map.get(ch).toSeq.flatten)).distinct
+        val allChildren = (elem.bothChildren ++ elem.bothChildren.flatMap(
+          ch => map.get(ch).toSeq.flatten
+        )).distinct
         map.updated(elem.id, allChildren)
     }
   }
@@ -195,8 +209,9 @@ object QueryLog {
     sorted.foldLeft(Map.empty[String, Seq[String]]) {
       case (map, elem) =>
         val allChildren =
-          (elem.directChildren ++ elem.directChildren.flatMap(ch =>
-            map.get(ch).toSeq.flatten)).distinct
+          (elem.directChildren ++ elem.directChildren.flatMap(
+            ch => map.get(ch).toSeq.flatten
+          )).distinct
         map.updated(elem.id, allChildren)
     }
   }
@@ -217,7 +232,8 @@ object QueryLog {
         node.bothChildren
           .map { ch =>
             wallClockTime(ch)
-          }).getOrElse(0d)
+          }
+      ).getOrElse(0d)
 
       val wallClockTime0 = node.elapsedTime.toDouble + maxWallClockTimeOfChildren
 
@@ -232,7 +248,8 @@ object QueryLog {
       }
 
       val cpuTime0 = node.elapsedTime.toDouble * node.resource.cpu + allChildren(
-        node.id).map(byId).map(n => n.elapsedTime.toDouble * n.resource.cpu).sum
+        node.id
+      ).map(byId).map(n => n.elapsedTime.toDouble * n.resource.cpu).sum
 
       wallClockTime.update(node.id, wallClockTime0)
       cpuNeed.update(node.id, cpuNeed0)
@@ -242,11 +259,14 @@ object QueryLog {
 
     tree.map { node =>
       node.copy(
-        labels = node.labels ++ Labels(List(
-          cpuTimeKey -> (cpuTime(node.id)).toString,
-          cpuNeedKey -> cpuNeed(node.id).map(_.resource.cpu).sum.toString,
-          wallClockTimeKey -> (wallClockTime(node.id)).toString
-        )))
+        labels = node.labels ++ Labels(
+          List(
+            cpuTimeKey -> (cpuTime(node.id)).toString,
+            cpuNeedKey -> cpuNeed(node.id).map(_.resource.cpu).sum.toString,
+            wallClockTimeKey -> (wallClockTime(node.id)).toString
+          )
+        )
+      )
     }
 
   }
@@ -279,8 +299,9 @@ object QueryLog {
             List.fill(group.size)(head.id)
         }
         List(
-          parent.copy(dataChildren = data1.toList,
-                      directChildren = direct1.toList))
+          parent
+            .copy(dataChildren = data1.toList, directChildren = direct1.toList)
+        )
       }
     }
 
@@ -288,14 +309,16 @@ object QueryLog {
 
   def ancestorsFinished(tree: Seq[RawNode]) = {
     val ids = tree.groupBy(_.id).map { case (id, nodes) => (id, nodes.head) }
-    tree.filter(node =>
-      node.pathFromRoot.forall(id =>
-        ids.contains(id) || node.pathFromRoot.head == id))
+    tree.filter(
+      node =>
+        node.pathFromRoot
+          .forall(id => ids.contains(id) || node.pathFromRoot.head == id)
+    )
   }
 
   def formatTime(nanos: Double, seconds: Boolean = false) = {
     val div = if (seconds) 1 else 3600
-    val hours = nanos * 1E-9 / div
+    val hours = nanos * 1e-9 / div
     f"$hours%.1f"
   }
 
@@ -312,9 +335,11 @@ object QueryLog {
 
           s""""${node.id}" [label="${node.taskId}(${formatTime(
             node.elapsedTime.toDouble,
-            seconds)}$timeUnit,${formatTime(wallClockTime, seconds)}wc$timeUnit,${formatTime(
+            seconds
+          )}$timeUnit,${formatTime(wallClockTime, seconds)}wc$timeUnit,${formatTime(
             cpuTime,
-            seconds)}c$timeUnit,${node.resource.cpu}c,${cpuNeed}C)"] """
+            seconds
+          )}c$timeUnit,${node.resource.cpu}c,${cpuNeed}C)"] """
       }
       .mkString(";")
     val edgelist = s

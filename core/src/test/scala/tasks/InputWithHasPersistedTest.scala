@@ -36,9 +36,10 @@ object InputWithHasPersistentTest extends TestHelpers {
 
   val sideEffect = scala.collection.mutable.ArrayBuffer[String]()
 
-  case class InputWithHasPersistent(ephemeral: Option[Int],
-                                    persisted: Option[Int])
-      extends HasPersistent[InputWithHasPersistent] {
+  case class InputWithHasPersistent(
+      ephemeral: Option[Int],
+      persisted: Option[Int]
+  ) extends HasPersistent[InputWithHasPersistent] {
     def persistent = InputWithHasPersistent(None, persisted)
   }
   object InputWithHasPersistent {
@@ -58,11 +59,14 @@ object InputWithHasPersistentTest extends TestHelpers {
 
       val future = for {
         t1 <- task(InputWithHasPersistent(Some(1), Some(1)))(
-          ResourceRequest(1, 500))
+          ResourceRequest(1, 500)
+        )
         t2 <- task(InputWithHasPersistent(Some(2), Some(1)))(
-          ResourceRequest(1, 500))
+          ResourceRequest(1, 500)
+        )
         t3 <- task(InputWithHasPersistent(Some(2), Some(2)))(
-          ResourceRequest(1, 500))
+          ResourceRequest(1, 500)
+        )
       } yield t1 + t2 + t3
 
       await(future)
@@ -75,7 +79,8 @@ object InputWithHasPersistentTest extends TestHelpers {
 class InputWithHasPersistentTestSuite extends FunSuite with Matchers {
 
   test(
-    "a failing task should propagate its exception and not interfere with other tasks") {
+    "a failing task should propagate its exception and not interfere with other tasks"
+  ) {
     InputWithHasPersistentTest.run.get shouldBe 3
     InputWithHasPersistentTest.sideEffect.count(_ == "execution of task") shouldBe 2
   }

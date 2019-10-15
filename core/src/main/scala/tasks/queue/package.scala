@@ -31,8 +31,9 @@ package object queue {
 
   def extractDataDependencies[T](
       deserializedInputData: T
-  )(implicit ce: ComputationEnvironment)
-    : Future[DependenciesAndRuntimeMetadata] = {
+  )(
+      implicit ce: ComputationEnvironment
+  ): Future[DependenciesAndRuntimeMetadata] = {
     val logs = ce.currentLogRecords
     if (ce.components.tasksConfig.trackDataFlow) {
       val files = HasSharedFiles.allFiles(deserializedInputData)

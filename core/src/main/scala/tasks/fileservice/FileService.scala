@@ -41,9 +41,11 @@ import tasks.wire._
 import io.circe.generic.semiauto._
 import io.circe.{Encoder, Decoder}
 
-case class FileServiceComponent(actor: ActorRef,
-                                storage: Option[ManagedFileStorage],
-                                remote: RemoteFileStorage)
+case class FileServiceComponent(
+    actor: ActorRef,
+    storage: Option[ManagedFileStorage],
+    remote: RemoteFileStorage
+)
 
 case class FileServicePrefix(list: Vector[String]) {
   def append(n: String) = FileServicePrefix(list :+ n)
@@ -73,13 +75,15 @@ object ProposedManagedFilePath {
 class FileService(
     storage: ManagedFileStorage,
     threadpoolsize: Int = 8,
-    isLocal: File => Boolean = _.canRead)(implicit config: TasksConfig)
+    isLocal: File => Boolean = _.canRead
+)(implicit config: TasksConfig)
     extends Actor
     with akka.actor.ActorLogging {
 
   val fjp = tasks.util.concurrent.newJavaForkJoinPoolWithNamePrefix(
     "fileservice-recordtonames",
-    threadpoolsize)
+    threadpoolsize
+  )
   val ec = ExecutionContext.fromExecutorService(fjp)
 
   import context.dispatcher
@@ -95,16 +99,16 @@ class FileService(
 
   // transferinactor -> (name,channel,fileinbase,filesender)
   private val transferinactors =
-    collection.mutable.Map[ActorRef,
-                           (WritableByteChannel,
-                            File,
-                            ActorRef,
-                            ProposedManagedFilePath,
-                            Boolean)]()
+    collection.mutable.Map[
+      ActorRef,
+      (WritableByteChannel, File, ActorRef, ProposedManagedFilePath, Boolean)
+    ]()
 
-  private def create(length: Long,
-                     hash: Int,
-                     path: ManagedFilePath): Future[SharedFile] = {
+  private def create(
+      length: Long,
+      hash: Int,
+      path: ManagedFilePath
+  ): Future[SharedFile] = {
     Future {
       ((SharedFileHelper.create(length, hash, path)))
     }(ec)
@@ -123,10 +127,12 @@ class FileService(
                 create(length, hash, managedFilePath)
                   .recover {
                     case e =>
-                      log.error(e,
-                                "Error in creation of SharedFile {} {}",
-                                file,
-                                proposedPath)
+                      log.error(
+                        e,
+                        "Error in creation of SharedFile {} {}",
+                        file,
+                        proposedPath
+                      )
                       throw e
                   }
             }
@@ -140,10 +146,12 @@ class FileService(
             new java.io.FileOutputStream(savePath).getChannel
           val transferinActor = context.actorOf(
             Props(new TransferIn(writeableChannel, self))
-              .withDispatcher("transferin"))
+              .withDispatcher("transferin")
+          )
           transferinactors.update(
             transferinActor,
-            (writeableChannel, savePath, sender, proposedPath, ephemeral))
+            (writeableChannel, savePath, sender, proposedPath, ephemeral)
+          )
 
           sender ! TransferToMe(transferinActor)
 
@@ -152,7 +160,8 @@ class FileService(
         case e: Exception => {
           log.error(
             e,
-            "Error while accessing storage " + file + " " + proposedPath)
+            "Error while accessing storage " + file + " " + proposedPath
+          )
           sender ! ErrorWhileAccessingStore
         }
       }
@@ -165,10 +174,12 @@ class FileService(
           new java.io.FileOutputStream(savePath).getChannel
         val transferinActor = context.actorOf(
           Props(new TransferIn(writeableChannel, self))
-            .withDispatcher("transferin"))
+            .withDispatcher("transferin")
+        )
         transferinactors.update(
           transferinActor,
-          (writeableChannel, savePath, sender, proposedPath, true))
+          (writeableChannel, savePath, sender, proposedPath, true)
+        )
 
         sender ! TransferToMe(transferinActor)
 
@@ -198,10 +209,12 @@ class FileService(
                 create(length, hash, managedFilePath)
                   .recover {
                     case e =>
-                      log.error(e,
-                                "Error in creation of SharedFile {} {}",
-                                file,
-                                proposedPath)
+                      log.error(
+                        e,
+                        "Error in creation of SharedFile {} {}",
+                        file,
+                        proposedPath
+                      )
                       throw e
                   }
 
@@ -225,8 +238,13 @@ class FileService(
             if (contains)
               storage.exportFile(managedPath).map(f => KnownPaths(List(f)))
             else
-              Future.successful(FileNotFound(new RuntimeException(
-                s"SharedFile not found in storage. $storage # contains($managedPath) returned false. ")))
+              Future.successful(
+                FileNotFound(
+                  new RuntimeException(
+                    s"SharedFile not found in storage. $storage # contains($managedPath) returned false. "
+                  )
+                )
+              )
           }
           .pipeTo(sender)
       } catch {
@@ -242,7 +260,8 @@ class FileService(
           val chunksize = config.fileSendChunkSize
           context.actorOf(
             Props(new TransferOut(readablechannel, transferinActor, chunksize))
-              .withDispatcher("transferout"))
+              .withDispatcher("transferout")
+          )
         }
 
       } catch {

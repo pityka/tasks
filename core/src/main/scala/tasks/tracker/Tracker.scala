@@ -45,7 +45,9 @@ object TrackerBootstrap {
       case "default" =>
         Some(
           reflectivelyInstantiateObject[TrackerBootstrap](
-            "tasks.tracker.TrackerBootstrapImpl"))
+            "tasks.tracker.TrackerBootstrapImpl"
+          )
+        )
       case other =>
         Some(reflectivelyInstantiateObject[TrackerBootstrap](other))
     }

@@ -18,7 +18,8 @@ object HashedTaskDescription {
 
 case class SerializedTaskDescription(value: Array[Byte]) {
   val hash = HashedTaskDescription(
-    Hashing.murmur3_128.hashBytes(value).toString)
+    Hashing.murmur3_128.hashBytes(value).toString
+  )
 }
 
 object SerializedTaskDescription {
@@ -27,6 +28,7 @@ object SerializedTaskDescription {
       td.persistentInput.getOrElse(td.input).value
 
     SerializedTaskDescription(
-      (td.taskId + "\n" + base64TaskDescription).getBytes("UTF8"))
+      (td.taskId + "\n" + base64TaskDescription).getBytes("UTF8")
+    )
   }
 }

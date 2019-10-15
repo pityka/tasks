@@ -38,7 +38,8 @@ object WebSocketClient {
         akka.Done
       } else {
         throw new RuntimeException(
-          s"Connection failed: ${upgrade.response.status}")
+          s"Connection failed: ${upgrade.response.status}"
+        )
       }
     }
 

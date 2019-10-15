@@ -67,11 +67,13 @@ object Deployment {
           "{RAM}",
           math
             .max(1, (memory.toDouble * config.jvmMaxHeapFactor).toInt)
-            .toString)
+            .toString
+        )
         .replaceAllLiterally("{EXTRA}", config.additionalJavaCommandline)
         .replaceAllLiterally(
           "{MASTER}",
-          masterAddress.getHostName + ":" + masterAddress.getPort)
+          masterAddress.getHostName + ":" + masterAddress.getPort
+        )
         .replaceAllLiterally("{GRID}", elasticSupport.fqcn)
         .replaceAllLiterally("{STORAGE}", config.storageURI.toString)
 

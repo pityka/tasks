@@ -168,22 +168,23 @@ trait GenericMap2Ops {
   ): Partial[(EColl[A], EColl[B]), EColl[C]] =
     Partial({
       case (data1, data2) =>
-        resourceRequest => tsc =>
-          GenericMap2.task(taskID, taskVersion)(
-            GenericMap2.Input(
-              data1,
-              data2,
-              implicitly[SerDe[A]],
-              implicitly[SerDe[B]],
-              implicitly[SerDe[C]],
-              None,
-              fun,
-              parallelize,
-              outName,
-              taskID,
-              taskVersion
-            )
-          )(resourceRequest)(tsc)
+        resourceRequest =>
+          tsc =>
+            GenericMap2.task(taskID, taskVersion)(
+              GenericMap2.Input(
+                data1,
+                data2,
+                implicitly[SerDe[A]],
+                implicitly[SerDe[B]],
+                implicitly[SerDe[C]],
+                None,
+                fun,
+                parallelize,
+                outName,
+                taskID,
+                taskVersion
+              )
+            )(resourceRequest)(tsc)
     })
 
 }

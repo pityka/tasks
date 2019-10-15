@@ -38,9 +38,11 @@ import scala.util.Try
 import io.circe.{Encoder, Decoder}
 import io.circe.generic.semiauto._
 
-case class Node(name: RunningJobId,
-                size: ResourceAvailable,
-                launcherActor: ActorRef)
+case class Node(
+    name: RunningJobId,
+    size: ResourceAvailable,
+    launcherActor: ActorRef
+)
 
 object Node {
   implicit val enc: Encoder[Node] = deriveEncoder[Node]
@@ -64,7 +66,8 @@ trait ShutdownNode extends ShutdownRunningNode {
 
 trait CreateNode {
   def requestOneNewJobFromJobScheduler(
-      k: ResourceRequest): Try[(PendingJobId, ResourceAvailable)]
+      k: ResourceRequest
+  ): Try[(PendingJobId, ResourceAvailable)]
 
   def convertRunningToPending(p: RunningJobId): Option[PendingJobId] =
     Some(PendingJobId(p.value))
@@ -76,8 +79,10 @@ trait CreateNode {
 }
 
 trait CreateNodeFactory {
-  def apply(masterAddress: InetSocketAddress,
-            codeAddres: CodeAddress): CreateNode
+  def apply(
+      masterAddress: InetSocketAddress,
+      codeAddres: CodeAddress
+  ): CreateNode
 }
 
 trait ReaperFactory {
@@ -88,7 +93,8 @@ trait DecideNewNode {
   def needNewNode(
       q: QueueStat,
       registeredNodes: Seq[ResourceAvailable],
-      pendingNodes: Seq[ResourceAvailable]): Map[ResourceRequest, Int]
+      pendingNodes: Seq[ResourceAvailable]
+  ): Map[ResourceRequest, Int]
 }
 
 class ShutdownReaper(id: RunningJobId, shutdown: ShutdownRunningNode)

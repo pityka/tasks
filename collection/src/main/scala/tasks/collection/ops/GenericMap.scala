@@ -208,17 +208,18 @@ trait GenericMapOps {
   ): Partial[(EColl[A], B), EColl[C]] =
     Partial({
       case (data1, data2) =>
-        resource => implicit tsc =>
-          implicit val ec = tsc.executionContext
-          implicit val w = implicitly[SerDe[B]].ser(())
-          val p = genericMap(taskID, taskVersion, parallelize)(
-            GenericMap.adaptedDefined(fun)
-          )
+        resource =>
+          implicit tsc =>
+            implicit val ec = tsc.executionContext
+            implicit val w = implicitly[SerDe[B]].ser(())
+            val p = genericMap(taskID, taskVersion, parallelize)(
+              GenericMap.adaptedDefined(fun)
+            )
 
-          for {
-            b <- EColl.single(data2, None)
-            r <- p((data1, Some(b)))(resource)(tsc)
-          } yield r
+            for {
+              b <- EColl.single(data2, None)
+              r <- p((data1, Some(b)))(resource)(tsc)
+            } yield r
 
     })
   def mapWithFirst[A: SerDe, B: SerDe, C: SerDe](
@@ -233,11 +234,12 @@ trait GenericMapOps {
   ): Partial[(EColl[A], EColl[B]), EColl[C]] =
     Partial({
       case (data1, data2) =>
-        resource => tsc =>
-          val p = genericMap(taskID, taskVersion, parallelize)(
-            GenericMap.adaptedDefined(fun)
-          )
-          p((data1, Some(data2)))(resource)(tsc)
+        resource =>
+          tsc =>
+            val p = genericMap(taskID, taskVersion, parallelize)(
+              GenericMap.adaptedDefined(fun)
+            )
+            p((data1, Some(data2)))(resource)(tsc)
     })
 
   def mapWithContext[A: SerDe, B: SerDe, C: SerDe](
@@ -252,11 +254,12 @@ trait GenericMapOps {
   ): Partial[(EColl[A], EColl[B]), EColl[C]] =
     Partial({
       case (data1, data2) =>
-        resource => tsc =>
-          val p = genericMap(taskID, taskVersion, parallelize)(
-            GenericMap.adaptedEmpty(fun)
-          )
-          p((data1, Some(data2)))(resource)(tsc)
+        resource =>
+          tsc =>
+            val p = genericMap(taskID, taskVersion, parallelize)(
+              GenericMap.adaptedEmpty(fun)
+            )
+            p((data1, Some(data2)))(resource)(tsc)
     })
 
   def genericMap[A: SerDe, B: SerDe, C: SerDe](
@@ -278,22 +281,23 @@ trait GenericMapOps {
   ): Partial[(EColl[A], Option[EColl[B]]), EColl[C]] =
     Partial({
       case (data1, data2) =>
-        resourceRequest => tsc =>
-          GenericMap.task(taskID, taskVersion)(
-            GenericMap.Input(
-              data1,
-              data2,
-              implicitly[SerDe[A]],
-              implicitly[SerDe[B]],
-              implicitly[SerDe[C]],
-              None,
-              fun,
-              parallelize,
-              outName,
-              taskID,
-              taskVersion
-            )
-          )(resourceRequest)(tsc)
+        resourceRequest =>
+          tsc =>
+            GenericMap.task(taskID, taskVersion)(
+              GenericMap.Input(
+                data1,
+                data2,
+                implicitly[SerDe[A]],
+                implicitly[SerDe[B]],
+                implicitly[SerDe[C]],
+                None,
+                fun,
+                parallelize,
+                outName,
+                taskID,
+                taskVersion
+              )
+            )(resourceRequest)(tsc)
     })
 
 }

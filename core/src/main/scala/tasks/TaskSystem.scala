@@ -73,15 +73,17 @@ case class TaskSystemComponents(
   def withChildPrefix(names: Seq[String]) =
     this.copy(filePrefix = this.filePrefix.append(names))
 
-  def withFilePrefix[B](prefix: Seq[String])(
-      fun: TaskSystemComponents => B): B =
+  def withFilePrefix[B](
+      prefix: Seq[String]
+  )(fun: TaskSystemComponents => B): B =
     fun(this.withChildPrefix(prefix))
 }
 
-class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
-                                 val system: ActorSystem,
-                                 val elasticSupport: Option[ElasticSupport])(
-    implicit val config: TasksConfig) {
+class TaskSystem private[tasks] (
+    val hostConfig: HostConfiguration,
+    val system: ActorSystem,
+    val elasticSupport: Option[ElasticSupport]
+)(implicit val config: TasksConfig) {
 
   implicit val AS = system
   implicit val AM = ActorMaterializer()
@@ -104,7 +106,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
     tasksystemlog.warning(
       "Number of CPUs in the machine is " + Runtime
         .getRuntime()
-        .availableProcessors + ". numCPU should not be greater than this.")
+        .availableProcessors + ". numCPU should not be greater than this."
+    )
   }
 
   tasksystemlog.info("Master node address is: " + hostConfig.master.toString)
@@ -124,14 +127,17 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
       val noderegistry = Try(
         Await.result(
           system.actorSelection(remoteActorPath).resolveOne(60 seconds),
-          atMost = 60 seconds))
+          atMost = 60 seconds
+        )
+      )
       tasksystemlog.info("Remote node registry: " + noderegistry)
       noderegistry match {
         case Success(nr) => Some(nr)
         case Failure(e) =>
           tasksystemlog.error(
             "Failed to contact remote node registry. Shut down job.",
-            e)
+            e
+          )
           try {
             elasticSupport.get.selfShutdownNow
           } finally {
@@ -150,7 +156,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
       val s3bucket =
         if (config.storageURI.getScheme != null && config.storageURI.getScheme == "s3") {
           Some(
-            (config.storageURI.getAuthority, config.storageURI.getPath.drop(1)))
+            (config.storageURI.getAuthority, config.storageURI.getPath.drop(1))
+          )
         } else None
 
       if (s3bucket.isDefined) {
@@ -165,9 +172,11 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
             config.storageURI.getPath
           else {
             tasksystemlog.error(
-              s"${config.storageURI} unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative")
+              s"${config.storageURI} unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative"
+            )
             throw new RuntimeException(
-              s"${config.storageURI} unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative")
+              s"${config.storageURI} unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative"
+            )
           }
         val storageFolder = new File(storageFolderPath).getCanonicalFile
         if (storageFolder.isFile) {
@@ -178,12 +187,14 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
           if (hostConfig.isQueue) {
 
             tasksystemlog.warning(
-              s"Folder $storageFolder does not exists. Try to create it. ")
+              s"Folder $storageFolder does not exists. Try to create it. "
+            )
             storageFolder.mkdirs
             Some(new FolderFileStorage(storageFolder))
           } else {
             tasksystemlog.warning(
-              s"Folder $storageFolder does not exists. This is not a master node. Reverting to no managed storage.")
+              s"Folder $storageFolder does not exists. This is not a master node. Reverting to no managed storage."
+            )
             None
           }
         } else {
@@ -202,7 +213,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
       val localFileServiceActor = system.actorOf(
         Props(new FileService(managedFileStorage.get, threadpoolsize))
           .withDispatcher("fileservice-pinned"),
-        "fileservice")
+        "fileservice"
+      )
       reaperActor ! WatchMe(localFileServiceActor)
       localFileServiceActor
     } else {
@@ -210,7 +222,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
         s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/fileservice"
       val remoteFileServieActor = Await.result(
         system.actorSelection(actorPath).resolveOne(600 seconds),
-        atMost = 600 seconds)
+        atMost = 600 seconds
+      )
 
       remoteFileServieActor
     }
@@ -239,24 +252,29 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
 
       val cache: Cache =
         if (config.cacheEnabled)
-          new SharedFileCache()(fileServiceComponent,
-                                system,
-                                system.dispatcher,
-                                AM,
-                                config)
+          new SharedFileCache()(
+            fileServiceComponent,
+            system,
+            system.dispatcher,
+            AM,
+            config
+          )
         else new DisabledCache
 
       val localCacheActor = system.actorOf(
         Props(new TaskResultCacheActor(cache, fileServiceComponent))
           .withDispatcher("cache-pinned"),
-        "cache")
+        "cache"
+      )
       reaperActor ! WatchMe(localCacheActor)
       localCacheActor
     } else {
       val actorPath =
         s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/cache"
-      Await.result(system.actorSelection(actorPath).resolveOne(600 seconds),
-                   atMost = 600 seconds)
+      Await.result(
+        system.actorSelection(actorPath).resolveOne(600 seconds),
+        atMost = 600 seconds
+      )
 
     }
   } catch {
@@ -286,9 +304,11 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
         trackerEventListener.toList
 
       val localActor =
-        system.actorOf(Props(new TaskQueue(eventListeners))
-                         .withDispatcher("taskqueue"),
-                       "queue")
+        system.actorOf(
+          Props(new TaskQueue(eventListeners))
+            .withDispatcher("taskqueue"),
+          "queue"
+        )
       reaperActor ! WatchMe(localActor)
       localActor
     } else {
@@ -296,7 +316,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
         s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/queue"
       val remoteActor = Await.result(
         system.actorSelection(actorPath).resolveOne(600 seconds),
-        atMost = 600 seconds)
+        atMost = 600 seconds
+      )
 
       remoteActor
     }
@@ -324,9 +345,13 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
         if (hostConfig.isApp)
           Some(
             elastic.CodeAddress(
-              new java.net.InetSocketAddress(packageServerHostname,
-                                             packageServerPort),
-              config.codeVersion))
+              new java.net.InetSocketAddress(
+                packageServerHostname,
+                packageServerPort
+              ),
+              config.codeVersion
+            )
+          )
         else None
 
       elasticSupport.map(
@@ -334,13 +359,16 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
           es(
             masterAddress = hostConfig.master,
             queueActor = QueueActor(queueActor),
-            resource = ResourceAvailable(cpu = hostConfig.availableCPU,
-                                         memory = hostConfig.availableMemory,
-                                         scratch = hostConfig.availableScratch),
+            resource = ResourceAvailable(
+              cpu = hostConfig.availableCPU,
+              memory = hostConfig.availableMemory,
+              scratch = hostConfig.availableScratch
+            ),
             codeAddress = codeAddress,
             eventListener =
               uiComponent.flatMap(_.map(_.nodeRegistryEventListener))
-        ))
+          )
+      )
     } else None
 
   val localNodeRegistry: Option[ActorRef] =
@@ -384,7 +412,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
         case Failure(e) =>
           tasksystemlog.error(
             e,
-            s"Packaging self failed. Main thread exited? Skip starting package server.")
+            s"Packaging self failed. Main thread exited? Skip starting package server."
+          )
       }
 
     } else None
@@ -422,16 +451,19 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
             nodeLocalCache.actor,
             VersionedResourceAvailable(
               config.codeVersion,
-              ResourceAvailable(cpu = hostConfig.availableCPU,
-                                memory = hostConfig.availableMemory,
-                                scratch = hostConfig.availableScratch)),
+              ResourceAvailable(
+                cpu = hostConfig.availableCPU,
+                memory = hostConfig.availableMemory,
+                scratch = hostConfig.availableScratch
+              )
+            ),
             refreshInterval = refreshInterval,
             auxExecutionContext = auxExecutionContext,
             actorMaterializer = AM,
             remoteStorage = remoteFileStorage,
             managedStorage = managedFileStorage
-          ))
-          .withDispatcher("launcher"),
+          )
+        ).withDispatcher("launcher"),
         "launcher"
       )
       Some(localActor)
@@ -442,7 +474,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
     val nodeName = getNodeName
 
     tasksystemlog.info(
-      "This is a worker node. ElasticNodeAllocation is enabled. Notifying remote node registry about this node. Node name: " + nodeName + ". Launcher actor address is: " + launcherActor.get)
+      "This is a worker node. ElasticNodeAllocation is enabled. Notifying remote node registry about this node. Node name: " + nodeName + ". Launcher actor address is: " + launcherActor.get
+    )
 
     val tempFolderWriteable =
       if (!config.checkTempFolderOnSlaveInitialization) true
@@ -454,20 +487,27 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
 
     if (!tempFolderWriteable) {
       tasksystemlog.error(
-        s"Temp folder is not writeable (${System.getProperty("java.io.tmpdir")}). Failing slave init.")
+        s"Temp folder is not writeable (${System.getProperty("java.io.tmpdir")}). Failing slave init."
+      )
       initFailed()
     } else {
 
       remoteNodeRegistry.get ! NodeComingUp(
-        Node(RunningJobId(nodeName),
-             ResourceAvailable(hostConfig.availableCPU,
-                               hostConfig.availableMemory,
-                               hostConfig.availableScratch),
-             launcherActor.get))
+        Node(
+          RunningJobId(nodeName),
+          ResourceAvailable(
+            hostConfig.availableCPU,
+            hostConfig.availableMemory,
+            hostConfig.availableScratch
+          ),
+          launcherActor.get
+        )
+      )
 
       system.actorOf(
         Props(elasticSupportFactory.get.createSelfShutdown)
-          .withDispatcher("selfshutdown-pinned"))
+          .withDispatcher("selfshutdown-pinned")
+      )
     }
 
   } else {
@@ -477,7 +517,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
   private def initFailed(): Unit = {
     if (!hostConfig.isApp && hostConfig.isWorker) {
       tasksystemlog.error(
-        "Initialization failed. This is a slave node, notifying remote node registry.")
+        "Initialization failed. This is a slave node, notifying remote node registry."
+      )
       remoteNodeRegistry.foreach(_ ! InitFailed(PendingJobId(getNodeName)))
     }
   }
@@ -512,7 +553,8 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
         localNodeRegistry.foreach(_ ! PoisonPill)
 
         tasksystemlog.info(
-          "Shutting down tasksystem. Blocking until all actors have terminated.")
+          "Shutting down tasksystem. Blocking until all actors have terminated."
+        )
         latch.await
         auxFjp.shutdown
       }
@@ -525,10 +567,12 @@ class TaskSystem private[tasks] (val hostConfig: HostConfiguration,
   val shutdownHook = if (config.addShutdownHook) {
     Some(scala.sys.addShutdownHook {
       tasksystemlog.warning(
-        "JVM is shutting down - will call tasksystem shutdown.")
+        "JVM is shutting down - will call tasksystem shutdown."
+      )
       shutdownImpl
       tasksystemlog.warning(
-        "JVM is shutting down - called tasksystem shutdown.")
+        "JVM is shutting down - called tasksystem shutdown."
+      )
     })
   } else None
 

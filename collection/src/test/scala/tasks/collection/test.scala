@@ -44,25 +44,34 @@ object Tests {
   implicit val s2i = spore(() => implicitly[tasks.queue.Deserializer[Int]])
   implicit val s1 = spore(() => implicitly[tasks.queue.Serializer[Option[Int]]])
   implicit val s2 = spore(
-    () => implicitly[tasks.queue.Deserializer[Option[Int]]])
+    () => implicitly[tasks.queue.Deserializer[Option[Int]]]
+  )
   implicit val s3 = spore(() => implicitly[tasks.queue.Deserializer[String]])
   implicit val s4 = spore(() => implicitly[tasks.queue.Serializer[String]])
   implicit val s5 = spore(
-    () => implicitly[tasks.queue.Deserializer[Seq[Option[Int]]]])
+    () => implicitly[tasks.queue.Deserializer[Seq[Option[Int]]]]
+  )
   implicit val s6 = spore(
-    () => implicitly[tasks.queue.Serializer[Seq[Option[Int]]]])
+    () => implicitly[tasks.queue.Serializer[Seq[Option[Int]]]]
+  )
   implicit val s7 = spore(
-    () => implicitly[tasks.queue.Deserializer[Seq[Option[Option[Int]]]]])
+    () => implicitly[tasks.queue.Deserializer[Seq[Option[Option[Int]]]]]
+  )
   implicit val s8 = spore(
-    () => implicitly[tasks.queue.Serializer[Seq[Option[Option[Int]]]]])
+    () => implicitly[tasks.queue.Serializer[Seq[Option[Option[Int]]]]]
+  )
   implicit val s9 = spore(
     () =>
-      implicitly[tasks.queue.Deserializer[(Option[Option[Int]],
-                                           Option[Option[Int]])]])
+      implicitly[
+        tasks.queue.Deserializer[(Option[Option[Int]], Option[Option[Int]])]
+      ]
+  )
   implicit val s10 = spore(
     () =>
-      implicitly[tasks.queue.Serializer[(Option[Option[Int]],
-                                         Option[Option[Int]])]])
+      implicitly[
+        tasks.queue.Serializer[(Option[Option[Int]], Option[Option[Int]])]
+      ]
+  )
 
   val twice =
     EColl.map("twice", 1)((_: Option[Int]).map(_ * 3))
@@ -70,7 +79,8 @@ object Tests {
   val collect = EColl.collect[Option[Int], String]("doubleodd", 1)(
     (i: Option[Int]) =>
       if (i.isDefined) Some(i.get.toString)
-      else None)
+      else None
+  )
 
   val odd =
     EColl.filter("odd", 1)(spore((i: Option[Int]) => i.forall(_ % 2 == 1)))
@@ -82,26 +92,31 @@ object Tests {
 
   val mapconcat =
     EColl.mapConcat("mapconcat", 1)(
-      spore[Option[Int], Seq[Int]]((a: Option[Int]) => (1 to a.get).toIterable))
+      spore[Option[Int], Seq[Int]]((a: Option[Int]) => (1 to a.get).toIterable)
+    )
 
   val sort =
     EColl.sortBy("sortByToString", 1)((_: Option[Int]).toString)
 
   val group =
-    EColl.groupBy("groupByToConstant", 1)(spore(() => Option(4)),
-                                          spore(() => None),
-                                          (_: Option[Int]) => "a")
+    EColl.groupBy("groupByToConstant", 1)(
+      spore(() => Option(4)),
+      spore(() => None),
+      (_: Option[Int]) => "a"
+    )
   val groupPresorted =
     EColl.groupByPresorted("groupByPresorted", 1)((_: Option[Int]) => "a")
 
   val join =
     EColl.join("outerjoinByToString", 1, Some(3), None)(
-      (_: Option[Int]).toString)
+      (_: Option[Int]).toString
+    )
 
   val join2 =
     EColl.join2LeftOuter("leftouter2joinByToString", 1, Some(3), None)(
       (_: Option[Int]).toString,
-      (_: Option[Int]).toString)
+      (_: Option[Int]).toString
+    )
 
   val take = EColl.take[Option[Int]]("take1", 1)
 
@@ -129,7 +144,8 @@ object Tests {
       val mappedEColl = for {
         scanZero <- EColl.single(Option(0))
         e1 <- EColl.fromSource(
-          akka.stream.scaladsl.Source(List(3, 2, 1).map(Option(_))))
+          akka.stream.scaladsl.Source(List(3, 2, 1).map(Option(_)))
+        )
         s1 <- collect(e1)(ResourceRequest(1, 1))
         e2 <- twice(e1)(ResourceRequest(1, 1))
         sum <- scan((e1, scanZero))(ResourceRequest(1, 1))
@@ -146,7 +162,8 @@ object Tests {
         grouped2 <- groupPresorted(e4)(ResourceRequest(1, 1))
         gV2 <- grouped2.toSeq(1)
         e6 <- join(List(e1 -> false, e2 -> true, e3 -> false))(
-          ResourceRequest(1, 1))
+          ResourceRequest(1, 1)
+        )
         e6V <- e6.toSeq(1)
         e7 <- join2((e1, e2))(ResourceRequest(1, 1))
         e7V <- e7.toSeq(1)
@@ -158,19 +175,21 @@ object Tests {
         distinct <- distinct(e4)(ResourceRequest(1, 1)).flatMap(_.toSeq(1))
 
       } yield
-        (v2,
-         sv2,
-         sumSeqV,
-         mapconcatV,
-         e4V,
-         gV,
-         gV2,
-         e6V,
-         e7V,
-         e8V,
-         e9V.head,
-         e10.head,
-         distinct)
+        (
+          v2,
+          sv2,
+          sumSeqV,
+          mapconcatV,
+          e4V,
+          gV,
+          gV2,
+          e6V,
+          e7V,
+          e8V,
+          e9V.head,
+          e10.head,
+          distinct
+        )
 
       Await.result(mappedEColl, atMost = 10 minutes)
     }
@@ -182,38 +201,46 @@ object Tests {
 class TaskCollectionTestSuite extends FunSuite with Matchers {
 
   val expected =
-    (Vector(Some(9), Some(6), Some(3)),
-     Vector(3, 2, 1),
-     Vector(Some(0), Some(3), Some(5), Some(6)),
-     Vector(1, 2, 3, 1, 2, 1),
-     Vector(Some(3), Some(9)),
-     Vector(List(Some(3), Some(9))),
-     Vector(List(Some(3), Some(9))),
-     Vector(List(Some(Some(3)), Some(Some(3)), Some(Some(3))),
-            List(None, Some(Some(6)), None),
-            List(None, Some(Some(9)), Some(Some(9)))),
-     Vector((Some(Some(3)), Some(3)), (None, Some(6)), (None, Some(9))),
-     Vector(Some(3)),
-     Some(3),
-     Some(6),
-     Vector(Some(3), Some(9)))
+    (
+      Vector(Some(9), Some(6), Some(3)),
+      Vector(3, 2, 1),
+      Vector(Some(0), Some(3), Some(5), Some(6)),
+      Vector(1, 2, 3, 1, 2, 1),
+      Vector(Some(3), Some(9)),
+      Vector(List(Some(3), Some(9))),
+      Vector(List(Some(3), Some(9))),
+      Vector(
+        List(Some(Some(3)), Some(Some(3)), Some(Some(3))),
+        List(None, Some(Some(6)), None),
+        List(None, Some(Some(9)), Some(Some(9)))
+      ),
+      Vector((Some(Some(3)), Some(3)), (None, Some(6)), (None, Some(9))),
+      Vector(Some(3)),
+      Some(3),
+      Some(6),
+      Vector(Some(3), Some(9))
+    )
 
   val got =
-    (Vector(Some(9), Some(6), Some(3)),
-     Vector(3, 2, 1),
-     Vector(Some(0), Some(3), Some(5), Some(6)),
-     Vector(1, 2, 3, 1, 2, 1),
-     Vector(Some(3), Some(9)),
-     Vector(List(Some(3), Some(9))),
-     Vector(List(Some(3), Some(9))),
-     Vector(List(Some(Some(3)), Some(Some(3)), Some(Some(3))),
-            List(None, Some(Some(6)), None),
-            List(None, Some(Some(9)), Some(Some(9)))),
-     Vector((Some(Some(3)), Some(3)), (None, Some(6)), (None, Some(9))),
-     Vector(Some(3)),
-     Some(3),
-     Some(6),
-     Vector(Some(3), Some(9)))
+    (
+      Vector(Some(9), Some(6), Some(3)),
+      Vector(3, 2, 1),
+      Vector(Some(0), Some(3), Some(5), Some(6)),
+      Vector(1, 2, 3, 1, 2, 1),
+      Vector(Some(3), Some(9)),
+      Vector(List(Some(3), Some(9))),
+      Vector(List(Some(3), Some(9))),
+      Vector(
+        List(Some(Some(3)), Some(Some(3)), Some(Some(3))),
+        List(None, Some(Some(6)), None),
+        List(None, Some(Some(9)), Some(Some(9)))
+      ),
+      Vector((Some(Some(3)), Some(3)), (None, Some(6)), (None, Some(9))),
+      Vector(Some(3)),
+      Some(3),
+      Some(6),
+      Vector(Some(3), Some(9))
+    )
 
   test("collection") {
     val tmp = tasks.util.TempFile.createTempFile(".temp")

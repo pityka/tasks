@@ -67,12 +67,18 @@ trait FactoryMethods extends StrictLogging { self: Constants =>
 
     val dataSink = SharedFile
       .sink(dataFileName)
-      .getOrElse(throw new RuntimeException(
-        "No sink created because sinks without a centralized storage are not implemented. Use a centralized storage to support this."))
+      .getOrElse(
+        throw new RuntimeException(
+          "No sink created because sinks without a centralized storage are not implemented. Use a centralized storage to support this."
+        )
+      )
     val indexSink = SharedFile
       .sink(indexFileName)
-      .getOrElse(throw new RuntimeException(
-        "No sink created because sinks without a centralized storage are not implemented. Use a centralized storage to support this."))
+      .getOrElse(
+        throw new RuntimeException(
+          "No sink created because sinks without a centralized storage are not implemented. Use a centralized storage to support this."
+        )
+      )
 
     val bgzipSink = lame.BlockGzip.sinkWithIndex(
       dataSink,

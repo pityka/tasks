@@ -39,7 +39,8 @@ import tasks.shared._
 object WebSocketHelper {
   def open(address: String)(
       implicit
-      AM: ActorMaterializer): (Source[MessageEvent, _], Sink[String, _]) = {
+      AM: ActorMaterializer
+  ): (Source[MessageEvent, _], Sink[String, _]) = {
     val ws = new dom.WebSocket(address)
     val source = ws.source(_.onmessage_=).watchTermination() {
       (_, terminationFuture) =>
@@ -64,8 +65,8 @@ object Helpers {
       jsonArray =
         elements => elements.flatMap(element => loop(element)).distinct.toList,
       jsonObject = obj =>
-        if (obj.contains("path") && obj.contains("hash") && obj.contains(
-              "byteSize")) {
+        if (obj.contains("path") && obj.contains("hash") && obj
+              .contains("byteSize")) {
           obj("path").flatMap(_.asObject) match {
             case Some(obj) if obj.contains("RemoteFilePath") =>
               Json
@@ -103,8 +104,9 @@ object Helpers {
 
   }
 
-  def renderTable(render: UIQueueState => Seq[dom.raw.Element])(
-      implicit AS: ActorSystem) = {
+  def renderTable(
+      render: UIQueueState => Seq[dom.raw.Element]
+  )(implicit AS: ActorSystem) = {
     val t = table(`class` := "ui celled table").render
     val tSink = Flow[UIQueueState]
       .map(render)
@@ -112,16 +114,20 @@ object Helpers {
     (t, tSink)
   }
 
-  val ScheduledTasksTableHeader = tr(th("ID"),
-                                     th("Input"),
-                                     th("Launcher"),
-                                     th("CodeVersion"),
-                                     th("CPU"),
-                                     th("RAM"))
+  val ScheduledTasksTableHeader = tr(
+    th("ID"),
+    th("Input"),
+    th("Launcher"),
+    th("CodeVersion"),
+    th("CPU"),
+    th("RAM")
+  )
 
   def renderTableBodyWithScheduledTasks(
-      scheduledTasks: List[(TaskDescription,
-                            (UILauncherActor, VersionedResourceAllocated))]) =
+      scheduledTasks: List[
+        (TaskDescription, (UILauncherActor, VersionedResourceAllocated))
+      ]
+  ) =
     tbody(
       scheduledTasks.toSeq.map {
         case ((taskDescription, (launcher, resource))) =>
@@ -135,7 +141,7 @@ object Helpers {
             td(showUILauncher(launcher)),
             td(resource.codeVersion),
             td(resource.cpu),
-            td(resource.memory),
+            td(resource.memory)
           )
       }
     ).render
@@ -163,10 +169,12 @@ object Helpers {
     tbody(
       recoveredTasks.toSeq.sortBy(_._1.toString).map {
         case (taskId, count) =>
-          tr(td(`class` := "collapsing")(
-               taskId.id + " @" + taskId.version
-             ),
-             td(count))
+          tr(
+            td(`class` := "collapsing")(
+              taskId.id + " @" + taskId.version
+            ),
+            td(count)
+          )
       }
     ).render
 

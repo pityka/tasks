@@ -36,7 +36,8 @@ import tasks.util.Uri
 class StreamHelper(s3stream: Option[S3ClientSupport])(
     implicit as: ActorSystem,
     actorMaterializer: Materializer,
-    ec: ExecutionContext) {
+    ec: ExecutionContext
+) {
 
   implicit val log = akka.event.Logging(as.eventStream, getClass)
 
@@ -51,11 +52,14 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
     S3Location(bucket, key)
   }
 
-  private def createSourceHttp(uri: Uri,
-                               fromOffset: Long): Source[ByteString, _] = {
+  private def createSourceHttp(
+      uri: Uri,
+      fromOffset: Long
+  ): Source[ByteString, _] = {
     assert(
       fromOffset == 0L,
-      "Seeking into http not implemented yet. Use Range request header or drop the stream to implement it.")
+      "Seeking into http not implemented yet. Use Range request header or drop the stream to implement it."
+    )
     val partSize = 5242880L * 10L
     val retries = 3
     val parallelism = 4
@@ -68,8 +72,10 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
 
     def getRangeOnce(range: headers.ByteRange) =
       Source
-        .lazilyAsync(() =>
-          queue(HttpRequest(uri = uri.akka).addHeader(headers.`Range`(range))))
+        .lazilyAsync(
+          () =>
+            queue(HttpRequest(uri = uri.akka).addHeader(headers.`Range`(range)))
+        )
         .map(_.entity.dataBytes)
         .flatMapConcat(identity)
 
@@ -95,7 +101,8 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
         queue(rq).map { response =>
           response.discardEntityBytes();
           log.debug(
-            s"Probed content range capabilities of server. $rq responds with $response.")
+            s"Probed content range capabilities of server. $rq responds with $response."
+          )
           response.status == StatusCodes.PartialContent
         }
       }
@@ -106,7 +113,8 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
           case true => d
           case false =>
             log.debug(
-              s"$uri returned `Accept-Ranges` but did not respond with 206 on probing request.")
+              s"$uri returned `Accept-Ranges` but did not respond with 206 on probing request."
+            )
             (Some(contentLength), false)
         }
       case other => Future.successful(other)
@@ -114,29 +122,30 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
 
     def makeParts(contentLength: Long) = {
 
-      val intervals = 0L until contentLength by partSize map (s =>
-        (s, math.min(contentLength, s + partSize)))
+      val intervals = 0L until contentLength by partSize map (
+          s => (s, math.min(contentLength, s + partSize))
+      )
 
       intervals
         .map {
           case (startIdx, openEndIdx) =>
-            () =>
-              {
-                val rangeHeader = headers.ByteRange(startIdx, openEndIdx - 1)
-                tasks.util.retryFuture(s"$uri @($startIdx-${openEndIdx - 1})")(
-                  getRangeOnce(rangeHeader)
-                    .runFold(ByteString())(_ ++ _)
-                    .map { data =>
-                      val expectedLength = openEndIdx - startIdx
-                      if (data.size != expectedLength)
-                        throw new RuntimeException(
-                          s"Expected download length does not match. Got ${data.size} for header $rangeHeader.")
+            () => {
+              val rangeHeader = headers.ByteRange(startIdx, openEndIdx - 1)
+              tasks.util.retryFuture(s"$uri @($startIdx-${openEndIdx - 1})")(
+                getRangeOnce(rangeHeader)
+                  .runFold(ByteString())(_ ++ _)
+                  .map { data =>
+                    val expectedLength = openEndIdx - startIdx
+                    if (data.size != expectedLength)
+                      throw new RuntimeException(
+                        s"Expected download length does not match. Got ${data.size} for header $rangeHeader."
+                      )
 
-                      data
-                    },
-                  retries
-                )
-              }
+                    data
+                  },
+                retries
+              )
+            }
         }
     }
 
@@ -149,29 +158,36 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
         .async
 
     Source
-      .lazilyAsync(() =>
-        getHeader.map {
-          case (Some(contentLength), true) =>
-            log.debug(s"Fetching $uri by parts.")
-            byPartsWithRetry(contentLength)
-          case _ =>
-            log.debug(s"Fetching $uri by one request.")
-            bySingleRequest
-      })
+      .lazilyAsync(
+        () =>
+          getHeader.map {
+            case (Some(contentLength), true) =>
+              log.debug(s"Fetching $uri by parts.")
+              byPartsWithRetry(contentLength)
+            case _ =>
+              log.debug(s"Fetching $uri by one request.")
+              bySingleRequest
+          }
+      )
       .flatMapConcat(identity)
 
   }
 
-  private def createSourceS3(uri: Uri,
-                             fromOffset: Long): Source[ByteString, _] = {
+  private def createSourceS3(
+      uri: Uri,
+      fromOffset: Long
+  ): Source[ByteString, _] = {
     assert(
       fromOffset == 0L,
-      "Seeking into S3 file not implemented. Use GetObjectMetaData.range to implement it.")
+      "Seeking into S3 file not implemented. Use GetObjectMetaData.range to implement it."
+    )
     s3stream.get.getData(s3Loc(uri), parallelism = 1)
   }
 
-  private def createSourceFile(uri: Uri,
-                               fromOffset: Long): Source[ByteString, _] = {
+  private def createSourceFile(
+      uri: Uri,
+      fromOffset: Long
+  ): Source[ByteString, _] = {
     val file = new java.io.File(uri.path)
     FileIO.fromPath(file.toPath, chunkSize = 8192, startPosition = fromOffset)
   }
@@ -183,7 +199,8 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
   }
 
   private def getContentLengthAndETagHttp(
-      uri: Uri): Future[(Option[Long], Option[String])] =
+      uri: Uri
+  ): Future[(Option[Long], Option[String])] =
     queue(HttpRequest(uri = uri.akka).withMethod(HttpMethods.HEAD)).map(x => {
       x.discardEntityBytes();
       val etag = x.header[headers.`ETag`].map(_.value)
@@ -192,11 +209,13 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
     })
 
   private def getContentLengthAndETagS3(
-      uri: Uri): Future[(Option[Long], Option[String])] =
+      uri: Uri
+  ): Future[(Option[Long], Option[String])] =
     s3stream.get.getMetadata(s3Loc(uri)).map(x => x.contentLength -> x.eTag)
 
   def getContentLengthAndETag(
-      uri: Uri): Future[(Option[Long], Option[String])] = uri.scheme match {
+      uri: Uri
+  ): Future[(Option[Long], Option[String])] = uri.scheme match {
     case "http" | "https" => getContentLengthAndETagHttp(uri)
     case "s3"             => getContentLengthAndETagS3(uri)
   }

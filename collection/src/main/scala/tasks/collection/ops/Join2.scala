@@ -195,22 +195,23 @@ trait Join2Ops {
   ): Partial[(EColl[AA], EColl[BB]), EColl[C]] =
     Partial({
       case (d1, d2) =>
-        resourceRequest => tsc =>
-          val partial =
-            join2ThenMap(
-              taskID,
-              taskVersion,
-              maxParallelJoins,
-              numberOfShards,
-              outName
-            )(
-              preTransformA,
-              preTransformB,
-              keyA,
-              keyB,
-              Join2.innerTx[A, B, C](postTransform)
-            )
-          partial(((d1, true), (d2, true)))(resourceRequest)(tsc)
+        resourceRequest =>
+          tsc =>
+            val partial =
+              join2ThenMap(
+                taskID,
+                taskVersion,
+                maxParallelJoins,
+                numberOfShards,
+                outName
+              )(
+                preTransformA,
+                preTransformB,
+                keyA,
+                keyB,
+                Join2.innerTx[A, B, C](postTransform)
+              )
+            partial(((d1, true), (d2, true)))(resourceRequest)(tsc)
     })
   def join2OuterTx[AA: SerDe, A: SerDe, BB: SerDe, B: SerDe, C: SerDe](
       taskID: String,
@@ -229,22 +230,23 @@ trait Join2Ops {
   ): Partial[(EColl[AA], EColl[BB]), EColl[C]] =
     Partial({
       case (d1, d2) =>
-        resourceRequest => tsc =>
-          val partial =
-            join2ThenMap(
-              taskID,
-              taskVersion,
-              maxParallelJoins,
-              numberOfShards,
-              outName
-            )(
-              preTransformA,
-              preTransformB,
-              keyA,
-              keyB,
-              Join2.outerTx[A, B, C](postTransform)
-            )
-          partial(((d1, false), (d2, false)))(resourceRequest)(tsc)
+        resourceRequest =>
+          tsc =>
+            val partial =
+              join2ThenMap(
+                taskID,
+                taskVersion,
+                maxParallelJoins,
+                numberOfShards,
+                outName
+              )(
+                preTransformA,
+                preTransformB,
+                keyA,
+                keyB,
+                Join2.outerTx[A, B, C](postTransform)
+              )
+            partial(((d1, false), (d2, false)))(resourceRequest)(tsc)
     })
   def join2LeftOuterTx[AA: SerDe, A: SerDe, BB: SerDe, B: SerDe, C: SerDe](
       taskID: String,
@@ -263,22 +265,23 @@ trait Join2Ops {
   ): Partial[(EColl[AA], EColl[BB]), EColl[C]] =
     Partial({
       case (d1, d2) =>
-        resourceRequest => tsc =>
-          val partial =
-            join2ThenMap(
-              taskID,
-              taskVersion,
-              maxParallelJoins,
-              numberOfShards,
-              outName
-            )(
-              preTransformA,
-              preTransformB,
-              keyA,
-              keyB,
-              Join2.leftOuterTx[A, B, C](postTransform)
-            )
-          partial(((d1, false), (d2, true)))(resourceRequest)(tsc)
+        resourceRequest =>
+          tsc =>
+            val partial =
+              join2ThenMap(
+                taskID,
+                taskVersion,
+                maxParallelJoins,
+                numberOfShards,
+                outName
+              )(
+                preTransformA,
+                preTransformB,
+                keyA,
+                keyB,
+                Join2.leftOuterTx[A, B, C](postTransform)
+              )
+            partial(((d1, false), (d2, true)))(resourceRequest)(tsc)
     })
   def join2RightOuterTx[AA: SerDe, A: SerDe, BB: SerDe, B: SerDe, C: SerDe](
       taskID: String,
@@ -297,22 +300,23 @@ trait Join2Ops {
   ): Partial[(EColl[AA], EColl[BB]), EColl[C]] =
     Partial({
       case (d1, d2) =>
-        resourceRequest => tsc =>
-          val partial =
-            join2ThenMap(
-              taskID,
-              taskVersion,
-              maxParallelJoins,
-              numberOfShards,
-              outName
-            )(
-              preTransformA,
-              preTransformB,
-              keyA,
-              keyB,
-              Join2.rightOuterTx[A, B, C](postTransform)
-            )
-          partial(((d1, true), (d2, false)))(resourceRequest)(tsc)
+        resourceRequest =>
+          tsc =>
+            val partial =
+              join2ThenMap(
+                taskID,
+                taskVersion,
+                maxParallelJoins,
+                numberOfShards,
+                outName
+              )(
+                preTransformA,
+                preTransformB,
+                keyA,
+                keyB,
+                Join2.rightOuterTx[A, B, C](postTransform)
+              )
+            partial(((d1, true), (d2, false)))(resourceRequest)(tsc)
     })
 
   def join2Inner[A: SerDe, B: SerDe](
@@ -327,22 +331,23 @@ trait Join2Ops {
   ): Partial[(EColl[A], EColl[B]), EColl[(A, B)]] =
     Partial({
       case (d1, d2) =>
-        resourceRequest => tsc =>
-          val partial =
-            join2ThenMap(
-              taskID,
-              taskVersion,
-              maxParallelJoins,
-              numberOfShards,
-              outName
-            )(
-              Join2.identityList[A],
-              Join2.identityList[B],
-              keyA,
-              keyB,
-              Join2.inner[A, B]
-            )
-          partial(((d1, true), (d2, true)))(resourceRequest)(tsc)
+        resourceRequest =>
+          tsc =>
+            val partial =
+              join2ThenMap(
+                taskID,
+                taskVersion,
+                maxParallelJoins,
+                numberOfShards,
+                outName
+              )(
+                Join2.identityList[A],
+                Join2.identityList[B],
+                keyA,
+                keyB,
+                Join2.inner[A, B]
+              )
+            partial(((d1, true), (d2, true)))(resourceRequest)(tsc)
     })
 
   def join2Outer[A: SerDe, B: SerDe](
@@ -356,22 +361,23 @@ trait Join2Ops {
   ): Partial[(EColl[A], EColl[B]), EColl[(Option[A], Option[B])]] =
     Partial({
       case (d1, d2) =>
-        resourceRequest => tsc =>
-          val partial =
-            join2ThenMap(
-              taskID,
-              taskVersion,
-              maxParallelJoins,
-              numberOfShards,
-              outName
-            )(
-              Join2.identityList[A],
-              Join2.identityList[B],
-              keyA,
-              keyB,
-              Join2.outer[A, B]
-            )
-          partial(((d1, false), (d2, false)))(resourceRequest)(tsc)
+        resourceRequest =>
+          tsc =>
+            val partial =
+              join2ThenMap(
+                taskID,
+                taskVersion,
+                maxParallelJoins,
+                numberOfShards,
+                outName
+              )(
+                Join2.identityList[A],
+                Join2.identityList[B],
+                keyA,
+                keyB,
+                Join2.outer[A, B]
+              )
+            partial(((d1, false), (d2, false)))(resourceRequest)(tsc)
     })
 
   def join2LeftOuter[A: SerDe, B: SerDe](
@@ -386,22 +392,23 @@ trait Join2Ops {
   ): Partial[(EColl[A], EColl[B]), EColl[(Option[A], B)]] =
     Partial({
       case (d1, d2) =>
-        resourceRequest => tsc =>
-          val partial =
-            join2ThenMap(
-              taskID,
-              taskVersion,
-              maxParallelJoins,
-              numberOfShards,
-              outName
-            )(
-              Join2.identityList[A],
-              Join2.identityList[B],
-              keyA,
-              keyB,
-              Join2.leftOuter[A, B]
-            )
-          partial(((d1, false), (d2, true)))(resourceRequest)(tsc)
+        resourceRequest =>
+          tsc =>
+            val partial =
+              join2ThenMap(
+                taskID,
+                taskVersion,
+                maxParallelJoins,
+                numberOfShards,
+                outName
+              )(
+                Join2.identityList[A],
+                Join2.identityList[B],
+                keyA,
+                keyB,
+                Join2.leftOuter[A, B]
+              )
+            partial(((d1, false), (d2, true)))(resourceRequest)(tsc)
     })
 
   def join2RightOuter[A: SerDe, B: SerDe](
@@ -416,22 +423,23 @@ trait Join2Ops {
   ): Partial[(EColl[A], EColl[B]), EColl[(A, Option[B])]] =
     Partial({
       case (d1, d2) =>
-        resourceRequest => tsc =>
-          val partial =
-            join2ThenMap(
-              taskID,
-              taskVersion,
-              maxParallelJoins,
-              numberOfShards,
-              outName
-            )(
-              Join2.identityList[A],
-              Join2.identityList[B],
-              keyA,
-              keyB,
-              Join2.rightOuter[A, B]
-            )
-          partial(((d1, true), (d2, false)))(resourceRequest)(tsc)
+        resourceRequest =>
+          tsc =>
+            val partial =
+              join2ThenMap(
+                taskID,
+                taskVersion,
+                maxParallelJoins,
+                numberOfShards,
+                outName
+              )(
+                Join2.identityList[A],
+                Join2.identityList[B],
+                keyA,
+                keyB,
+                Join2.rightOuter[A, B]
+              )
+            partial(((d1, true), (d2, false)))(resourceRequest)(tsc)
     })
 
   def join2ThenMap[AA: SerDe, A: SerDe, BB: SerDe, B: SerDe, C: SerDe](
@@ -451,29 +459,30 @@ trait Join2Ops {
   ): Partial[((EColl[AA], Boolean), (EColl[BB], Boolean)), EColl[C]] =
     Partial({
       case ((data1, data1Drop), (data2, data2Drop)) =>
-        resourceRequest => tsc =>
-          Join2.task(taskID, taskVersion)(
-            Join2.Input[AA, A, BB, B, C](
-              data1,
-              data2,
-              implicitly[SerDe[AA]],
-              implicitly[SerDe[BB]],
-              implicitly[SerDe[(Option[A], Option[B])]],
-              implicitly[SerDe[C]],
-              keyA,
-              keyB,
-              preTransformA,
-              preTransformB,
-              postTransform,
-              data1Drop,
-              data2Drop,
-              maxParallelJoins,
-              numberOfShards,
-              outName,
-              taskID,
-              taskVersion
-            )
-          )(resourceRequest)(tsc)
+        resourceRequest =>
+          tsc =>
+            Join2.task(taskID, taskVersion)(
+              Join2.Input[AA, A, BB, B, C](
+                data1,
+                data2,
+                implicitly[SerDe[AA]],
+                implicitly[SerDe[BB]],
+                implicitly[SerDe[(Option[A], Option[B])]],
+                implicitly[SerDe[C]],
+                keyA,
+                keyB,
+                preTransformA,
+                preTransformB,
+                postTransform,
+                data1Drop,
+                data2Drop,
+                maxParallelJoins,
+                numberOfShards,
+                outName,
+                taskID,
+                taskVersion
+              )
+            )(resourceRequest)(tsc)
     })
 
 }

@@ -11,9 +11,12 @@ trait Framing { self: Constants =>
   def decodeFrame =
     Flow[ByteString]
       .via(
-        lame.Framing.delimiter(Eol.head,
-                               maximumFrameLength = Int.MaxValue,
-                               allowTruncation = true))
+        lame.Framing.delimiter(
+          Eol.head,
+          maximumFrameLength = Int.MaxValue,
+          allowTruncation = true
+        )
+      )
 
   def decodeFileForFlatJoin[T](
       decoder: Deserializer[T],

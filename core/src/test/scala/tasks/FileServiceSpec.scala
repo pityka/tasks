@@ -56,10 +56,13 @@ akka.loglevel = "DEBUG" """
 
 class FileServiceSpec
     extends TestKit(
-      ActorSystem("testsystem",
-                  ConfigFactory
-                    .parseString(Conf.str)
-                    .withFallback(ConfigFactory.load("akka.conf"))))
+      ActorSystem(
+        "testsystem",
+        ConfigFactory
+          .parseString(Conf.str)
+          .withFallback(ConfigFactory.load("akka.conf"))
+      )
+    )
     with ImplicitSender
     with FunSpecLike
     with Matchers
@@ -73,8 +76,9 @@ class FileServiceSpec
   implicit val sh = new StreamHelper(None)
 
   implicit val tconfig = tasks.util.config
-    .parse(() =>
-      ConfigFactory.load().withFallback(ConfigFactory.load("akka.conf")))
+    .parse(
+      () => ConfigFactory.load().withFallback(ConfigFactory.load("akka.conf"))
+    )
 
   val remoteStore = new RemoteFileStorage
 
@@ -93,12 +97,16 @@ class FileServiceSpec
       writeBinaryToFile(input.getCanonicalPath, data)
 
       val folder =
-        new File(new java.io.File(getClass.getResource("/").getPath),
-                 "test-empty-source")
+        new File(
+          new java.io.File(getClass.getResource("/").getPath),
+          "test-empty-source"
+        )
       folder.mkdir
       val folder2 =
-        new File(new java.io.File(getClass.getResource("/").getPath),
-                 "test-empty-sourcef")
+        new File(
+          new java.io.File(getClass.getResource("/").getPath),
+          "test-empty-sourcef"
+        )
       folder2.mkdir
 
       val fs = new FolderFileStorage(folder)
@@ -106,16 +114,20 @@ class FileServiceSpec
         Props(
           new FileService(
             fs
-          )))
+          )
+        )
+      )
       implicit val serviceimpl =
         FileServiceComponent(service, Some(fs), remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
       SharedFileHelper.createFromSource(
         akka.stream.scaladsl.Source(List.empty[akka.util.ByteString]),
-        "proba")
+        "proba"
+      )
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
-        data.deep)
+        data.deep
+      )
     }
     it("add new empty file") {
       val data = Array[Byte]()
@@ -134,16 +146,20 @@ class FileServiceSpec
         Props(
           new FileService(
             fs
-          )))
+          )
+        )
+      )
       implicit val serviceimpl =
         FileServiceComponent(service, Some(fs), remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
       scala.concurrent.Await.result(
         SharedFileHelper.createFromFile(input, "proba", false),
-        atMost = Duration.Inf)
+        atMost = Duration.Inf
+      )
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
-        data.deep)
+        data.deep
+      )
     }
     it("add new file") {
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
@@ -162,14 +178,17 @@ class FileServiceSpec
         Props(
           new FileService(
             fs
-          )))
+          )
+        )
+      )
       implicit val serviceimpl =
         FileServiceComponent(service, Some(fs), remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
       SharedFileHelper.createFromFile(input, "proba", false)
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
-        data.deep)
+        data.deep
+      )
     }
     it("add new file - from source") {
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
@@ -177,12 +196,16 @@ class FileServiceSpec
       writeBinaryToFile(input.getCanonicalPath, data)
 
       val folder =
-        new File(new java.io.File(getClass.getResource("/").getPath),
-                 "test1-from-source")
+        new File(
+          new java.io.File(getClass.getResource("/").getPath),
+          "test1-from-source"
+        )
       folder.mkdir
       val folder2 =
-        new File(new java.io.File(getClass.getResource("/").getPath),
-                 "test1f-fro-source")
+        new File(
+          new java.io.File(getClass.getResource("/").getPath),
+          "test1f-fro-source"
+        )
       folder2.mkdir
 
       val fs = new FolderFileStorage(folder)
@@ -190,16 +213,20 @@ class FileServiceSpec
         Props(
           new FileService(
             fs
-          )))
+          )
+        )
+      )
       implicit val serviceimpl =
         FileServiceComponent(service, Some(fs), remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
       SharedFileHelper.createFromSource(
         akka.stream.scaladsl.Source.single(akka.util.ByteString(data)),
-        "proba")
+        "proba"
+      )
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
-        data.deep)
+        data.deep
+      )
     }
 
     it("add new file and ask for it") {
@@ -218,18 +245,23 @@ class FileServiceSpec
         Props(
           new FileService(
             fs
-          )))
+          )
+        )
+      )
       implicit val serviceimpl =
         FileServiceComponent(service, Some(fs), remoteStore)
       implicit val nlc =
         NodeLocalCache.start
       implicit val historyContext = tasks.fileservice.NoHistory
       val t: SharedFile =
-        Await.result(SharedFileHelper.createFromFile(input, "proba", false),
-                     50 seconds)
+        Await.result(
+          SharedFileHelper.createFromFile(input, "proba", false),
+          50 seconds
+        )
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
-        data.deep)
+        data.deep
+      )
 
       val path = Await.result(SharedFileHelper.getPathToFile(t), 50 seconds)
       readBinaryFile(path.getCanonicalPath).deep should equal(data.deep)
@@ -257,13 +289,15 @@ class FileServiceSpec
       val t: SharedFile = SharedFileHelper.createForTesting(
         "proba",
         16,
-        com.google.common.hash.Hashing.crc32c.hashBytes(data).asInt)
+        com.google.common.hash.Hashing.crc32c.hashBytes(data).asInt
+      )
 
       val path = Await.result(SharedFileHelper.getPathToFile(t), 50 seconds)
       readBinaryFile(path.getCanonicalPath).deep should equal(data.deep)
 
       Await.result(SharedFileHelper.isAccessible(t, true), 30 seconds) should be(
-        true)
+        true
+      )
 
     }
   }
@@ -292,7 +326,8 @@ class FileServiceSpec
       val t: SharedFile = SharedFileHelper.createForTesting(
         "proba",
         16,
-        com.google.common.hash.Hashing.crc32c.hashBytes(data).asInt)
+        com.google.common.hash.Hashing.crc32c.hashBytes(data).asInt
+      )
 
       val path = Await.result(SharedFileHelper.getPathToFile(t), 30 seconds)
       readBinaryFile(path.getCanonicalPath).deep should equal(data.deep)

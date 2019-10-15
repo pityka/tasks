@@ -28,10 +28,13 @@ class StaticMessageSerializer(system: ExtendedActorSystem) extends Serializer {
 
   override def includeManifest: Boolean = false
 
-  override def fromBinary(bytes: Array[Byte],
-                          manifest: Option[Class[_]]): AnyRef = {
+  override def fromBinary(
+      bytes: Array[Byte],
+      manifest: Option[Class[_]]
+  ): AnyRef = {
     val r = rightOrThrow(
-      io.circe.parser.decode[StaticMessage](new String(bytes)))
+      io.circe.parser.decode[StaticMessage](new String(bytes))
+    )
     log.debug(s"Decoding {} as {}", new String(bytes), r)
     r
   }
@@ -61,10 +64,13 @@ class ScheduleTaskSerializer(system: ExtendedActorSystem) extends Serializer {
 
   override def includeManifest: Boolean = false
 
-  override def fromBinary(bytes: Array[Byte],
-                          manifest: Option[Class[_]]): AnyRef = {
+  override def fromBinary(
+      bytes: Array[Byte],
+      manifest: Option[Class[_]]
+  ): AnyRef = {
     val r = rightOrThrow(
-      io.circe.parser.decode[ScheduleTask](new String(bytes)))
+      io.circe.parser.decode[ScheduleTask](new String(bytes))
+    )
     log.debug(s"Decoding {} as {}", new String(bytes), r)
     r
   }

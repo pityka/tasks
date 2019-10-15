@@ -40,7 +40,8 @@ import tasks.queue.TaskId
 
 class TaskResultCacheActor(
     val cacheMap: Cache,
-    fileService: FileServiceComponent)(implicit config: TasksConfig)
+    fileService: FileServiceComponent
+)(implicit config: TasksConfig)
     extends Actor
     with ActorLogging
     with Stash {
@@ -53,7 +54,8 @@ class TaskResultCacheActor(
 
   override def preStart = {
     log.info(
-      "Cache service starting. " + cacheMap.toString + s". config.verifySharedFileInCache: ${config.verifySharedFileInCache}. config.skipContentHashVerificationAfterCache: ${config.skipContentHashVerificationAfterCache}.")
+      "Cache service starting. " + cacheMap.toString + s". config.verifySharedFileInCache: ${config.verifySharedFileInCache}. config.skipContentHashVerificationAfterCache: ${config.skipContentHashVerificationAfterCache}."
+    )
   }
 
   override def postStop = {
@@ -73,8 +75,10 @@ class TaskResultCacheActor(
     case PoisonPillToCacheActor => self ! PoisonPill
     case SaveResult(description, result, prefixFromTask) =>
       log.debug("SavingResult")
-      context.become(waitUntilSavingIsDone(description.taskId),
-                     discardOld = false)
+      context.become(
+        waitUntilSavingIsDone(description.taskId),
+        discardOld = false
+      )
 
       val prefix = config.cachePath match {
         case None => prefixFromTask
@@ -117,16 +121,21 @@ class TaskResultCacheActor(
           case None =>
             log.debug(s"Checking: $taskId. Not found in cache.")
             Future.successful(
-              AnswerFromCache(Left("TaskNotFoundInCache"),
-                              originalSender,
-                              scheduleTask))
+              AnswerFromCache(
+                Left("TaskNotFoundInCache"),
+                originalSender,
+                scheduleTask
+              )
+            )
           case _ if !config.verifySharedFileInCache =>
             log.debug(s"Checking: $taskId. Got something (not verified).")
             Future.successful(
-              AnswerFromCache(Right(cacheLookup), originalSender, scheduleTask))
+              AnswerFromCache(Right(cacheLookup), originalSender, scheduleTask)
+            )
           case Some(cacheLookup) =>
             log.debug(
-              s"Checking: $taskId. Got something $cacheLookup, verifying..")
+              s"Checking: $taskId. Got something $cacheLookup, verifying.."
+            )
             val files = cacheLookup.files.toSeq.map(sf => (sf, true))
             val mutableFiles =
               cacheLookup.mutableFiles.toSeq.flatten.map(sf => (sf, false))
@@ -139,7 +148,8 @@ class TaskResultCacheActor(
               .recover {
                 case e =>
                   log.warning(
-                    s"Checking: $taskId. Got something ($cacheLookup), but failed to verify after cache with error: $e.")
+                    s"Checking: $taskId. Got something ($cacheLookup), but failed to verify after cache with error: $e."
+                  )
                   (Nil, false)
               }
               .map {
@@ -148,15 +158,20 @@ class TaskResultCacheActor(
                     (files zip accessibility).filterNot(_._2)
                   log.warning(
                     s"Checking: $taskId. Got something ($cacheLookup), but failed to verify after cache. Inaccessible files: ${inaccessibleFiles.size} : ${inaccessibleFiles
-                      .mkString(", ")}")
-                  AnswerFromCache(Left("TaskNotFoundInCache"),
-                                  originalSender,
-                                  scheduleTask)
+                      .mkString(", ")}"
+                  )
+                  AnswerFromCache(
+                    Left("TaskNotFoundInCache"),
+                    originalSender,
+                    scheduleTask
+                  )
                 case (_, true) =>
                   log.debug(s"Checking: $taskId. Got something (verified).")
-                  AnswerFromCache(Right(Some(cacheLookup)),
-                                  originalSender,
-                                  scheduleTask)
+                  AnswerFromCache(
+                    Right(Some(cacheLookup)),
+                    originalSender,
+                    scheduleTask
+                  )
 
               }
         }

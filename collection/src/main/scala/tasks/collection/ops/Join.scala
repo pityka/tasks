@@ -133,22 +133,23 @@ trait JoinOps {
   ): Partial[List[(EColl[A], Boolean)], EColl[B]] =
     Partial({
       case data1 =>
-        resourceRequest => tsc =>
-          Join.task(taskID, taskVersion)(
-            Join.Input(
-              data1.map(_._1),
-              implicitly[SerDe[A]],
-              implicitly[SerDe[B]],
-              key,
-              transform,
-              data1.zipWithIndex.filter(_._1._2).map(_._2),
-              maxParallelJoins,
-              numberOfShards,
-              outName,
-              taskID,
-              taskVersion
-            )
-          )(resourceRequest)(tsc)
+        resourceRequest =>
+          tsc =>
+            Join.task(taskID, taskVersion)(
+              Join.Input(
+                data1.map(_._1),
+                implicitly[SerDe[A]],
+                implicitly[SerDe[B]],
+                key,
+                transform,
+                data1.zipWithIndex.filter(_._1._2).map(_._2),
+                maxParallelJoins,
+                numberOfShards,
+                outName,
+                taskID,
+                taskVersion
+              )
+            )(resourceRequest)(tsc)
     })
 
 }

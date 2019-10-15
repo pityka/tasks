@@ -33,10 +33,12 @@ import tasks.util.config._
 import tasks.wire._
 import tasks.queue.LauncherActor
 
-class NodeKiller(shutdownNode: ShutdownNode,
-                 targetLauncherActor: LauncherActor,
-                 targetNode: Node,
-                 listener: ActorRef)(implicit config: TasksConfig)
+class NodeKiller(
+    shutdownNode: ShutdownNode,
+    targetLauncherActor: LauncherActor,
+    targetNode: Node,
+    listener: ActorRef
+)(implicit config: TasksConfig)
     extends Actor
     with ActorLogging {
 
@@ -47,7 +49,8 @@ class NodeKiller(shutdownNode: ShutdownNode,
 
   override def preStart: Unit = {
     log.debug(
-      "NodeKiller start. Monitoring actor: " + targetLauncherActor + " on node: " + targetNode.name)
+      "NodeKiller start. Monitoring actor: " + targetLauncherActor + " on node: " + targetNode.name
+    )
 
     import context.dispatcher
 
@@ -83,7 +86,8 @@ class NodeKiller(shutdownNode: ShutdownNode,
 
   def shutdown() {
     log.info(
-      "Shutting down target node: name= " + targetNode.name + " , actor= " + targetLauncherActor)
+      "Shutting down target node: name= " + targetNode.name + " , actor= " + targetLauncherActor
+    )
     shutdownNode.shutdownRunningNode(targetNode.name)
     listener ! RemoveNode(targetNode)
     scheduler.cancel
@@ -99,7 +103,8 @@ class NodeKiller(shutdownNode: ShutdownNode,
             .nanoTime() - lastIdleSessionStart) >= config.idleNodeTimeout.toNanos) {
         try {
           log.info(
-            "Target is idle. Start shutdown sequence. Send PrepareForShutdown to " + targetLauncherActor)
+            "Target is idle. Start shutdown sequence. Send PrepareForShutdown to " + targetLauncherActor
+          )
           targetLauncherActor.actor ! PrepareForShutdown
           log.info("PrepareForShutdown sent to " + targetLauncherActor)
         } catch {

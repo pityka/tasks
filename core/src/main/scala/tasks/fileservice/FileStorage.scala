@@ -53,18 +53,22 @@ object FileStorage {
   }
 }
 
-class RemoteFileStorage(implicit mat: Materializer,
-                        ec: ExecutionContext,
-                        streamHelper: StreamHelper,
-                        as: ActorSystem,
-                        config: TasksConfig) {
+class RemoteFileStorage(
+    implicit mat: Materializer,
+    ec: ExecutionContext,
+    streamHelper: StreamHelper,
+    as: ActorSystem,
+    config: TasksConfig
+) {
 
   val log = akka.event.Logging(as.eventStream, "remote-storage")
 
   def uri(mp: RemoteFilePath): Uri = mp.uri
 
-  def createSource(path: RemoteFilePath,
-                   fromOffset: Long): Source[ByteString, _] =
+  def createSource(
+      path: RemoteFilePath,
+      fromOffset: Long
+  ): Source[ByteString, _] =
     streamHelper.createSource(uri(path), fromOffset)
 
   def getSizeAndHash(path: RemoteFilePath): Future[(Long, Int)] =
@@ -78,9 +82,12 @@ class RemoteFileStorage(implicit mat: Materializer,
       case "s3" | "http" | "https" =>
         streamHelper.getContentLengthAndETag(uri(path)).map {
           case (size, etag) =>
-            (size.getOrElse(
-               throw new RuntimeException(s"Size can't retrieved for $path")),
-             etag.map(_.hashCode).getOrElse(-1))
+            (
+              size.getOrElse(
+                throw new RuntimeException(s"Size can't retrieved for $path")
+              ),
+              etag.map(_.hashCode).getOrElse(-1)
+            )
         }
     }
 
@@ -98,7 +105,8 @@ class RemoteFileStorage(implicit mat: Materializer,
 
   def exportFile(path: RemoteFilePath): Future[File] = {
     val localFile = path.uri.akka.scheme == "file" && new File(
-      path.uri.akka.path.toString).canRead
+      path.uri.akka.path.toString
+    ).canRead
     if (localFile) Future.successful(new File(path.uri.akka.path.toString))
     else {
       val file = TempFile.createTempFile("")
@@ -115,23 +123,29 @@ trait ManagedFileStorage {
 
   def uri(mp: ManagedFilePath): Uri
 
-  def createSource(path: ManagedFilePath,
-                   fromOffset: Long): Source[ByteString, _]
+  def createSource(
+      path: ManagedFilePath,
+      fromOffset: Long
+  ): Source[ByteString, _]
 
   /* If size < 0 then it must not check the size and the hash
    *  but must return true iff the file is readable
    */
   def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean]
 
-  def contains(path: ManagedFilePath,
-               retrieveSizeAndHash: Boolean): Future[Option[SharedFile]]
+  def contains(
+      path: ManagedFilePath,
+      retrieveSizeAndHash: Boolean
+  ): Future[Option[SharedFile]]
 
   def importFile(
       f: File,
-      path: ProposedManagedFilePath): Future[(Long, Int, File, ManagedFilePath)]
+      path: ProposedManagedFilePath
+  ): Future[(Long, Int, File, ManagedFilePath)]
 
-  def sink(path: ProposedManagedFilePath)
-    : Sink[ByteString, Future[(Long, Int, ManagedFilePath)]]
+  def sink(
+      path: ProposedManagedFilePath
+  ): Sink[ByteString, Future[(Long, Int, ManagedFilePath)]]
 
   def exportFile(path: ManagedFilePath): Future[File]
 
@@ -139,8 +153,10 @@ trait ManagedFileStorage {
 
   def sharedFolder(prefix: Seq[String]): Option[File]
 
-  def delete(path: ManagedFilePath,
-             expectedSize: Long,
-             expectedHash: Int): Future[Boolean]
+  def delete(
+      path: ManagedFilePath,
+      expectedSize: Long,
+      expectedHash: Int
+  ): Future[Boolean]
 
 }

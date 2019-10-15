@@ -80,9 +80,11 @@ class NodeLocalCacheTestSuite extends FunSuite with Matchers {
     println(NodeLocalCacheTest.sideEffect)
     NodeLocalCacheTest.sideEffect.count(_ == "execution of task") shouldBe 4
     NodeLocalCacheTest.sideEffect.count(
-      _ == "execution of nodelocalcache factory 1") shouldBe 1
+      _ == "execution of nodelocalcache factory 1"
+    ) shouldBe 1
     NodeLocalCacheTest.sideEffect.count(
-      _ == "execution of nodelocalcache factory 0") shouldBe 2
+      _ == "execution of nodelocalcache factory 0"
+    ) shouldBe 2
   }
 
 }

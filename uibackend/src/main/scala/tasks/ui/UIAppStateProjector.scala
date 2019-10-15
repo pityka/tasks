@@ -40,14 +40,17 @@ object UIAppStateProjector {
           running = state.running :+ ((UIJobId(runningJobId.value), resource))
         )
       case NodeIsDown(Node(runningJobId, _, _)) =>
-        state.copy(running =
-          state.running.filterNot(_._1 == UIJobId(runningJobId.value)))
+        state.copy(
+          running = state.running.filterNot(_._1 == UIJobId(runningJobId.value))
+        )
       case InitFailed(pendingJobId) =>
         state.copy(
           pending =
-            state.pending.filterNot(_._1 === UIJobId(pendingJobId.value)))
+            state.pending.filterNot(_._1 === UIJobId(pendingJobId.value))
+        )
       case NodeIsPending(pendingJobId, resource) =>
         state.copy(
-          pending = state.pending :+ ((UIJobId(pendingJobId.value), resource)))
+          pending = state.pending :+ ((UIJobId(pendingJobId.value), resource))
+        )
     }
 }

@@ -62,11 +62,13 @@ class QueueUI(container: Node) {
         thead(
           tr(
             th(colspan := "6")(
-              "Scheduled tasks, total: " + uiState.scheduledTasks.size)),
+              "Scheduled tasks, total: " + uiState.scheduledTasks.size
+            )
+          ),
           ScheduledTasksTableHeader
         ).render,
         renderTableBodyWithScheduledTasks(uiState.scheduledTasks)
-    )
+      )
   )
 
   val (completedTasksTable, completedTasksTableSink) = renderTable(
@@ -77,11 +79,13 @@ class QueueUI(container: Node) {
             th(colspan := "8")(
               "Completed tasks, total: " + uiState.completedTasks.toSeq
                 .map(_._2)
-                .sum)),
+                .sum
+            )
+          ),
           CompletedTasksTableHeader
         ).render,
         renderTableBodyWithCompletedTasks(uiState.completedTasks)
-    )
+      )
   )
 
   val (recoveredTasksTable, recoveredTasksTableSink) = renderTable(
@@ -92,11 +96,13 @@ class QueueUI(container: Node) {
             th(colspan := "4")(
               "Previously completed tasks, total: " + uiState.recoveredTasks
                 .map(_._2)
-                .sum)),
+                .sum
+            )
+          ),
           RecoveredTasksTableHeader
         ).render,
         renderTableBodyWithRecoveredTasks(uiState.recoveredTasks)
-    )
+      )
   )
 
   val (scheduledTasksSummaryTable, scheudledTasksSummaryTableSink) =
@@ -111,7 +117,9 @@ class QueueUI(container: Node) {
             th(colspan := "4")(
               "Scheduled tasks, total: " + counts
                 .map(_._2)
-                .sum)),
+                .sum
+            )
+          ),
           RecoveredTasksTableHeader
         ).render,
         renderTableBodyWithRecoveredTasks(counts.toSet)
@@ -124,11 +132,13 @@ class QueueUI(container: Node) {
         thead(
           tr(
             th(colspan := "6")(
-              "Failed tasks, total: " + uiState.failedTasks.size)),
+              "Failed tasks, total: " + uiState.failedTasks.size
+            )
+          ),
           ScheduledTasksTableHeader
         ).render,
         renderTableBodyWithScheduledTasks(uiState.failedTasks)
-    )
+      )
   )
 
   val (queuedTasksTable, queuedTasksTableSink) = renderTable(
@@ -137,7 +147,9 @@ class QueueUI(container: Node) {
         thead(
           tr(
             th(colspan := "3")(
-              "Queued tasks, total " + uiState.queuedTasks.size)),
+              "Queued tasks, total " + uiState.queuedTasks.size
+            )
+          ),
           tr(th(), th("ID"), th("Input"))
         ).render,
         tbody(
@@ -155,8 +167,9 @@ class QueueUI(container: Node) {
                 )
             }
             .map(_.render)
-            .take(10)).render
-    )
+            .take(10)
+        ).render
+      )
   )
 
   val root = div(
@@ -174,8 +187,10 @@ class QueueUI(container: Node) {
   val (wsSource, wsSink) = WebSocketHelper.open(s"ws://$host/states")
 
   val uiStateSource = wsSource
-    .map(wsMessage =>
-      io.circe.parser.decode[UIQueueState](wsMessage.data.toString).right.get)
+    .map(
+      wsMessage =>
+        io.circe.parser.decode[UIQueueState](wsMessage.data.toString).right.get
+    )
 
   val keepAliveTicks = {
     import scala.concurrent.duration._

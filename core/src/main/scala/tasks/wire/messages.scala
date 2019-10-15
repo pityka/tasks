@@ -27,19 +27,22 @@ case class LookUp(s: String) extends StaticMessage
 private[tasks] case class QueryTask(sch: ScheduleTask, ac: ActorRef)
     extends StaticMessage
 
-private[tasks] case class TaskDone(sch: ScheduleTask,
-                                   result: UntypedResultWithMetadata,
-                                   elapsedTime: ElapsedTimeNanoSeconds,
-                                   resourceAllocated: ResourceAllocated)
-    extends StaticMessage
+private[tasks] case class TaskDone(
+    sch: ScheduleTask,
+    result: UntypedResultWithMetadata,
+    elapsedTime: ElapsedTimeNanoSeconds,
+    resourceAllocated: ResourceAllocated
+) extends StaticMessage
 
-private[tasks] case class TaskFailedMessageToQueue(sch: ScheduleTask,
-                                                   cause: Throwable)
-    extends StaticMessage
+private[tasks] case class TaskFailedMessageToQueue(
+    sch: ScheduleTask,
+    cause: Throwable
+) extends StaticMessage
 
-private[tasks] case class TaskFailedMessageToProxy(sch: ScheduleTask,
-                                                   cause: Throwable)
-    extends StaticMessage
+private[tasks] case class TaskFailedMessageToProxy(
+    sch: ScheduleTask,
+    cause: Throwable
+) extends StaticMessage
 
 private[tasks] case class AskForWork(resources: VersionedResourceAvailable)
     extends StaticMessage
@@ -51,9 +54,10 @@ private[tasks] case class InternalMessageFromTask(
     result: UntypedResultWithMetadata
 ) extends StaticMessage
 
-private[tasks] case class InternalMessageTaskFailed(actor: ActorRef,
-                                                    cause: Throwable)
-    extends StaticMessage
+private[tasks] case class InternalMessageTaskFailed(
+    actor: ActorRef,
+    cause: Throwable
+) extends StaticMessage
 
 private[tasks] case class FailureMessageFromProxyToProxy(cause: Throwable)
     extends StaticMessage
@@ -103,11 +107,12 @@ case object WaitingForPath extends StaticMessage
 
 case class FileNotFound(e: Throwable) extends StaticMessage
 
-case class Uploaded(length: Long,
-                    hash: Int,
-                    file: Option[File],
-                    p: ManagedFilePath)
-    extends StaticMessage
+case class Uploaded(
+    length: Long,
+    hash: Int,
+    file: Option[File],
+    p: ManagedFilePath
+) extends StaticMessage
 
 case class CouldNotUpload(p: ProposedManagedFilePath) extends StaticMessage
 
@@ -153,10 +158,11 @@ private[tasks] case class RemoveNode(node: Node) extends StaticMessage
 
 case class CacheActor(actor: ActorRef) extends StaticMessage
 
-private[tasks] case class SaveResult(sch: TaskDescription,
-                                     r: UntypedResult,
-                                     prefix: FileServicePrefix)
-    extends StaticMessage
+private[tasks] case class SaveResult(
+    sch: TaskDescription,
+    r: UntypedResult,
+    prefix: FileServicePrefix
+) extends StaticMessage
 
 private[tasks] case class CheckResult(sch: ScheduleTask, sender: Proxy)
     extends StaticMessage
@@ -166,8 +172,8 @@ private[tasks] case object PoisonPillToCacheActor extends StaticMessage
 private[tasks] case class AnswerFromCache(
     message: Either[String, Option[UntypedResult]],
     sender: Proxy,
-    sch: ScheduleTask)
-    extends StaticMessage
+    sch: ScheduleTask
+) extends StaticMessage
 
 // Messages related to HeartBeat
 
@@ -181,7 +187,8 @@ object StaticMessage {
   import io.circe.disjunctionCodecs._
   implicit val encode: Encoder[StaticMessage] = deriveEncoder[StaticMessage]
   implicit def decoder(
-      implicit as: ExtendedActorSystem): Decoder[StaticMessage] = {
+      implicit as: ExtendedActorSystem
+  ): Decoder[StaticMessage] = {
     val _ = as // suppress unused warning
     deriveDecoder[StaticMessage]
   }

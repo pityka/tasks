@@ -56,7 +56,8 @@ class JsonIterSuite extends FunSuite with Matchers {
 
     readFromString[P](writeToString[P]((Leaf1("a")))) shouldBe Leaf1("a")
     readFromString[Leaf1](writeToString[Leaf1]((Leaf1("a")))) shouldBe Leaf1(
-      "a")
+      "a"
+    )
   }
 
   test("sharedfile") {

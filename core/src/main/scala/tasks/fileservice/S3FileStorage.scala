@@ -41,13 +41,16 @@ import com.bluelabs.s3stream._
 import akka.stream.scaladsl._
 import scala.concurrent._
 
-class S3Storage(bucketName: String,
-                folderPrefix: String,
-                s3stream: S3ClientSupport)(implicit mat: Materializer,
-                                           as: ActorSystem,
-                                           ec: ExecutionContext,
-                                           config: TasksConfig)
-    extends ManagedFileStorage {
+class S3Storage(
+    bucketName: String,
+    folderPrefix: String,
+    s3stream: S3ClientSupport
+)(
+    implicit mat: Materializer,
+    as: ActorSystem,
+    ec: ExecutionContext,
+    config: TasksConfig
+) extends ManagedFileStorage {
 
   implicit val log = akka.event.Logging(as.eventStream, getClass)
 
@@ -57,8 +60,9 @@ class S3Storage(bucketName: String,
     val grantFullControl = config.s3GrantFullControl
 
     val rq = grantFullControl.foldLeft(
-      cannedAcls.foldLeft(PostObjectRequest.default)((rq, acl) =>
-        rq.cannedAcl(acl)))((rq, acl) => rq.grantFullControl(acl._1, acl._2))
+      cannedAcls
+        .foldLeft(PostObjectRequest.default)((rq, acl) => rq.cannedAcl(acl))
+    )((rq, acl) => rq.grantFullControl(acl._1, acl._2))
     if (sse) rq.serverSideEncryption else rq
   }
 
@@ -66,8 +70,10 @@ class S3Storage(bucketName: String,
 
   def list(pattern: String): List[SharedFile] = ???
 
-  def contains(path: ManagedFilePath,
-               retrieveSizeAndHash: Boolean): Future[Option[SharedFile]] =
+  def contains(
+      path: ManagedFilePath,
+      retrieveSizeAndHash: Boolean
+  ): Future[Option[SharedFile]] =
     s3stream.getMetadata(S3Location(bucketName, assembleName(path))).map {
       metadata =>
         val (size1, hash1) = getLengthAndHash(metadata)
@@ -102,8 +108,9 @@ class S3Storage(bucketName: String,
       .map(x => if (x.endsWith("/")) x.dropRight(1) else x)
       .mkString("/")
 
-  def sink(path: ProposedManagedFilePath)
-    : Sink[ByteString, Future[(Long, Int, ManagedFilePath)]] = {
+  def sink(
+      path: ProposedManagedFilePath
+  ): Sink[ByteString, Future[(Long, Int, ManagedFilePath)]] = {
     val managed = path.toManaged
     val key = assembleName(managed)
     val s3loc = S3Location(bucketName, key)
@@ -118,12 +125,16 @@ class S3Storage(bucketName: String,
 
   }
 
-  def importFile(f: File, path: ProposedManagedFilePath)
-    : Future[(Long, Int, File, ManagedFilePath)] =
+  def importFile(
+      f: File,
+      path: ProposedManagedFilePath
+  ): Future[(Long, Int, File, ManagedFilePath)] =
     tasks.util.retryFuture(s"upload to $path")(importFile1(f, path), 4)
 
-  def importFile1(f: File, path: ProposedManagedFilePath)
-    : Future[(Long, Int, File, ManagedFilePath)] = {
+  def importFile1(
+      f: File,
+      path: ProposedManagedFilePath
+  ): Future[(Long, Int, File, ManagedFilePath)] = {
     val managed = path.toManaged
     val key = assembleName(managed)
     val s3loc = S3Location(bucketName, key)
@@ -143,11 +154,15 @@ class S3Storage(bucketName: String,
 
   }
 
-  def createSource(path: ManagedFilePath,
-                   fromOffset: Long): Source[ByteString, _] = {
+  def createSource(
+      path: ManagedFilePath,
+      fromOffset: Long
+  ): Source[ByteString, _] = {
     assert(fromOffset == 0L, "seeking into s3 not implemented ")
-    s3stream.getData(S3Location(bucketName, assembleName(path)),
-                     parallelism = 1)
+    s3stream.getData(
+      S3Location(bucketName, assembleName(path)),
+      parallelism = 1
+    )
   }
 
   def exportFile(path: ManagedFilePath): Future[File] = {

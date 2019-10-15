@@ -77,13 +77,12 @@ object PiTasks {
           /* Return value */
           BatchResult(in, out)
 
-      }
+        }
   }
 
   val piCalc = AsyncTask[PiInput, PiResult]("reduce", 1) {
     case PiInput(in, out) =>
-      _ =>
-        Future.successful(PiResult(in.toDouble / (in + out) * 4d))
+      _ => Future.successful(PiResult(in.toDouble / (in + out) * 4d))
   }
 }
 
@@ -103,8 +102,7 @@ object Fib {
 
   val reduce = AsyncTask[FibReduce, Int]("fibreduce", 1) {
     case FibReduce(f1, f2) =>
-      _ =>
-        Future.successful(f1 + f2)
+      _ => Future.successful(f1 + f2)
   }
 
   /** Recursive Fibonacci
@@ -180,8 +178,8 @@ object PiApp extends App {
         )
         .flatMap { batches =>
           piCalc(
-            PiInput(batches.map(_.inside).sum, batches.map(_.outside).sum))(
-            ResourceRequest(1, 1000, 1))
+            PiInput(batches.map(_.inside).sum, batches.map(_.outside).sum)
+          )(ResourceRequest(1, 1000, 1))
         }
     }
 

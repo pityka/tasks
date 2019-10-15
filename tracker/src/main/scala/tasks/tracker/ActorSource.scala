@@ -40,8 +40,10 @@ object ActorSource {
   def make[T](implicit AS: ActorSystem) = {
     val fw = AS.actorOf(Props[Forwarder])
     val source = Source
-      .actorRef[T](bufferSize = 1000000,
-                   overflowStrategy = OverflowStrategy.fail)
+      .actorRef[T](
+        bufferSize = 1000000,
+        overflowStrategy = OverflowStrategy.fail
+      )
       .mapMaterializedValue { actorRef =>
         fw ! actorRef
 

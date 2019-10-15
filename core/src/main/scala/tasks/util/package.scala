@@ -91,7 +91,8 @@ package object util extends StrictLogging {
 
   def rethrow[T](
       messageOnError: => String,
-      exceptionFactory: (=> String, Throwable) => Throwable)(block: => T): T =
+      exceptionFactory: (=> String, Throwable) => Throwable
+  )(block: => T): T =
     try {
       block
     } catch {
@@ -117,7 +118,9 @@ package object util extends StrictLogging {
     * @param f block using the resource
     */
   def useResource[A <: { def close(): Unit }, B](param: A)(f: A => B): B =
-    try { f(param) } finally {
+    try {
+      f(param)
+    } finally {
       import scala.language.reflectiveCalls
       param.close()
     }
@@ -161,7 +164,10 @@ package object util extends StrictLogging {
     def hasNext = s != -1
 
     def next = {
-      val x = s.toByte; s = is.read; if (!hasNext) { is.close() }; x
+      val x = s.toByte; s = is.read;
+      if (!hasNext) {
+        is.close()
+      }; x
     }
   }
 
@@ -193,9 +199,11 @@ package object util extends StrictLogging {
 
   /** Opens a buffered java.io.BufferedOutputStream on the file. Closes it after the block is executed. */
   def openFileOutputStream[T](fileName: File, append: Boolean = false)(
-      func: BufferedOutputStream => T) =
+      func: BufferedOutputStream => T
+  ) =
     useResource(
-      new BufferedOutputStream(new FileOutputStream(fileName, append)))(func)
+      new BufferedOutputStream(new FileOutputStream(fileName, append))
+    )(func)
 
   /** Opens a buffered java.io.BufferedInputStream on the file. Closes it after the block is executed. */
   def openFileInputStream[T](fileName: File)(func: BufferedInputStream => T) =
@@ -210,7 +218,7 @@ package object util extends StrictLogging {
     * @return Exit code of the process.
     */
   def exec(pb: ProcessBuilder)(stdOutFunc: String => Unit = { _: String =>
-    })(implicit stdErrFunc: String => Unit = (_: String) => ()): Int =
+  })(implicit stdErrFunc: String => Unit = (_: String) => ()): Int =
     pb.run(ProcessLogger(stdOutFunc, stdErrFunc)).exitValue
 
   /**
@@ -223,16 +231,19 @@ package object util extends StrictLogging {
     * @param atMost max waiting time.
     * @return (stdout,stderr,success) triples
     */
-  def execGetStreamsAndCode(pb: ProcessBuilder,
-                            unsuccessfulOnErrorStream: Boolean = true)
-    : (List[String], List[String], Boolean) = {
+  def execGetStreamsAndCode(
+      pb: ProcessBuilder,
+      unsuccessfulOnErrorStream: Boolean = true
+  ): (List[String], List[String], Boolean) = {
     var ls: List[String] = Nil
     var lse: List[String] = Nil
     var boolean = true
     val exitvalue = exec(pb) { ln =>
       ls = ln :: ls
     } { ln =>
-      if (unsuccessfulOnErrorStream) { boolean = false }; lse = ln :: lse
+      if (unsuccessfulOnErrorStream) {
+        boolean = false
+      }; lse = ln :: lse
     }
     (ls.reverse, lse.reverse, boolean && (exitvalue == 0))
   }
@@ -258,7 +269,8 @@ package object util extends StrictLogging {
     * @param fun Handles key collision
     */
   def addMaps[K, V](a: collection.Map[K, V], b: collection.Map[K, V])(
-      fun: (V, V) => V): collection.Map[K, V] = {
+      fun: (V, V) => V
+  ): collection.Map[K, V] = {
     a ++ b.map {
       case (key, bval) =>
         val aval = a.get(key)
@@ -273,7 +285,8 @@ package object util extends StrictLogging {
   def retryFuture[A](tag: String)(f: => Future[A], c: Int)(
       implicit as: akka.actor.ActorSystem,
       ec: ExecutionContext,
-      log: akka.event.LoggingAdapter): Future[A] =
+      log: akka.event.LoggingAdapter
+  ): Future[A] =
     if (c > 0) f.recoverWith {
       case e =>
         log.error(e, s"Failed $tag. Retry $c more times.")

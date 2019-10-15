@@ -57,9 +57,11 @@ case class EColl[T](
     }
   }
 
-  def sourceOfRange(range: Range,
-                    parallelismOfDeserialization: Int = 1,
-                    parsedIndex: Option[lame.index.Index] = None)(
+  def sourceOfRange(
+      range: Range,
+      parallelismOfDeserialization: Int = 1,
+      parsedIndex: Option[lame.index.Index] = None
+  )(
       implicit decoder: Deserializer[T],
       tsc: TaskSystemComponents
   ) =

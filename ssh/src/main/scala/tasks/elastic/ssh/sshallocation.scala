@@ -37,13 +37,15 @@ import tasks.shared._
 import tasks.util.config._
 
 object SSHSettings {
-  case class Host(hostname: String,
-                  keyFile: File,
-                  username: String,
-                  memory: Int,
-                  cpu: Int,
-                  scratch: Int,
-                  extraArgs: String)
+  case class Host(
+      hostname: String,
+      keyFile: File,
+      username: String,
+      memory: Int,
+      cpu: Int,
+      scratch: Int,
+      extraArgs: String
+  )
   object Host {
     def fromConfig(config: Config) = {
       val hostname = config.getString("hostname")
@@ -108,11 +110,14 @@ object SSHOperations {
 
   object HostKeyVerifier extends ServerHostKeyVerifier {
     val kh = new KnownHosts(
-      new File(System.getProperty("user.home") + "/.ssh/known_hosts"))
-    def verifyServerHostKey(hostname: String,
-                            port: Int,
-                            serverHostKeyAlgorithm: String,
-                            serverHostKey: Array[Byte]) =
+      new File(System.getProperty("user.home") + "/.ssh/known_hosts")
+    )
+    def verifyServerHostKey(
+        hostname: String,
+        port: Int,
+        serverHostKeyAlgorithm: String,
+        serverHostKey: Array[Byte]
+    ) =
       kh.verifyHostkey(hostname, serverHostKeyAlgorithm, serverHostKey) == KnownHosts.HOSTKEY_IS_OK
   }
 
@@ -141,17 +146,19 @@ class SSHShutdown(implicit config: TasksConfig) extends ShutdownNode {
 
 class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
     implicit config: TasksConfig,
-    elasticSupport: ElasticSupportFqcn)
-    extends CreateNode {
+    elasticSupport: ElasticSupportFqcn
+) extends CreateNode {
 
   val settings = SSHSettings.fromConfig
 
   def requestOneNewJobFromJobScheduler(
-      requestSize: ResourceRequest): Try[(PendingJobId, ResourceAvailable)] =
+      requestSize: ResourceRequest
+  ): Try[(PendingJobId, ResourceAvailable)] =
     settings.hosts
       .filter(x => x._2._2 == true)
-      .filter(x =>
-        x._2._1.cpu >= requestSize.cpu._1 && x._2._1.memory >= requestSize.memory)
+      .filter(
+        x => x._2._1.cpu >= requestSize.cpu._1 && x._2._1.memory >= requestSize.memory
+      )
       .iterator
       .map {
         case (name, (host, _)) =>
@@ -161,10 +168,12 @@ class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
             scratch = requestSize.scratch,
             elasticSupport = elasticSupport,
             masterAddress = masterAddress,
-            download = new java.net.URL("http",
-                                        codeAddress.address.getHostName,
-                                        codeAddress.address.getPort,
-                                        "/"),
+            download = new java.net.URL(
+              "http",
+              codeAddress.address.getHostName,
+              codeAddress.address.getPort,
+              "/"
+            ),
             slaveHostname = Some(host.hostname),
             background = true
           )
@@ -176,8 +185,10 @@ class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
 
             session.getStdin.close
 
-            session.waitForCondition(ch.ethz.ssh2.ChannelCondition.STDOUT_DATA,
-                                     10000)
+            session.waitForCondition(
+              ch.ethz.ssh2.ChannelCondition.STDOUT_DATA,
+              10000
+            )
 
             val stdout =
               scala.io.Source.fromInputStream(session.getStdout).mkString
@@ -186,10 +197,14 @@ class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
 
             settings.disableHost(name)
 
-            (PendingJobId(host.hostname + ":" + pid.toString),
-             ResourceAvailable(cpu = host.cpu,
-                               memory = host.memory,
-                               scratch = host.scratch))
+            (
+              PendingJobId(host.hostname + ":" + pid.toString),
+              ResourceAvailable(
+                cpu = host.cpu,
+                memory = host.memory,
+                scratch = host.scratch
+              )
+            )
 
           }
       }
@@ -198,9 +213,10 @@ class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
 
 }
 
-class SSHCreateNodeFactory(implicit config: TasksConfig,
-                           elasticSupport: ElasticSupportFqcn)
-    extends CreateNodeFactory {
+class SSHCreateNodeFactory(
+    implicit config: TasksConfig,
+    elasticSupport: ElasticSupportFqcn
+) extends CreateNodeFactory {
   def apply(master: InetSocketAddress, codeAddress: CodeAddress) =
     new SSHCreateNode(master, codeAddress)
 }

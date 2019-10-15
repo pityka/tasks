@@ -39,11 +39,12 @@ import java.nio.channels.WritableByteChannel
 import tasks.util._
 import tasks.wire._
 
-class FileUserSource(sf: ManagedFilePath,
-                     service: ActorRef,
-                     isLocal: java.io.File => Boolean,
-                     fromOffset: Long)
-    extends AbstractFileUser[Source[ByteString, _]](sf, 0, 0, service, isLocal) {
+class FileUserSource(
+    sf: ManagedFilePath,
+    service: ActorRef,
+    isLocal: java.io.File => Boolean,
+    fromOffset: Long
+) extends AbstractFileUser[Source[ByteString, _]](sf, 0, 0, service, isLocal) {
 
   private var writeableChannel: Option[WritableByteChannel] = None
 
@@ -57,12 +58,18 @@ class FileUserSource(sf: ManagedFilePath,
     writeableChannel = Some(pipe.sink)
     val transferinActor = context.actorOf(
       Props(new TransferIn(writeableChannel.get, self))
-        .withDispatcher("transferin"))
+        .withDispatcher("transferin")
+    )
 
     service ! TransferFileToUser(transferinActor, sf)
 
-    result = Some(Success(StreamConverters.fromInputStream(() =>
-      java.nio.channels.Channels.newInputStream(pipe.source))))
+    result = Some(
+      Success(
+        StreamConverters.fromInputStream(
+          () => java.nio.channels.Channels.newInputStream(pipe.source)
+        )
+      )
+    )
     finish
   }
 
@@ -75,8 +82,11 @@ class FileUserSource(sf: ManagedFilePath,
 
   def finishLocalFile(f: File): Unit = {
     log.debug("Readable")
-    result = Some(Success(
-      FileIO.fromPath(f.toPath, chunkSize = 8192, startPosition = fromOffset)))
+    result = Some(
+      Success(
+        FileIO.fromPath(f.toPath, chunkSize = 8192, startPosition = fromOffset)
+      )
+    )
     finish
   }
 
@@ -87,12 +97,13 @@ class FileUserSource(sf: ManagedFilePath,
   }
 }
 
-class FileUser(sf: ManagedFilePath,
-               size: Long,
-               hash: Int,
-               service: ActorRef,
-               isLocal: java.io.File => Boolean)
-    extends AbstractFileUser[File](sf, size, hash, service, isLocal) {
+class FileUser(
+    sf: ManagedFilePath,
+    size: Long,
+    hash: Int,
+    service: ActorRef,
+    isLocal: java.io.File => Boolean
+) extends AbstractFileUser[File](sf, size, hash, service, isLocal) {
 
   private var fileUnderTransfer: Option[File] = None
   private var writeableChannel: Option[WritableByteChannel] = None
@@ -104,7 +115,8 @@ class FileUser(sf: ManagedFilePath,
     writeableChannel = Some(new java.io.FileOutputStream(fileToSave).getChannel)
     val transferinActor = context.actorOf(
       Props(new TransferIn(writeableChannel.get, self))
-        .withDispatcher("transferin"))
+        .withDispatcher("transferin")
+    )
 
     service ! TransferFileToUser(transferinActor, sf)
   }
@@ -127,12 +139,13 @@ class FileUser(sf: ManagedFilePath,
   }
 }
 
-abstract class AbstractFileUser[R](sf: ManagedFilePath,
-                                   size: Long,
-                                   hash: Int,
-                                   service: ActorRef,
-                                   isLocal: File => Boolean)
-    extends Actor
+abstract class AbstractFileUser[R](
+    sf: ManagedFilePath,
+    size: Long,
+    hash: Int,
+    service: ActorRef,
+    isLocal: File => Boolean
+) extends Actor
     with akka.actor.ActorLogging {
 
   var listener: Option[ActorRef] = None

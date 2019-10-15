@@ -29,57 +29,60 @@ import tasks.queue._
 import io.circe._
 import io.circe.generic.semiauto._
 
-case class UIUntypedResult(files:Set[UISharedFile], data: Base64Data)
+case class UIUntypedResult(files: Set[UISharedFile], data: Base64Data)
 
 object UIUntypedResult {
-      implicit val encoder : Encoder[UIUntypedResult] =
-      deriveEncoder[UIUntypedResult]
-    implicit val decoder : Decoder[UIUntypedResult]=
-      deriveDecoder[UIUntypedResult]
+  implicit val encoder: Encoder[UIUntypedResult] =
+    deriveEncoder[UIUntypedResult]
+  implicit val decoder: Decoder[UIUntypedResult] =
+    deriveDecoder[UIUntypedResult]
 }
 
 sealed trait UIFilePath
-case class UIManagedFilePath(path:Vector[String]) extends UIFilePath {
+case class UIManagedFilePath(path: Vector[String]) extends UIFilePath {
   override def toString = path.mkString("/")
 }
 object UIManagedFilePath {
-      implicit val encoder : Encoder[UIManagedFilePath]=
-      deriveEncoder[UIManagedFilePath]
-    implicit val decoder: Decoder[UIManagedFilePath] =
-      deriveDecoder[UIManagedFilePath]
+  implicit val encoder: Encoder[UIManagedFilePath] =
+    deriveEncoder[UIManagedFilePath]
+  implicit val decoder: Decoder[UIManagedFilePath] =
+    deriveDecoder[UIManagedFilePath]
 }
-case class UIRemoteFilePath(uri:String) extends UIFilePath {
+case class UIRemoteFilePath(uri: String) extends UIFilePath {
   override def toString = uri
 }
 object UIRemoteFilePath {
-      implicit val encoder =
-      deriveEncoder[UIRemoteFilePath]
-    implicit val decoder =
-      deriveDecoder[UIRemoteFilePath]
+  implicit val encoder =
+    deriveEncoder[UIRemoteFilePath]
+  implicit val decoder =
+    deriveDecoder[UIRemoteFilePath]
 }
 object UIFilePath {
-      implicit val encoder =
-      deriveEncoder[UIFilePath]
-    implicit val decoder =
-      deriveDecoder[UIFilePath]
+  implicit val encoder =
+    deriveEncoder[UIFilePath]
+  implicit val decoder =
+    deriveDecoder[UIFilePath]
 }
 
-case class UISharedFile(path: UIFilePath, byteSize:Long,hash:Int)
+case class UISharedFile(path: UIFilePath, byteSize: Long, hash: Int)
 object UISharedFile {
-      implicit val encoder : Encoder[UISharedFile] =
-      deriveEncoder[UISharedFile]
-    implicit val decoder : Decoder[UISharedFile] =
-      deriveDecoder[UISharedFile]
+  implicit val encoder: Encoder[UISharedFile] =
+    deriveEncoder[UISharedFile]
+  implicit val decoder: Decoder[UISharedFile] =
+    deriveDecoder[UISharedFile]
 }
-case class UIHistory(dependencies: List[UISharedFile], task: TaskId, timestamp: java.time.Instant, codeVersion:String)
+case class UIHistory(
+    dependencies: List[UISharedFile],
+    task: TaskId,
+    timestamp: java.time.Instant,
+    codeVersion: String
+)
 object UIHistory {
-      implicit val encoder =
-      deriveEncoder[UIHistory]
-    implicit val decoder =
-      deriveDecoder[UIHistory]
+  implicit val encoder =
+    deriveEncoder[UIHistory]
+  implicit val decoder =
+    deriveDecoder[UIHistory]
 }
-
-
 
 case class UILauncherActor(actorPath: String)
 object UILauncherActor {
@@ -91,39 +94,41 @@ object UILauncherActor {
 
 case class UIQueueState(
     queuedTasks: List[TaskDescription],
-    scheduledTasks: List[(TaskDescription,
-                          (UILauncherActor, VersionedResourceAllocated))],
+    scheduledTasks: List[
+      (TaskDescription, (UILauncherActor, VersionedResourceAllocated))
+    ],
     knownLaunchers: Set[UILauncherActor],
     negotiation: Option[(UILauncherActor, TaskDescription)],
-    failedTasks: List[(TaskDescription,
-                          (UILauncherActor, VersionedResourceAllocated))],
-    completedTasks: Set[(TaskId,Int)],  
-    recoveredTasks : Set[(TaskId,Int)]                                             
+    failedTasks: List[
+      (TaskDescription, (UILauncherActor, VersionedResourceAllocated))
+    ],
+    completedTasks: Set[(TaskId, Int)],
+    recoveredTasks: Set[(TaskId, Int)]
 )
 
 object UIQueueState {
-  val empty = UIQueueState(Nil, Nil, Set(), None, Nil,Set(), Set())
+  val empty = UIQueueState(Nil, Nil, Set(), None, Nil, Set(), Set())
   implicit val encoder: Encoder[UIQueueState] = deriveEncoder[UIQueueState]
   implicit val decoder: Decoder[UIQueueState] = deriveDecoder[UIQueueState]
 }
 
-case class UIJobId(value:String)
+case class UIJobId(value: String)
 object UIJobId {
   implicit val encoder: Encoder[UIJobId] =
     deriveEncoder[UIJobId]
   implicit val decoder: Decoder[UIJobId] =
     deriveDecoder[UIJobId]
-} 
+}
 
-case class UIAppState(                                           
-      running: Seq[(UIJobId, ResourceAvailable)],
-      pending: Seq[(UIJobId, ResourceAvailable)],
-      cumulativeRequested: Int
+case class UIAppState(
+    running: Seq[(UIJobId, ResourceAvailable)],
+    pending: Seq[(UIJobId, ResourceAvailable)],
+    cumulativeRequested: Int
 )
 
 object UIAppState {
 
-  val empty = UIAppState(Nil, Nil, 0  )
+  val empty = UIAppState(Nil, Nil, 0)
   implicit val encoder: Encoder[UIAppState] = deriveEncoder[UIAppState]
   implicit val decoder: Decoder[UIAppState] = deriveDecoder[UIAppState]
 }

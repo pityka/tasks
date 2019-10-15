@@ -60,12 +60,12 @@ object JvmElasticSupport {
   }
 
   class JvmCreateNode(masterAddress: InetSocketAddress)(
-      implicit config: TasksConfig)
-      extends CreateNode {
+      implicit config: TasksConfig
+  ) extends CreateNode {
 
     def requestOneNewJobFromJobScheduler(
-        requestSize: tasks.shared.ResourceRequest)
-      : Try[(PendingJobId, ResourceAvailable)] = {
+        requestSize: tasks.shared.ResourceRequest
+    ): Try[(PendingJobId, ResourceAvailable)] = {
       val jobid =
         java.util.UUID.randomUUID.toString.replaceAllLiterally("-", "")
 
@@ -87,10 +87,15 @@ object JvmElasticSupport {
         taskSystems += ((jobid, ts))
       }
       Try(
-        (PendingJobId(jobid),
-         ResourceAvailable(cpu = requestSize.cpu._1,
-                           memory = requestSize.memory,
-                           scratch = requestSize.scratch)))
+        (
+          PendingJobId(jobid),
+          ResourceAvailable(
+            cpu = requestSize.cpu._1,
+            memory = requestSize.memory,
+            scratch = requestSize.scratch
+          )
+        )
+      )
 
     }
 

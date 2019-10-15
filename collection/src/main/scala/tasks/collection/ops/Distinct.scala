@@ -23,14 +23,13 @@ private[ecoll] object Distinct {
       case (source: Source[A, NotUsed], _, _, _, _) =>
         source.statefulMapConcat(() => {
           var last: Option[A] = None
-          (elem: A) =>
-            {
-              if (last.isDefined && elem == last.get) Nil
-              else {
-                last = Some(elem)
-                List(elem)
-              }
+          (elem: A) => {
+            if (last.isDefined && elem == last.get) Nil
+            else {
+              last = Some(elem)
+              List(elem)
             }
+          }
         })
     }
 
@@ -45,24 +44,25 @@ trait DistinctOps {
   ): Partial[EColl[A], EColl[A]] =
     Partial({
       case data1 =>
-        resourceRequest => tsc =>
-          val inner = Distinct.distinctSpore[A]
+        resourceRequest =>
+          tsc =>
+            val inner = Distinct.distinctSpore[A]
 
-          GenericMap.task(taskID, taskVersion)(
-            GenericMap.Input[A, Nothing, A](
-              data1,
-              None,
-              implicitly[SerDe[A]],
-              SerDe.nothing,
-              implicitly[SerDe[A]],
-              None,
-              inner,
-              false,
-              outName,
-              taskID,
-              taskVersion
-            )
-          )(resourceRequest)(tsc)
+            GenericMap.task(taskID, taskVersion)(
+              GenericMap.Input[A, Nothing, A](
+                data1,
+                None,
+                implicitly[SerDe[A]],
+                SerDe.nothing,
+                implicitly[SerDe[A]],
+                None,
+                inner,
+                false,
+                outName,
+                taskID,
+                taskVersion
+              )
+            )(resourceRequest)(tsc)
     })
 
 }

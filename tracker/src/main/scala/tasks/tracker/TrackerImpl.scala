@@ -37,13 +37,15 @@ import tasks.shared.ResourceAllocated
 import tasks.shared.{ElapsedTimeNanoSeconds, Labels}
 import tasks.fileservice.SharedFile
 
-case class ResourceUtilizationRecord(taskId: TaskId,
-                                     labels: Labels,
-                                     elapsedTime: ElapsedTimeNanoSeconds,
-                                     resource: ResourceAllocated,
-                                     metadata: Option[ResultMetadata],
-                                     resultFiles: Option[Set[SharedFile]],
-                                     codeVersion: Option[String])
+case class ResourceUtilizationRecord(
+    taskId: TaskId,
+    labels: Labels,
+    elapsedTime: ElapsedTimeNanoSeconds,
+    resource: ResourceAllocated,
+    metadata: Option[ResultMetadata],
+    resultFiles: Option[Set[SharedFile]],
+    codeVersion: Option[String]
+)
 
 object ResourceUtilizationRecord {
   implicit val encoder: Encoder[ResourceUtilizationRecord] =
@@ -76,21 +78,23 @@ class TrackerImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
         td.resourceAllocated,
         Some(td.result.metadata),
         Some(td.result.untypedResult.files),
-        Some(config.codeVersion),
+        Some(config.codeVersion)
       )
       import io.circe.syntax._
       akka.util.ByteString(dto.asJson.noSpaces + "\n")
     }
-    .to(FileIO
-      .toPath(
-        new java.io.File(config.resourceUtilizationLogFile).toPath,
-        options = Set(
-          java.nio.file.StandardOpenOption.APPEND,
-          java.nio.file.StandardOpenOption.WRITE,
-          java.nio.file.StandardOpenOption.CREATE,
-          java.nio.file.StandardOpenOption.SYNC
+    .to(
+      FileIO
+        .toPath(
+          new java.io.File(config.resourceUtilizationLogFile).toPath,
+          options = Set(
+            java.nio.file.StandardOpenOption.APPEND,
+            java.nio.file.StandardOpenOption.WRITE,
+            java.nio.file.StandardOpenOption.CREATE,
+            java.nio.file.StandardOpenOption.SYNC
+          )
         )
-      ))
+    )
 
   private val (eventListenerActor, eventSource) =
     ActorSource.make[TaskQueue.Event]

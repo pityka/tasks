@@ -107,15 +107,17 @@ object SporeAnalysis {
       }
     }
 
-    class ReplaceSpores(mappingFromOldToNewNames: Map[Symbol, Ident],
-                        invalidSymbols: List[Symbol])
-        extends Transformer {
+    class ReplaceSpores(
+        mappingFromOldToNewNames: Map[Symbol, Ident],
+        invalidSymbols: List[Symbol]
+    ) extends Transformer {
       var capturedSpores = List.empty[(TermName, Symbol)]
       override def transform(tree: Tree): Tree = {
         tree match {
           case Ident(_)
               if isSymbolSpore(tree.symbol) && invalidSymbols.contains(
-                tree.symbol) =>
+                tree.symbol
+              ) =>
             val sym = tree.symbol
             val freshName = cxt.freshName(TermName("t"))
             capturedSpores = (freshName, sym) :: capturedSpores
@@ -143,9 +145,11 @@ object SporeAnalysis {
       valDefs -> references
     }
 
-    def rewrite(oldParamSymbols: List[Symbol],
-                oldBody: Tree,
-                invalidSymbols: List[Symbol]) = {
+    def rewrite(
+        oldParamSymbols: List[Symbol],
+        oldBody: Tree,
+        invalidSymbols: List[Symbol]
+    ) = {
 
       val (newParamDefs, newParamRefs) = generateNewParameters(oldParamSymbols)
       val mapping = oldParamSymbols.zip(newParamRefs).toMap
@@ -160,7 +164,8 @@ object SporeAnalysis {
     val (rewritten, capturedSporeSymbols) = rewrite(
       params.map(_.symbol),
       body,
-      ReferenceInspector.foundReferencesToSpores)
+      ReferenceInspector.foundReferencesToSpores
+    )
     (rewritten, capturedSporeSymbols)
 
   }

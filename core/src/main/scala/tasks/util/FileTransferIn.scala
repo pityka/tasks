@@ -55,10 +55,11 @@ class TransferIn(output: WritableByteChannel, notification: ActorRef)
   }
 }
 
-class TransferOut(file: ReadableByteChannel,
-                  transferIn: ActorRef,
-                  chunkSize: Int)
-    extends Actor
+class TransferOut(
+    file: ReadableByteChannel,
+    transferIn: ActorRef,
+    chunkSize: Int
+) extends Actor
     with akka.actor.ActorLogging {
 
   val buffer: ByteBuffer = ByteBuffer.allocate(chunkSize)

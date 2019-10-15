@@ -132,8 +132,10 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
         tmut1 <- taskWithMutable(Input(1))(ResourceRequest(1, 500))
         path <- tmut1.sf.uri
         _ = {
-          util.writeBinaryToFile(new java.io.File(path.path),
-                                 Array[Byte](1, 2, 3))
+          util.writeBinaryToFile(
+            new java.io.File(path.path),
+            Array[Byte](1, 2, 3)
+          )
         }
         _ <- taskWithMutable(Input(1))(ResourceRequest(1, 500))
       } yield t51
@@ -148,7 +150,8 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
 class InputWithSharedFilesTestSuite extends FunSuite with Matchers {
 
   test(
-    "a failing task should propagate its exception and not interfere with other tasks") {
+    "a failing task should propagate its exception and not interfere with other tasks"
+  ) {
     InputWithSharedFilesTest.run
     InputWithSharedFilesTest.sideEffect.count(_ == "execution of task 1") shouldBe 2
     InputWithSharedFilesTest.sideEffect.count(_ == "execution of task 2") shouldBe 1

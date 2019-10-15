@@ -40,8 +40,9 @@ trait HasSharedFiles extends Product {
 object HasSharedFiles {
   def allFiles(r: Any): Set[SharedFile] = recurse(r)(_.allFiles).toSet
 
-  private[tasks] def recurse(a: Any)(
-      f: HasSharedFiles => Seq[SharedFile]): Seq[SharedFile] = a match {
+  private[tasks] def recurse(
+      a: Any
+  )(f: HasSharedFiles => Seq[SharedFile]): Seq[SharedFile] = a match {
     case t: HasSharedFiles => f(t)
     case t: Traversable[_] => t.flatMap(r => recurse(r)(f)).toSeq
     case t: Product        => t.productIterator.flatMap(r => recurse(r)(f)).toSeq
@@ -63,9 +64,10 @@ object HasSharedFiles {
  *
  * See the WithSharedFilesTestSuite.scala for examples
  */
-abstract class WithSharedFiles(members: Seq[Any] = Nil,
-                               mutables: Seq[Any] = Nil)
-    extends Product
+abstract class WithSharedFiles(
+    members: Seq[Any] = Nil,
+    mutables: Seq[Any] = Nil
+) extends Product
     with HasSharedFiles {
 
   import HasSharedFiles.recurse
@@ -80,8 +82,8 @@ abstract class WithSharedFiles(members: Seq[Any] = Nil,
   private[tasks] def mutableFiles =
     (members
       .flatMap(m => recurse(m)(_.mutableFiles)) ++ this.productIterator.flatMap(
-      p => recurse(p)(_.mutableFiles)) ++ mutables.flatMap(m =>
-      recurse(m)(_.allFiles))).distinct
+      p => recurse(p)(_.mutableFiles)
+    ) ++ mutables.flatMap(m => recurse(m)(_.allFiles))).distinct
 }
 
 trait HasPersistent[+A] extends Serializable { self: A =>
@@ -91,7 +93,8 @@ trait HasPersistent[+A] extends Serializable { self: A =>
 case class UntypedTaskDefinition[A, C](
     rs: Spore[Unit, Deserializer[A]],
     ws: Spore[Unit, Serializer[C]],
-    fs: Spore[A, ComputationEnvironment => Future[C]]) {
+    fs: Spore[A, ComputationEnvironment => Future[C]]
+) {
 
   def apply(j: Base64Data) =
     (ce: ComputationEnvironment) => {
@@ -103,8 +106,7 @@ case class UntypedTaskDefinition[A, C](
           case Right(value) => value
           case Left(error) =>
             val logMessage =
-              s"Could not deserialize input. Error: $error. Raw data (as utf8): ${new String(
-                Base64DataHelpers.toBytes(j))}"
+              s"Could not deserialize input. Error: $error. Raw data (as utf8): ${new String(Base64DataHelpers.toBytes(j))}"
             ce.log.error(logMessage)
             throw new RuntimeException(logMessage)
         }

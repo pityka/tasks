@@ -95,8 +95,9 @@ case class SharedFile(
 object SharedFile {
 
   implicit val encoder: Encoder[SharedFile] =
-    Encoder.forProduct3("path", "byteSize", "hash")(sf =>
-      (sf.path, sf.byteSize, sf.hash))
+    Encoder.forProduct3("path", "byteSize", "hash")(
+      sf => (sf.path, sf.byteSize, sf.hash)
+    )
 
   implicit val decoder: Decoder[SharedFile] =
     Decoder.instance { cursor =>
@@ -105,7 +106,8 @@ object SharedFile {
         case Some(_) =>
           Decoder
             .forProduct3("path", "byteSize", "hash")(
-              (a: FilePath, b: Long, c: Int) => new SharedFile(a, b, c))
+              (a: FilePath, b: Long, c: Int) => new SharedFile(a, b, c)
+            )
             .apply(cursor)
 
       }
@@ -115,27 +117,33 @@ object SharedFile {
     SharedFileHelper.create(RemoteFilePath(uri), tsc.fs.remote)
 
   def apply(file: File, name: String)(
-      implicit tsc: TaskSystemComponents): Future[SharedFile] =
+      implicit tsc: TaskSystemComponents
+  ): Future[SharedFile] =
     apply(file, name, false)
 
   def apply(file: File, name: String, deleteFile: Boolean)(
-      implicit tsc: TaskSystemComponents): Future[SharedFile] =
+      implicit tsc: TaskSystemComponents
+  ): Future[SharedFile] =
     SharedFileHelper.createFromFile(file, name, deleteFile)
 
   def apply(source: Source[ByteString, _], name: String)(
-      implicit tsc: TaskSystemComponents): Future[SharedFile] =
+      implicit tsc: TaskSystemComponents
+  ): Future[SharedFile] =
     SharedFileHelper.createFromSource(source, name)
 
-  def sink(name: String)(implicit tsc: TaskSystemComponents)
-    : Option[Sink[ByteString, Future[SharedFile]]] =
+  def sink(name: String)(
+      implicit tsc: TaskSystemComponents
+  ): Option[Sink[ByteString, Future[SharedFile]]] =
     SharedFileHelper.sink(name)
 
-  def fromFolder(callback: File => List[File])(
-      implicit tsc: TaskSystemComponents): Future[Seq[SharedFile]] =
+  def fromFolder(
+      callback: File => List[File]
+  )(implicit tsc: TaskSystemComponents): Future[Seq[SharedFile]] =
     SharedFileHelper.createFromFolder(callback)
 
-  def getByName(name: String)(
-      implicit tsc: TaskSystemComponents): Future[Option[SharedFile]] =
+  def getByName(
+      name: String
+  )(implicit tsc: TaskSystemComponents): Future[Option[SharedFile]] =
     SharedFileHelper.getByName(name, retrieveSizeAndHash = true)
 
 }

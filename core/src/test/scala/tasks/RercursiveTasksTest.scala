@@ -59,9 +59,11 @@ object RercursiveTasksTest {
           case 1 => Future.successful(FibOut(1))
           case n => {
             val f1 = fibtask(FibInput(Some(n - 1), Some(false :: tag)))(
-              ResourceRequest(1, 1))
+              ResourceRequest(1, 1)
+            )
             val f2 = fibtask(FibInput(Some(n - 2), Some(true :: tag)))(
-              ResourceRequest(1, 1))
+              ResourceRequest(1, 1)
+            )
             releaseResources
             for {
               r1 <- f1

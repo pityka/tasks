@@ -63,9 +63,12 @@ object UIBackendTest extends TestHelpers {
 
       val sf =
         Await.result(
-          SharedFile(akka.stream.scaladsl.Source.single(akka.util.ByteString()),
-                     "boo"),
-          atMost = 50 seconds)
+          SharedFile(
+            akka.stream.scaladsl.Source.single(akka.util.ByteString()),
+            "boo"
+          ),
+          atMost = 50 seconds
+        )
 
       val f1 = testTask(Input(1, sf))(ResourceRequest(1, 500))
       val f2 = testTask(Input(2, sf))(ResourceRequest(1, 500))
@@ -76,13 +79,15 @@ object UIBackendTest extends TestHelpers {
         t3 <- f3
       } yield t1 + t2 + t3
 
-      WebSocketClient.make("ws://localhost:28880/states")(frame =>
-        synchronized {
-          websocketContents += io.circe.parser
-            .decode[UIQueueState](frame)
-            .right
-            .get
-      })
+      WebSocketClient.make("ws://localhost:28880/states")(
+        frame =>
+          synchronized {
+            websocketContents += io.circe.parser
+              .decode[UIQueueState](frame)
+              .right
+              .get
+          }
+      )
 
       Await.result(future, atMost = 30 seconds)
 

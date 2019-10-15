@@ -74,7 +74,8 @@ object CacheWithoutFilePrefixTest extends TestHelpers {
 class CacheWithoutFilePrefixTestSuite extends FunSuite with Matchers {
 
   test(
-    "caching should work even if with  tasks.createFilePrefixForTaskId = false") {
+    "caching should work even if with  tasks.createFilePrefixForTaskId = false"
+  ) {
     CacheWithoutFilePrefixTest.run.get shouldBe 3
     CacheWithoutFilePrefixTest.sideEffect.count(_ == "execution of task") shouldBe 2
   }

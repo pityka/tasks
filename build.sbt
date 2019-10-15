@@ -272,7 +272,7 @@ lazy val root = (project in file("."))
     example
   )
 
-lazy val testables = (project in file("."))
+lazy val testables = (project in file("testables"))
   .settings(commonSettings: _*)
   .settings(
     publishArtifact := false

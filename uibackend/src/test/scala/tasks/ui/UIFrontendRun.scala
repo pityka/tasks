@@ -67,11 +67,15 @@ object UIFrontendRun extends TestHelpers {
       import scala.concurrent.ExecutionContext.Implicits.global
       val sf =
         Await.result(
-          SharedFile(akka.stream.scaladsl.Source.single(akka.util.ByteString()),
-                     "boo"),
-          atMost = 50 seconds)
+          SharedFile(
+            akka.stream.scaladsl.Source.single(akka.util.ByteString()),
+            "boo"
+          ),
+          atMost = 50 seconds
+        )
       Future.sequence(
-        (1 to 100).map(i => testTask(Input(i, sf))(ResourceRequest(1, 500))))
+        (1 to 100).map(i => testTask(Input(i, sf))(ResourceRequest(1, 500)))
+      )
 
       Thread.sleep(Long.MaxValue)
 

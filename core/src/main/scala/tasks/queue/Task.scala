@@ -45,9 +45,11 @@ import io.circe.generic.semiauto._
 
 import java.time.Instant
 
-case class UntypedResult(files: Set[SharedFile],
-                         data: Base64Data,
-                         mutableFiles: Option[Set[SharedFile]])
+case class UntypedResult(
+    files: Set[SharedFile],
+    data: Base64Data,
+    mutableFiles: Option[Set[SharedFile]]
+)
 
 case class DependenciesAndRuntimeMetadata(
     dependencies: Seq[History],
@@ -76,8 +78,8 @@ case class TaskLineage(lineage: Seq[TaskInvocationId]) {
   def leaf = lineage.last
   def inherit(td: TaskDescription) =
     TaskLineage(
-      lineage :+ TaskInvocationId(td.taskId,
-                                  SerializedTaskDescription(td).hash))
+      lineage :+ TaskInvocationId(td.taskId, SerializedTaskDescription(td).hash)
+    )
 }
 
 object TaskLineage {
@@ -105,8 +107,10 @@ object ResultMetadata {
     deriveDecoder[ResultMetadata]
 }
 
-case class UntypedResultWithMetadata(untypedResult: UntypedResult,
-                                     metadata: ResultMetadata)
+case class UntypedResultWithMetadata(
+    untypedResult: UntypedResult,
+    metadata: ResultMetadata
+)
 
 object UntypedResultWithMetadata {
   implicit val encoder: Encoder[UntypedResultWithMetadata] =
@@ -155,8 +159,9 @@ case class ComputationEnvironment(
     logQueue.iterator.asScala.toList
   }
 
-  def withFilePrefix[B](prefix: Seq[String])(
-      fun: ComputationEnvironment => B): B =
+  def withFilePrefix[B](
+      prefix: Seq[String]
+  )(fun: ComputationEnvironment => B): B =
     fun(copy(components = components.withChildPrefix(prefix)))
 
   implicit def fileServiceComponent: FileServiceComponent = components.fs
@@ -224,19 +229,24 @@ private class Task(
 
   private def handleCompletion(
       future: Future[(UntypedResult, DependenciesAndRuntimeMetadata)],
-      startTimeStamp: Instant) =
+      startTimeStamp: Instant
+  ) =
     future.onComplete {
       case Success((result, dependencies)) =>
         log.debug("Task success. ")
         val endTimeStamp = Instant.now
         launcherActor ! InternalMessageFromTask(
           self,
-          UntypedResultWithMetadata(result,
-                                    ResultMetadata(dependencies.dependencies,
-                                                   started = startTimeStamp,
-                                                   ended = endTimeStamp,
-                                                   logs = dependencies.logs,
-                                                   lineage = lineage))
+          UntypedResultWithMetadata(
+            result,
+            ResultMetadata(
+              dependencies.dependencies,
+              started = startTimeStamp,
+              ended = endTimeStamp,
+              logs = dependencies.logs,
+              lineage = lineage
+            )
+          )
         )
         self ! PoisonPill
 
@@ -244,7 +254,7 @@ private class Task(
     }(executionContextOfTask)
 
   private def executeTaskAsynchronously()
-    : Future[(UntypedResult, DependenciesAndRuntimeMetadata)] =
+      : Future[(UntypedResult, DependenciesAndRuntimeMetadata)] =
     try {
       val history = HistoryContextImpl(
         task = History.TaskVersion(taskId.id, taskId.version),
@@ -268,15 +278,18 @@ private class Task(
           labels,
           lineage
         ),
-        akka.event.Logging(context.system.eventStream,
-                           "usertasks." + fileServicePrefix.list.mkString(".")),
+        akka.event.Logging(
+          context.system.eventStream,
+          "usertasks." + fileServicePrefix.list.mkString(".")
+        ),
         LauncherActor(launcherActor),
         executionContextOfTask,
         self
       )
 
       log.debug(
-        s"Starting task with computation environment $ce and with input data $input.")
+        s"Starting task with computation environment $ce and with input data $input."
+      )
 
       Future {
         val untyped =
@@ -297,8 +310,10 @@ private class Task(
 
   def receive = {
     case Start =>
-      handleCompletion(executeTaskAsynchronously(),
-                       startTimeStamp = java.time.Instant.now)
+      handleCompletion(
+        executeTaskAsynchronously(),
+        startTimeStamp = java.time.Instant.now
+      )
 
     case other => log.error("received unknown message" + other)
   }

@@ -32,9 +32,11 @@ import tasks.util._
 import tasks.util.config._
 import tasks.queue.QueueActor
 
-class SelfShutdown(shutdownRunningNode: ShutdownRunningNode,
-                   id: RunningJobId,
-                   queueActor: QueueActor)(implicit config: TasksConfig)
+class SelfShutdown(
+    shutdownRunningNode: ShutdownRunningNode,
+    id: RunningJobId,
+    queueActor: QueueActor
+)(implicit config: TasksConfig)
     extends Actor
     with ActorLogging {
 

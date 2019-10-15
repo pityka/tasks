@@ -104,7 +104,7 @@ class Launcher(
   private var denyWorkBeforeShutdown = false
 
   private var runningTasks
-    : List[(ActorRef, ScheduleTask, VersionedResourceAllocated, Long)] =
+      : List[(ActorRef, ScheduleTask, VersionedResourceAllocated, Long)] =
     Nil
 
   private var resourceDeallocatedAt: Map[ActorRef, Long] = Map()
@@ -121,7 +121,8 @@ class Launcher(
     val filePrefix =
       if (config.createFilePrefixForTaskId)
         scheduleTask.fileServicePrefix.append(
-          scheduleTask.description.taskId.id)
+          scheduleTask.description.taskId.id
+        )
       else scheduleTask.fileServicePrefix
 
     val taskActor = context.actorOf(
@@ -132,9 +133,11 @@ class Launcher(
         scheduleTask.function,
         self,
         scheduleTask.queueActor,
-        FileServiceComponent(scheduleTask.fileServiceActor,
-                             managedStorage,
-                             remoteStorage),
+        FileServiceComponent(
+          scheduleTask.fileServiceActor,
+          managedStorage,
+          remoteStorage
+        ),
         scheduleTask.cacheActor,
         nodeLocalCache,
         allocatedResource.cpuMemoryAllocated,
@@ -192,28 +195,36 @@ class Launcher(
 
     runningTasks.foreach(_._1 ! PoisonPill)
     log.info(
-      s"TaskLauncher stopped, sent PoisonPill to ${runningTasks.size} running tasks.")
+      s"TaskLauncher stopped, sent PoisonPill to ${runningTasks.size} running tasks."
+    )
   }
 
-  private def taskFinished(taskActor: ActorRef,
-                           receivedResult: UntypedResultWithMetadata): Unit = {
+  private def taskFinished(
+      taskActor: ActorRef,
+      receivedResult: UntypedResultWithMetadata
+  ): Unit = {
     val elem = runningTasks
       .find(_._1 == taskActor)
-      .getOrElse(throw new RuntimeException(
-        "Wrong message received. No such taskActor."))
+      .getOrElse(
+        throw new RuntimeException("Wrong message received. No such taskActor.")
+      )
     val scheduleTask = elem._2
     val resourceAllocated = elem._3
     val elapsedTime = ElapsedTimeNanoSeconds(
-      resourceDeallocatedAt.get(taskActor).getOrElse(System.nanoTime) - elem._4)
+      resourceDeallocatedAt.get(taskActor).getOrElse(System.nanoTime) - elem._4
+    )
     import akka.pattern.ask
     import context.dispatcher
     (
       scheduleTask.cacheActor
         .?(
-          SaveResult(scheduleTask.description,
-                     receivedResult.untypedResult,
-                     scheduleTask.fileServicePrefix.append(
-                       scheduleTask.description.taskId.id)))(
+          SaveResult(
+            scheduleTask.description,
+            receivedResult.untypedResult,
+            scheduleTask.fileServicePrefix
+              .append(scheduleTask.description.taskId.id)
+          )
+        )(
           timeout = 600 seconds
         )
       )
@@ -221,10 +232,12 @@ class Launcher(
         case Failure(e) =>
           log.error(e, s"Failed to save ${scheduleTask.description}")
         case Success(_) =>
-          queueActor ! TaskDone(scheduleTask,
-                                receivedResult,
-                                elapsedTime,
-                                resourceAllocated.cpuMemoryAllocated)
+          queueActor ! TaskDone(
+            scheduleTask,
+            receivedResult,
+            elapsedTime,
+            resourceAllocated.cpuMemoryAllocated
+          )
       }
 
     runningTasks = runningTasks.filterNot(_ == elem)
@@ -240,8 +253,9 @@ class Launcher(
 
     val elem = runningTasks
       .find(_._1 == taskActor)
-      .getOrElse(throw new RuntimeException(
-        "Wrong message received. No such taskActor."))
+      .getOrElse(
+        throw new RuntimeException("Wrong message received. No such taskActor.")
+      )
     val sch = elem._2
 
     runningTasks = runningTasks.filterNot(_ == elem)
@@ -304,8 +318,12 @@ class Launcher(
       else {
         availableResources = availableResources.addBack(allocated.get)
         freed = freed + taskActor
-        resourceDeallocatedAt = resourceDeallocatedAt + ((taskActor,
-                                                          System.nanoTime))
+        resourceDeallocatedAt = resourceDeallocatedAt + (
+          (
+            taskActor,
+            System.nanoTime
+          )
+        )
       }
       askForWork
 

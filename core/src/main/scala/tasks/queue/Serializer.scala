@@ -21,8 +21,10 @@ object Deserializer {
   }
 }
 
-case class SerDe[AA](ser: Spore[Unit, Serializer[AA]],
-                     deser: Spore[Unit, Deserializer[AA]])
+case class SerDe[AA](
+    ser: Spore[Unit, Serializer[AA]],
+    deser: Spore[Unit, Deserializer[AA]]
+)
 
 object SerDe {
   import io.circe._
@@ -30,13 +32,15 @@ object SerDe {
   implicit def encoder[A, B]: Encoder[SerDe[A]] = deriveEncoder[SerDe[A]]
   implicit def decoder[A, B]: Decoder[SerDe[A]] = deriveDecoder[SerDe[A]]
 
-  implicit def makeFromComponents[A](implicit r: tasks.SDeserializer[A],
-                                     w: tasks.SSerializer[A]): SerDe[A] =
+  implicit def makeFromComponents[A](
+      implicit r: tasks.SDeserializer[A],
+      w: tasks.SSerializer[A]
+  ): SerDe[A] =
     SerDe(w, r)
 
   val nothing = SerDe[Nothing](
     ser = spore(() => Serializer.nothing),
-    deser = spore(() => Deserializer.nothing),
+    deser = spore(() => Deserializer.nothing)
   )
 }
 

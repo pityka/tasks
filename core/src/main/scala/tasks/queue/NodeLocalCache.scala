@@ -38,27 +38,30 @@ import tasks.wire._
 object NodeLocalCache {
   def start(implicit AS: ActorRefFactory) =
     NodeLocalCacheActor(
-      AS.actorOf(Props[NodeLocalCache].withDispatcher("nodelocalcache-pinned")))
+      AS.actorOf(Props[NodeLocalCache].withDispatcher("nodelocalcache-pinned"))
+    )
 
-  def getItemAsync[A](key: String)(orElse: => Future[A])(
-      implicit tsc: TaskSystemComponents): Future[A] =
+  def getItemAsync[A](
+      key: String
+  )(orElse: => Future[A])(implicit tsc: TaskSystemComponents): Future[A] =
     _getItemAsync(key, dropAfterSave = false)(orElse)
 
-  def getItem[A](key: String)(orElse: => A)(
-      implicit tsc: TaskSystemComponents): Future[A] =
+  def getItem[A](
+      key: String
+  )(orElse: => A)(implicit tsc: TaskSystemComponents): Future[A] =
     _getItem(key, dropAfterSave = false)(orElse)
 
   def drop(key: String)(implicit tsc: TaskSystemComponents) =
     tsc.nodeLocalCache.actor ! Drop(key)
 
   private[tasks] def _getItemAsync[A](key: String, dropAfterSave: Boolean)(
-      orElse: => Future[A])(implicit nlc: NodeLocalCacheActor,
-                            ec: ExecutionContext): Future[A] =
+      orElse: => Future[A]
+  )(implicit nlc: NodeLocalCacheActor, ec: ExecutionContext): Future[A] =
     _getItem(key, dropAfterSave)(orElse).flatMap(identity)
 
   private[tasks] def _getItem[A](key: String, dropAfterSave: Boolean)(
-      orElse: => A)(implicit nlc: NodeLocalCacheActor,
-                    ec: ExecutionContext): Future[A] = {
+      orElse: => A
+  )(implicit nlc: NodeLocalCacheActor, ec: ExecutionContext): Future[A] = {
     implicit val to = akka.util.Timeout(168 hours)
     (nlc.actor ? LookUp(key)).map {
       case YouShouldSetIt => {
@@ -89,7 +92,8 @@ object NodeLocalCache {
             sender ! hit
           case Some(None) =>
             log.debug(
-              s"LookUp($key): Item is under production, adding sender to waiting list.")
+              s"LookUp($key): Item is under production, adding sender to waiting list."
+            )
             waitingList += key -> sender
         }
 

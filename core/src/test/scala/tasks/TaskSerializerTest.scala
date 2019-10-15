@@ -42,9 +42,11 @@ class TaskSerializerTestSuite
   test("serialize and deserialize UntypedResult") {
     val sf: SharedFile =
       SharedFileHelper.create(1L, 1, ManagedFilePath(Vector("boo")))
-    val v = UntypedResult(files = Set(sf),
-                          data = Base64Data("whatever"),
-                          mutableFiles = Some(Set(sf)))
+    val v = UntypedResult(
+      files = Set(sf),
+      data = Base64Data("whatever"),
+      mutableFiles = Some(Set(sf))
+    )
 
     deserializeResult(serializeResult(v)) shouldBe v
 

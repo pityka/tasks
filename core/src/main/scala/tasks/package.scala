@@ -55,56 +55,70 @@ package object tasks {
   type ResourceRequest = tasks.shared.VersionedResourceRequest
 
   def ResourceRequest(cpu: (Int, Int), memory: Int, scratch: Int)(
-      implicit codeVersion: CodeVersion) =
+      implicit codeVersion: CodeVersion
+  ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.ResourceRequest(cpu, memory, scratch))
+      tasks.shared.ResourceRequest(cpu, memory, scratch)
+    )
 
   def ResourceRequest(cpu: (Int, Int), memory: Int)(
-      implicit codeVersion: CodeVersion) =
+      implicit codeVersion: CodeVersion
+  ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.ResourceRequest(cpu, memory, 1))
+      tasks.shared.ResourceRequest(cpu, memory, 1)
+    )
 
   def ResourceRequest(cpu: Int, memory: Int)(
-      implicit codeVersion: CodeVersion) =
+      implicit codeVersion: CodeVersion
+  ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.ResourceRequest((cpu, cpu), memory, 1))
+      tasks.shared.ResourceRequest((cpu, cpu), memory, 1)
+    )
 
   def ResourceRequest(cpu: Int, memory: Int, scratch: Int)(
-      implicit codeVersion: CodeVersion) =
+      implicit codeVersion: CodeVersion
+  ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.ResourceRequest(cpu, memory, scratch))
+      tasks.shared.ResourceRequest(cpu, memory, scratch)
+    )
 
   implicit def tsc(implicit ts: TaskSystem): TaskSystemComponents =
     ts.components
 
   implicit def tasksConfig(
-      implicit component: TaskSystemComponents): TasksConfig =
+      implicit component: TaskSystemComponents
+  ): TasksConfig =
     component.tasksConfig
 
   implicit def codeVersionFromTasksConfig(
-      implicit c: TasksConfig): CodeVersion = c.codeVersion
+      implicit c: TasksConfig
+  ): CodeVersion = c.codeVersion
 
   implicit def fs(
-      implicit component: TaskSystemComponents): FileServiceComponent =
+      implicit component: TaskSystemComponents
+  ): FileServiceComponent =
     component.fs
 
   implicit def executionContext(
-      implicit env: ComputationEnvironment): ExecutionContext =
+      implicit env: ComputationEnvironment
+  ): ExecutionContext =
     env.executionContext
 
   def releaseResources(implicit comp: ComputationEnvironment) =
     comp.launcher.actor.!(Release)(comp.taskActor)
 
   implicit def ts(
-      implicit component: ComputationEnvironment): TaskSystemComponents =
+      implicit component: ComputationEnvironment
+  ): TaskSystemComponents =
     component.components
 
   implicit def launcherActor(
-      implicit component: ComputationEnvironment): LauncherActor =
+      implicit component: ComputationEnvironment
+  ): LauncherActor =
     component.launcher
 
   implicit def resourceAllocated(implicit component: ComputationEnvironment) =
@@ -141,8 +155,9 @@ package object tasks {
   def withTaskSystem[T](s: String)(f: TaskSystemComponents => T): Option[T] =
     withTaskSystem(Some(ConfigFactory.parseString(s)))(f)
 
-  def withTaskSystem[T](c: Option[Config])(
-      f: TaskSystemComponents => T): Option[T] = {
+  def withTaskSystem[T](
+      c: Option[Config]
+  )(f: TaskSystemComponents => T): Option[T] = {
     val ts = defaultTaskSystem(c)
     if (ts.hostConfig.myRoles.contains(App)) {
       try {
@@ -227,7 +242,8 @@ package object tasks {
   }
 
   def AsyncTask[A <: AnyRef, C](taskID: String, taskVersion: Int)(
-      comp: A => ComputationEnvironment => Future[C]): TaskDefinition[A, C] =
+      comp: A => ComputationEnvironment => Future[C]
+  ): TaskDefinition[A, C] =
     macro TaskDefinitionMacros
       .taskDefinitionFromTree[A, C]
 
@@ -256,17 +272,19 @@ package object tasks {
   implicit def serde2deser[A](a: SerDe[A]): SDeserializer[A] = a.deser
 
   def MasterSlaveGridEngineChosenFromConfig(
-      implicit config: TasksConfig): HostConfiguration =
+      implicit config: TasksConfig
+  ): HostConfiguration =
     if (config.disableRemoting) new LocalConfigurationFromConfig
     else new MasterSlaveFromConfig
 
-  def appendToFilePrefix[T](elements: Seq[String])(
-      implicit ce: ComputationEnvironment): (ComputationEnvironment => T) => T =
+  def appendToFilePrefix[T](
+      elements: Seq[String]
+  )(implicit ce: ComputationEnvironment): (ComputationEnvironment => T) => T =
     ce.withFilePrefix[T](elements) _
 
   def fromFileList[I, O](files: Seq[Seq[String]])(
-      fromFiles: Seq[SharedFile] => O)(full: => Future[O])(
-      implicit tsc: TaskSystemComponents): Future[O] = {
+      fromFiles: Seq[SharedFile] => O
+  )(full: => Future[O])(implicit tsc: TaskSystemComponents): Future[O] = {
     import tsc.actorsystem.dispatcher
     val filesWithNonEmptyPath = files.filter(_.nonEmpty)
     val logger = akka.event.Logging(tsc.actorsystem, getClass)

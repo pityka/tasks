@@ -48,8 +48,8 @@ private[tasks] class SharedFileCache(
     AS: ActorSystem,
     EC: ExecutionContext,
     MAT: Materializer,
-    config: TasksConfig)
-    extends Cache
+    config: TasksConfig
+) extends Cache
     with TaskSerializer {
 
   private val logger = akka.event.Logging(AS, getClass)
@@ -58,8 +58,9 @@ private[tasks] class SharedFileCache(
 
   def shutDown() = ()
 
-  def get(taskDescription: TaskDescription)(
-      implicit prefix: FileServicePrefix): Future[Option[UntypedResult]] = {
+  def get(
+      taskDescription: TaskDescription
+  )(implicit prefix: FileServicePrefix): Future[Option[UntypedResult]] = {
 
     val hash = SerializedTaskDescription(taskDescription).hash.hash
     val fileName = "__meta__result__" + hash
@@ -83,8 +84,10 @@ private[tasks] class SharedFileCache(
             }
             .recover {
               case e =>
-                logger.error(e,
-                             s"Failed to locate cached result file: $fileName")
+                logger.error(
+                  e,
+                  s"Failed to locate cached result file: $fileName"
+                )
                 None
             }
       }
@@ -92,7 +95,8 @@ private[tasks] class SharedFileCache(
   }
 
   def set(taskDescription: TaskDescription, untypedResult: UntypedResult)(
-      implicit p: FileServicePrefix) = {
+      implicit p: FileServicePrefix
+  ) = {
     try {
       implicit val historyContext = tasks.fileservice.NoHistory
       val serializedTaskDescription = SerializedTaskDescription(taskDescription)
@@ -101,12 +105,16 @@ private[tasks] class SharedFileCache(
       val key = serializedTaskDescription.value
       for {
         _ <- SharedFileHelper
-          .createFromSource(Source.single(ByteString(value)),
-                            name = "__meta__result__" + hash)
+          .createFromSource(
+            Source.single(ByteString(value)),
+            name = "__meta__result__" + hash
+          )
         _ <- if (config.saveTaskDescriptionInCache)
           SharedFileHelper
-            .createFromSource(Source.single(ByteString(key)),
-                              name = "__meta__input__" + hash)
+            .createFromSource(
+              Source.single(ByteString(key)),
+              name = "__meta__input__" + hash
+            )
         else Future.successful(())
       } yield ()
 

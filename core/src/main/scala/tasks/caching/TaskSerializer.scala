@@ -39,11 +39,13 @@ trait TaskSerializer {
       else
         List(
           "mutablefiles" -> implicitly[Encoder[Set[SharedFile]]]
-            .apply(original.mutableFiles.get))
+            .apply(original.mutableFiles.get)
+        )
 
     val fields = List(
       "files" -> implicitly[Encoder[Set[SharedFile]]].apply(original.files),
-      "data" -> Json.fromString(original.data.value)) ++ mutableFilesField
+      "data" -> Json.fromString(original.data.value)
+    ) ++ mutableFilesField
 
     val js = Json.obj(fields: _*)
     js.noSpaces.getBytes("UTF8")
@@ -70,7 +72,8 @@ trait TaskSerializer {
           implicitly[Decoder[Set[SharedFile]]]
             .decodeJson(js)
             .right
-            .get)
+            .get
+        )
     }
 
     UntypedResult(files, Base64Data(map("data").get.asString.get), mutableFiles)

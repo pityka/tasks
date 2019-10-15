@@ -47,7 +47,8 @@ import tasks.wire._
 object HeartBeatActor {
   def watch[A](target: ActorRef, signal: A, listener: ActorRef)(
       implicit AS: ActorRefFactory,
-      config: TasksConfig) =
+      config: TasksConfig
+  ) =
     AS.actorOf(
       Props(new HeartBeatActor(target, signal, listener))
         .withDispatcher("heartbeat")
@@ -55,8 +56,8 @@ object HeartBeatActor {
 }
 
 class HeartBeatActor(target: ActorRef, signal: Any, listener: ActorRef)(
-    implicit config: TasksConfig)
-    extends Actor
+    implicit config: TasksConfig
+) extends Actor
     with akka.actor.ActorLogging {
 
   private case object CheckHeartBeat
@@ -65,11 +66,13 @@ class HeartBeatActor(target: ActorRef, signal: Any, listener: ActorRef)(
 
   private val failureDetector = new DeadlineFailureDetector(
     config.acceptableHeartbeatPause,
-    config.acceptableHeartbeatPause)
+    config.acceptableHeartbeatPause
+  )
 
   override def preStart = {
     log.debug(
-      "HeartBeatActor start for: " + target + " " + failureDetector.acceptableHeartbeatPause)
+      "HeartBeatActor start for: " + target + " " + failureDetector.acceptableHeartbeatPause
+    )
 
     import context.dispatcher
 
