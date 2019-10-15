@@ -283,7 +283,6 @@ lazy val testables = (project in file("testables"))
     jsoniter,
     sharedJVM,
     ssh,
-    uifrontend,
     tracker
   )
 
