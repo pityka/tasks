@@ -168,7 +168,8 @@ lazy val tracker = project
   .settings(
     name := "tasks-tracker",
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.0.0" % "test"),
+      "org.scalatest" %% "scalatest" % "3.0.0" % "test"
+    ),
     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
   )
   .dependsOn(core % "compile->compile;test->test")
@@ -179,7 +180,8 @@ lazy val uibackend = project
   .settings(
     name := "tasks-ui-backend",
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.0.0" % "test"),
+      "org.scalatest" %% "scalatest" % "3.0.0" % "test"
+    ),
     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
   )
   .dependsOn(core % "compile->compile;test->test")
@@ -253,20 +255,40 @@ lazy val root = (project in file("."))
   .settings(
     publishArtifact := false
   )
-  .aggregate(spores,
-             core,
-             ecoll,
-             upicklesupport,
-             jsoniter,
-             sharedJVM,
-             sharedJS,
-             ec2,
-             ssh,
-             uibackend,
-             uifrontend,
-             kubernetes,
-             tracker,
-             example)
+  .aggregate(
+    spores,
+    core,
+    ecoll,
+    upicklesupport,
+    jsoniter,
+    sharedJVM,
+    sharedJS,
+    ec2,
+    ssh,
+    uibackend,
+    uifrontend,
+    kubernetes,
+    tracker,
+    example
+  )
+
+lazy val testables = (project in file("."))
+  .settings(commonSettings: _*)
+  .settings(
+    publishArtifact := false
+  )
+  .aggregate(
+    spores,
+    core,
+    ecoll,
+    upicklesupport,
+    jsoniter,
+    sharedJVM,
+    sharedJS,
+    ssh,
+    uifrontend,
+    tracker
+  )
 
 scalafmtOnCompile in ThisBuild := true
 
