@@ -282,8 +282,7 @@ lazy val testables = (project in file("testables"))
     upicklesupport,
     jsoniter,
     sharedJVM,
-    ssh,
-    tracker
+    ssh
   )
 
 scalafmtOnCompile in ThisBuild := true
