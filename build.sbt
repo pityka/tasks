@@ -282,7 +282,6 @@ lazy val testables = (project in file("testables"))
     upicklesupport,
     jsoniter,
     sharedJVM,
-    sharedJS,
     ssh,
     uifrontend,
     tracker
