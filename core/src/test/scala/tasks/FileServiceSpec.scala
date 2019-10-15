@@ -120,9 +120,12 @@ class FileServiceSpec
       implicit val serviceimpl =
         FileServiceComponent(service, Some(fs), remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
-      SharedFileHelper.createFromSource(
-        akka.stream.scaladsl.Source(List.empty[akka.util.ByteString]),
-        "proba"
+      Await.result(
+        SharedFileHelper.createFromSource(
+          akka.stream.scaladsl.Source(List.empty[akka.util.ByteString]),
+          "proba"
+        ),
+        30 seconds
       )
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
@@ -219,9 +222,12 @@ class FileServiceSpec
       implicit val serviceimpl =
         FileServiceComponent(service, Some(fs), remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
-      SharedFileHelper.createFromSource(
-        akka.stream.scaladsl.Source.single(akka.util.ByteString(data)),
-        "proba"
+      Await.result(
+        SharedFileHelper.createFromSource(
+          akka.stream.scaladsl.Source.single(akka.util.ByteString(data)),
+          "proba"
+        ),
+        30 seconds
       )
 
       readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
