@@ -113,7 +113,7 @@ class QueryLogTestSuite extends FunSuite with Matchers {
 
   test("should query log") {
     QueryLogTest.run.get
-    Thread.sleep(1000)
+    Thread.sleep(10000)
     QueryLogTest.file.canRead shouldBe true
     println(QueryLogTest.file)
     val nodes = tasks.util.openFileInputStream(QueryLogTest.file) {
