@@ -78,7 +78,7 @@ object Deployment {
         .replaceAllLiterally("{STORAGE}", config.storageURI.toString)
 
     val runPackage =
-      if (background) s"""nohup $edited 1> stdout 2> stderr & """
+      if (background) s"""(nohup $edited 1> stdout 2> stderr & echo $$!;) """
       else s"$edited ;"
 
     s"""$downloadScript && $runPackage"""

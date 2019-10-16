@@ -75,7 +75,7 @@ class SHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
         Seq(
           "bash",
           "-c",
-          s"cd ${wd.getCanonicalPath};" + script + "echo $!;exit;"
+          s"cd ${wd.getCanonicalPath};" + script
         )
       )
     )
