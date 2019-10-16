@@ -152,6 +152,7 @@ class TaskSystem private[tasks] (
 
   val managedFileStorage: Option[ManagedFileStorage] =
     if (config.storageURI.toString == "") None
+    else if (!hostConfig.isQueue && config.forceNoManagedFileStorage) None
     else {
       val s3bucket =
         if (config.storageURI.getScheme != null && config.storageURI.getScheme == "s3") {
