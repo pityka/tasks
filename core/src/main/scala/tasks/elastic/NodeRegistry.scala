@@ -186,6 +186,7 @@ class NodeRegistry(
                     log.warning("Request failed: " + e.getMessage + " " + e)
                     withRequested
                   case Success((jobId, size)) =>
+                    log.info(s"Request succeeded. Job id: $jobId, size: $size")
                     context.system.scheduler.scheduleOnce(
                       delay = config.pendingNodeTimeout,
                       receiver = self,
