@@ -89,9 +89,7 @@ private[tasks] object SharedFileHelper extends StrictLogging {
       val f = (ac ? WaitingForPath)
         .asInstanceOf[Future[Try[Source[ByteString, _]]]]
 
-      f onComplete {
-        case _ => ac ! PoisonPill
-      }
+      f.andThen { case e => println("XXX" + e) }
 
       val f2 = f map (_ match {
         case Success(r) => r

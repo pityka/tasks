@@ -76,7 +76,6 @@ class FileUserSource(
   def finish(): Unit = {
     if (listener.isDefined) {
       listener.get ! result.get
-      self ! PoisonPill
     }
   }
 
@@ -93,6 +92,7 @@ class FileUserSource(
   override def receive = super.receive orElse {
     case filetransfermessages.FileSaved() => {
       writeableChannel.get.close
+      self ! PoisonPill
     }
   }
 }

@@ -132,6 +132,7 @@ class FileServiceSpec
         data.deep
       )
     }
+
     it("add new empty file") {
       val data = Array[Byte]()
       val input = TempFile.createTempFile(".in")
@@ -193,6 +194,35 @@ class FileServiceSpec
         data.deep
       )
     }
+    it("add new file - not managed") {
+      val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
+      val input = TempFile.createTempFile(".in")
+      writeBinaryToFile(input.getCanonicalPath, data)
+
+      val folder =
+        new File(new java.io.File(getClass.getResource("/").getPath), "test1")
+      folder.mkdir
+      val folder2 =
+        new File(new java.io.File(getClass.getResource("/").getPath), "test1f")
+      folder2.mkdir
+
+      val fs = new FolderFileStorage(folder)
+      val service = system.actorOf(
+        Props(
+          new FileService(
+            fs
+          )
+        )
+      )
+      implicit val serviceimpl =
+        FileServiceComponent(service, None, remoteStore)
+      implicit val historyContext = tasks.fileservice.NoHistory
+      SharedFileHelper.createFromFile(input, "proba", false)
+
+      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
+        data.deep
+      )
+    }
     it("add new file - from source") {
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
       val input = TempFile.createTempFile(".in")
@@ -221,6 +251,47 @@ class FileServiceSpec
       )
       implicit val serviceimpl =
         FileServiceComponent(service, Some(fs), remoteStore)
+      implicit val historyContext = tasks.fileservice.NoHistory
+      Await.result(
+        SharedFileHelper.createFromSource(
+          akka.stream.scaladsl.Source.single(akka.util.ByteString(data)),
+          "proba"
+        ),
+        30 seconds
+      )
+
+      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
+        data.deep
+      )
+    }
+    it("add new file - from source - not managed") {
+      val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
+      val input = TempFile.createTempFile(".in")
+      writeBinaryToFile(input.getCanonicalPath, data)
+
+      val folder =
+        new File(
+          new java.io.File(getClass.getResource("/").getPath),
+          "test1-from-source"
+        )
+      folder.mkdir
+      val folder2 =
+        new File(
+          new java.io.File(getClass.getResource("/").getPath),
+          "test1f-fro-source"
+        )
+      folder2.mkdir
+
+      val fs = new FolderFileStorage(folder)
+      val service = system.actorOf(
+        Props(
+          new FileService(
+            fs
+          )
+        )
+      )
+      implicit val serviceimpl =
+        FileServiceComponent(service, None, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
       Await.result(
         SharedFileHelper.createFromSource(
@@ -271,6 +342,55 @@ class FileServiceSpec
 
       val path = Await.result(SharedFileHelper.getPathToFile(t), 50 seconds)
       readBinaryFile(path.getCanonicalPath).deep should equal(data.deep)
+
+    }
+    it("add new file and ask for it - not managed") {
+      val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
+      val input = TempFile.createTempFile(".in")
+      writeBinaryToFile(input.getCanonicalPath, data)
+
+      val folder =
+        new File(new java.io.File(getClass.getResource("/").getPath), "test2")
+      folder.mkdir
+      val folder2 =
+        new File(new java.io.File(getClass.getResource("/").getPath), "test2f")
+      folder2.mkdir
+      val fs = new FolderFileStorage(folder)
+      val service = system.actorOf(
+        Props(
+          new FileService(
+            fs,
+            isLocal = _ => false
+          )
+        )
+      )
+      implicit val serviceimpl =
+        FileServiceComponent(service, None, remoteStore)
+      implicit val nlc =
+        NodeLocalCache.start
+      implicit val historyContext = tasks.fileservice.NoHistory
+      val t: SharedFile =
+        Await.result(
+          SharedFileHelper.createFromFile(input, "proba", false),
+          50 seconds
+        )
+
+      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).deep should equal(
+        data.deep
+      )
+
+      val path = Await.result(SharedFileHelper.getPathToFile(t), 50 seconds)
+      readBinaryFile(path.getCanonicalPath).deep should equal(data.deep)
+
+      Await
+        .result(
+          SharedFileHelper
+            .getSourceToFile(t, 0L)
+            .runFold(akka.util.ByteString.empty)(_ ++ _),
+          20 seconds
+        )
+        .toArray
+        .deep should equal(data.deep)
 
     }
 
@@ -325,7 +445,7 @@ class FileServiceSpec
       val service =
         system.actorOf(Props(new FileService(fs, 8, (_: File) => false)))
       implicit val serviceimpl =
-        FileServiceComponent(service, Some(fs), remoteStore)
+        FileServiceComponent(service, None, remoteStore)
       implicit val nlc =
         NodeLocalCache.start
 
