@@ -60,7 +60,7 @@ object SHTest extends TestHelpers {
       tasks.slave-main-class = "tasks.TestSlave"
       tasks.elastic.sh.workdir = ${tmp.getAbsolutePath}
       tasks.resubmitFailedTask = true
-      akka.loglevel=INFO
+      akka.loglevel=OFF
       """
     )
   }
