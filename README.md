@@ -1,3 +1,10 @@
+[![codecov](https://codecov.io/gh/pityka/tasks/branch/master/graph/badge.svg)](https://codecov.io/gh/pityka/tasks)
+![](https://github.com/pityka/tasks/workflows/CI/badge.svg)
+[![maven](https://img.shields.io/maven-central/v/io.github.pityka/tasks-core_2.12.svg)](https://repo1.maven.org/maven2/io/github/pityka/tasks-core_2.12/)
+
+
+
+
 This library provides persistent memoization around asynchronous distributed computations.
 
 It also provides a framework to execute those computations on remote machines. For the latter it supports AWS EC2, kubernetes, or ssh.
