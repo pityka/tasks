@@ -54,6 +54,7 @@ trait TestHelpers {
     ConfigFactory.parseString(
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=4
+      akka.loglevel=OFF
       """
     )
   }

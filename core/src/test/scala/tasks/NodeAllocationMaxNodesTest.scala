@@ -52,6 +52,7 @@ object NodeAllocationMaxNodesTest extends TestHelpers {
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.elastic.maxNodes = 0
+      akka.loglevel=OFF
       """
     )
   }

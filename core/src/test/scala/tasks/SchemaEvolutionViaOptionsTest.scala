@@ -44,6 +44,7 @@ object SchemaEvolutionViaOptionsTest extends TestHelpers {
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
     hosts.numCPU=4
     tasks.createFilePrefixForTaskId = false
+    akka.loglevel=OFF
     """
     )
   }

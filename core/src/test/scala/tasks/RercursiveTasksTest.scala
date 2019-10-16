@@ -90,7 +90,7 @@ class RecursiveTaskTestSuite
     tmp.delete
     ConfigFactory.parseString(
       s"""
-      akka.loglevel = "INFO"
+      akka.loglevel = "OFF"
 tasks.cacheEnabled = false
 tasks.disableRemoting = true
 hosts.numCPU=4

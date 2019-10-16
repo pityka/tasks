@@ -17,7 +17,7 @@ object Conf {
   type = PinnedDispatcher
   thread-pool-executor.allow-core-timeout=off
 }
-akka.loglevel = "DEBUG" """
+akka.loglevel = "OFF" """
 }
 
 class TransferSpec

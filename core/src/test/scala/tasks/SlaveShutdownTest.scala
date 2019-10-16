@@ -50,6 +50,7 @@ object SlaveShutdownTest extends TestHelpers {
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
+      akka.loglevel=OFF
       """
     )
   }

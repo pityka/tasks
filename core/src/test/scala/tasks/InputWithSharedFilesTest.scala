@@ -50,7 +50,6 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
         sf2 <- SharedFile(Source.single(ByteString("abcd")), "f2")
         sf2History <- sf2.history
         _ = {
-          println(sf2History.context.get)
           sf2History.context.get
         }
         r <- Future(sf2)

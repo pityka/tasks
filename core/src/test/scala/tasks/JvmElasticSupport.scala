@@ -70,6 +70,7 @@ object JvmElasticSupport {
         java.util.UUID.randomUUID.toString.replaceAllLiterally("-", "")
 
       val ts = Future { defaultTaskSystem(s"""
+    akka.loglevel=OFF
     hosts.master = "${masterAddress.getHostName}:${masterAddress.getPort}"
     hosts.app = false
     tasks.elastic.engine= "tasks.JvmElasticSupport.JvmGrid"
@@ -79,7 +80,7 @@ object JvmElasticSupport {
     tasks.fileservice.storageURI="${config.storageURI.toString}"
     """) }(scala.concurrent.ExecutionContext.Implicits.global)
       import scala.concurrent.ExecutionContext.Implicits.global
-      ts.map(println).recover {
+      ts.map(_ => ()).recover {
         case e =>
           println(e)
       }

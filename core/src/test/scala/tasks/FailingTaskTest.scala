@@ -43,11 +43,12 @@ object FailingTasksTest extends TestHelpers {
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=4
       tasks.cache.enabled = false
+      akka.loglevel=OFF
       """
     )
   }
 
-  class TestException extends RuntimeException("boom")
+  class TestException extends RuntimeException("expected exception thrown")
 
   val fail = AsyncTask[Input, String]("failingtasktest-fail", 1) {
     _ => implicit computationEnvironment =>

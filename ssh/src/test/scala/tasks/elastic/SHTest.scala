@@ -58,6 +58,7 @@ object SHTest extends TestHelpers {
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
       tasks.slave-main-class = "tasks.TestSlave"
       tasks.elastic.sh.workdir = ${tmp.getAbsolutePath}
+      akka.loglevel=OFF
       """
     )
   }

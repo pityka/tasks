@@ -53,7 +53,7 @@ object SporeTest extends TestHelpers with Matchers {
     withTaskSystem(
       Some(
         ConfigFactory.parseString(
-          s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}"
+          s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}\nakka.loglevel=OFF"
         )
       )
     ) { implicit ts =>

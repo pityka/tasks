@@ -54,6 +54,7 @@ object ReloadConfigTest extends TestHelpers with Matchers {
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
       tasks.maxConfigLoadInterval = 2 seconds
+      akka.loglevel=OFF
       """
     )
   }
