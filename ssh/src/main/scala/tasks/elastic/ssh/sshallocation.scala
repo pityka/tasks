@@ -179,7 +179,7 @@ class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
           )
           SSHOperations.openSession(host) { session =>
             val command =
-              "source .bash_profile; " + script + "echo $!;exit;"
+              "source .bash_profile; " + script
 
             session.execCommand(command)
 
