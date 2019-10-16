@@ -144,7 +144,7 @@ object SHResultWithSharedFilesTest extends TestHelpers {
     val testConfig2 =
       ConfigFactory.parseString(
         s"""tasks.fileservice.disableOnSlave = true
-        akka.loglevel= INFO
+        akka.loglevel= OFF
         tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=0
       tasks.elastic.engine = "tasks.elastic.sh.SHElasticSupport"
