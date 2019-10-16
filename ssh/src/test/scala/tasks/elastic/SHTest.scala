@@ -43,6 +43,7 @@ object SHTest extends TestHelpers {
   val testTask = AsyncTask[Input, Int]("shtest", 1) {
     _ => implicit computationEnvironment =>
       log.info("Hello from task")
+      if (scala.util.Random.nextBoolean) System.exit(1)
       Future(1)
   }
 
@@ -55,10 +56,11 @@ object SHTest extends TestHelpers {
       tasks.elastic.engine = "tasks.elastic.sh.SHElasticSupport"
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
-      tasks.failuredetector.acceptable-heartbeat-pause = 10 s
+      tasks.failuredetector.acceptable-heartbeat-pause = 5 s
       tasks.slave-main-class = "tasks.TestSlave"
       tasks.elastic.sh.workdir = ${tmp.getAbsolutePath}
-      akka.loglevel=OFF
+      tasks.resubmitFailedTask = true
+      akka.loglevel=INFO
       """
     )
   }
