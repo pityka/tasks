@@ -48,11 +48,6 @@ lazy val commonSettings = Seq(
   licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
   pomExtra in Global := {
     <url>https://pityka.github.io/tasks/</url>
-      <scm>
-        <connection>scm:git:github.com/pityka/tasks</connection>
-        <developerConnection>scm:git:git@github.com:pityka/tasks</developerConnection>
-        <url>github.com/pityka/tasks</url>
-      </scm>
       <developers>
         <developer>
           <id>pityka</id>
