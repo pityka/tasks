@@ -43,7 +43,8 @@ object SHTest extends TestHelpers {
   val testTask = AsyncTask[Input, Int]("shtest", 1) {
     _ => implicit computationEnvironment =>
       log.info("Hello from task")
-      if (scala.util.Random.nextBoolean) System.exit(1)
+      if (tasks.elastic.sh.SHGetNodeName.getNodeName.toInt % 2 == 0)
+        System.exit(1)
       Future(1)
   }
 
@@ -60,7 +61,7 @@ object SHTest extends TestHelpers {
       tasks.slave-main-class = "tasks.TestSlave"
       tasks.elastic.sh.workdir = ${tmp.getAbsolutePath}
       tasks.resubmitFailedTask = true
-      akka.loglevel=OFF
+      akka.loglevel=INFO
       """
     )
   }
