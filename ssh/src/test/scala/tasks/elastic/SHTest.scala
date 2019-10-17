@@ -62,6 +62,7 @@ object SHTest extends TestHelpers {
       tasks.elastic.sh.workdir = ${tmp.getAbsolutePath}
       tasks.resubmitFailedTask = true
       akka.loglevel=INFO
+      tasks.elastic.maxNodesCumulative = 1000
       """
     )
   }
