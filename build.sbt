@@ -1,7 +1,7 @@
 import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.12.8",
+  scalaVersion := "2.12.11",
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -60,9 +60,9 @@ lazy val commonSettings = Seq(
   cancelable in Global := true
 )
 
-lazy val circeVersion = "0.11.1"
+lazy val circeVersion = "0.13.0"
 lazy val jsoniterVersion = "0.54.0"
-lazy val akkaVersion = "2.5.18"
+lazy val akkaVersion = "2.5.31"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
   .crossType(sbtcrossproject.CrossPlugin.autoImport.CrossType.Pure)

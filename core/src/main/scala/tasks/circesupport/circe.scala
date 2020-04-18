@@ -8,7 +8,7 @@ package object circesupport extends StrictLogging {
 
   implicit def serializer[A](implicit enc: Encoder[A]): Serializer[A] =
     new Serializer[A] {
-      def apply(a: A) = printer.pretty(enc(a)).getBytes("UTF-8")
+      def apply(a: A) = printer.print(enc(a)).getBytes("UTF-8")
     }
   implicit def deserializer[A](implicit dec: Decoder[A]): Deserializer[A] =
     new Deserializer[A] {
