@@ -90,8 +90,8 @@ class Launcher(
     extends Actor
     with akka.actor.ActorLogging {
 
-  private case object CheckQueue extends Serializable
-  private case object PrintResources extends Serializable
+  private case object CheckQueue
+  private case object PrintResources
 
   private val maxResources: VersionedResourceAvailable = slots
   private var availableResources: VersionedResourceAvailable = maxResources

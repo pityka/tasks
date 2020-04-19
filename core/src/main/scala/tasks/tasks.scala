@@ -86,7 +86,7 @@ abstract class WithSharedFiles(
     ) ++ mutables.flatMap(m => recurse(m)(_.allFiles))).distinct
 }
 
-trait HasPersistent[+A] extends Serializable { self: A =>
+trait HasPersistent[+A] { self: A =>
   def persistent: A
 }
 
