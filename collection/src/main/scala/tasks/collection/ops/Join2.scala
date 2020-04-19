@@ -77,7 +77,7 @@ private[ecoll] object Join2 {
           implicit val wab = serdeAB.ser(())
           implicit val wc = serdeC.ser(())
           implicit val fmt = EColl.flatJoinFormat[(Option[A], Option[B])]
-          implicit val mat = ctx.components.actorMaterializer
+          implicit val as = ctx.components.actorsystem
           val parallelismOfJoin =
             math.min(
               resourceAllocated.cpu,

@@ -31,7 +31,7 @@ private[ecoll] object GroupBy {
         implicit val ce = ctx
         implicit val fmt = EColl.flatJoinFormat[A]
         implicit val sk = new flatjoin.StringKey[A] { def key(t: A) = fun(t) }
-        implicit val mat = ctx.components.actorMaterializer
+        implicit val as = ctx.components.actorsystem
         val parallelismOfJoin =
           math.min(
             resourceAllocated.cpu,

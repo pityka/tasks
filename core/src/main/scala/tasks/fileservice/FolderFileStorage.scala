@@ -159,7 +159,7 @@ class FolderFileStorage(val basePath: File)(
       path: ManagedFilePath,
       fromOffset: Long
   ): Source[ByteString, _] =
-    Source.lazily(
+    Source.lazySource(
       () =>
         FileIO.fromPath(
           assemblePath(path).toPath,
@@ -242,28 +242,22 @@ class FolderFileStorage(val basePath: File)(
       Future.successful(
         FileIO
           .toPath(tmp.toPath)
-          .mapMaterializedValue(_.flatMap { ioResult =>
-            if (ioResult.wasSuccessful) {
-              val r = importFile(tmp, path)
-              tmp.delete
-              r.map(x => (x._1, x._2, x._4))
-            } else {
-              throw ioResult.status.failed.get
-            }
+          .mapMaterializedValue(_.flatMap { _ =>
+            val r = importFile(tmp, path)
+            tmp.delete
+            r.map(x => (x._1, x._2, x._4))
           })
       )
     }
 
     Sink
-      .lazyInitAsync(createSink)
-      .mapMaterializedValue(_.flatMap {
-        case None =>
+      .lazyFutureSink(createSink)
+      .mapMaterializedValue(_.flatten.recoverWith {
+        case _ =>
           // empty file, upstream terminated without emitting an element
           val tmp = TempFile.createTempFile("foldertmp")
           val r = importFile(tmp, path)
-          tmp.delete
-          r.map(x => (x._1, x._2, x._4))
-        case Some(value) => value
+          r.map(x => { tmp.delete; (x._1, x._2, x._4) })
       })
   }
 

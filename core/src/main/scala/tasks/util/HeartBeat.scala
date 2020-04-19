@@ -76,7 +76,7 @@ class HeartBeatActor(target: ActorRef, signal: Any, listener: ActorRef)(
 
     import context.dispatcher
 
-    scheduledHeartBeats = context.system.scheduler.schedule(
+    scheduledHeartBeats = context.system.scheduler.scheduleAtFixedRate(
       initialDelay = 0 seconds,
       interval = config.launcherActorHeartBeatInterval,
       receiver = self,

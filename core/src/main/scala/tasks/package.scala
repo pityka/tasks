@@ -207,24 +207,20 @@ package object tasks {
         case _                     => "akka.remote.RemoteActorRefProvider"
       }
 
-      val numberOfAkkaRemotingThreads =
-        if (hostConfig.myRoles.contains(Queue)) 6 else 2
-
       val akkaProgrammaticalConfiguration = ConfigFactory.parseString(s"""
         task-worker-dispatcher.fork-join-executor.parallelism-max = ${hostConfig.availableCPU}
         task-worker-dispatcher.fork-join-executor.parallelism-min = ${hostConfig.availableCPU}
+        
         akka {
           actor {
             provider = "${actorProvider}"
           }
           remote {
-            enabled-transports = ["akka.remote.netty.tcp"]
-            netty.tcp {
-              hostname = "${hostConfig.myAddress.getHostName}"
-              port = ${hostConfig.myAddress.getPort.toString}
-              server-socket-worker-pool.pool-size-max = ${numberOfAkkaRemotingThreads}
-              client-socket-worker-pool.pool-size-max = ${numberOfAkkaRemotingThreads}
+            artery {
+              canonical.hostname = "${hostConfig.myAddress.getHostName}"
+              canonical.port = ${hostConfig.myAddress.getPort.toString}
             }
+            
          }
         }
           """)

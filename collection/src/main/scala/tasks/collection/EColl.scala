@@ -33,7 +33,7 @@ case class EColl[T](
   def withName(name: String) = copy(name = Some(name))
 
   def loadIndex(implicit tsc: TaskSystemComponents) = {
-    implicit val mat = tsc.actorMaterializer
+    implicit val as = tsc.actorsystem
     implicit val ec = tsc.executionContext
     for {
       indexBytes <- indexData.source.runFold(ByteString.empty)(_ ++ _)
@@ -83,10 +83,10 @@ case class EColl[T](
           parallelism = parallelismOfDeserialization,
           bufferSize = EColl.ElemBufferSize
         )(line => rightOrThrow(decoder(line.toArray)))(
-          tsc.actorMaterializer.executionContext
+          tsc.actorsystem.dispatcher
         )
 
-    implicit val ec = tsc.actorMaterializer.executionContext
+    implicit val ec = tsc.actorsystem.dispatcher
 
     val indexQueryResult =
       if (fromIndex <= 0L) Future.successful(Some(Index.QueryResult(0L, 0L)))
@@ -112,7 +112,7 @@ case class EColl[T](
     }
 
     Source
-      .fromFutureSource(futureSource)
+      .futureSource(futureSource)
       .mapMaterializedValue(_ => NotUsed)
 
   }
@@ -123,7 +123,7 @@ case class EColl[T](
       implicit decoder: Deserializer[T],
       tsc: TaskSystemComponents
   ): Future[Seq[T]] = {
-    implicit val mat = tsc.actorMaterializer
+    implicit val as = tsc.actorsystem
     sourceFrom(parallelismOfDeserialization = parallelismOfDeserialization)
       .runWith(Sink.seq)
   }
@@ -132,7 +132,7 @@ case class EColl[T](
       implicit decoder: Deserializer[T],
       tsc: TaskSystemComponents
   ): Future[Seq[T]] = {
-    implicit val mat = tsc.actorMaterializer
+    implicit val as = tsc.actorsystem
     sourceFrom(parallelismOfDeserialization = parallelismOfDeserialization)
       .take(n)
       .runWith(Sink.seq)
@@ -142,7 +142,7 @@ case class EColl[T](
       implicit decoder: Deserializer[T],
       tsc: TaskSystemComponents
   ): Future[Option[T]] = {
-    implicit val mat = tsc.actorMaterializer
+    implicit val as = tsc.actorsystem
     sourceFrom().runWith(Sink.headOption)
   }
 

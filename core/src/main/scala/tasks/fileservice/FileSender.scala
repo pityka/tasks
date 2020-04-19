@@ -29,7 +29,7 @@ package tasks.fileservice
 
 import akka.actor._
 import akka.stream.scaladsl._
-import akka.stream._
+import akka.stream.Materializer
 import akka.util._
 
 import java.io.File
@@ -104,7 +104,7 @@ class SourceSender(
     extends Actor
     with akka.actor.ActorLogging {
 
-  implicit val mat = ActorMaterializer()
+  implicit val mat = Materializer(context)
 
   override def preStart {
     service ! NewSource(proposedPath)

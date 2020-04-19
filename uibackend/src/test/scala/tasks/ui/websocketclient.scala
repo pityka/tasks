@@ -1,7 +1,6 @@
 package tasks.ui
 
 import akka.actor._
-import akka.stream._
 import akka.stream.scaladsl._
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
@@ -13,7 +12,6 @@ object WebSocketClient {
   def make(url: String)(foreach: String => Unit) {
     implicit val AS = ActorSystem()
     import AS.dispatcher
-    implicit val MAT = ActorMaterializer()
 
     val sink: Sink[Message, Future[_]] =
       Sink.foreach {

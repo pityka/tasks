@@ -12,7 +12,7 @@ trait FactoryMethods extends StrictLogging { self: Constants =>
   def concatenate[T](ecolls: Seq[EColl[T]], name: Option[String] = None)(
       implicit tsc: TaskSystemComponents
   ): Future[EColl[T]] = {
-    implicit val mat = tsc.actorMaterializer
+    implicit val as = tsc.actorsystem
     implicit val ec = tsc.executionContext
     val dataName = name.getOrElse(java.util.UUID.randomUUID.toString)
     val indexName = dataName + ".bidx"
@@ -42,7 +42,7 @@ trait FactoryMethods extends StrictLogging { self: Constants =>
       implicit encoder: Serializer[T],
       tsc: TaskSystemComponents
   ): Future[EColl[T]] = {
-    implicit val mat = tsc.actorMaterializer
+    implicit val as = tsc.actorsystem
     source.runWith(sink[T](name, parallelism))
   }
 
@@ -50,8 +50,8 @@ trait FactoryMethods extends StrictLogging { self: Constants =>
       implicit encoder: Serializer[T],
       tsc: TaskSystemComponents
   ): Sink[T, Future[EColl[T]]] = {
-    implicit val mat = tsc.actorMaterializer
-    implicit val ec = mat.executionContext
+    implicit val as = tsc.actorsystem
+    implicit val ec = as.dispatcher
 
     val gzipPar = 1 //if (parallelism == 1) 1 else parallelism / 2
     val encoderPar = if (parallelism == 1) 1 else parallelism - gzipPar

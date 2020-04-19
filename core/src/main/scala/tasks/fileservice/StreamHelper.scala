@@ -32,6 +32,7 @@ import akka.util._
 import com.bluelabs.s3stream._
 import scala.concurrent.{ExecutionContext, Future}
 import tasks.util.Uri
+import akka.http.scaladsl.Http
 
 class StreamHelper(s3stream: Option[S3ClientSupport])(
     implicit as: ActorSystem,
@@ -43,7 +44,7 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
 
   val queue = (rq: HttpRequest) => {
     log.debug("Queueing: " + rq)
-    httpqueue.HttpQueue(as).queue(rq)
+    Http(as).singleRequest(rq)
   }
 
   def s3Loc(uri: Uri) = {
@@ -66,13 +67,13 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
 
     def bySingleRequest =
       Source
-        .lazilyAsync(() => queue(HttpRequest(uri = uri.akka)))
+        .lazyFuture(() => queue(HttpRequest(uri = uri.akka)))
         .map(_.entity.dataBytes)
         .flatMapConcat(identity)
 
     def getRangeOnce(range: headers.ByteRange) =
       Source
-        .lazilyAsync(
+        .lazyFuture(
           () =>
             queue(HttpRequest(uri = uri.akka).addHeader(headers.`Range`(range)))
         )
@@ -158,7 +159,7 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
         .async
 
     Source
-      .lazilyAsync(
+      .lazyFuture(
         () =>
           getHeader.map {
             case (Some(contentLength), true) =>
