@@ -4,6 +4,7 @@ import akka.serialization.Serializer
 import akka.actor.ExtendedActorSystem
 import tasks.queue.ScheduleTask
 import tasks.util.rightOrThrow
+import tasks.fileservice.SharedFile
 
 class StaticMessageSerializer(system: ExtendedActorSystem) extends Serializer {
   import io.circe.Encoder
@@ -70,6 +71,41 @@ class ScheduleTaskSerializer(system: ExtendedActorSystem) extends Serializer {
   ): AnyRef = {
     val r = rightOrThrow(
       io.circe.parser.decode[ScheduleTask](new String(bytes))
+    )
+    log.debug(s"Decoding {} as {}", new String(bytes), r)
+    r
+  }
+
+}
+class SharedFileSerializer(system: ExtendedActorSystem) extends Serializer {
+  import io.circe.Encoder
+
+  implicit val as = system
+
+  val log =
+    akka.event.Logging(system.eventStream, "tasks.wire.SharedFileSerializer")
+
+  override def identifier: Int = 1001
+
+  override def toBinary(o: AnyRef): Array[Byte] =
+    o match {
+      case t: SharedFile =>
+        val encoded = implicitly[Encoder[SharedFile]]
+          .apply(t)
+          .noSpaces
+          .getBytes("UTF-8")
+        log.debug(s"Encoding {} as {}", t, encoded)
+        encoded
+    }
+
+  override def includeManifest: Boolean = false
+
+  override def fromBinary(
+      bytes: Array[Byte],
+      manifest: Option[Class[_]]
+  ): AnyRef = {
+    val r = rightOrThrow(
+      io.circe.parser.decode[SharedFile](new String(bytes))
     )
     log.debug(s"Decoding {} as {}", new String(bytes), r)
     r
