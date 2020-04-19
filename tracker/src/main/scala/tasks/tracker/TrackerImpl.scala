@@ -26,7 +26,6 @@ package tasks.tracker
 
 import akka.actor._
 import akka.stream.scaladsl._
-import akka.stream._
 import tasks.queue.TaskQueue
 import tasks.ui.EventListener
 import tasks.util.config.TasksConfig
@@ -56,8 +55,6 @@ object ResourceUtilizationRecord {
 
 class TrackerImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
     extends Tracker {
-
-  implicit val AM = ActorMaterializer()
 
   val log = akka.event.Logging(actorSystem.eventStream, getClass)
   log.info("Instantiating resource tracking")

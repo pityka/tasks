@@ -28,7 +28,6 @@
 package tasks.queue
 
 import akka.actor.{Actor, PoisonPill, ActorRef}
-import akka.stream.Materializer
 
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
@@ -193,7 +192,6 @@ private class Task(
     resourceAllocated: ResourceAllocated,
     fileServicePrefix: FileServicePrefix,
     auxExecutionContext: ExecutionContext,
-    actorMaterializer: Materializer,
     tasksConfig: TasksConfig,
     priority: Priority,
     labels: Labels,
@@ -271,7 +269,6 @@ private class Task(
           NodeLocalCacheActor(nodeLocalCache),
           fileServicePrefix,
           auxExecutionContext,
-          actorMaterializer,
           tasksConfig,
           history,
           priority,

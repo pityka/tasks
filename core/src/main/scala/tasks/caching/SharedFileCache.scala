@@ -30,7 +30,6 @@ package tasks.caching
 import scala.util._
 import scala.concurrent._
 import akka.actor.ActorSystem
-import akka.stream.Materializer
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
 
@@ -47,7 +46,6 @@ private[tasks] class SharedFileCache(
     implicit fileServiceComponent: FileServiceComponent,
     AS: ActorSystem,
     EC: ExecutionContext,
-    MAT: Materializer,
     config: TasksConfig
 ) extends Cache
     with TaskSerializer {

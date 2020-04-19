@@ -37,7 +37,6 @@ import akka.http.scaladsl.server.Route
 class QueueUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
     extends QueueUI {
 
-  implicit val AM = ActorMaterializer()
   import actorSystem.dispatcher
 
   val log = akka.event.Logging(actorSystem.eventStream, getClass)
@@ -52,7 +51,13 @@ class QueueUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
 
   eventSource
     .via(stateFlow)
-    .runWith(Sink.actorRef(multiplex, onCompleteMessage = None))
+    .runWith(
+      Sink.actorRef(
+        multiplex,
+        onCompleteMessage = None,
+        onFailureMessage = (_ => ())
+      )
+    )
 
   private val stateToTextMessage =
     Flow[UIQueueState].map { state =>
@@ -66,6 +71,12 @@ class QueueUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
       path("states") {
         val source = Source
           .actorRef[UIQueueState](
+            completionMatcher = {
+              case akka.actor.Status.Success => CompletionStrategy.draining
+            }: PartialFunction[Any, CompletionStrategy],
+            failureMatcher = {
+              case akka.actor.Status.Failure(e) => e
+            }: PartialFunction[Any, Throwable],
             bufferSize = 100,
             overflowStrategy = OverflowStrategy.dropTail
           )

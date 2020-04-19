@@ -39,7 +39,7 @@ private[ecoll] object Sort {
           implicit ctx =>
             val range = mayRange.get
             log.info(taskId + "-" + range)
-            implicit val mat = ctx.components.actorMaterializer
+            implicit val as = ctx.components.actorsystem
             implicit val r = serdeA.deser(())
             implicit val w = serdeA.ser(())
 
@@ -100,7 +100,7 @@ private[ecoll] object Sort {
               val fileReader = (f: SharedFile) =>
                 EColl
                   .decodeFileForFlatJoin(r, sk, resourceAllocated.cpu)(f)(
-                    ctx.components.actorMaterializer.executionContext,
+                    ctx.components.executionContext,
                     ctx.components
                   )
 

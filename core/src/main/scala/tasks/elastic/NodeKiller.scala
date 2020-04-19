@@ -54,7 +54,7 @@ class NodeKiller(
 
     import context.dispatcher
 
-    scheduler = context.system.scheduler.schedule(
+    scheduler = context.system.scheduler.scheduleAtFixedRate(
       initialDelay = 0 seconds,
       interval = config.nodeKillerMonitorInterval,
       receiver = self,

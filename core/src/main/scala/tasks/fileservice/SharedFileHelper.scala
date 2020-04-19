@@ -89,15 +89,13 @@ private[tasks] object SharedFileHelper extends StrictLogging {
       val f = (ac ? WaitingForPath)
         .asInstanceOf[Future[Try[Source[ByteString, _]]]]
 
-      f.andThen { case e => println("XXX" + e) }
-
       val f2 = f map (_ match {
         case Success(r) => r
         case Failure(e) =>
           throw new RuntimeException("getSourceToFile failed. " + path, e)
       })
 
-      Source.fromFuture(f2).flatMapConcat(x => x)
+      Source.future(f2).flatMapConcat(x => x)
     }
 
   def getSourceToFile(sf: SharedFile, fromOffset: Long)(

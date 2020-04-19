@@ -62,7 +62,7 @@ lazy val commonSettings = Seq(
 
 lazy val circeVersion = "0.13.0"
 lazy val jsoniterVersion = "0.54.0"
-lazy val akkaVersion = "2.5.31"
+lazy val akkaVersion = "2.6.4"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
   .crossType(sbtcrossproject.CrossPlugin.autoImport.CrossType.Pure)
@@ -110,11 +110,10 @@ lazy val core = project
       "com.typesafe.akka" %% "akka-actor" % akkaVersion,
       "com.typesafe.akka" %% "akka-remote" % akkaVersion,
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
-      "com.typesafe.akka" %% "akka-http-core" % "10.1.1",
-      "com.typesafe" % "config" % "1.3.3",
+      "com.typesafe.akka" %% "akka-http-core" % "10.1.11",
+      "com.typesafe" % "config" % "1.4.0",
       "io.github.pityka" %% "selfpackage" % "1.2.3",
-      "io.github.pityka" %% "s3-stream-fork" % "0.0.3",
-      "io.github.pityka" %% "akka-http-unboundedqueue" % "1.2.0",
+      "io.github.pityka" %% "s3-stream-fork" % "0.0.4",
       "org.scalatest" %% "scalatest" % "3.0.0" % "test",
       "com.typesafe.scala-logging" %% "scala-logging" % "3.9.0",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value

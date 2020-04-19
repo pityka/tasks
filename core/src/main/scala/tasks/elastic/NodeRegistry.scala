@@ -108,7 +108,7 @@ class NodeRegistry(
 
     import context.dispatcher
 
-    scheduler = context.system.scheduler.schedule(
+    scheduler = context.system.scheduler.scheduleAtFixedRate(
       initialDelay = config.queueCheckInitialDelay,
       interval = config.queueCheckInterval,
       receiver = self,

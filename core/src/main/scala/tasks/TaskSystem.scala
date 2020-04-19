@@ -39,7 +39,6 @@ import tasks.shared._
 
 import akka.actor._
 import akka.pattern.ask
-import akka.stream._
 
 import java.io.File
 
@@ -59,7 +58,6 @@ case class TaskSystemComponents(
     nodeLocalCache: NodeLocalCacheActor,
     filePrefix: FileServicePrefix,
     executionContext: ExecutionContext,
-    actorMaterializer: Materializer,
     tasksConfig: TasksConfig,
     historyContext: HistoryContext,
     priority: Priority,
@@ -86,7 +84,6 @@ class TaskSystem private[tasks] (
 )(implicit val config: TasksConfig) {
 
   implicit val AS = system
-  implicit val AM = ActorMaterializer()
   import AS.dispatcher
   implicit val s3Stream = scala.util
     .Try(new S3ClientQueued(config.s3Region))
@@ -123,7 +120,7 @@ class TaskSystem private[tasks] (
   val remoteNodeRegistry =
     if (!hostConfig.isApp && hostConfig.isWorker && elasticSupport.isDefined) {
       val remoteActorPath =
-        s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/noderegistry"
+        s"akka://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/noderegistry"
       val noderegistry = Try(
         Await.result(
           system.actorSelection(remoteActorPath).resolveOne(60 seconds),
@@ -220,7 +217,7 @@ class TaskSystem private[tasks] (
       localFileServiceActor
     } else {
       val actorPath =
-        s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/fileservice"
+        s"akka://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/fileservice"
       val remoteFileServieActor = Await.result(
         system.actorSelection(actorPath).resolveOne(600 seconds),
         atMost = 600 seconds
@@ -257,7 +254,6 @@ class TaskSystem private[tasks] (
             fileServiceComponent,
             system,
             system.dispatcher,
-            AM,
             config
           )
         else new DisabledCache
@@ -271,7 +267,7 @@ class TaskSystem private[tasks] (
       localCacheActor
     } else {
       val actorPath =
-        s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/cache"
+        s"akka://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/cache"
       Await.result(
         system.actorSelection(actorPath).resolveOne(600 seconds),
         atMost = 600 seconds
@@ -314,7 +310,7 @@ class TaskSystem private[tasks] (
       localActor
     } else {
       val actorPath =
-        s"akka.tcp://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/queue"
+        s"akka://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/queue"
       val remoteActor = Await.result(
         system.actorSelection(actorPath).resolveOne(600 seconds),
         atMost = 600 seconds
@@ -434,7 +430,6 @@ class TaskSystem private[tasks] (
     nodeLocalCache = nodeLocalCache,
     filePrefix = FileServicePrefix(Vector()),
     executionContext = auxExecutionContext,
-    actorMaterializer = AM,
     tasksConfig = config,
     historyContext = rootHistory,
     priority = Priority(0),
@@ -460,7 +455,6 @@ class TaskSystem private[tasks] (
             ),
             refreshInterval = refreshInterval,
             auxExecutionContext = auxExecutionContext,
-            actorMaterializer = AM,
             remoteStorage = remoteFileStorage,
             managedStorage = managedFileStorage
           )
@@ -558,9 +552,10 @@ class TaskSystem private[tasks] (
         )
         latch.await
         auxFjp.shutdown
+        Await.result(AS.terminate, 10 seconds)
       }
     } else {
-      AS.terminate
+      Await.result(AS.terminate, 10 seconds)
     }
 
   }

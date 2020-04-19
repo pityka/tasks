@@ -39,7 +39,6 @@ import java.io._
 
 import org.scalatest.Matchers
 
-import akka.stream._
 import akka.actor._
 import tasks.queue._
 import tasks.fileservice._
@@ -69,7 +68,6 @@ class FileServiceSpec
     with BeforeAndAfterAll {
   self: Suite =>
 
-  implicit val mat = ActorMaterializer()
   val as = implicitly[ActorSystem]
   import as.dispatcher
   // implicit val s3stream = new S3StreamQueued(AWSCredentials("na", "na"), "na")

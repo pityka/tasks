@@ -28,7 +28,6 @@
 package tasks
 
 import akka.actor.ActorSystem
-import akka.stream._
 import scala.concurrent.ExecutionContext
 
 import scala.concurrent._
@@ -48,11 +47,6 @@ private[tasks] object Implicits {
       implicit component: TaskSystemComponents
   ): ActorSystem =
     component.actorsystem
-
-  implicit def actormaterializer(
-      implicit component: TaskSystemComponents
-  ): Materializer =
-    component.actorMaterializer
 
   implicit def filePrefix(
       implicit component: TaskSystemComponents

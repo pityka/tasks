@@ -35,7 +35,6 @@ import akka.actor.{
   Cancellable,
   ExtendedActorSystem
 }
-import akka.stream.Materializer
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -85,7 +84,6 @@ class Launcher(
     slots: VersionedResourceAvailable,
     refreshInterval: FiniteDuration,
     auxExecutionContext: ExecutionContext,
-    actorMaterializer: Materializer,
     remoteStorage: RemoteFileStorage,
     managedStorage: Option[ManagedFileStorage]
 )(implicit config: TasksConfig)
@@ -143,7 +141,6 @@ class Launcher(
         allocatedResource.cpuMemoryAllocated,
         filePrefix,
         auxExecutionContext,
-        actorMaterializer,
         config,
         scheduleTask.priority,
         scheduleTask.labels,
@@ -173,13 +170,13 @@ class Launcher(
 
     import context.dispatcher
 
-    logScheduler = context.system.scheduler.schedule(
+    logScheduler = context.system.scheduler.scheduleAtFixedRate(
       initialDelay = 0 seconds,
       interval = 20 seconds,
       receiver = self,
       message = PrintResources
     )
-    scheduler = context.system.scheduler.schedule(
+    scheduler = context.system.scheduler.scheduleAtFixedRate(
       initialDelay = 0 seconds,
       interval = refreshInterval,
       receiver = self,
