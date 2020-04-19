@@ -13,16 +13,9 @@ import tasks.fileservice._
 import tasks.queue._
 import tasks.elastic._
 
-case class Save(s: String, v: Any, dropAfterSave: Boolean)
-    extends java.io.Serializable
-
-sealed trait StaticMessage extends java.io.Serializable
+sealed trait StaticMessage
 
 // Messages related to the queue
-
-case class Drop(s: String) extends StaticMessage
-
-case class LookUp(s: String) extends StaticMessage
 
 private[tasks] case class QueryTask(sch: ScheduleTask, ac: ActorRef)
     extends StaticMessage

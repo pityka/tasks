@@ -31,4 +31,4 @@ import tasks.shared._
 case class QueueStat(
     queued: List[(String, VersionedResourceRequest)],
     running: List[(String, VersionedResourceAllocated)]
-) extends Serializable
+)

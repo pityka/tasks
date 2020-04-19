@@ -36,6 +36,12 @@ import tasks.Implicits._
 import tasks.wire._
 
 object NodeLocalCache {
+  case class Save(s: String, v: Any, dropAfterSave: Boolean)
+
+  case class Drop(s: String)
+
+  case class LookUp(s: String)
+
   def start(implicit AS: ActorRefFactory) =
     NodeLocalCacheActor(
       AS.actorOf(Props[NodeLocalCache].withDispatcher("nodelocalcache-pinned"))
