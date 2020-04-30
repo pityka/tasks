@@ -222,7 +222,7 @@ class Launcher(
               .append(scheduleTask.description.taskId.id)
           )
         )(
-          timeout = 600 seconds
+          timeout = config.cacheTimeout
         )
       )
       .onComplete {

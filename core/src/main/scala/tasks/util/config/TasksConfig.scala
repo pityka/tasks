@@ -125,6 +125,8 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   def idleNodeTimeout: FD = raw.getDuration("tasks.elastic.idleNodeTimeout")
 
+  def cacheTimeout: FD = raw.getDuration("tasks.cache.timeout")
+
   def maxNodes = raw.getInt("tasks.elastic.maxNodes")
 
   def maxPendingNodes = raw.getInt("tasks.elastic.maxPending")
