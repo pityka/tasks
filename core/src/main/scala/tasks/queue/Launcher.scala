@@ -216,7 +216,7 @@ class Launcher(
                      receivedResult.untypedResult,
                      scheduleTask.fileServicePrefix.append(
                        scheduleTask.description.taskId.id)))(
-          timeout = 600 seconds
+          timeout = config.cacheTimeout
         )
       )
       .onComplete {
