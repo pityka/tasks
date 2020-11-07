@@ -94,6 +94,8 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   val hostNumCPU = raw.getInt("hosts.numCPU")
 
+  val hostGPU = raw.getIntList("hosts.gpus").asScala.toList.map(_.toInt)
+
   val hostRAM = raw.getInt("hosts.RAM")
 
   val hostScratch = raw.getInt("hosts.scratch")

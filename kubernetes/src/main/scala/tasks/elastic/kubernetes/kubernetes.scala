@@ -105,7 +105,12 @@ class K8SCreateNode(
         .endSpec
         .done
 
-      val available = requestSize.toAvailable
+      val available = ResourceAvailable(
+        cpu = requestSize.cpu._1,
+        memory = requestSize.memory,
+        scratch = requestSize.scratch,
+        gpu = 0 until requestSize.gpu toList
+      )
 
       (PendingJobId(name), available)
     }

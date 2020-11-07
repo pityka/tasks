@@ -54,12 +54,19 @@ package object tasks {
 
   type ResourceRequest = tasks.shared.VersionedResourceRequest
 
+  def ResourceRequest(cpu: (Int, Int), memory: Int, scratch: Int, gpu: Int)(
+      implicit codeVersion: CodeVersion
+  ) =
+    tasks.shared.VersionedResourceRequest(
+      codeVersion,
+      tasks.shared.ResourceRequest(cpu, memory, scratch, gpu)
+    )
   def ResourceRequest(cpu: (Int, Int), memory: Int, scratch: Int)(
       implicit codeVersion: CodeVersion
   ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.ResourceRequest(cpu, memory, scratch)
+      tasks.shared.ResourceRequest(cpu, memory, scratch, 0)
     )
 
   def ResourceRequest(cpu: (Int, Int), memory: Int)(
@@ -67,7 +74,7 @@ package object tasks {
   ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.ResourceRequest(cpu, memory, 1)
+      tasks.shared.ResourceRequest(cpu, memory, 1, 0)
     )
 
   def ResourceRequest(cpu: Int, memory: Int)(
@@ -75,7 +82,7 @@ package object tasks {
   ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.ResourceRequest((cpu, cpu), memory, 1)
+      tasks.shared.ResourceRequest((cpu, cpu), memory, 1, 0)
     )
 
   def ResourceRequest(cpu: Int, memory: Int, scratch: Int)(
@@ -83,7 +90,7 @@ package object tasks {
   ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.ResourceRequest(cpu, memory, scratch)
+      tasks.shared.ResourceRequest(cpu, memory, scratch, 0)
     )
 
   implicit def tsc(implicit ts: TaskSystem): TaskSystemComponents =
