@@ -44,6 +44,8 @@ trait HostConfiguration {
 
   def availableCPU: Int
 
+  def availableGPU: List[Int]
+
   def availableMemory: Int
 
   def availableScratch: Int
@@ -69,6 +71,8 @@ trait HostConfigurationFromConfig extends HostConfiguration {
 
   lazy val availableCPU = config.hostNumCPU
 
+  lazy val availableGPU = config.hostGPU
+
   lazy val availableMemory = config.hostRAM
 
   lazy val availableScratch = config.hostScratch
@@ -90,7 +94,8 @@ trait HostConfigurationFromConfig extends HostConfiguration {
 class LocalConfiguration(
     val availableCPU: Int,
     val availableMemory: Int,
-    val availableScratch: Int
+    val availableScratch: Int,
+    val availableGPU: List[Int]
 ) extends HostConfiguration {
 
   override lazy val myRoles = Set(App, Queue, Worker)
@@ -104,7 +109,8 @@ class LocalConfigurationFromConfig(implicit config: TasksConfig)
     extends LocalConfiguration(
       config.hostNumCPU,
       config.hostRAM,
-      config.hostScratch
+      config.hostScratch,
+      config.hostGPU
     )
 
 class MasterSlaveFromConfig(implicit val config: TasksConfig)

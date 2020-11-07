@@ -93,7 +93,8 @@ object JvmElasticSupport {
           ResourceAvailable(
             cpu = requestSize.cpu._1,
             memory = requestSize.memory,
-            scratch = requestSize.scratch
+            scratch = requestSize.scratch,
+            gpu = 0 until requestSize.gpu toList
           )
         )
       )

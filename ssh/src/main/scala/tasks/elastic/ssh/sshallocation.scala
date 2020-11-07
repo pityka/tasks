@@ -44,7 +44,8 @@ object SSHSettings {
       memory: Int,
       cpu: Int,
       scratch: Int,
-      extraArgs: String
+      extraArgs: String,
+      gpu: List[Int]
   )
   object Host {
     def fromConfig(config: Config) = {
@@ -54,8 +55,11 @@ object SSHSettings {
       val memory = config.getInt("memory")
       val cpu = config.getInt("cpu")
       val scratch = config.getInt("scratch")
+      val gpu =
+        Try(config.getIntList("gpu").asScala.map(_.toInt).toList).toOption
+          .getOrElse(Nil)
       val extraArgs = Try(config.getString("extraArgs")).toOption.getOrElse("")
-      Host(hostname, keyFile, username, memory, cpu, scratch, extraArgs)
+      Host(hostname, keyFile, username, memory, cpu, scratch, extraArgs, gpu)
     }
   }
 
@@ -202,7 +206,8 @@ class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
               ResourceAvailable(
                 cpu = host.cpu,
                 memory = host.memory,
-                scratch = host.scratch
+                scratch = host.scratch,
+                gpu = host.gpu
               )
             )
 

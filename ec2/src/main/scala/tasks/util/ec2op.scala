@@ -38,19 +38,21 @@ object EC2Operations {
   val scratch = Int.MaxValue
 
   val instanceTypes = List(
-    "m3.medium" -> ResourceAvailable(1, 3750, scratch),
-    "c3.large" -> ResourceAvailable(2, 3750, scratch),
-    "m3.xlarge" -> ResourceAvailable(4, 7500, scratch),
-    "c3.xlarge" -> ResourceAvailable(4, 7500, scratch),
-    "r3.large" -> ResourceAvailable(2, 15000, scratch),
-    "m3.2xlarge" -> ResourceAvailable(8, 15000, scratch),
-    "c3.2xlarge" -> ResourceAvailable(8, 15000, scratch),
-    "r3.xlarge" -> ResourceAvailable(4, 30000, scratch),
-    "c3.4xlarge" -> ResourceAvailable(16, 30000, scratch),
-    "r3.2xlarge" -> ResourceAvailable(8, 60000, scratch),
-    "c3.8xlarge" -> ResourceAvailable(32, 60000, scratch),
-    "r3.4xlarge" -> ResourceAvailable(16, 120000, scratch),
-    "r3.8xlarge" -> ResourceAvailable(32, 240000, scratch)
+    "m3.medium" -> ResourceAvailable(1, 3750, scratch, Nil),
+    "c3.large" -> ResourceAvailable(2, 3750, scratch, Nil),
+    "m3.xlarge" -> ResourceAvailable(4, 7500, scratch, Nil),
+    "c3.xlarge" -> ResourceAvailable(4, 7500, scratch, Nil),
+    "r3.large" -> ResourceAvailable(2, 15000, scratch, Nil),
+    "m3.2xlarge" -> ResourceAvailable(8, 15000, scratch, Nil),
+    "c3.2xlarge" -> ResourceAvailable(8, 15000, scratch, Nil),
+    "r3.xlarge" -> ResourceAvailable(4, 30000, scratch, Nil),
+    "c3.4xlarge" -> ResourceAvailable(16, 30000, scratch, Nil),
+    "r3.2xlarge" -> ResourceAvailable(8, 60000, scratch, Nil),
+    "c3.8xlarge" -> ResourceAvailable(32, 60000, scratch, Nil),
+    "r3.4xlarge" -> ResourceAvailable(16, 120000, scratch, Nil),
+    "r3.8xlarge" -> ResourceAvailable(32, 240000, scratch, Nil),
+    "p2.xlarge" -> ResourceAvailable(4, 61000, scratch, List(0)),
+    "p2.8xlarge" -> ResourceAvailable(32, 488000, scratch, List(0 until 8: _*))
   )
 
   def currentInstanceType =

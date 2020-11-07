@@ -96,6 +96,7 @@ class TaskSystem private[tasks] (
   tasksystemlog.info("CPU: " + hostConfig.availableCPU.toString)
   tasksystemlog.info("RAM: " + hostConfig.availableMemory.toString)
   tasksystemlog.info("SCRATCH: " + hostConfig.availableScratch.toString)
+  tasksystemlog.info("GPU: " + hostConfig.availableGPU.mkString("[", ", ", "]"))
   tasksystemlog.info("Roles: " + hostConfig.myRoles.mkString(", "))
   tasksystemlog.info("Elastic: " + elasticSupport)
 
@@ -359,7 +360,8 @@ class TaskSystem private[tasks] (
             resource = ResourceAvailable(
               cpu = hostConfig.availableCPU,
               memory = hostConfig.availableMemory,
-              scratch = hostConfig.availableScratch
+              scratch = hostConfig.availableScratch,
+              gpu = hostConfig.availableGPU
             ),
             codeAddress = codeAddress,
             eventListener =
@@ -450,7 +452,8 @@ class TaskSystem private[tasks] (
               ResourceAvailable(
                 cpu = hostConfig.availableCPU,
                 memory = hostConfig.availableMemory,
-                scratch = hostConfig.availableScratch
+                scratch = hostConfig.availableScratch,
+                gpu = hostConfig.availableGPU
               )
             ),
             refreshInterval = refreshInterval,
@@ -493,7 +496,8 @@ class TaskSystem private[tasks] (
           ResourceAvailable(
             hostConfig.availableCPU,
             hostConfig.availableMemory,
-            hostConfig.availableScratch
+            hostConfig.availableScratch,
+            hostConfig.availableGPU
           ),
           launcherActor.get
         )

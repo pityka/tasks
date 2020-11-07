@@ -42,21 +42,40 @@ class SimpleDecideNewNode(codeVersion: CodeVersion)(
       registeredNodes: Seq[ResourceAvailable],
       pendingNodes: Seq[ResourceAvailable]
   ): Map[ResourceRequest, Int] = {
-    val resourceNeeded: List[ResourceRequest] = q.queued.map(_._2).collect {
+    val resourceRequests: List[ResourceRequest] = q.queued.map(_._2).collect {
       case VersionedResourceRequest(v, request) if v === codeVersion => request
     }
-    val resourcesUsedByRunningJobs: List[ResourceRequest] =
+    val resourcesUsedByRunningJobs: List[ResourceAllocated] =
       q.running.map(_._2).collect {
         case VersionedResourceAllocated(v, allocated) if v === codeVersion =>
-          allocated.toRequest
+          allocated
       }
 
     val availableResources: List[ResourceAvailable] =
       (registeredNodes ++ pendingNodes).toList
 
-    val (_, allocatedResources) =
-      (resourceNeeded ++ resourcesUsedByRunningJobs).foldLeft(
-        (availableResources, List[ResourceRequest]())
+    val availableResourcesMinusRunningJobs =
+      (resourcesUsedByRunningJobs).foldLeft(List.empty[ResourceAvailable]) {
+        case (available, runningJob) =>
+          val (prefix, suffix) =
+            available.span(x => !x.canFulfillRequest(runningJob))
+          val chosen = suffix.headOption
+          chosen.foreach(x => assert(x.canFulfillRequest(runningJob)))
+
+          val transformed = chosen.map(_.substract(runningJob))
+          if (transformed.isDefined)
+            (prefix ::: (transformed.get :: suffix.tail))
+              .filterNot(_.isEmpty)
+          else {
+            logger.warn(
+              "More resources running than available??"
+            )
+            available
+          }
+      }
+    val (_, allocatedRequests) =
+      resourceRequests.foldLeft(
+        (availableResourcesMinusRunningJobs, List[ResourceRequest]())
       ) {
         case ((available, allocated), request) =>
           val (prefix, suffix) =
@@ -72,13 +91,13 @@ class SimpleDecideNewNode(codeVersion: CodeVersion)(
       }
 
     val nonAllocatedResources: Map[ResourceRequest, Int] = {
-      val need = (resourceNeeded ++ resourcesUsedByRunningJobs)
+      val need = (resourceRequests)
         .groupBy(x => x)
         .map(x => x._1 -> x._2.size)
       val fulfilled =
-        allocatedResources.groupBy(x => x).map(x => x._1 -> x._2.size)
+        allocatedRequests.groupBy(x => x).map(x => x._1 -> x._2.size)
       logger.info(
-        s"Resources needed: $need. Resources allocable with current running or pending nodes: $fulfilled. Current nodes: $availableResources"
+        s"Queued resource requests: $need. Requests allocable with current running or pending nodes: $fulfilled. Current nodes: $availableResources"
       )
       (addMaps(need, fulfilled)(_ - _)).filter(x => x._2 > 0)
 
