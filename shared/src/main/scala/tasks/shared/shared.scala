@@ -51,8 +51,10 @@ case class ResourceAllocated(
     cpu: Int,
     memory: Int,
     scratch: Int,
-    gpu: Seq[Int]
-)
+    gpu: List[Int]
+) {
+  val gpuWithMultiplicities = ResourceAvailable.zipMultiplicities(gpu)
+}
 
 object ResourceAllocated {
   implicit val decoder: Decoder[ResourceAllocated] =
@@ -68,9 +70,13 @@ case class ResourceAvailable(
     gpu: List[Int]
 ) {
 
+  val gpuWithMultiplicities = ResourceAvailable.zipMultiplicities(gpu)
+
   def canFulfillRequest(r: ResourceAllocated) =
-    cpu >= r.cpu && memory >= r.memory && scratch >= r.scratch && (r.gpu
-      .forall(g => gpu.contains(g)))
+    cpu >= r.cpu && memory >= r.memory && scratch >= r.scratch &&
+      r.gpuWithMultiplicities
+        .forall(g => gpuWithMultiplicities.contains(g))
+
   def canFulfillRequest(r: ResourceRequest) =
     cpu >= r.cpu._1 && memory >= r.memory && scratch >= r.scratch && gpu.size >= r.gpu
 
@@ -89,7 +95,9 @@ case class ResourceAvailable(
       cpu - r.cpu,
       memory - r.memory,
       scratch - r.scratch,
-      gpu.filterNot(i => r.gpu.contains(i))
+      gpuWithMultiplicities
+        .filterNot(avail => r.gpuWithMultiplicities.contains(avail))
+        .map(_._1)
     )
 
   def addBack(r: ResourceAllocated) =
@@ -119,6 +127,15 @@ case class ResourceAvailable(
 }
 
 object ResourceAvailable {
+  def zipMultiplicities(l: List[Int]) =
+    l.sorted.foldLeft(List.empty[(Int, Int)]) {
+      case (acc, next) =>
+        acc match {
+          case (last, i) :: _ if last == next => (next, i + 1) :: acc
+          case _                              => (next, 0) :: acc
+
+        }
+    }
   implicit val decoder: Decoder[ResourceAvailable] =
     deriveDecoder[ResourceAvailable]
   implicit val encoder: Encoder[ResourceAvailable] =
