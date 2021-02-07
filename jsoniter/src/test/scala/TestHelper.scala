@@ -39,13 +39,13 @@ trait TestHelpers {
   case class Input(i: Int)
   object Input {
     implicit val codec: JsonValueCodec[Input] =
-      JsonCodecMaker.make[Input](CodecMakerConfig())
+      JsonCodecMaker.make[Input]
   }
 
   case class InputSF(files1: List[SharedFile]) extends WithSharedFiles(files1)
   object InputSF {
     implicit val codec: JsonValueCodec[InputSF] =
-      JsonCodecMaker.make[InputSF](CodecMakerConfig())
+      JsonCodecMaker.make[InputSF]
   }
 
   def testConfig = {
@@ -60,6 +60,6 @@ trait TestHelpers {
   }
 
   implicit val codec: JsonValueCodec[Int] =
-    JsonCodecMaker.make[Int](CodecMakerConfig())
+    JsonCodecMaker.make[Int]
 
 }

@@ -24,30 +24,27 @@
 
 package tasks.ui
 
-import org.scalajs.dom.raw._
 import org.scalajs.dom
-import scalatags.JsDom.all._
-import akka.ui._
-import akka.actor._
-import akka.stream._
-import akka.stream.scaladsl._
-import scala.concurrent.ExecutionContext.Implicits.global
+// import scalatags.JsDom.all._
+// import akka.ui._
+// import akka.actor._
+// import akka.stream._
+// import akka.stream.scaladsl._
+// import scala.concurrent.ExecutionContext.Implicits.global
 
 import tasks.queue._
 import tasks.shared._
+import com.raquo.airstream.eventbus.EventBus
+import com.raquo.laminar.api.L._
 
 object WebSocketHelper {
-  def open(address: String)(
-      implicit
-      AM: ActorMaterializer
-  ): (Source[MessageEvent, _], Sink[String, _]) = {
+  def open(address: String): EventBus[String] = {
     val ws = new dom.WebSocket(address)
-    val source = ws.source(_.onmessage_=).watchTermination() {
-      (_, terminationFuture) =>
-        terminationFuture.foreach(_ => ws.close())
-    }
-    val sink = Sink.foreach[String](msg => ws.send(msg))
-    (source, sink)
+    val bus = new EventBus[String]
+    ws.onmessage =
+      (messageEvent => bus.writer.onNext(messageEvent.data.toString))
+    bus
+
   }
 }
 
@@ -105,13 +102,15 @@ object Helpers {
   }
 
   def renderTable(
-      render: UIQueueState => Seq[dom.raw.Element]
-  )(implicit AS: ActorSystem) = {
-    val t = table(`class` := "ui celled table").render
-    val tSink = Flow[UIQueueState]
-      .map(render)
-      .to(t.childrenSink)
-    (t, tSink)
+      render: UIQueueState => List[Node],
+      signal: EventStream[UIQueueState]
+  ) = {
+
+    table(
+      cls := "ui celled table",
+      children <-- signal.map(s => render(s))
+    )
+
   }
 
   val ScheduledTasksTableHeader = tr(
@@ -132,7 +131,8 @@ object Helpers {
       scheduledTasks.toSeq.map {
         case ((taskDescription, (launcher, resource))) =>
           tr(
-            td(`class` := "collapsing")(
+            td(
+              cls := "collapsing",
               taskDescription.taskId.id + " @" + taskDescription.taskId.version
             ),
             td(
@@ -144,7 +144,7 @@ object Helpers {
             td(resource.memory)
           )
       }
-    ).render
+    )
 
   val CompletedTasksTableHeader =
     tr(th("ID"), th("Count"))
@@ -157,25 +157,21 @@ object Helpers {
       completedTasks.toSeq.sortBy(_._1.toString).map {
         case ((taskId, count)) =>
           tr(
-            td(`class` := "collapsing")(
-              taskId.id + " @" + taskId.version
-            ),
+            td(cls := "collapsing", taskId.id + " @" + taskId.version),
             td(count)
           )
       }
-    ).render
+    )
 
   def renderTableBodyWithRecoveredTasks(recoveredTasks: Set[(TaskId, Int)]) =
     tbody(
       recoveredTasks.toSeq.sortBy(_._1.toString).map {
         case (taskId, count) =>
           tr(
-            td(`class` := "collapsing")(
-              taskId.id + " @" + taskId.version
-            ),
+            td(cls := "collapsing", taskId.id + " @" + taskId.version),
             td(count)
           )
       }
-    ).render
+    )
 
 }

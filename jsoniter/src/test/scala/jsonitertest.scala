@@ -41,13 +41,13 @@ class JsonIterSuite extends FunSuite with Matchers {
 
     object Codec1 {
       implicit val leaf1Codec: JsonValueCodec[Leaf1] =
-        JsonCodecMaker.make[Leaf1](CodecMakerConfig())
+        JsonCodecMaker.make[Leaf1]
     }
 
     object Codec2 {
 
       implicit val pCodec: JsonValueCodec[P] =
-        JsonCodecMaker.make[P](CodecMakerConfig())
+        JsonCodecMaker.make[P]
 
     }
 

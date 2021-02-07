@@ -24,106 +24,77 @@
 
 package tasks.ui
 
-import org.scalajs.dom.raw._
 import org.scalajs.dom
 import scala.scalajs.js.annotation._
-import scalatags.JsDom.all._
-import akka.ui._
-import akka.actor._
-import akka.stream._
-import akka.stream.scaladsl._
+import com.raquo.laminar.api.L._
 import tasks.shared.ResourceAvailable
-
-class AppUI(container: Node) {
-
-  implicit val system = ActorSystem("AkkaUI")
-  implicit val materializer = ActorMaterializer()
-
-  val host = dom.document.location.host
-
-  val TableHeader = tr(th("ID"), th("CPU"), th("RAM"))
-
-  def makeTable(
-      header: String,
-      project: UIAppState => Seq[(UIJobId, ResourceAvailable)]
-  ) = {
-    val body = tbody().render
-    val bodySink = Flow[UIAppState]
-      .map { uiState =>
-        project(uiState)
-          .map {
-            case (UIJobId(jobId), resource) =>
-              tr(
-                td(`class` := "collapsing")(jobId),
-                td(resource.cpu),
-                td(resource.memory)
-              ).render
-          }
-      }
-      .to(body.childrenSink)
-    val element =
-      table(`class` := "ui celled table")(
-        thead(tr(th(colspan := "3")(header)), TableHeader),
-        body
-      )
-    (element, bodySink)
-  }
-
-  val (runningTable, runningSink) = makeTable("Running nodes", _.running)
-  val (pendingTable, pendingSink) = makeTable("Pending nodes", _.pending)
-
-  val (cumulativeCountElem, cumulativeSink) = {
-    val elem = div().render
-    val sink = Flow[UIAppState]
-      .map(state => Seq(span(state.cumulativeRequested.toString).render))
-      .to(elem.childrenSink)
-    (
-      div(`class` := "ui red horizontal label")(
-        "Cumulative requested nodes: ",
-        elem
-      ),
-      sink
-    )
-  }
-
-  val root = div(
-    div(`class` := "ui grid container")(
-      div(`class` := "two wide column")(cumulativeCountElem),
-      div(`class` := "eight wide column")(runningTable),
-      div(`class` := "eight wide column")(pendingTable)
-    )
-  )
-
-  val (wsSource, wsSink) = WebSocketHelper.open(s"ws://$host/states")
-
-  val uiStateSource = wsSource
-    .map(
-      wsMessage =>
-        io.circe.parser.decode[UIAppState](wsMessage.data.toString).right.get
-    )
-
-  val keepAliveTicks = {
-    import scala.concurrent.duration._
-    Source.tick(0 seconds, 500 milliseconds, "tick")
-  }
-
-  keepAliveTicks.runWith(wsSink)
-
-  val combinedUIStateSinks = Sink
-    .combine(runningSink, pendingSink, cumulativeSink)(Broadcast[UIAppState](_))
-
-  uiStateSource.runWith(combinedUIStateSinks)
-
-  container.appendChild(root.render)
-
-}
-
 @JSExportTopLevel("AppMain")
 object AppMain {
 
   @JSExport
-  def bind(parent: Node) = {
-    new AppUI(parent)
+  def bind(container: dom.raw.Element) {
+
+    val host = dom.document.location.host
+
+    val TableHeader = tr(th("ID"), th("CPU"), th("RAM"))
+
+    def makeTable(
+        header: String,
+        project: UIAppState => List[(UIJobId, ResourceAvailable)],
+        signal: EventStream[UIAppState]
+    ) = {
+      val body = tbody(children <-- signal.map { uiState =>
+        project(uiState)
+          .map {
+            case (UIJobId(jobId), resource) =>
+              tr(
+                td(cls := "collapsing", jobId),
+                td(resource.cpu),
+                td(resource.memory)
+              )
+          }
+      })
+
+      val element =
+        table(
+          cls := "ui celled table",
+          thead(tr(th(colSpan := 3, header)), TableHeader),
+          body
+        )
+      element
+    }
+
+    val websocket = WebSocketHelper
+      .open(s"ws://$host/states")
+    val events = websocket.events
+      .map(
+        wsMessage => io.circe.parser.decode[UIAppState](wsMessage).right.get
+      )
+
+    val runningTable = makeTable("Running nodes", _.running.toList, events)
+    val pendingTable = makeTable("Pending nodes", _.pending.toList, events)
+
+    val cumulativeCountElem =
+      div(
+        cls := "ui red horizontal label",
+        "Cumulative requested nodes: ",
+        div(
+          children <-- events
+            .map(state => List(span(state.cumulativeRequested.toString)))
+        )
+      )
+
+    val root = div(
+      div(
+        cls := "ui grid container",
+        div(cls := "two wide column", cumulativeCountElem),
+        div(cls := "eight wide column", runningTable),
+        div(cls := "eight wide column", pendingTable)
+      )
+    )
+
+    render(container, root)
+
   }
 
 }

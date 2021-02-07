@@ -21,7 +21,7 @@ package object jsonitersupport {
     }
 
   implicit val sharedFileCodec: JsonValueCodec[SharedFile] =
-    JsonCodecMaker.make[SharedFile](CodecMakerConfig())
+    JsonCodecMaker.make[SharedFile]
 
   implicit val serdeSharedFile = tasks.makeSerDe[SharedFile]
 

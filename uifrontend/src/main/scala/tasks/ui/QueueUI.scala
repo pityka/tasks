@@ -24,204 +24,185 @@
 
 package tasks.ui
 
-import org.scalajs.dom.raw._
 import org.scalajs.dom
 import scala.scalajs.js.annotation._
-import scalatags.JsDom.all._
-import akka.ui._
-import akka.actor._
-import akka.stream._
-import akka.stream.scaladsl._
-
-class QueueUI(container: Node) {
-  import Helpers._
-
-  implicit val system = ActorSystem("AkkaUI")
-  implicit val materializer = ActorMaterializer()
-
-  val host = dom.document.location.host
-
-  val (knownLaunchersTable, knownLaunchersSink) = {
-    val body = tbody().render
-    val bodySink = Flow[UIQueueState]
-      .map { uiState =>
-        uiState.knownLaunchers.toSeq
-          .map(showUILauncher)
-          .sorted
-          .map(actorPath => tr(td(`class` := "collapsing")(actorPath)).render)
-      }
-      .to(body.childrenSink)
-    val element =
-      table(`class` := "ui celled table")(thead(tr(th("Launchers"))), body)
-    (element, bodySink)
-  }
-
-  val (scheduledTasksTable, scheduledTasksTableSink) = renderTable(
-    uiState =>
-      List(
-        thead(
-          tr(
-            th(colspan := "6")(
-              "Scheduled tasks, total: " + uiState.scheduledTasks.size
-            )
-          ),
-          ScheduledTasksTableHeader
-        ).render,
-        renderTableBodyWithScheduledTasks(uiState.scheduledTasks)
-      )
-  )
-
-  val (completedTasksTable, completedTasksTableSink) = renderTable(
-    uiState =>
-      List(
-        thead(
-          tr(
-            th(colspan := "8")(
-              "Completed tasks, total: " + uiState.completedTasks.toSeq
-                .map(_._2)
-                .sum
-            )
-          ),
-          CompletedTasksTableHeader
-        ).render,
-        renderTableBodyWithCompletedTasks(uiState.completedTasks)
-      )
-  )
-
-  val (recoveredTasksTable, recoveredTasksTableSink) = renderTable(
-    uiState =>
-      List(
-        thead(
-          tr(
-            th(colspan := "4")(
-              "Previously completed tasks, total: " + uiState.recoveredTasks
-                .map(_._2)
-                .sum
-            )
-          ),
-          RecoveredTasksTableHeader
-        ).render,
-        renderTableBodyWithRecoveredTasks(uiState.recoveredTasks)
-      )
-  )
-
-  val (scheduledTasksSummaryTable, scheudledTasksSummaryTableSink) =
-    renderTable { uiState =>
-      val counts = uiState.scheduledTasks
-        .map { case (taskDescription, _) => taskDescription.taskId }
-        .groupBy(identity)
-        .map { case (key, group) => (key, group.size) }
-      List(
-        thead(
-          tr(
-            th(colspan := "4")(
-              "Scheduled tasks, total: " + counts
-                .map(_._2)
-                .sum
-            )
-          ),
-          RecoveredTasksTableHeader
-        ).render,
-        renderTableBodyWithRecoveredTasks(counts.toSet)
-      )
-    }
-
-  val (failedTasksTable, failedTasksTableSink) = renderTable(
-    uiState =>
-      List(
-        thead(
-          tr(
-            th(colspan := "6")(
-              "Failed tasks, total: " + uiState.failedTasks.size
-            )
-          ),
-          ScheduledTasksTableHeader
-        ).render,
-        renderTableBodyWithScheduledTasks(uiState.failedTasks)
-      )
-  )
-
-  val (queuedTasksTable, queuedTasksTableSink) = renderTable(
-    uiState =>
-      List(
-        thead(
-          tr(
-            th(colspan := "3")(
-              "Queued tasks, total " + uiState.queuedTasks.size
-            )
-          ),
-          tr(th(), th("ID"), th("Input"))
-        ).render,
-        tbody(
-          uiState.queuedTasks.toSeq.zipWithIndex
-            .map {
-              case (taskDescription, idx) =>
-                tr(
-                  td(`class` := "collapsing")(idx),
-                  td(`class` := "collapsing")(
-                    taskDescription.taskId.id + " @" + taskDescription.taskId.version
-                  ),
-                  td(
-                    code(prettyJson(taskDescription.input))
-                  )
-                )
-            }
-            .map(_.render)
-            .take(10)
-        ).render
-      )
-  )
-
-  val root = div(
-    div(`class` := "ui")(
-      div(`class` := "")(knownLaunchersTable),
-      div(`class` := "")(scheduledTasksSummaryTable),
-      div(`class` := "")(completedTasksTable),
-      div(`class` := "")(recoveredTasksTable),
-      div(`class` := "")(queuedTasksTable),
-      div(`class` := "")(failedTasksTable),
-      div(`class` := "")(scheduledTasksTable)
-    )
-  )
-
-  val (wsSource, wsSink) = WebSocketHelper.open(s"ws://$host/states")
-
-  val uiStateSource = wsSource
-    .map(
-      wsMessage =>
-        io.circe.parser.decode[UIQueueState](wsMessage.data.toString).right.get
-    )
-
-  val keepAliveTicks = {
-    import scala.concurrent.duration._
-    Source.tick(0 seconds, 500 milliseconds, "tick")
-  }
-
-  keepAliveTicks.runWith(wsSink)
-
-  val combinedUIStateSinks = Sink
-    .combine(
-      knownLaunchersSink,
-      queuedTasksTableSink,
-      scheduledTasksTableSink,
-      scheudledTasksSummaryTableSink,
-      completedTasksTableSink,
-      failedTasksTableSink,
-      recoveredTasksTableSink
-    )(Broadcast[UIQueueState](_))
-
-  uiStateSource.runWith(combinedUIStateSinks)
-
-  container.appendChild(root.render)
-
-}
-
+import com.raquo.laminar.api.L._
 @JSExportTopLevel("QueueMain")
 object QueueMain {
 
   @JSExport
-  def bind(parent: Node) = {
-    new QueueUI(parent)
+  def bind(container: dom.raw.Element) = {
+
+    import Helpers._
+
+    val host = dom.document.location.host
+
+    val websocket = WebSocketHelper.open(s"ws://$host/states")
+
+    val uiStateSource = websocket.events
+      .map(
+        wsMessage => io.circe.parser.decode[UIQueueState](wsMessage).right.get
+      )
+
+    val knownLaunchersTable = {
+      val body = tbody(
+        children <-- uiStateSource.map { uiState =>
+          uiState.knownLaunchers.toList
+            .map(showUILauncher)
+            .map(actorPath => tr(td(cls := "collapsing", actorPath)))
+        }
+      )
+
+      val element =
+        table(cls := "ui celled table", thead(tr(th("Launchers"))), body)
+      element
+    }
+
+    val (scheduledTasksTable) = renderTable(
+      uiState =>
+        List(
+          thead(
+            tr(
+              th(
+                colSpan := 6,
+                "Scheduled tasks, total: " + uiState.scheduledTasks.size
+              )
+            ),
+            ScheduledTasksTableHeader
+          ),
+          renderTableBodyWithScheduledTasks(uiState.scheduledTasks)
+        ),
+      uiStateSource
+    )
+
+    val (completedTasksTable) = renderTable(
+      uiState =>
+        List(
+          thead(
+            tr(
+              th(
+                colSpan := 8,
+                "Completed tasks, total: " + uiState.completedTasks.toSeq
+                  .map(_._2)
+                  .sum
+              )
+            ),
+            CompletedTasksTableHeader
+          ),
+          renderTableBodyWithCompletedTasks(uiState.completedTasks)
+        ),
+      uiStateSource
+    )
+
+    val (recoveredTasksTable) = renderTable(
+      uiState =>
+        List(
+          thead(
+            tr(
+              th(
+                colSpan := 4,
+                "Previously completed tasks, total: " + uiState.recoveredTasks
+                  .map(_._2)
+                  .sum
+              )
+            ),
+            RecoveredTasksTableHeader
+          ),
+          renderTableBodyWithRecoveredTasks(uiState.recoveredTasks)
+        ),
+      uiStateSource
+    )
+
+    val (scheduledTasksSummaryTable) =
+      renderTable(
+        { uiState =>
+          val counts = uiState.scheduledTasks
+            .map { case (taskDescription, _) => taskDescription.taskId }
+            .groupBy(identity)
+            .map { case (key, group) => (key, group.size) }
+          List(
+            thead(
+              tr(
+                th(
+                  colSpan := 4,
+                  "Scheduled tasks, total: " + counts
+                    .map(_._2)
+                    .sum
+                )
+              ),
+              RecoveredTasksTableHeader
+            ),
+            renderTableBodyWithRecoveredTasks(counts.toSet)
+          )
+        },
+        uiStateSource
+      )
+
+    val (failedTasksTable) = renderTable(
+      uiState =>
+        List(
+          thead(
+            tr(
+              th(
+                colSpan := 6,
+                "Failed tasks, total: " + uiState.failedTasks.size
+              )
+            ),
+            ScheduledTasksTableHeader
+          ),
+          renderTableBodyWithScheduledTasks(uiState.failedTasks)
+        ),
+      uiStateSource
+    )
+
+    val (queuedTasksTable) = renderTable(
+      uiState =>
+        List(
+          thead(
+            tr(
+              th(
+                colSpan := 3,
+                "Queued tasks, total " + uiState.queuedTasks.size
+              )
+            ),
+            tr(th(), th("ID"), th("Input"))
+          ),
+          tbody(
+            uiState.queuedTasks.toSeq.zipWithIndex
+              .map {
+                case (taskDescription, idx) =>
+                  tr(
+                    td(cls := "collapsing", idx),
+                    td(
+                      cls := "collapsing",
+                      taskDescription.taskId.id + " @" + taskDescription.taskId.version
+                    ),
+                    td(
+                      code(prettyJson(taskDescription.input))
+                    )
+                  )
+              }
+              .take(10)
+          )
+        ),
+      uiStateSource
+    )
+
+    val root = div(
+      div(
+        cls := "ui",
+        div(cls := "", knownLaunchersTable),
+        div(cls := "", scheduledTasksSummaryTable),
+        div(cls := "", completedTasksTable),
+        div(cls := "", recoveredTasksTable),
+        div(cls := "", queuedTasksTable),
+        div(cls := "", failedTasksTable),
+        div(cls := "", scheduledTasksTable)
+      )
+    )
+
+    render(container, root)
+
   }
 
 }

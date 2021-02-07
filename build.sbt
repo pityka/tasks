@@ -1,7 +1,7 @@
 import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.12.11",
+  scalaVersion := "2.12.13",
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -61,7 +61,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val circeVersion = "0.13.0"
-lazy val jsoniterVersion = "0.54.0"
+lazy val jsoniterVersion = "2.6.3"
 lazy val akkaVersion = "2.6.4"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
@@ -184,12 +184,11 @@ lazy val uifrontend = project
   .settings(
     name := "tasks-ui-frontend",
     libraryDependencies ++= Seq(
-      "com.lihaoyi" %%% "scalatags" % "0.6.7",
-      "org.scala-js" %%% "scalajs-dom" % "0.9.5",
+      "org.scala-js" %%% "scalajs-dom" % "1.0.0",
       "io.circe" %%% "circe-core" % circeVersion,
       "io.circe" %%% "circe-parser" % circeVersion,
       "io.circe" %%% "circe-generic" % circeVersion,
-      "net.pishen" %%% "akka-ui" % "0.1.1"
+      "com.raquo" %%% "laminar" % "0.11.0"
     ),
     fork := false
   )

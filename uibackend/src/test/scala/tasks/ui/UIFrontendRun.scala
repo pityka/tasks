@@ -86,7 +86,7 @@ object UIFrontendRun extends TestHelpers {
 
 class UIFrontendRunSuite extends FunSuite with Matchers {
 
-  ignore("keep task system running with ui") {
+  test("keep task system running with ui") {
     UIFrontendRun.run
 
   }
