@@ -27,8 +27,8 @@
 
 package tasks.ecoll
 
-import org.scalatest._
-
+import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
+import org.scalatest.matchers.should._
 import tasks._
 import tasks.circesupport._
 

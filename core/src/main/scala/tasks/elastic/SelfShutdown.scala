@@ -46,14 +46,14 @@ class SelfShutdown(
     shutdownRunningNode.shutdownRunningNode(id)
   }
 
-  override def preStart: Unit = {
+  override def preStart(): Unit = {
     HeartBeatActor.watch(queueActor.actor, QueueLostOrStopped, self)
   }
 
   def receive = {
     case QueueLostOrStopped =>
       log.error("QueueLostOrStopped received. Shutting down.")
-      shutdown
+      shutdown()
 
   }
 }

@@ -65,16 +65,16 @@ object QueryLog {
   ): Seq[RawNode] =
     scala.io.Source
       .fromInputStream(source)
-      .getLines
+      .getLines()
       .map { line =>
         val parsed = io.circe.parser.decode[ResourceUtilizationRecord](line)
         // if (parsed.isLeft) {
         // println(parsed.left.get + " " + line)
         // }
-        parsed.right
+        parsed
       }
       .filter(_.toOption.isDefined)
-      .map(_.get)
+      .map(_.toOption.get)
       .filterNot(
         elem =>
           if (excludeTaskIds.isEmpty) false

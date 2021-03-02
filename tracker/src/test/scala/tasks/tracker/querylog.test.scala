@@ -24,9 +24,9 @@
 
 package tasks.tracker
 
-import org.scalatest._
+import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 
 import tasks.circesupport._
 import com.typesafe.config.ConfigFactory
@@ -139,9 +139,9 @@ class QueryLogTestSuite extends FunSuite with Matchers {
     tasks.util.openFileInputStream(QueryLogTest.file) { inputStream =>
       val workerLogs = scala.io.Source
         .fromInputStream(inputStream)
-        .getLines
+        .getLines()
         .map { line =>
-          io.circe.parser.decode[ResourceUtilizationRecord](line).right.get
+          io.circe.parser.decode[ResourceUtilizationRecord](line).toOption.get
         }
         .filter(_.taskId.id == "work")
         .toList

@@ -114,7 +114,7 @@ class TaskSystem private[tasks] (
 
   val reaperActor = elasticSupport.flatMap(_.reaperFactory.map(_.apply)) match {
     case None =>
-      system.actorOf(Props[ShutdownActorSystemReaper], name = "reaper")
+      system.actorOf(Props[ShutdownActorSystemReaper](), name = "reaper")
     case Some(reaper) => reaper
   }
 
@@ -137,7 +137,7 @@ class TaskSystem private[tasks] (
             e
           )
           try {
-            elasticSupport.get.selfShutdownNow
+            elasticSupport.get.selfShutdownNow()
           } finally {
             tasksystemlog.info("Stop jvm")
             System.exit(1)
@@ -228,7 +228,7 @@ class TaskSystem private[tasks] (
     }
   } catch {
     case e: Throwable => {
-      initFailed
+      initFailed()
       throw e
     }
   }
@@ -277,7 +277,7 @@ class TaskSystem private[tasks] (
     }
   } catch {
     case e: Throwable => {
-      initFailed
+      initFailed()
       throw e
     }
   }
@@ -321,7 +321,7 @@ class TaskSystem private[tasks] (
     }
   } catch {
     case e: Throwable => {
-      initFailed
+      initFailed()
       throw e
     }
   }
@@ -398,7 +398,8 @@ class TaskSystem private[tasks] (
           val _ = actorsystem // suppress unused warning
           val bindingFuture =
             Http()
-              .bindAndHandle(service.route, "0.0.0.0", packageServerPort)
+              .newServerAt("0.0.0.0", packageServerPort)
+              .bind(service.route)
               .andThen {
                 case Success(binding) =>
                   tasksystemlog.info(s"Started package server on $binding")
@@ -534,7 +535,7 @@ class TaskSystem private[tasks] (
         val latch = new java.util.concurrent.CountDownLatch(1)
         reaperActor ! Latch(latch)
 
-        trackerEventListener.foreach(_.close)
+        trackerEventListener.foreach(_.close())
 
         if (hostConfig.isQueue) {
           val cacheReaper = system.actorOf(Props(new CallbackReaper({
@@ -556,10 +557,10 @@ class TaskSystem private[tasks] (
         )
         latch.await
         auxFjp.shutdown
-        Await.result(AS.terminate, 10 seconds)
+        Await.result(AS.terminate(), 10 seconds)
       }
     } else {
-      Await.result(AS.terminate, 10 seconds)
+      Await.result(AS.terminate(), 10 seconds)
     }
 
   }
@@ -569,7 +570,7 @@ class TaskSystem private[tasks] (
       tasksystemlog.warning(
         "JVM is shutting down - will call tasksystem shutdown."
       )
-      shutdownImpl
+      shutdownImpl()
       tasksystemlog.warning(
         "JVM is shutting down - called tasksystem shutdown."
       )
@@ -578,7 +579,7 @@ class TaskSystem private[tasks] (
 
   def shutdown(): Unit = {
     shutdownImpl()
-    shutdownHook.foreach(_.remove)
+    shutdownHook.foreach(_.remove())
   }
 
   private def getNodeName: String = elasticSupportFactory.get.getNodeName

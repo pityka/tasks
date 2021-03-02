@@ -72,7 +72,6 @@ object Helpers {
                 .downField("RemoteFilePath")
                 .downField("uri")
                 .as[String]
-                .right
                 .toOption
                 .toList
             case Some(obj) if obj.contains("ManagedFilePath") =>
@@ -82,7 +81,6 @@ object Helpers {
                 .downField("ManagedFilePath")
                 .downField("pathElements")
                 .as[Vector[String]]
-                .right
                 .toOption
                 .map(_.mkString("/"))
                 .toList

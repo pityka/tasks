@@ -24,8 +24,9 @@
 
 package tasks
 
+import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
+import org.scalatest.matchers.should._
 import org.scalatest._
-
 import tasks.util.concurrent.await
 import scala.concurrent._
 import com.typesafe.config.ConfigFactory
@@ -108,9 +109,9 @@ hosts.numCPU=4
     assertResult(r)(serial(n))
   }
 
-  override def afterAll {
+  override def afterAll() = {
     Thread.sleep(1500)
-    system.shutdown
+    system.shutdown()
 
   }
 }

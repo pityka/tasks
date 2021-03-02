@@ -24,7 +24,8 @@
 
 package tasks
 
-import org.scalatest._
+import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
+import org.scalatest.matchers.should._
 
 import tasks.jsonitersupport._
 import tasks.fileservice.SharedFileHelper

@@ -32,7 +32,7 @@ import tasks.shared.ResourceAvailable
 object AppMain {
 
   @JSExport
-  def bind(container: dom.raw.Element) {
+  def bind(container: dom.raw.Element) = {
 
     val host = dom.document.location.host
 
@@ -68,7 +68,7 @@ object AppMain {
       .open(s"ws://$host/states")
     val events = websocket.events
       .map(
-        wsMessage => io.circe.parser.decode[UIAppState](wsMessage).right.get
+        wsMessage => io.circe.parser.decode[UIAppState](wsMessage).toOption.get
       )
 
     val runningTable = makeTable("Running nodes", _.running.toList, events)

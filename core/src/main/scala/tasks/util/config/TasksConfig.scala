@@ -28,7 +28,7 @@
 package tasks.util.config
 
 import com.typesafe.config.Config
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import com.typesafe.scalalogging.StrictLogging
 
 class TasksConfig(load: () => Config) extends StrictLogging {

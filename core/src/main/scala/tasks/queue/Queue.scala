@@ -179,7 +179,7 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
   def running(state: State): Receive = {
     case sch: ScheduleTask =>
       log.debug("Received ScheduleTask.")
-      val proxy = Proxy(sender)
+      val proxy = Proxy(sender())
 
       if (state.queuedButSentByADifferentProxy(sch, proxy)) {
         context.become(running(state.update(Enqueued(sch, List(proxy)))))
@@ -227,7 +227,7 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
       if (state.negotiation.isEmpty) {
         log.debug(
           "AskForWork. Sender: {}. Resource: {}. Negotition state: {}. Queue state: {}",
-          sender,
+          sender(),
           availableResource,
           state.negotiation,
           state.queuedTasks.map {
@@ -235,7 +235,7 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
           }.toSeq
         )
 
-        val launcher = LauncherActor(sender)
+        val launcher = LauncherActor(sender())
 
         state.queuedTasks
           .filter {
@@ -290,7 +290,7 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
         running(
           state
             .update(NegotiationDone)
-            .update(TaskScheduled(sch, LauncherActor(sender), allocated))
+            .update(TaskScheduled(sch, LauncherActor(sender()), allocated))
         )
       )
 
@@ -368,7 +368,7 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
       }
 
     case Ping =>
-      sender ! Pong
+      sender() ! Pong
 
     case HowLoadedAreYou =>
       val qs = QueueStat(
@@ -380,16 +380,16 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
           .toList
       )
 
-      sender ! qs
+      sender() ! qs
 
   }
 
-  override def preStart: Unit = {
+  override def preStart(): Unit = {
     log.debug("TaskQueue starting.")
     context.become(running(State.empty))
   }
 
-  override def postStop: Unit = {
+  override def postStop(): Unit = {
     log.info("TaskQueue stopped.")
   }
 

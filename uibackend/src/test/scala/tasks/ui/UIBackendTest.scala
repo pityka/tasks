@@ -24,9 +24,9 @@
 
 package tasks.ui
 
-import org.scalatest._
+import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 
 import tasks.circesupport._
 import com.typesafe.config.ConfigFactory
@@ -35,7 +35,7 @@ import scala.concurrent.duration._
 
 import tasks._
 
-object UIBackendTest extends TestHelpers {
+object UIBackendTest extends TestHelpersUI {
 
   val testTask = AsyncTask[Input, Int]("nodeallocationtest", 1) {
     _ => implicit computationEnvironment =>
@@ -84,7 +84,7 @@ object UIBackendTest extends TestHelpers {
           synchronized {
             websocketContents += io.circe.parser
               .decode[UIQueueState](frame)
-              .right
+              .toOption
               .get
           }
       )

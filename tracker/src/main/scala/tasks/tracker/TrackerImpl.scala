@@ -104,7 +104,7 @@ class TrackerImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
     new EventListener[TaskQueue.Event] {
       def watchable = eventListenerActor
 
-      def close =
+      def close() =
         eventListenerActor ! PoisonPill
 
       def receive(event: TaskQueue.Event): Unit = {

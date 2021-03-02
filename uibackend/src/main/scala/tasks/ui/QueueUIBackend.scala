@@ -45,7 +45,7 @@ class QueueUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
     Flow[TaskQueue.Event]
       .scan(UIQueueState.empty)(UIQueueStateProjector.project(_, _))
 
-  private val multiplex = actorSystem.actorOf(Props[Multiplex])
+  private val multiplex = actorSystem.actorOf(Props[Multiplex]())
 
   private val (eventListener, eventSource) = ActorSource.make[TaskQueue.Event]
 
@@ -128,7 +128,7 @@ class QueueUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
   def tasksQueueEventListener: EventListener[TaskQueue.Event] =
     new EventListener[TaskQueue.Event] {
       def watchable = eventListener
-      def close = eventListener ! PoisonPill
+      def close() = eventListener ! PoisonPill
       def receive(event: TaskQueue.Event): Unit = {
         eventListener ! event
       }

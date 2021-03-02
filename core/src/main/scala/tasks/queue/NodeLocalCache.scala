@@ -44,7 +44,9 @@ object NodeLocalCache {
 
   def start(implicit AS: ActorRefFactory) =
     NodeLocalCacheActor(
-      AS.actorOf(Props[NodeLocalCache].withDispatcher("nodelocalcache-pinned"))
+      AS.actorOf(
+        Props[NodeLocalCache]().withDispatcher("nodelocalcache-pinned")
+      )
     )
 
   def getItemAsync[A](
@@ -92,15 +94,15 @@ object NodeLocalCache {
           case None =>
             log.debug(s"LookUp($key): Not Found. Reply with YouShouldSetIt")
             map += key -> None
-            sender ! YouShouldSetIt
+            sender() ! YouShouldSetIt
           case Some(Some(hit)) =>
             log.debug(s"LookUp($key): Found. Reply with item.")
-            sender ! hit
+            sender() ! hit
           case Some(None) =>
             log.debug(
               s"LookUp($key): Item is under production, adding sender to waiting list."
             )
-            waitingList += key -> sender
+            waitingList += key -> sender()
         }
 
       case Save(key, value, dropAfterSave) =>

@@ -38,8 +38,6 @@ import tasks.util._
 import tasks.util.config._
 
 import com.amazonaws.services.ec2.AmazonEC2Client;
-import com.amazonaws.services.ec2.model.CancelSpotInstanceRequestsRequest;
-import com.amazonaws.services.ec2.model.CreateTagsRequest;
 import com.amazonaws.services.ec2.model.LaunchSpecification;
 import com.amazonaws.services.ec2.model.RequestSpotInstancesRequest;
 import com.amazonaws.services.ec2.model.GroupIdentifier
@@ -51,7 +49,7 @@ import com.amazonaws.services.ec2.model.CancelSpotInstanceRequestsRequest
 import com.amazonaws.services.ec2.model.SpotPlacement
 import com.amazonaws.services.ec2.model.CreateTagsRequest
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 class EC2Shutdown(ec2: AmazonEC2Client) extends ShutdownNode {
 

@@ -28,7 +28,7 @@ package tasks.elastic.ssh
 import java.net.InetSocketAddress
 import scala.util._
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import java.io.File
 import com.typesafe.config.{Config, ConfigObject}
 

@@ -48,7 +48,7 @@ class FileUserSource(
 
   private var writeableChannel: Option[WritableByteChannel] = None
 
-  override def preStart: Unit = {
+  override def preStart(): Unit = {
     self ! KnownPaths(Nil)
   }
 
@@ -70,7 +70,7 @@ class FileUserSource(
         )
       )
     )
-    finish
+    finish()
   }
 
   def finish(): Unit = {
@@ -86,11 +86,11 @@ class FileUserSource(
         FileIO.fromPath(f.toPath, chunkSize = 8192, startPosition = fromOffset)
       )
     )
-    finish
+    finish()
   }
 
   override def receive = super.receive orElse {
-    case filetransfermessages.FileSaved() => {
+    case filetransfermessages.FileSaved(_) => {
       writeableChannel.get.close
       self ! PoisonPill
     }
@@ -108,7 +108,7 @@ class FileUser(
   private var fileUnderTransfer: Option[File] = None
   private var writeableChannel: Option[WritableByteChannel] = None
 
-  def transfertome {
+  def transfertome() = {
     log.debug("Unreadable")
     val fileToSave = TempFile.createFileInTempFolderIfPossibleWithName(sf.name)
     fileUnderTransfer = Some(fileToSave)
@@ -121,7 +121,7 @@ class FileUser(
     service ! TransferFileToUser(transferinActor, sf)
   }
 
-  def finishLocalFile(f: File) {
+  def finishLocalFile(f: File) = {
     log.debug("Readable")
     result = Some(Success(f))
     if (listener.isDefined) {
@@ -131,7 +131,7 @@ class FileUser(
   }
 
   override def receive = super.receive orElse {
-    case filetransfermessages.FileSaved() => {
+    case filetransfermessages.FileSaved(_) => {
       writeableChannel.get.close
       // service ! NewPath(sf, fileUnderTransfer.get)
       finishLocalFile(fileUnderTransfer.get)
@@ -152,14 +152,14 @@ abstract class AbstractFileUser[R](
   var result: Option[Try[R]] = None
   var fileNotFound = false
 
-  override def preStart {
+  override def preStart() = {
     service ! GetPaths(sf, size, hash)
   }
 
   protected def transfertome(): Unit
   protected def finishLocalFile(file: File): Unit
 
-  private def fail(e: Throwable) {
+  private def fail(e: Throwable) = {
     fileNotFound = true
     if (listener.isDefined) {
       listener.get ! Failure(e)
@@ -169,10 +169,10 @@ abstract class AbstractFileUser[R](
 
   def receive = {
     case WaitingForPath => {
-      listener = Some(sender)
+      listener = Some(sender())
       log.debug("listener:" + listener)
       if (result.isDefined || fileNotFound) {
-        sender ! result.getOrElse(Failure(new RuntimeException("not found")))
+        sender() ! result.getOrElse(Failure(new RuntimeException("not found")))
         self ! PoisonPill
       }
     }
@@ -182,7 +182,7 @@ abstract class AbstractFileUser[R](
       }
       fail(e)
     }
-    case filetransfermessages.CannotSaveFile(e) => {
+    case filetransfermessages.CannotSaveFile(e, _) => {
       log.error("CannotSaveFile : " + sf + " Reason: " + e)
       fail(new RuntimeException(e))
     }
@@ -190,7 +190,7 @@ abstract class AbstractFileUser[R](
       log.debug("KnownPaths:" + list)
       list.find(isLocal) match {
         case Some(file) => finishLocalFile(file)
-        case None       => transfertome
+        case None       => transfertome()
       }
     }
 

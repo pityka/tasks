@@ -69,7 +69,7 @@ class HeartBeatActor(target: ActorRef, signal: Any, listener: ActorRef)(
     config.acceptableHeartbeatPause
   )
 
-  override def preStart = {
+  override def preStart() = {
     log.debug(
       "HeartBeatActor start for: " + target + " " + failureDetector.acceptableHeartbeatPause
     )
@@ -85,8 +85,8 @@ class HeartBeatActor(target: ActorRef, signal: Any, listener: ActorRef)(
 
   }
 
-  override def postStop = {
-    scheduledHeartBeats.cancel
+  override def postStop() = {
+    scheduledHeartBeats.cancel()
     log.info("HeartBeatActor stopped.")
   }
 
@@ -99,17 +99,17 @@ class HeartBeatActor(target: ActorRef, signal: Any, listener: ActorRef)(
     case DisassociatedEvent(_, remoteAddress, _)
         if remoteAddress === target.path.address =>
       log.warning("DisassociatedEvent received. TargetDown.")
-      targetDown
+      targetDown()
 
     case CheckHeartBeat =>
       if (!failureDetector.isAvailable) {
-        targetDown
+        targetDown()
       } else {
         target ! Ping
       }
 
     case Pong =>
-      failureDetector.heartbeat
+      failureDetector.heartbeat()
 
   }
 

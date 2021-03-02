@@ -24,10 +24,10 @@
 
 package tasks.ui
 
-import org.scalatest._
+import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import tasks.circesupport._
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 import scala.concurrent.Future
 import com.typesafe.config.ConfigFactory
 
@@ -39,7 +39,7 @@ import tasks._
 import scala.concurrent._
 import scala.concurrent.duration._
 
-object UIFrontendRun extends TestHelpers {
+object UIFrontendRun extends TestHelpersUI {
 
   val testTask = AsyncTask[Input, SharedFile]("uifrontendtest", 1) {
     input => implicit computationEnvironment =>

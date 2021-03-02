@@ -30,8 +30,6 @@ package tasks
 import akka.actor.ActorSystem
 import scala.concurrent.ExecutionContext
 
-import scala.concurrent._
-
 import tasks.queue._
 import tasks.fileservice._
 import tasks.wire._

@@ -9,7 +9,7 @@ import scala.concurrent._
 import scala.concurrent.duration._
 
 object WebSocketClient {
-  def make(url: String)(foreach: String => Unit) {
+  def make(url: String)(foreach: String => Unit) = {
     implicit val AS = ActorSystem()
     import AS.dispatcher
 

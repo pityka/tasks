@@ -68,8 +68,8 @@ object PiTasks {
           val sizeInt = scala.io.Source.fromFile(localFile).mkString.toInt
           val (in, out) = (0 until sizeInt).foldLeft((0, 0)) {
             case ((countIn, countOut), _) =>
-              val x = scala.util.Random.nextDouble
-              val y = scala.util.Random.nextDouble
+              val x = scala.util.Random.nextDouble()
+              val y = scala.util.Random.nextDouble()
               val inside = math.sqrt(x * x + y * y) <= 1.0
               if (inside) (countIn + 1, countOut) else (countIn, countOut + 1)
           }

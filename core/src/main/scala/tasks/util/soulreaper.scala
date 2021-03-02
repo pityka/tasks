@@ -48,7 +48,7 @@ abstract class Reaper extends Actor with akka.actor.ActorLogging {
       context.watch(ref)
       watched += ref
       if (answer) {
-        sender ! true
+        sender() ! true
       }
     case Terminated(ref) =>
       watched -= ref
@@ -63,11 +63,11 @@ abstract class Reaper extends Actor with akka.actor.ActorLogging {
 }
 
 class CallbackReaper(f: => Unit) extends Reaper {
-  def allSoulsReaped = f
+  def allSoulsReaped() = f
 }
 
 class ShutdownActorSystemReaper extends Reaper {
-  def allSoulsReaped = {
+  def allSoulsReaped() = {
     log.info("All souls reaped. Calling system.shutdown.")
     context.system.terminate()
   }

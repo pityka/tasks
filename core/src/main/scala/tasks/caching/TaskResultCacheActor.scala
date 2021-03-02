@@ -52,14 +52,14 @@ class TaskResultCacheActor(
 
   private case object SetDone
 
-  override def preStart = {
+  override def preStart() = {
     log.info(
       "Cache service starting. " + cacheMap.toString + s". config.verifySharedFileInCache: ${config.verifySharedFileInCache}. config.skipContentHashVerificationAfterCache: ${config.skipContentHashVerificationAfterCache}."
     )
   }
 
-  override def postStop = {
-    cacheMap.shutDown
+  override def postStop() = {
+    cacheMap.shutDown()
     log.info("TaskResultCacheActor stopped.")
   }
 
@@ -94,10 +94,10 @@ class TaskResultCacheActor(
             SetDone
         }
         .pipeTo(self)
-      sender ! true
+      sender() ! true
 
     case CheckResult(scheduleTask, originalSender) =>
-      val savedSender = sender
+      val savedSender = sender()
       val taskId = scheduleTask.description.taskId
       val queryFileServicePrefix =
         config.cachePath match {

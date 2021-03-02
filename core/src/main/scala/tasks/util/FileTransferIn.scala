@@ -36,19 +36,19 @@ class TransferIn(output: WritableByteChannel, notification: ActorRef)
     with akka.actor.ActorLogging {
 
   def receive = {
-    case Chunk(bytestring) =>
+    case Chunk(bytestring, _) =>
       Try {
         output.write(bytestring.asReadOnlyByteBuffer)
       } match {
-        case Success(_) => sender ! Ack()
+        case Success(_) => sender() ! Ack()
         case Failure(e) => {
           notification ! CannotSaveFile(e.getMessage)
-          sender ! CannotSaveFile(e.getMessage)
+          sender() ! CannotSaveFile(e.getMessage)
           self ! PoisonPill
         }
       }
 
-    case EndChunk() =>
+    case EndChunk(_) =>
       notification ! FileSaved()
       self ! PoisonPill
 
@@ -79,7 +79,7 @@ class TransferOut(
   }
 
   private def send(): Unit = {
-    readAhead
+    readAhead()
 
     if (eof) {
       transferIn ! EndChunk()
@@ -93,11 +93,11 @@ class TransferOut(
 
   override def preStart(): Unit = {
     log.debug("FileTransferOut start")
-    send
+    send()
   }
 
   def receive = {
-    case Ack()             => send
-    case CannotSaveFile(_) => self ! PoisonPill
+    case Ack(_)               => send()
+    case CannotSaveFile(_, _) => self ! PoisonPill
   }
 }

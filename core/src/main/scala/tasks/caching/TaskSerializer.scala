@@ -54,7 +54,7 @@ trait TaskSerializer {
   def deserializeResult(byteArray: Array[Byte]): UntypedResult = {
     val map = io.circe.parser
       .parse(new String(byteArray, "UTF8"))
-      .right
+      .toOption
       .get
       .asObject
       .get
@@ -62,7 +62,7 @@ trait TaskSerializer {
     val files =
       implicitly[Decoder[Set[SharedFile]]]
         .decodeJson(map("files").get)
-        .right
+        .toOption
         .get
 
     val mutableFiles = map.apply("mutablefiles") match {
@@ -71,7 +71,7 @@ trait TaskSerializer {
         Some(
           implicitly[Decoder[Set[SharedFile]]]
             .decodeJson(js)
-            .right
+            .toOption
             .get
         )
     }

@@ -154,7 +154,7 @@ case class ComputationEnvironment(
   def appendLog(l: LogRecord) = logQueue.add(l)
 
   def currentLogRecords = {
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
     logQueue.iterator.asScala.toList
   }
 
@@ -203,12 +203,12 @@ private class Task(
 
   private case object Start
 
-  override def preStart: Unit = {
+  override def preStart(): Unit = {
     log.debug("Prestart of Task class")
     self ! Start
   }
 
-  override def postStop: Unit = {
+  override def postStop(): Unit = {
     fjp.shutdown
     log.debug(s"Task stopped. Input was: ${input.value}.")
   }

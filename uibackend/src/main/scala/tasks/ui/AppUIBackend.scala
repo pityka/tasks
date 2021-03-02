@@ -45,7 +45,7 @@ class AppUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
     Flow[NodeRegistry.Event]
       .scan(UIAppState.empty)(UIAppStateProjector.project(_, _))
 
-  private val multiplex = actorSystem.actorOf(Props[Multiplex])
+  private val multiplex = actorSystem.actorOf(Props[Multiplex]())
 
   private val (eventListener, eventSource) =
     ActorSource.make[NodeRegistry.Event]
@@ -130,7 +130,7 @@ class AppUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
   def nodeRegistryEventListener: EventListener[NodeRegistry.Event] =
     new EventListener[NodeRegistry.Event] {
       def watchable = eventListener
-      def close = eventListener ! PoisonPill
+      def close() = eventListener ! PoisonPill
       def receive(event: NodeRegistry.Event): Unit = {
         eventListener ! event
       }

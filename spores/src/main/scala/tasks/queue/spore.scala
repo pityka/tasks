@@ -63,6 +63,7 @@ case class Spore[A, B](fqcn: String, dependencies: Seq[Spore[_, _]]) {
 
 object Spore {
   import io.circe.{Decoder, Encoder}
+  @scala.annotation.nowarn
   implicit def sporeDecoder[A, B]: io.circe.Decoder[Spore[A, B]] =
     Decoder.decodeJsonObject.emap { jsonObject =>
       val fqcn = jsonObject("fqcn").flatMap(_.asString)

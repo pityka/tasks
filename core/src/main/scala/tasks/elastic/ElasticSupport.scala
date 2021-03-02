@@ -74,7 +74,7 @@ case class SimpleElasticSupport(
     val getNodeName: GetNodeName
 ) extends ElasticSupport { self =>
 
-  def selfShutdownNow =
+  def selfShutdownNow() =
     shutdown.shutdownRunningNode(RunningJobId(getNodeName.getNodeName))
 
   def apply(

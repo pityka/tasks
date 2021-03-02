@@ -118,7 +118,7 @@ private[tasks] class SharedFileCache(
 
     } catch {
       case e: Throwable => {
-        shutDown
+        shutDown()
         throw e
       }
     }

@@ -1,13 +1,14 @@
 package tasks.util
 
 import org.scalatest._
+import org.scalatest.funspec.{AnyFunSpecLike => FunSpecLike}
 import scala.concurrent.duration._
 import akka.testkit.TestKit
 import akka.testkit.ImplicitSender
 import akka.actor.{Props, ActorSystem}
 import com.typesafe.config.ConfigFactory
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 
 import tasks.wire.filetransfermessages._
 
@@ -35,7 +36,7 @@ class TransferSpec
     with BeforeAndAfterAll {
   self: Suite =>
 
-  override def afterAll {
+  override def afterAll() = {
     Thread.sleep(1500)
     system.terminate()
 
@@ -60,7 +61,9 @@ class TransferSpec
 
       expectMsg(1000 millis, FileSaved())
 
-      readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
+      readBinaryFile(output.getCanonicalPath).toVector should equal(
+        data.toVector
+      )
 
     }
 
@@ -82,7 +85,9 @@ class TransferSpec
 
       expectMsg(100 millis, FileSaved())
 
-      readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
+      readBinaryFile(output.getCanonicalPath).toVector should equal(
+        data.toVector
+      )
 
     }
 
@@ -104,7 +109,9 @@ class TransferSpec
 
       expectMsg(100 millis, FileSaved())
 
-      readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
+      readBinaryFile(output.getCanonicalPath).toVector should equal(
+        data.toVector
+      )
 
     }
 
@@ -126,7 +133,9 @@ class TransferSpec
 
       expectMsg(100 millis, FileSaved())
 
-      readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
+      readBinaryFile(output.getCanonicalPath).toVector should equal(
+        data.toVector
+      )
 
     }
 
@@ -148,7 +157,9 @@ class TransferSpec
 
       expectMsg(100 millis, FileSaved())
 
-      readBinaryFile(output.getCanonicalPath).deep should equal(data.deep)
+      readBinaryFile(output.getCanonicalPath).toVector should equal(
+        data.toVector
+      )
 
     }
 
@@ -172,8 +183,8 @@ class TransferSpec
       expectMsg(100 millis, FileSaved())
       writeablechannel.close
 
-      readBinaryStream(java.nio.channels.Channels.newInputStream(pipe.source)).deep should equal(
-        data.deep
+      readBinaryStream(java.nio.channels.Channels.newInputStream(pipe.source)).toVector should equal(
+        data.toVector
       )
 
     }

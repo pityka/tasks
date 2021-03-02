@@ -25,9 +25,9 @@
 package tasks
 
 import tasks.shared._
-import org.scalatest._
+import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 
 class ResourceTest extends FunSuite with Matchers {
 

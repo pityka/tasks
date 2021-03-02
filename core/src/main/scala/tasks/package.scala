@@ -170,7 +170,7 @@ package object tasks {
       try {
         Some(f(ts.components))
       } finally {
-        ts.shutdown
+        ts.shutdown()
       }
     } else None
 

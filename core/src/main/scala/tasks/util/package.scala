@@ -163,7 +163,7 @@ package object util extends StrictLogging {
 
     def hasNext = s != -1
 
-    def next = {
+    def next() = {
       val x = s.toByte; s = is.read;
       if (!hasNext) {
         is.close()
@@ -219,7 +219,7 @@ package object util extends StrictLogging {
     */
   def exec(pb: ProcessBuilder)(stdOutFunc: String => Unit = { _: String =>
   })(implicit stdErrFunc: String => Unit = (_: String) => ()): Int =
-    pb.run(ProcessLogger(stdOutFunc, stdErrFunc)).exitValue
+    pb.run(ProcessLogger(stdOutFunc, stdErrFunc)).exitValue()
 
   /**
     * Execute command. Returns stdout and stderr as strings, and true if it was successful.

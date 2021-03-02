@@ -31,8 +31,6 @@ import akka.stream.scaladsl._
 import akka.util._
 import scala.concurrent.Future
 import java.io.File
-import tasks.util._
-import scala.concurrent._
 import tasks.util.Uri
 import tasks.TaskSystemComponents
 import tasks.Implicits._

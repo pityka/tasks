@@ -47,7 +47,7 @@ class NodeKiller(
   private var scheduler: Cancellable = null
   private var heartBeat: ActorRef = null
 
-  override def preStart: Unit = {
+  override def preStart(): Unit = {
     log.debug(
       "NodeKiller start. Monitoring actor: " + targetLauncherActor + " on node: " + targetNode.name
     )
@@ -66,9 +66,9 @@ class NodeKiller(
 
   }
 
-  override def postStop: Unit = {
+  override def postStop(): Unit = {
     if (scheduler != null) {
-      scheduler.cancel
+      scheduler.cancel()
     }
 
     if (heartBeat != null) {
@@ -84,19 +84,19 @@ class NodeKiller(
 
   var targetIsIdle = true
 
-  def shutdown() {
+  def shutdown() = {
     log.info(
       "Shutting down target node: name= " + targetNode.name + " , actor= " + targetLauncherActor
     )
     shutdownNode.shutdownRunningNode(targetNode.name)
     listener ! RemoveNode(targetNode)
-    scheduler.cancel
+    scheduler.cancel()
     self ! PoisonPill
   }
 
   def receive = {
     case TargetStopped =>
-      shutdown
+      shutdown()
     case MeasureTime =>
       if (targetIsIdle &&
           (System
@@ -108,7 +108,7 @@ class NodeKiller(
           targetLauncherActor.actor ! PrepareForShutdown
           log.info("PrepareForShutdown sent to " + targetLauncherActor)
         } catch {
-          case _: java.nio.channels.ClosedChannelException => shutdown
+          case _: java.nio.channels.ClosedChannelException => shutdown()
         }
       } else {
         targetLauncherActor.actor ! WhatAreYouDoing
@@ -124,7 +124,7 @@ class NodeKiller(
     case Working =>
       targetIsIdle = false
 
-    case ReadyForShutdown => shutdown
+    case ReadyForShutdown => shutdown()
   }
 
 }

@@ -131,7 +131,7 @@ private[ecoll] object Group2 {
 
 trait Group2Ops {
 
-  def group2[AA: SerDe, A: SerDe, BB: SerDe, B: SerDe, C: SerDe](
+  def group2[AA: SerDe, A, BB: SerDe, B, C: SerDe](
       taskID: String,
       taskVersion: Int,
       maxParallelJoins: Option[Int],

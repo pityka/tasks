@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package tasks.ui
+package tasks.tracker
 
 import scala.concurrent._
 import scala.concurrent.duration._

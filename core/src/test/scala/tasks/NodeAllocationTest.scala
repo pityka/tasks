@@ -24,9 +24,9 @@
 
 package tasks
 
-import org.scalatest._
+import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.Future
 import tasks.circesupport._
@@ -72,7 +72,7 @@ object NodeAllocationTest extends TestHelpers {
       f1.andThen {
         case _ =>
           synchronized {
-            tasks.JvmElasticSupport.taskSystems.head._2.foreach(_.shutdown)
+            tasks.JvmElasticSupport.taskSystems.head._2.foreach(_.shutdown())
           }
       }
 

@@ -63,19 +63,19 @@ object Deployment {
 
     val edited =
       s"./$packageFileName -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $hostnameString"
-        .replaceAllLiterally(
+        .replace(
           "{RAM}",
           math
             .max(1, (memory.toDouble * config.jvmMaxHeapFactor).toInt)
             .toString
         )
-        .replaceAllLiterally("{EXTRA}", config.additionalJavaCommandline)
-        .replaceAllLiterally(
+        .replace("{EXTRA}", config.additionalJavaCommandline)
+        .replace(
           "{MASTER}",
           masterAddress.getHostName + ":" + masterAddress.getPort
         )
-        .replaceAllLiterally("{GRID}", elasticSupport.fqcn)
-        .replaceAllLiterally("{STORAGE}", config.storageURI.toString)
+        .replace("{GRID}", elasticSupport.fqcn)
+        .replace("{STORAGE}", config.storageURI.toString)
 
     val runPackage =
       if (background) s"""(nohup $edited 1> stdout 2> stderr & echo $$!;) """

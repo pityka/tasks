@@ -41,7 +41,8 @@ object QueueMain {
 
     val uiStateSource = websocket.events
       .map(
-        wsMessage => io.circe.parser.decode[UIQueueState](wsMessage).right.get
+        wsMessage =>
+          io.circe.parser.decode[UIQueueState](wsMessage).toOption.get
       )
 
     val knownLaunchersTable = {

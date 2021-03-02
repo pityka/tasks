@@ -28,7 +28,7 @@ object SerializedTaskDescription {
       td.persistentInput.getOrElse(td.input).value
 
     SerializedTaskDescription(
-      (td.taskId + "\n" + base64TaskDescription).getBytes("UTF8")
+      (td.taskId.toString + "\n" + base64TaskDescription).getBytes("UTF8")
     )
   }
 }

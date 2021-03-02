@@ -30,7 +30,6 @@ package tasks.fileservice
 import scala.concurrent.{Future, ExecutionContext}
 import java.io.File
 import tasks.util._
-import scala.concurrent._
 import tasks.util.eq._
 import tasks.util.config._
 import akka.stream.scaladsl._
@@ -341,7 +340,7 @@ class FolderFileStorage(val basePath: File)(
   }
 
   def list(pattern: String): List[SharedFile] = {
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
     val stream =
       java.nio.file.Files.newDirectoryStream(basePath.toPath, pattern)
     try {

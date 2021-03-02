@@ -178,7 +178,7 @@ private[ecoll] object Join2 {
 }
 
 trait Join2Ops {
-  def join2InnerTx[AA: SerDe, A: SerDe, BB: SerDe, B: SerDe, C: SerDe](
+  def join2InnerTx[AA: SerDe, A, BB: SerDe, B, C: SerDe](
       taskID: String,
       taskVersion: Int,
       maxParallelJoins: Option[Int],
@@ -213,7 +213,7 @@ trait Join2Ops {
               )
             partial(((d1, true), (d2, true)))(resourceRequest)(tsc)
     })
-  def join2OuterTx[AA: SerDe, A: SerDe, BB: SerDe, B: SerDe, C: SerDe](
+  def join2OuterTx[AA: SerDe, A, BB: SerDe, B, C: SerDe](
       taskID: String,
       taskVersion: Int,
       maxParallelJoins: Option[Int],
@@ -248,7 +248,7 @@ trait Join2Ops {
               )
             partial(((d1, false), (d2, false)))(resourceRequest)(tsc)
     })
-  def join2LeftOuterTx[AA: SerDe, A: SerDe, BB: SerDe, B: SerDe, C: SerDe](
+  def join2LeftOuterTx[AA: SerDe, A, BB: SerDe, B, C: SerDe](
       taskID: String,
       taskVersion: Int,
       maxParallelJoins: Option[Int],
@@ -283,7 +283,7 @@ trait Join2Ops {
               )
             partial(((d1, false), (d2, true)))(resourceRequest)(tsc)
     })
-  def join2RightOuterTx[AA: SerDe, A: SerDe, BB: SerDe, B: SerDe, C: SerDe](
+  def join2RightOuterTx[AA: SerDe, A, BB: SerDe, B, C: SerDe](
       taskID: String,
       taskVersion: Int,
       maxParallelJoins: Option[Int],
@@ -442,7 +442,7 @@ trait Join2Ops {
             partial(((d1, true), (d2, false)))(resourceRequest)(tsc)
     })
 
-  def join2ThenMap[AA: SerDe, A: SerDe, BB: SerDe, B: SerDe, C: SerDe](
+  def join2ThenMap[AA: SerDe, A, BB: SerDe, B, C: SerDe](
       taskID: String,
       taskVersion: Int,
       maxParallelJoins: Option[Int],

@@ -47,7 +47,7 @@ class FileSender(
     extends Actor
     with akka.actor.ActorLogging {
 
-  override def preStart {
+  override def preStart() = {
     service ! NewFile(file, proposedPath, ephemeralFile = deleteLocalFile)
   }
 
@@ -75,12 +75,12 @@ class FileSender(
       )
 
     case WaitingForSharedFile =>
-      listener = Some(sender)
+      listener = Some(sender())
       if (sharedFile.isDefined) {
-        sender ! sharedFile
+        sender() ! sharedFile
         self ! PoisonPill
       } else if (error) {
-        sender ! None
+        sender() ! None
         self ! PoisonPill
       }
 
@@ -106,7 +106,7 @@ class SourceSender(
 
   implicit val mat = Materializer(context)
 
-  override def preStart {
+  override def preStart() = {
     service ! NewSource(proposedPath)
   }
 
@@ -132,12 +132,12 @@ class SourceSender(
       )
 
     case WaitingForSharedFile =>
-      listener = Some(sender)
+      listener = Some(sender())
       if (sharedFile.isDefined) {
-        sender ! sharedFile
+        sender() ! sharedFile
         self ! PoisonPill
       } else if (error) {
-        sender ! None
+        sender() ! None
         self ! PoisonPill
       }
 

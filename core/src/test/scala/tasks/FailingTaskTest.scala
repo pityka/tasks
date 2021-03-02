@@ -24,9 +24,9 @@
 
 package tasks
 
-import org.scalatest._
+import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 import com.typesafe.config.ConfigFactory
 
 import tasks.circesupport._

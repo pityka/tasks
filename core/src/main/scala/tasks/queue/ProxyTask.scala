@@ -112,7 +112,7 @@ class ProxyTask[Input, Output](
         case Right(output) =>
           log.debug(
             "MessageFromTask received from: {}, {}, {}",
-            sender,
+            sender(),
             untypedOutput,
             output
           )
@@ -120,13 +120,13 @@ class ProxyTask[Input, Output](
           self ! PoisonPill
         case Left(error) if retrievedFromCache =>
           log.error(
-            s"MessageFromTask received from cache and failed to decode: $sender, $untypedOutput, $error. Task is rescheduled without caching."
+            s"MessageFromTask received from cache and failed to decode: ${sender()}, $untypedOutput, $error. Task is rescheduled without caching."
           )
           startTask(cache = false)
         case Left(error) =>
           log.error(
             error,
-            s"MessageFromTask received not from cache and failed to decode: $sender, $untypedOutput, $error. Execution failed."
+            s"MessageFromTask received not from cache and failed to decode: ${sender()}, $untypedOutput, $error. Execution failed."
           )
           notifyListenersOnFailure(new RuntimeException(error))
           self ! PoisonPill

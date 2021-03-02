@@ -165,7 +165,7 @@ class Launcher(
   private var scheduler: Cancellable = null
   private var logScheduler: Cancellable = null
 
-  override def preStart: Unit = {
+  override def preStart(): Unit = {
     log.debug("TaskLauncher starting")
 
     import context.dispatcher
@@ -185,10 +185,10 @@ class Launcher(
 
   }
 
-  override def postStop: Unit = {
-    scheduler.cancel
+  override def postStop(): Unit = {
+    scheduler.cancel()
 
-    logScheduler.cancel
+    logScheduler.cancel()
 
     runningTasks.foreach(_._1 ! PoisonPill)
     log.info(
@@ -277,39 +277,39 @@ class Launcher(
           idleState += 1
         }
         val allocated = launch(scheduleTask)
-        sender ! Ack(allocated)
-        askForWork
+        sender() ! Ack(allocated)
+        askForWork()
       }
 
     case InternalMessageFromTask(actor, result) =>
       taskFinished(actor, result)
-      askForWork
+      askForWork()
 
     case InternalMessageTaskFailed(actor, cause) =>
       taskFailed(actor, cause)
-      askForWork
+      askForWork()
 
     case PrintResources =>
       log.info(s"Available resources: $availableResources on $self")
-    case CheckQueue => askForWork
-    case Ping       => sender ! Pong
+    case CheckQueue => askForWork()
+    case Ping       => sender() ! Pong
     case PrepareForShutdown =>
       if (isIdle) {
         denyWorkBeforeShutdown = true
-        sender ! ReadyForShutdown
+        sender() ! ReadyForShutdown
       }
 
     case WhatAreYouDoing =>
       val idle = isIdle
       log.debug(s"Received WhatAreYouDoing. idle:$idle, idleState:$idleState")
       if (idle) {
-        sender ! Idling(idleState)
+        sender() ! Idling(idleState)
       } else {
-        sender ! Working
+        sender() ! Working
       }
 
     case Release =>
-      val taskActor = sender
+      val taskActor = sender()
       val allocated = runningTasks.find(_._1 == taskActor).map(_._3)
       if (allocated.isEmpty) log.error("Can't find actor ")
       else {
@@ -322,7 +322,7 @@ class Launcher(
           )
         )
       }
-      askForWork
+      askForWork()
 
     case other => log.debug("unhandled" + other)
 

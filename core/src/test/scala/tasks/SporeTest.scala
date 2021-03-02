@@ -27,9 +27,9 @@
 
 package tasks
 
-import org.scalatest._
+import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 import scala.concurrent._
 import tasks.queue.Spore
 
@@ -187,7 +187,7 @@ class SporeTestSuite extends FunSuite with Matchers {
     spore.asJson.noSpaces shouldBe """{"fqcn":"tasks.MySpore$spore$macro$1$4","deps":[{"fqcn":"tasks.MySpore$spore$macro$32$1","deps":[]}]}"""
     io.circe.parser
       .decode[Spore[String, String]](spore.asJson.noSpaces)
-      .right
+      .toOption
       .get("qwerty") shouldBe "QWERTY"
   }
 

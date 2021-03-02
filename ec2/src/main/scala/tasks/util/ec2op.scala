@@ -28,7 +28,7 @@ package tasks.util
 import com.amazonaws.services.ec2.AmazonEC2Client;
 import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
 
-import collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import tasks.shared._
 import tasks.util.config._
@@ -76,7 +76,7 @@ object EC2Operations {
   def readMetadata(key: String): List[String] = {
     val source =
       scala.io.Source.fromURL("http://169.254.169.254/latest/meta-data/" + key)
-    val list = source.getLines.toList
+    val list = source.getLines().toList
     source.close
     list
   }

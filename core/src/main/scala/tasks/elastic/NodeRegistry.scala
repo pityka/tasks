@@ -103,7 +103,7 @@ class NodeRegistry(
     case _ => ???
   }
 
-  override def preStart: Unit = {
+  override def preStart(): Unit = {
     log.info("NodeCreator start. Monitoring actor: " + targetQueue)
 
     import context.dispatcher
@@ -119,8 +119,8 @@ class NodeRegistry(
 
   }
 
-  override def postStop: Unit = {
-    scheduler.cancel
+  override def postStop(): Unit = {
+    scheduler.cancel()
     log.info("NodeCreator stopping.")
     currentState.running.foreach {
       case (node, _) =>

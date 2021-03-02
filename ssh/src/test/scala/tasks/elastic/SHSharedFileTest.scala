@@ -24,9 +24,9 @@
 
 package tasks.elastic
 
-import org.scalatest._
+import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 
 import tasks.circesupport._
 import akka.stream.scaladsl.Source

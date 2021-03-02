@@ -88,12 +88,12 @@ class FileService(
 
   import context.dispatcher
 
-  override def postStop {
+  override def postStop() = {
     fjp.shutdown
     log.info("FileService stopped.")
   }
 
-  override def preStart {
+  override def preStart() = {
     log.info("FileService will start.")
   }
 
@@ -115,7 +115,7 @@ class FileService(
   }
 
   def receive = {
-    case GetSharedFolder(prefix) => sender ! storage.sharedFolder(prefix)
+    case GetSharedFolder(prefix) => sender() ! storage.sharedFolder(prefix)
     case NewFile(file, proposedPath, ephemeral) =>
       try {
         if (isLocal(file)) {
@@ -136,7 +136,7 @@ class FileService(
                       throw e
                   }
             }
-            .pipeTo(sender)
+            .pipeTo(sender())
 
         } else {
 
@@ -150,10 +150,10 @@ class FileService(
           )
           transferinactors.update(
             transferinActor,
-            (writeableChannel, savePath, sender, proposedPath, ephemeral)
+            (writeableChannel, savePath, sender(), proposedPath, ephemeral)
           )
 
-          sender ! TransferToMe(transferinActor)
+          sender() ! TransferToMe(transferinActor)
 
         }
       } catch {
@@ -162,7 +162,7 @@ class FileService(
             e,
             "Error while accessing storage " + file + " " + proposedPath
           )
-          sender ! ErrorWhileAccessingStore
+          sender() ! ErrorWhileAccessingStore
         }
       }
 
@@ -178,29 +178,29 @@ class FileService(
         )
         transferinactors.update(
           transferinActor,
-          (writeableChannel, savePath, sender, proposedPath, true)
+          (writeableChannel, savePath, sender(), proposedPath, true)
         )
 
-        sender ! TransferToMe(transferinActor)
+        sender() ! TransferToMe(transferinActor)
 
       } catch {
         case e: Exception => {
           log.error(e, "Error while accessing storage " + proposedPath)
-          sender ! ErrorWhileAccessingStore
+          sender() ! ErrorWhileAccessingStore
         }
       }
 
-    case filetransfermessages.CannotSaveFile(e) => {
-      transferinactors.get(sender).foreach {
+    case filetransfermessages.CannotSaveFile(e, _) => {
+      transferinactors.get(sender()).foreach {
         case (channel, _, filesender, _, _) =>
           channel.close
           log.error("CannotSaveFile(" + e + ")")
           filesender ! ErrorWhileAccessingStore(new RuntimeException(e))
       }
-      transferinactors.remove(sender)
+      transferinactors.remove(sender())
     }
-    case filetransfermessages.FileSaved() => {
-      transferinactors.get(sender).foreach {
+    case filetransfermessages.FileSaved(_) => {
+      transferinactors.get(sender()).foreach {
         case (channel, file, filesender, proposedPath, _) =>
           channel.close
           try {
@@ -227,7 +227,7 @@ class FileService(
             }
           }
       }
-      transferinactors.remove(sender)
+      transferinactors.remove(sender())
     }
 
     case GetPaths(managedPath, size: Long, hash: Int) =>
@@ -246,11 +246,11 @@ class FileService(
                 )
               )
           }
-          .pipeTo(sender)
+          .pipeTo(sender())
       } catch {
         case e: Exception => {
           log.error(e.toString)
-          sender ! FileNotFound(e)
+          sender() ! FileNotFound(e)
         }
       }
     case TransferFileToUser(transferinActor, sf) =>
@@ -267,17 +267,17 @@ class FileService(
       } catch {
         case e: Exception => {
           log.error(e.toString)
-          sender ! FileNotFound(e)
+          sender() ! FileNotFound(e)
         }
       }
 
-    case GetListOfFilesInStorage(regexp) => sender ! storage.list(regexp)
+    case GetListOfFilesInStorage(regexp) => sender() ! storage.list(regexp)
     case IsAccessible(managedPath, size, hash) =>
-      storage.contains(managedPath, size, hash).pipeTo(sender)
+      storage.contains(managedPath, size, hash).pipeTo(sender())
     case IsPathAccessible(managedPath, retrieveSizeAndHash) =>
-      storage.contains(managedPath, retrieveSizeAndHash).pipeTo(sender)
-    case GetUri(managedPath) => sender ! storage.uri(managedPath)
+      storage.contains(managedPath, retrieveSizeAndHash).pipeTo(sender())
+    case GetUri(managedPath) => sender() ! storage.uri(managedPath)
     case Delete(managedPath, size, hash) =>
-      storage.delete(managedPath, size, hash).pipeTo(sender)
+      storage.delete(managedPath, size, hash).pipeTo(sender())
   }
 }

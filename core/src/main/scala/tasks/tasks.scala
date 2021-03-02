@@ -146,7 +146,7 @@ case class TaskDefinition[A: Serializer, B: Deserializer](
 
     val taskId1 = taskId
 
-    val promise = Promise[B]
+    val promise = Promise[B]()
 
     context.actorOf(
       Props(

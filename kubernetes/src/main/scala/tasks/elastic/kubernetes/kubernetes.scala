@@ -34,7 +34,7 @@ import tasks.util.config._
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.api.model.{EnvVar}
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import com.typesafe.scalalogging.StrictLogging
 
 class K8SShutdown(k8s: KubernetesClient)

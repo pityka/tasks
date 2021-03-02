@@ -47,14 +47,14 @@ object JvmElasticSupport {
       nodesShutdown += nodeName.value
       taskSystems
         .filter(_._1 == nodeName.value)
-        .foreach(_._2.foreach(_.shutdown))
+        .foreach(_._2.foreach(_.shutdown()))
     }
 
     def shutdownPendingNode(nodeName: PendingJobId): Unit = synchronized {
       nodesShutdown += nodeName.value
       taskSystems
         .filter(_._1 == nodeName.value)
-        .foreach(_._2.foreach(_.shutdown))
+        .foreach(_._2.foreach(_.shutdown()))
     }
 
   }
@@ -67,7 +67,7 @@ object JvmElasticSupport {
         requestSize: tasks.shared.ResourceRequest
     ): Try[(PendingJobId, ResourceAvailable)] = {
       val jobid =
-        java.util.UUID.randomUUID.toString.replaceAllLiterally("-", "")
+        java.util.UUID.randomUUID.toString.replace("-", "")
 
       val ts = Future { defaultTaskSystem(s"""
     akka.loglevel=OFF

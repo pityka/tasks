@@ -32,7 +32,7 @@ import io.circe.generic.semiauto._
 
 import com.typesafe.config.ConfigFactory
 
-trait TestHelpers {
+trait TestHelpersUI {
 
   def await[T](f: Future[T]) = Await.result(f, atMost = Duration.Inf)
 

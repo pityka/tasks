@@ -38,7 +38,7 @@ object ActorSource {
     }
   }
   def make[T](implicit AS: ActorSystem) = {
-    val fw = AS.actorOf(Props[Forwarder])
+    val fw = AS.actorOf(Props[Forwarder]())
     val source = Source
       .actorRef[T](
         completionMatcher = {

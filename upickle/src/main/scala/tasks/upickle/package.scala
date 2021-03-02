@@ -3,7 +3,7 @@ package tasks
 import tasks.queue._
 
 package object upicklesupport {
-  import upickle.default.{Reader, Writer}
+  import upickle.default._
   implicit def ser[A](implicit enc: Writer[A]): Serializer[A] =
     new Serializer[A] {
       def apply(a: A) = upickle.default.write(a).getBytes("UTF-8")
@@ -19,12 +19,26 @@ package object upicklesupport {
     }
 
   implicit val instantRW =
-    upickle.default.ReadWriter[java.time.Instant](
-      instant => upickle.Js.Num(instant.toEpochMilli.toDouble), {
-        case upickle.Js.Num(num) =>
-          java.time.Instant.ofEpochMilli(num.toLong)
-      }
-    )
+    upickle.default
+      .readwriter[Long]
+      .bimap[java.time.Instant](
+        instant => instant.toEpochMilli, {
+          case num =>
+            java.time.Instant.ofEpochMilli(num)
+        }
+      )
+
+  implicit val uri =
+    upickle.default.macroRW[tasks.util.Uri]
+
+  implicit val rpath =
+    upickle.default.macroRW[tasks.fileservice.RemoteFilePath]
+
+  implicit val mpath =
+    upickle.default.macroRW[tasks.fileservice.ManagedFilePath]
+
+  implicit val filepath =
+    upickle.default.macroRW[tasks.fileservice.FilePath]
 
   implicit val sharedFileRW =
     upickle.default.macroRW[tasks.fileservice.SharedFile]
