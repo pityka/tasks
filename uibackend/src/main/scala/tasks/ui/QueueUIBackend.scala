@@ -116,7 +116,7 @@ class QueueUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
     }
 
   private val bindingFuture =
-    Http().bindAndHandle(route, config.uiServerHost, config.uiServerPort)
+    Http().newServerAt(config.uiServerHost, config.uiServerPort).bind(route)
 
   bindingFuture.andThen {
     case scala.util.Success(serverBinding) =>

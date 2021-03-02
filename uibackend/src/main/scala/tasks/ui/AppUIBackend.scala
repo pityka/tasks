@@ -118,7 +118,9 @@ class AppUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
     }
 
   private val bindingFuture =
-    Http().bindAndHandle(route, config.appUIServerHost, config.appUIServerPort)
+    Http()
+      .newServerAt(config.appUIServerHost, config.appUIServerPort)
+      .bind(route)
 
   bindingFuture.andThen {
     case scala.util.Success(serverBinding) =>
