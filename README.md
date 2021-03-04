@@ -1,6 +1,6 @@
 [![codecov](https://codecov.io/gh/pityka/tasks/branch/master/graph/badge.svg)](https://codecov.io/gh/pityka/tasks)
 [![](https://github.com/pityka/tasks/workflows/CI/badge.svg)](https://github.com/pityka/tasks/actions)
-[![maven](https://img.shields.io/maven-central/v/io.github.pityka/tasks-core_2.12.svg)](https://repo1.maven.org/maven2/io/github/pityka/tasks-core_2.12/)
+[![maven](https://img.shields.io/maven-central/v/io.github.pityka/tasks-core_2.13.svg)](https://repo1.maven.org/maven2/io/github/pityka/tasks-core_2.13/)
 
 
 
