@@ -1,7 +1,26 @@
 import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 
+inThisBuild(
+  List(
+    organization := "io.github.pityka",
+    homepage := Some(url("https://pityka.github.io/tasks/")),
+    licenses := List(
+      ("Apache-2.0", url("https://opensource.org/licenses/Apache-2.0"))
+    ),
+    developers := List(
+      Developer(
+        "pityka",
+        "Istvan Bartha",
+        "bartha.pityu@gmail.com",
+        url("https://github.com/pityka/tasks")
+      )
+    )
+  )
+)
+
 lazy val commonSettings = Seq(
   scalaVersion := "2.13.5",
+  crossScalaVersions := Seq("2.12.13", "2.13.5"),
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -34,18 +53,6 @@ lazy val commonSettings = Seq(
     "-Ywarn-unused:privates" // Warn if a private member is unused.
   )
 ) ++ Seq(
-  organization := "io.github.pityka",
-  licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
-  pomExtra in Global := {
-    <url>https://pityka.github.io/tasks/</url>
-      <developers>
-        <developer>
-          <id>pityka</id>
-          <name>Istvan Bartha</name>
-          <url>https://pityka.github.io/tasks/</url>
-        </developer>
-      </developers>
-  },
   fork := true,
   cancelable in Global := true
 )
@@ -102,8 +109,8 @@ lazy val core = project
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe.akka" %% "akka-http-core" % "10.1.11",
       "com.typesafe" % "config" % "1.4.0",
-      "io.github.pityka" %% "selfpackage" % "1.2.4",
-      "io.github.pityka" %% "s3-stream-fork" % "0.0.6",
+      "io.github.pityka" %% "selfpackage" % "1.2.5",
+      "io.github.pityka" %% "s3-stream-fork" % "0.0.8",
       "org.scalatest" %% "scalatest" % "3.2.5" % "test",
       "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value
@@ -193,7 +200,8 @@ lazy val example = project
   .settings(
     executableScriptName := "entrypoint",
     topLevelDirectory := None,
-    publishArtifact := false
+    publishArtifact := false,
+    crossScalaVersions := Nil
   )
 
 lazy val upicklesupport = project
@@ -224,8 +232,8 @@ lazy val ecoll = project
   .settings(
     name := "tasks-ecoll",
     libraryDependencies ++= Seq(
-      "io.github.pityka" %% "flatjoin-akka-stream" % "0.0.15",
-      "io.github.pityka" %% "lame-bgzip-index" % "0.0.3",
+      "io.github.pityka" %% "flatjoin-akka-stream" % "0.0.17",
+      "io.github.pityka" %% "lame-bgzip-index" % "0.0.4",
       "org.scalatest" %% "scalatest" % "3.2.5" % "test"
     )
   )
@@ -234,7 +242,8 @@ lazy val ecoll = project
 lazy val root = (project in file("."))
   .settings(commonSettings: _*)
   .settings(
-    publishArtifact := false
+    publishArtifact := false,
+    crossScalaVersions := Nil
   )
   .aggregate(
     spores,
