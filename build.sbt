@@ -135,7 +135,7 @@ lazy val ssh = project
   .settings(
     name := "tasks-ssh",
     libraryDependencies ++= Seq(
-      "ch.ethz.ganymed" % "ganymed-ssh2" % "261"
+      "ch.ethz.ganymed" % "ganymed-ssh2" % "262"
     )
   )
   .dependsOn(core % "compile->compile;test->test")
