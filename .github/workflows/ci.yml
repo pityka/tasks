@@ -15,8 +15,4 @@ jobs:
     - uses: olafurpg/setup-scala@v10
     - name: Compile
       run: sbt clean +testables/test
-    - name: Codecov
-      uses: codecov/codecov-action@v1.0.2
-      with:
-        token: ${{secrets.CODECOV_TOKEN}}
 
