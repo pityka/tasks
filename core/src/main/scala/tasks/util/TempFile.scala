@@ -72,15 +72,17 @@ object TempFile {
     scala.collection.concurrent.TrieMap[String, File]()
 
   def getExecutableFromJar(name: String): File =
-    writtenExecutables.getOrElseUpdate(name, {
-      synchronized {
-        val f = writeFreshExecutable(name)
+    writtenExecutables.getOrElseUpdate(
+      name, {
+        synchronized {
+          val f = writeFreshExecutable(name)
 
-        writtenExecutables.update(name, f)
+          writtenExecutables.update(name, f)
 
-        f
+          f
+        }
       }
-    })
+    )
 
   private def writeFreshExecutable(name: String): File = {
     val tmpFile = createTempFile(".executable")

@@ -1,5 +1,4 @@
-/**
-  * This code is a modification of the code found at https://github.com/scalacenter/spores
+/** This code is a modification of the code found at https://github.com/scalacenter/spores
   * That scalacenter/spores is licensed under the SCALA license which is reproduced below.
   *
   * SCALA LICENSE
@@ -24,7 +23,6 @@
   *    3. Neither the name of the EPFL nor the names of its contributors
   *       may be used to endorse or promote products derived from this
   *       software without specific prior written permission.
-  *
   *
   * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
   * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE

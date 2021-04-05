@@ -19,9 +19,8 @@ private[ecoll] object Take {
           SerDe[Long]
       ),
       Source[A, NotUsed]
-    ] {
-      case (source: Source[A, NotUsed], n, _, _, _) =>
-        source.take(n.get)
+    ] { case (source: Source[A, NotUsed], n, _, _, _) =>
+      source.take(n.get)
     }
 
 }
@@ -33,32 +32,31 @@ trait TakeOps {
       taskVersion: Int,
       outName: Option[String] = None
   )(implicit r: SerDe[Long]): Partial[(EColl[A], Long), EColl[A]] =
-    Partial({
-      case (data1, n: Long) =>
-        resourceRequest =>
-          implicit tsc =>
-            implicit val ec = tsc.executionContext
-            val inner = Take.takeSpore[A]
-            implicit val ww = implicitly[SerDe[Long]].ser(())
+    Partial({ case (data1, n: Long) =>
+      resourceRequest =>
+        implicit tsc =>
+          implicit val ec = tsc.executionContext
+          val inner = Take.takeSpore[A]
+          implicit val ww = implicitly[SerDe[Long]].ser(())
 
-            for {
-              ev <- EColl.single(n, None)
-              ecoll <- GenericMap.task(taskID, taskVersion)(
-                GenericMap.Input[A, Long, A](
-                  data1,
-                  Some(ev),
-                  implicitly[SerDe[A]],
-                  implicitly[SerDe[Long]],
-                  implicitly[SerDe[A]],
-                  None,
-                  inner,
-                  false,
-                  outName,
-                  taskID,
-                  taskVersion
-                )
-              )(resourceRequest)(tsc)
-            } yield ecoll
+          for {
+            ev <- EColl.single(n, None)
+            ecoll <- GenericMap.task(taskID, taskVersion)(
+              GenericMap.Input[A, Long, A](
+                data1,
+                Some(ev),
+                implicitly[SerDe[A]],
+                implicitly[SerDe[Long]],
+                implicitly[SerDe[A]],
+                None,
+                inner,
+                false,
+                outName,
+                taskID,
+                taskVersion
+              )
+            )(resourceRequest)(tsc)
+          } yield ecoll
 
     })
 

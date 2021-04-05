@@ -57,8 +57,10 @@ object UIQueueStateProjector {
       case TaskScheduled(sch, launcher, allocated) =>
         state.copy(
           queuedTasks = state.queuedTasks.filterNot(_ == sch.description),
-          scheduledTasks =
-            (sch.description, (uiLauncherActor(launcher), allocated)) :: state.scheduledTasks
+          scheduledTasks = (
+            sch.description,
+            (uiLauncherActor(launcher), allocated)
+          ) :: state.scheduledTasks
         )
 
       case TaskDone(sch, _, _, _) =>

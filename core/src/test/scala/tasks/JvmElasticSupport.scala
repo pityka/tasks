@@ -59,8 +59,8 @@ object JvmElasticSupport {
 
   }
 
-  class JvmCreateNode(masterAddress: InetSocketAddress)(
-      implicit config: TasksConfig
+  class JvmCreateNode(masterAddress: InetSocketAddress)(implicit
+      config: TasksConfig
   ) extends CreateNode {
 
     def requestOneNewJobFromJobScheduler(
@@ -69,7 +69,8 @@ object JvmElasticSupport {
       val jobid =
         java.util.UUID.randomUUID.toString.replace("-", "")
 
-      val ts = Future { defaultTaskSystem(s"""
+      val ts = Future {
+        defaultTaskSystem(s"""
     akka.loglevel=OFF
     hosts.master = "${masterAddress.getHostName}:${masterAddress.getPort}"
     hosts.app = false
@@ -78,11 +79,11 @@ object JvmElasticSupport {
     tasks.akka.actorsystem.name = $jobid   
     tasks.addShutdownHook = false 
     tasks.fileservice.storageURI="${config.storageURI.toString}"
-    """) }(scala.concurrent.ExecutionContext.Implicits.global)
+    """)
+      }(scala.concurrent.ExecutionContext.Implicits.global)
       import scala.concurrent.ExecutionContext.Implicits.global
-      ts.map(_ => ()).recover {
-        case e =>
-          println(e)
+      ts.map(_ => ()).recover { case e =>
+        println(e)
       }
       synchronized {
         taskSystems += ((jobid, ts))

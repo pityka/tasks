@@ -43,44 +43,37 @@ object Tests {
   implicit val s1i = spore(() => implicitly[tasks.queue.Serializer[Int]])
   implicit val s2i = spore(() => implicitly[tasks.queue.Deserializer[Int]])
   implicit val s1 = spore(() => implicitly[tasks.queue.Serializer[Option[Int]]])
-  implicit val s2 = spore(
-    () => implicitly[tasks.queue.Deserializer[Option[Int]]]
-  )
+  implicit val s2 =
+    spore(() => implicitly[tasks.queue.Deserializer[Option[Int]]])
   implicit val s3 = spore(() => implicitly[tasks.queue.Deserializer[String]])
   implicit val s4 = spore(() => implicitly[tasks.queue.Serializer[String]])
-  implicit val s5 = spore(
-    () => implicitly[tasks.queue.Deserializer[Seq[Option[Int]]]]
+  implicit val s5 =
+    spore(() => implicitly[tasks.queue.Deserializer[Seq[Option[Int]]]])
+  implicit val s6 =
+    spore(() => implicitly[tasks.queue.Serializer[Seq[Option[Int]]]])
+  implicit val s7 =
+    spore(() => implicitly[tasks.queue.Deserializer[Seq[Option[Option[Int]]]]])
+  implicit val s8 =
+    spore(() => implicitly[tasks.queue.Serializer[Seq[Option[Option[Int]]]]])
+  implicit val s9 = spore(() =>
+    implicitly[
+      tasks.queue.Deserializer[(Option[Option[Int]], Option[Option[Int]])]
+    ]
   )
-  implicit val s6 = spore(
-    () => implicitly[tasks.queue.Serializer[Seq[Option[Int]]]]
-  )
-  implicit val s7 = spore(
-    () => implicitly[tasks.queue.Deserializer[Seq[Option[Option[Int]]]]]
-  )
-  implicit val s8 = spore(
-    () => implicitly[tasks.queue.Serializer[Seq[Option[Option[Int]]]]]
-  )
-  implicit val s9 = spore(
-    () =>
-      implicitly[
-        tasks.queue.Deserializer[(Option[Option[Int]], Option[Option[Int]])]
-      ]
-  )
-  implicit val s10 = spore(
-    () =>
-      implicitly[
-        tasks.queue.Serializer[(Option[Option[Int]], Option[Option[Int]])]
-      ]
+  implicit val s10 = spore(() =>
+    implicitly[
+      tasks.queue.Serializer[(Option[Option[Int]], Option[Option[Int]])]
+    ]
   )
 
   val twice =
     EColl.map("twice", 1)((_: Option[Int]).map(_ * 3))
 
-  val collect = EColl.collect[Option[Int], String]("doubleodd", 1)(
-    (i: Option[Int]) =>
+  val collect =
+    EColl.collect[Option[Int], String]("doubleodd", 1)((i: Option[Int]) =>
       if (i.isDefined) Some(i.get.toString)
       else None
-  )
+    )
 
   val odd =
     EColl.filter("odd", 1)(spore((i: Option[Int]) => i.forall(_ % 2 == 1)))
@@ -174,22 +167,21 @@ object Tests {
         e10 <- sum2(e1)(ResourceRequest(1, 1)).flatMap(_.toSeq(1))
         distinct <- distinct(e4)(ResourceRequest(1, 1)).flatMap(_.toSeq(1))
 
-      } yield
-        (
-          v2,
-          sv2,
-          sumSeqV,
-          mapconcatV,
-          e4V,
-          gV,
-          gV2,
-          e6V,
-          e7V,
-          e8V,
-          e9V.head,
-          e10.head,
-          distinct
-        )
+      } yield (
+        v2,
+        sv2,
+        sumSeqV,
+        mapconcatV,
+        e4V,
+        gV,
+        gV2,
+        e6V,
+        e7V,
+        e8V,
+        e9V.head,
+        e10.head,
+        distinct
+      )
 
       Await.result(mappedEColl, atMost = 10 minutes)
     }

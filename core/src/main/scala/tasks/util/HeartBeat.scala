@@ -45,8 +45,8 @@ import tasks.util.config._
 import tasks.wire._
 
 object HeartBeatActor {
-  def watch[A](target: ActorRef, signal: A, listener: ActorRef)(
-      implicit AS: ActorRefFactory,
+  def watch[A](target: ActorRef, signal: A, listener: ActorRef)(implicit
+      AS: ActorRefFactory,
       config: TasksConfig
   ) =
     AS.actorOf(
@@ -55,8 +55,8 @@ object HeartBeatActor {
     )
 }
 
-class HeartBeatActor(target: ActorRef, signal: Any, listener: ActorRef)(
-    implicit config: TasksConfig
+class HeartBeatActor(target: ActorRef, signal: Any, listener: ActorRef)(implicit
+    config: TasksConfig
 ) extends Actor
     with akka.actor.ActorLogging {
 

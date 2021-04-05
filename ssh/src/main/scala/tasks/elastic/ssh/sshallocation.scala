@@ -72,10 +72,9 @@ class SSHSettings(implicit config: TasksConfig) {
   import SSHSettings._
 
   val hosts: collection.mutable.Map[String, (Host, Boolean)] =
-    collection.mutable.Map(config.sshHosts.asScala.map {
-      case (_, value) =>
-        val host = Host.fromConfig(value.asInstanceOf[ConfigObject].toConfig)
-        (host.hostname, (host, true))
+    collection.mutable.Map(config.sshHosts.asScala.map { case (_, value) =>
+      val host = Host.fromConfig(value.asInstanceOf[ConfigObject].toConfig)
+      (host.hostname, (host, true))
     }.toList: _*)
 
   def disableHost(h: String) = synchronized {
@@ -122,7 +121,11 @@ object SSHOperations {
         serverHostKeyAlgorithm: String,
         serverHostKey: Array[Byte]
     ) =
-      kh.verifyHostkey(hostname, serverHostKeyAlgorithm, serverHostKey) == KnownHosts.HOSTKEY_IS_OK
+      kh.verifyHostkey(
+        hostname,
+        serverHostKeyAlgorithm,
+        serverHostKey
+      ) == KnownHosts.HOSTKEY_IS_OK
   }
 
   def terminateProcess(host: SSHSettings.Host, pid: String): Unit = {
@@ -149,7 +152,8 @@ class SSHShutdown(implicit config: TasksConfig) extends ShutdownNode {
 }
 
 class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
-    implicit config: TasksConfig,
+    implicit
+    config: TasksConfig,
     elasticSupport: ElasticSupportFqcn
 ) extends CreateNode {
 
@@ -160,66 +164,65 @@ class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
   ): Try[(PendingJobId, ResourceAvailable)] =
     settings.hosts
       .filter(x => x._2._2 == true)
-      .filter(
-        x => x._2._1.cpu >= requestSize.cpu._1 && x._2._1.memory >= requestSize.memory
+      .filter(x =>
+        x._2._1.cpu >= requestSize.cpu._1 && x._2._1.memory >= requestSize.memory
       )
       .iterator
-      .map {
-        case (name, (host, _)) =>
-          val script = Deployment.script(
-            memory = requestSize.memory,
-            cpu = requestSize.cpu._2,
-            scratch = requestSize.scratch,
-            elasticSupport = elasticSupport,
-            masterAddress = masterAddress,
-            download = new java.net.URL(
-              "http",
-              codeAddress.address.getHostName,
-              codeAddress.address.getPort,
-              "/"
-            ),
-            slaveHostname = Some(host.hostname),
-            background = true
+      .map { case (name, (host, _)) =>
+        val script = Deployment.script(
+          memory = requestSize.memory,
+          cpu = requestSize.cpu._2,
+          scratch = requestSize.scratch,
+          elasticSupport = elasticSupport,
+          masterAddress = masterAddress,
+          download = new java.net.URL(
+            "http",
+            codeAddress.address.getHostName,
+            codeAddress.address.getPort,
+            "/"
+          ),
+          slaveHostname = Some(host.hostname),
+          background = true
+        )
+        SSHOperations.openSession(host) { session =>
+          val command =
+            "source .bash_profile; " + script
+
+          session.execCommand(command)
+
+          session.getStdin.close
+
+          session.waitForCondition(
+            ch.ethz.ssh2.ChannelCondition.STDOUT_DATA,
+            10000
           )
-          SSHOperations.openSession(host) { session =>
-            val command =
-              "source .bash_profile; " + script
 
-            session.execCommand(command)
+          val stdout =
+            scala.io.Source.fromInputStream(session.getStdout).mkString
 
-            session.getStdin.close
+          val pid = stdout.trim.toInt
 
-            session.waitForCondition(
-              ch.ethz.ssh2.ChannelCondition.STDOUT_DATA,
-              10000
+          settings.disableHost(name)
+
+          (
+            PendingJobId(host.hostname + ":" + pid.toString),
+            ResourceAvailable(
+              cpu = host.cpu,
+              memory = host.memory,
+              scratch = host.scratch,
+              gpu = host.gpu
             )
+          )
 
-            val stdout =
-              scala.io.Source.fromInputStream(session.getStdout).mkString
-
-            val pid = stdout.trim.toInt
-
-            settings.disableHost(name)
-
-            (
-              PendingJobId(host.hostname + ":" + pid.toString),
-              ResourceAvailable(
-                cpu = host.cpu,
-                memory = host.memory,
-                scratch = host.scratch,
-                gpu = host.gpu
-              )
-            )
-
-          }
+        }
       }
       .find(_.isSuccess)
       .getOrElse(Failure(new RuntimeException("No enabled/working hosts")))
 
 }
 
-class SSHCreateNodeFactory(
-    implicit config: TasksConfig,
+class SSHCreateNodeFactory(implicit
+    config: TasksConfig,
     elasticSupport: ElasticSupportFqcn
 ) extends CreateNodeFactory {
   def apply(master: InetSocketAddress, codeAddress: CodeAddress) =

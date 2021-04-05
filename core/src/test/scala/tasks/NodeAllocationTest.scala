@@ -69,11 +69,10 @@ object NodeAllocationTest extends TestHelpers {
         t3 <- f3
       } yield t1 + t2 + t3
 
-      f1.andThen {
-        case _ =>
-          synchronized {
-            tasks.JvmElasticSupport.taskSystems.head._2.foreach(_.shutdown())
-          }
+      f1.andThen { case _ =>
+        synchronized {
+          tasks.JvmElasticSupport.taskSystems.head._2.foreach(_.shutdown())
+        }
       }
 
       await(future)

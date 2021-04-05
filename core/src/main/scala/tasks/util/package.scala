@@ -111,8 +111,7 @@ package object util extends StrictLogging {
       case f             => f
     }
 
-  /**
-    * Returns the result of the block, and closes the resource.
+  /** Returns the result of the block, and closes the resource.
     *
     * @param param closeable resource
     * @param f block using the resource
@@ -153,8 +152,7 @@ package object util extends StrictLogging {
     file
   }
 
-  /**
-    * Returns an iterator on the InputStream's data.
+  /** Returns an iterator on the InputStream's data.
     *
     * Closes the stream when read through.
     */
@@ -209,20 +207,19 @@ package object util extends StrictLogging {
   def openFileInputStream[T](fileName: File)(func: BufferedInputStream => T) =
     useResource(new BufferedInputStream(new FileInputStream(fileName)))(func)
 
-  /**
-    * Execute command with user function to process each line of output.
+  /** Execute command with user function to process each line of output.
     *
     * Based on from http://www.jroller.com/thebugslayer/entry/executing_external_system_commands_in
     * Creates 2 new threads: one for the stdout, one for the stderror.
     * @param pb Description of the executable process
     * @return Exit code of the process.
     */
-  def exec(pb: ProcessBuilder)(stdOutFunc: String => Unit = { _: String =>
-  })(implicit stdErrFunc: String => Unit = (_: String) => ()): Int =
+  def exec(pb: ProcessBuilder)(stdOutFunc: String => Unit = { _: String => })(
+      implicit stdErrFunc: String => Unit = (_: String) => ()
+  ): Int =
     pb.run(ProcessLogger(stdOutFunc, stdErrFunc)).exitValue()
 
-  /**
-    * Execute command. Returns stdout and stderr as strings, and true if it was successful.
+  /** Execute command. Returns stdout and stderr as strings, and true if it was successful.
     *
     * A process is considered successful if its exit code is 0 and the error stream is empty.
     * The latter criterion can be disabled with the unsuccessfulOnErrorStream parameter.
@@ -248,52 +245,53 @@ package object util extends StrictLogging {
     (ls.reverse, lse.reverse, boolean && (exitvalue == 0))
   }
 
-  /**
-    * Merge maps with key collision
+  /** Merge maps with key collision
     * @param fun Handles key collision
     */
   def addMaps[K, V](a: Map[K, V], b: Map[K, V])(fun: (V, V) => V): Map[K, V] = {
-    a ++ b.map {
-      case (key, bval) =>
-        val aval = a.get(key)
-        val cval = aval match {
-          case None    => bval
-          case Some(a) => fun((a), (bval))
-        }
-        (key, cval)
+    a ++ b.map { case (key, bval) =>
+      val aval = a.get(key)
+      val cval = aval match {
+        case None    => bval
+        case Some(a) => fun((a), (bval))
+      }
+      (key, cval)
     }
   }
 
-  /**
-    * Merge maps with key collision
+  /** Merge maps with key collision
     * @param fun Handles key collision
     */
   def addMaps[K, V](a: collection.Map[K, V], b: collection.Map[K, V])(
       fun: (V, V) => V
   ): collection.Map[K, V] = {
-    a ++ b.map {
-      case (key, bval) =>
-        val aval = a.get(key)
-        val cval = aval match {
-          case None    => bval
-          case Some(a) => fun((a), (bval))
-        }
-        (key, cval)
+    a ++ b.map { case (key, bval) =>
+      val aval = a.get(key)
+      val cval = aval match {
+        case None    => bval
+        case Some(a) => fun((a), (bval))
+      }
+      (key, cval)
     }
   }
 
-  def retryFuture[A](tag: String)(f: => Future[A], c: Int)(
-      implicit as: akka.actor.ActorSystem,
+  def retryFuture[A](tag: String)(f: => Future[A], c: Int)(implicit
+      as: akka.actor.ActorSystem,
       ec: ExecutionContext,
       log: akka.event.LoggingAdapter
   ): Future[A] =
-    if (c > 0) f.recoverWith {
-      case e =>
-        log.error(e, s"Failed $tag. Retry $c more times.")
-        akka.pattern.after(2 seconds, as.scheduler)(retryFuture(tag)({
-          log.debug(s"Retrying $tag"); f
-        }, c - 1))
-    } else f
+    if (c > 0) f.recoverWith { case e =>
+      log.error(e, s"Failed $tag. Retry $c more times.")
+      akka.pattern.after(2 seconds, as.scheduler)(
+        retryFuture(tag)(
+          {
+            log.debug(s"Retrying $tag"); f
+          },
+          c - 1
+        )
+      )
+    }
+    else f
 
   def reflectivelyInstantiateObject[A](fqcn: String): A = {
     import scala.reflect.runtime.universe

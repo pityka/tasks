@@ -36,36 +36,36 @@ import tasks.wire._
 
 private[tasks] object Implicits {
 
-  implicit def executionContext(
-      implicit component: TaskSystemComponents
+  implicit def executionContext(implicit
+      component: TaskSystemComponents
   ): ExecutionContext =
     component.executionContext
 
-  implicit def actorsystem(
-      implicit component: TaskSystemComponents
+  implicit def actorsystem(implicit
+      component: TaskSystemComponents
   ): ActorSystem =
     component.actorsystem
 
-  implicit def filePrefix(
-      implicit component: TaskSystemComponents
+  implicit def filePrefix(implicit
+      component: TaskSystemComponents
   ): FileServicePrefix =
     component.filePrefix
 
-  implicit def nodeLocalCache(
-      implicit component: TaskSystemComponents
+  implicit def nodeLocalCache(implicit
+      component: TaskSystemComponents
   ): NodeLocalCacheActor =
     component.nodeLocalCache
 
-  implicit def queueActor(
-      implicit component: TaskSystemComponents
+  implicit def queueActor(implicit
+      component: TaskSystemComponents
   ): QueueActor = component.queue
 
-  implicit def cacheActor(
-      implicit component: TaskSystemComponents
+  implicit def cacheActor(implicit
+      component: TaskSystemComponents
   ): CacheActor = component.cache
 
-  implicit def historyContext(
-      implicit component: TaskSystemComponents
+  implicit def historyContext(implicit
+      component: TaskSystemComponents
   ): HistoryContext =
     component.historyContext
 

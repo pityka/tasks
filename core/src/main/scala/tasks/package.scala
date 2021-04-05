@@ -61,32 +61,32 @@ package object tasks {
       codeVersion,
       tasks.shared.ResourceRequest(cpu, memory, scratch, gpu)
     )
-  def ResourceRequest(cpu: (Int, Int), memory: Int, scratch: Int)(
-      implicit codeVersion: CodeVersion
+  def ResourceRequest(cpu: (Int, Int), memory: Int, scratch: Int)(implicit
+      codeVersion: CodeVersion
   ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
       tasks.shared.ResourceRequest(cpu, memory, scratch, 0)
     )
 
-  def ResourceRequest(cpu: (Int, Int), memory: Int)(
-      implicit codeVersion: CodeVersion
+  def ResourceRequest(cpu: (Int, Int), memory: Int)(implicit
+      codeVersion: CodeVersion
   ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
       tasks.shared.ResourceRequest(cpu, memory, 1, 0)
     )
 
-  def ResourceRequest(cpu: Int, memory: Int)(
-      implicit codeVersion: CodeVersion
+  def ResourceRequest(cpu: Int, memory: Int)(implicit
+      codeVersion: CodeVersion
   ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
       tasks.shared.ResourceRequest((cpu, cpu), memory, 1, 0)
     )
 
-  def ResourceRequest(cpu: Int, memory: Int, scratch: Int)(
-      implicit codeVersion: CodeVersion
+  def ResourceRequest(cpu: Int, memory: Int, scratch: Int)(implicit
+      codeVersion: CodeVersion
   ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
@@ -96,35 +96,35 @@ package object tasks {
   implicit def tsc(implicit ts: TaskSystem): TaskSystemComponents =
     ts.components
 
-  implicit def tasksConfig(
-      implicit component: TaskSystemComponents
+  implicit def tasksConfig(implicit
+      component: TaskSystemComponents
   ): TasksConfig =
     component.tasksConfig
 
-  implicit def codeVersionFromTasksConfig(
-      implicit c: TasksConfig
+  implicit def codeVersionFromTasksConfig(implicit
+      c: TasksConfig
   ): CodeVersion = c.codeVersion
 
-  implicit def fs(
-      implicit component: TaskSystemComponents
+  implicit def fs(implicit
+      component: TaskSystemComponents
   ): FileServiceComponent =
     component.fs
 
-  implicit def executionContext(
-      implicit env: ComputationEnvironment
+  implicit def executionContext(implicit
+      env: ComputationEnvironment
   ): ExecutionContext =
     env.executionContext
 
   def releaseResources(implicit comp: ComputationEnvironment) =
     comp.launcher.actor.!(Release)(comp.taskActor)
 
-  implicit def ts(
-      implicit component: ComputationEnvironment
+  implicit def ts(implicit
+      component: ComputationEnvironment
   ): TaskSystemComponents =
     component.components
 
-  implicit def launcherActor(
-      implicit component: ComputationEnvironment
+  implicit def launcherActor(implicit
+      component: ComputationEnvironment
   ): LauncherActor =
     component.launcher
 
@@ -274,8 +274,8 @@ package object tasks {
   implicit def serde2ser[A](a: SerDe[A]): SSerializer[A] = a.ser
   implicit def serde2deser[A](a: SerDe[A]): SDeserializer[A] = a.deser
 
-  def MasterSlaveGridEngineChosenFromConfig(
-      implicit config: TasksConfig
+  def MasterSlaveGridEngineChosenFromConfig(implicit
+      config: TasksConfig
   ): HostConfiguration =
     if (config.disableRemoting) new LocalConfigurationFromConfig
     else new MasterSlaveFromConfig
@@ -309,11 +309,12 @@ package object tasks {
         .filter(_.isDefined)
         .map(_.get)
 
-      result <- if (filesWithNonEmptyPath.size == validSharedFiles.size) {
-        Future.successful(fromFiles(validSharedFiles))
-      } else {
-        full
-      }
+      result <-
+        if (filesWithNonEmptyPath.size == validSharedFiles.size) {
+          Future.successful(fromFiles(validSharedFiles))
+        } else {
+          full
+        }
 
     } yield result
 

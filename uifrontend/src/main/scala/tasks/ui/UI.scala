@@ -62,8 +62,10 @@ object Helpers {
       jsonArray =
         elements => elements.flatMap(element => loop(element)).distinct.toList,
       jsonObject = obj =>
-        if (obj.contains("path") && obj.contains("hash") && obj
-              .contains("byteSize")) {
+        if (
+          obj.contains("path") && obj.contains("hash") && obj
+            .contains("byteSize")
+        ) {
           obj("path").flatMap(_.asObject) match {
             case Some(obj) if obj.contains("RemoteFilePath") =>
               Json
@@ -152,23 +154,21 @@ object Helpers {
 
   def renderTableBodyWithCompletedTasks(completedTasks: Set[(TaskId, Int)]) =
     tbody(
-      completedTasks.toSeq.sortBy(_._1.toString).map {
-        case ((taskId, count)) =>
-          tr(
-            td(cls := "collapsing", taskId.id + " @" + taskId.version),
-            td(count)
-          )
+      completedTasks.toSeq.sortBy(_._1.toString).map { case ((taskId, count)) =>
+        tr(
+          td(cls := "collapsing", taskId.id + " @" + taskId.version),
+          td(count)
+        )
       }
     )
 
   def renderTableBodyWithRecoveredTasks(recoveredTasks: Set[(TaskId, Int)]) =
     tbody(
-      recoveredTasks.toSeq.sortBy(_._1.toString).map {
-        case (taskId, count) =>
-          tr(
-            td(cls := "collapsing", taskId.id + " @" + taskId.version),
-            td(count)
-          )
+      recoveredTasks.toSeq.sortBy(_._1.toString).map { case (taskId, count) =>
+        tr(
+          td(cls := "collapsing", taskId.id + " @" + taskId.version),
+          td(count)
+        )
       }
     )
 

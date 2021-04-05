@@ -45,7 +45,8 @@ object SHShutdown extends ShutdownNode {
 }
 
 class SHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
-    implicit config: TasksConfig,
+    implicit
+    config: TasksConfig,
     elasticSupport: ElasticSupportFqcn
 ) extends CreateNode {
 
@@ -98,8 +99,8 @@ class SHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
 
 }
 
-class SHCreateNodeFactory(
-    implicit config: TasksConfig,
+class SHCreateNodeFactory(implicit
+    config: TasksConfig,
     fqcn: ElasticSupportFqcn
 ) extends CreateNodeFactory {
   def apply(master: InetSocketAddress, codeAddress: CodeAddress) =

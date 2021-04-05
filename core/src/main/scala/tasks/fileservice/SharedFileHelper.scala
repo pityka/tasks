@@ -47,8 +47,8 @@ import akka.NotUsed
 
 private[tasks] object SharedFileHelper extends StrictLogging {
 
-  def getByName(name: String, retrieveSizeAndHash: Boolean)(
-      implicit service: FileServiceComponent,
+  def getByName(name: String, retrieveSizeAndHash: Boolean)(implicit
+      service: FileServiceComponent,
       prefix: FileServicePrefix
   ): Future[Option[SharedFile]] =
     recreateFromManagedPath(prefix.propose(name).toManaged, retrieveSizeAndHash)
@@ -61,18 +61,18 @@ private[tasks] object SharedFileHelper extends StrictLogging {
   def create(size: Long, hash: Int, path: ManagedFilePath): SharedFile =
     new SharedFile(path, size, hash)
 
-  def create(path: RemoteFilePath, storage: RemoteFileStorage)(
-      implicit ec: ExecutionContext
+  def create(path: RemoteFilePath, storage: RemoteFileStorage)(implicit
+      ec: ExecutionContext
   ): Future[SharedFile] =
-    storage.getSizeAndHash(path).map {
-      case (size, hash) =>
-        new SharedFile(path, size, hash)
+    storage.getSizeAndHash(path).map { case (size, hash) =>
+      new SharedFile(path, size, hash)
     }
 
   val isLocal = (f: File) => f.canRead
 
   private def getSourceToManagedPath(path: ManagedFilePath, fromOffset: Long)(
-      implicit service: FileServiceComponent,
+      implicit
+      service: FileServiceComponent,
       context: ActorRefFactory,
       ec: ExecutionContext
   ) =
@@ -98,8 +98,8 @@ private[tasks] object SharedFileHelper extends StrictLogging {
       Source.future(f2).flatMapConcat(x => x)
     }
 
-  def getSourceToFile(sf: SharedFile, fromOffset: Long)(
-      implicit service: FileServiceComponent,
+  def getSourceToFile(sf: SharedFile, fromOffset: Long)(implicit
+      service: FileServiceComponent,
       context: ActorRefFactory,
       ec: ExecutionContext
   ): Source[ByteString, NotUsed] =
@@ -109,13 +109,13 @@ private[tasks] object SharedFileHelper extends StrictLogging {
           .createSource(path, fromOffset)
           .mapMaterializedValue(_ => NotUsed)
       case path: ManagedFilePath =>
-        getSourceToManagedPath(path, fromOffset).mapMaterializedValue(
-          _ => NotUsed
+        getSourceToManagedPath(path, fromOffset).mapMaterializedValue(_ =>
+          NotUsed
         )
     }
 
-  def getPathToFile(sf: SharedFile)(
-      implicit service: FileServiceComponent,
+  def getPathToFile(sf: SharedFile)(implicit
+      service: FileServiceComponent,
       context: ActorRefFactory,
       nlc: NodeLocalCacheActor,
       ec: ExecutionContext
@@ -124,12 +124,12 @@ private[tasks] object SharedFileHelper extends StrictLogging {
       ._getItemAsync("fs::" + sf, dropAfterSave = false)(
         getPathToFileUncached(sf)
       )
-      .recoverWith {
-        case _: java.nio.file.NoSuchFileException => getPathToFileUncached(sf)
+      .recoverWith { case _: java.nio.file.NoSuchFileException =>
+        getPathToFileUncached(sf)
       }
 
-  private def getPathToFileUncached(sf: SharedFile)(
-      implicit service: FileServiceComponent,
+  private def getPathToFileUncached(sf: SharedFile)(implicit
+      service: FileServiceComponent,
       context: ActorRefFactory,
       ec: ExecutionContext
   ): Future[File] =
@@ -147,8 +147,8 @@ private[tasks] object SharedFileHelper extends StrictLogging {
           )
 
           val f = (ac ? WaitingForPath).asInstanceOf[Future[Try[File]]]
-          f onComplete {
-            case _ => ac ! PoisonPill
+          f onComplete { case _ =>
+            ac ! PoisonPill
           }
 
           f map (_ match {
@@ -159,8 +159,8 @@ private[tasks] object SharedFileHelper extends StrictLogging {
         }
     }
 
-  def isAccessible(sf: SharedFile, verifyContent: Boolean)(
-      implicit service: FileServiceComponent
+  def isAccessible(sf: SharedFile, verifyContent: Boolean)(implicit
+      service: FileServiceComponent
   ): Future[Boolean] =
     sf.path match {
       case x: RemoteFilePath =>
@@ -210,8 +210,8 @@ private[tasks] object SharedFileHelper extends StrictLogging {
       }
     }
 
-  def saveHistory(sf: SharedFile, historyContext: HistoryContext)(
-      implicit prefix: FileServicePrefix,
+  def saveHistory(sf: SharedFile, historyContext: HistoryContext)(implicit
+      prefix: FileServicePrefix,
       ec: ExecutionContext,
       service: FileServiceComponent,
       context: ActorRefFactory,
@@ -235,8 +235,8 @@ private[tasks] object SharedFileHelper extends StrictLogging {
 
   }
 
-  def getHistory(sf: SharedFile)(
-      implicit service: FileServiceComponent,
+  def getHistory(sf: SharedFile)(implicit
+      service: FileServiceComponent,
       context: ActorRefFactory,
       ec: ExecutionContext,
       mat: Materializer
@@ -271,8 +271,9 @@ private[tasks] object SharedFileHelper extends StrictLogging {
 
         for {
           fileIsPresent <- recreateFromManagedPath(historyManagedPath, false)
-          history <- if (fileIsPresent.isDefined) readFile
-          else Future.successful(History(sf, None))
+          history <-
+            if (fileIsPresent.isDefined) readFile
+            else Future.successful(History(sf, None))
         } yield history
 
     }
@@ -291,8 +292,8 @@ private[tasks] object SharedFileHelper extends StrictLogging {
         .asInstanceOf[Future[Option[SharedFile]]]
     }
 
-  def createFromFile(file: File, name: String, deleteFile: Boolean)(
-      implicit prefix: FileServicePrefix,
+  def createFromFile(file: File, name: String, deleteFile: Boolean)(implicit
+      prefix: FileServicePrefix,
       ec: ExecutionContext,
       service: FileServiceComponent,
       context: ActorRefFactory,
@@ -333,8 +334,8 @@ private[tasks] object SharedFileHelper extends StrictLogging {
     } yield sf
   }
 
-  def sink(name: String)(
-      implicit prefix: FileServicePrefix,
+  def sink(name: String)(implicit
+      prefix: FileServicePrefix,
       ec: ExecutionContext,
       service: FileServiceComponent,
       context: ActorRefFactory,
@@ -344,8 +345,8 @@ private[tasks] object SharedFileHelper extends StrictLogging {
   ) =
     service.storage.map { storage =>
       storage.sink(prefix.propose(name)).mapMaterializedValue { futureOfPath =>
-        val sf = futureOfPath.map {
-          case (size, hash, path) => SharedFileHelper.create(size, hash, path)
+        val sf = futureOfPath.map { case (size, hash, path) =>
+          SharedFileHelper.create(size, hash, path)
         }
         for {
           sf <- sf
@@ -354,8 +355,8 @@ private[tasks] object SharedFileHelper extends StrictLogging {
       }
     }
 
-  def createFromSource(source: Source[ByteString, _], name: String)(
-      implicit prefix: FileServicePrefix,
+  def createFromSource(source: Source[ByteString, _], name: String)(implicit
+      prefix: FileServicePrefix,
       ec: ExecutionContext,
       service: FileServiceComponent,
       context: ActorRefFactory,
@@ -389,8 +390,8 @@ private[tasks] object SharedFileHelper extends StrictLogging {
     } yield sf
   }
 
-  def createFromFolder(callback: File => List[File])(
-      implicit prefix: FileServicePrefix,
+  def createFromFolder(callback: File => List[File])(implicit
+      prefix: FileServicePrefix,
       ec: ExecutionContext,
       service: FileServiceComponent,
       context: ActorRefFactory,

@@ -151,7 +151,12 @@ class Launcher(
     )
     log.debug("Actor constructed")
 
-    runningTasks = (taskActor, scheduleTask, allocatedResource, System.nanoTime) :: runningTasks
+    runningTasks = (
+      taskActor,
+      scheduleTask,
+      allocatedResource,
+      System.nanoTime
+    ) :: runningTasks
 
     allocatedResource
   }

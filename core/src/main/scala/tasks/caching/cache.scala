@@ -35,12 +35,12 @@ import tasks.fileservice.FileServicePrefix
 
 abstract class Cache {
 
-  def get(x: TaskDescription)(
-      implicit p: FileServicePrefix
+  def get(x: TaskDescription)(implicit
+      p: FileServicePrefix
   ): Future[Option[UntypedResult]]
 
-  def set(x: TaskDescription, r: UntypedResult)(
-      implicit p: FileServicePrefix
+  def set(x: TaskDescription, r: UntypedResult)(implicit
+      p: FileServicePrefix
   ): Future[Unit]
 
   def shutDown(): Unit

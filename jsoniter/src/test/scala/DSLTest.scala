@@ -39,18 +39,17 @@ import com.typesafe.config.ConfigFactory
 
 object DSLTest extends TestHelpers with Matchers {
 
-  val increment = AsyncTask[Input, Int]("dsltest", 1) {
-    case Input(c) =>
-      implicit computationEnvironment =>
-        import tasks.fileservice.HistoryContextImpl
-        computationEnvironment.components.historyContext
-          .asInstanceOf[HistoryContextImpl]
-          .task shouldBe fileservice.History
-          .TaskVersion("dsltest", 1)
-        computationEnvironment.components.historyContext
-          .asInstanceOf[HistoryContextImpl]
-          .codeVersion shouldBe "undefined"
-        Future(c + 1)
+  val increment = AsyncTask[Input, Int]("dsltest", 1) { case Input(c) =>
+    implicit computationEnvironment =>
+      import tasks.fileservice.HistoryContextImpl
+      computationEnvironment.components.historyContext
+        .asInstanceOf[HistoryContextImpl]
+        .task shouldBe fileservice.History
+        .TaskVersion("dsltest", 1)
+      computationEnvironment.components.historyContext
+        .asInstanceOf[HistoryContextImpl]
+        .codeVersion shouldBe "undefined"
+      Future(c + 1)
   }
 
   def run = {

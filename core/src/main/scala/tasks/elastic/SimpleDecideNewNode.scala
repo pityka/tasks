@@ -32,8 +32,8 @@ import tasks.util.eq._
 import tasks.util.config._
 import com.typesafe.scalalogging.StrictLogging
 
-class SimpleDecideNewNode(codeVersion: CodeVersion)(
-    implicit config: TasksConfig
+class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
+    config: TasksConfig
 ) extends DecideNewNode
     with StrictLogging {
 
@@ -76,18 +76,17 @@ class SimpleDecideNewNode(codeVersion: CodeVersion)(
     val (_, allocatedRequests) =
       resourceRequests.foldLeft(
         (availableResourcesMinusRunningJobs, List[ResourceRequest]())
-      ) {
-        case ((available, allocated), request) =>
-          val (prefix, suffix) =
-            available.span(x => !x.canFulfillRequest(request))
-          val chosen = suffix.headOption
-          chosen.foreach(x => assert(x.canFulfillRequest(request)))
+      ) { case ((available, allocated), request) =>
+        val (prefix, suffix) =
+          available.span(x => !x.canFulfillRequest(request))
+        val chosen = suffix.headOption
+        chosen.foreach(x => assert(x.canFulfillRequest(request)))
 
-          val transformed = chosen.map(_.substract(request))
-          if (chosen.isDefined)
-            (prefix ::: (transformed.get :: suffix.tail))
-              .filterNot(_.isEmpty) -> (request :: allocated)
-          else (available, allocated)
+        val transformed = chosen.map(_.substract(request))
+        if (chosen.isDefined)
+          (prefix ::: (transformed.get :: suffix.tail))
+            .filterNot(_.isEmpty) -> (request :: allocated)
+        else (available, allocated)
       }
 
     val nonAllocatedResources: Map[ResourceRequest, Int] = {
@@ -103,8 +102,10 @@ class SimpleDecideNewNode(codeVersion: CodeVersion)(
 
     }
 
-    if (!nonAllocatedResources.isEmpty
-        && (pendingNodes.size < config.maxPendingNodes)) {
+    if (
+      !nonAllocatedResources.isEmpty
+      && (pendingNodes.size < config.maxPendingNodes)
+    ) {
       nonAllocatedResources
 
     } else Map()

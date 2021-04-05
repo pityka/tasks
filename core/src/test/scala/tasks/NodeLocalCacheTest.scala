@@ -75,7 +75,9 @@ object NodeLocalCacheTest extends TestHelpers {
 
 class NodeLocalCacheTestSuite extends FunSuite with Matchers {
 
-  test("node local cache should not execute the same key twice, unless dropped") {
+  test(
+    "node local cache should not execute the same key twice, unless dropped"
+  ) {
     NodeLocalCacheTest.run.get should equal(4)
     NodeLocalCacheTest.sideEffect.count(_ == "execution of task") shouldBe 4
     NodeLocalCacheTest.sideEffect.count(

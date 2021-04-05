@@ -22,9 +22,9 @@ package object upicklesupport {
     upickle.default
       .readwriter[Long]
       .bimap[java.time.Instant](
-        instant => instant.toEpochMilli, {
-          case num =>
-            java.time.Instant.ofEpochMilli(num)
+        instant => instant.toEpochMilli,
+        { case num =>
+          java.time.Instant.ofEpochMilli(num)
         }
       )
 
