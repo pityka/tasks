@@ -46,8 +46,8 @@ private[ecoll] object Collect {
               data
                 .sourceOfRange(range)(r, ctx.components)
                 .map(x => fun(x))
-                .collect {
-                  case Some(x) => x
+                .collect { case Some(x) =>
+                  x
                 },
               outName.map(_ + "." + range)
             )(w, ctx.components)
@@ -94,21 +94,20 @@ trait CollectOps {
   )(
       fun: Spore[A, Option[B]]
   ): Partial[EColl[A], EColl[B]] =
-    Partial(
-      data =>
-        resourceRequest =>
-          tsc =>
-            Collect.task(taskID, taskVersion)(
-              Collect.Input(
-                data,
-                implicitly[SerDe[A]],
-                implicitly[SerDe[B]],
-                None,
-                fun,
-                outName,
-                taskID,
-                taskVersion
-              )
-            )(resourceRequest)(tsc)
+    Partial(data =>
+      resourceRequest =>
+        tsc =>
+          Collect.task(taskID, taskVersion)(
+            Collect.Input(
+              data,
+              implicitly[SerDe[A]],
+              implicitly[SerDe[B]],
+              None,
+              fun,
+              outName,
+              taskID,
+              taskVersion
+            )
+          )(resourceRequest)(tsc)
     )
 }

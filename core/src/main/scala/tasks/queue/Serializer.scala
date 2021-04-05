@@ -32,8 +32,8 @@ object SerDe {
   implicit def encoder[A, B]: Encoder[SerDe[A]] = deriveEncoder[SerDe[A]]
   implicit def decoder[A, B]: Decoder[SerDe[A]] = deriveDecoder[SerDe[A]]
 
-  implicit def makeFromComponents[A](
-      implicit r: tasks.SDeserializer[A],
+  implicit def makeFromComponents[A](implicit
+      r: tasks.SDeserializer[A],
       w: tasks.SSerializer[A]
   ): SerDe[A] =
     SerDe(w, r)

@@ -19,9 +19,8 @@ private[ecoll] object MapConcat {
           SerDe[Nothing]
       ),
       Source[B, NotUsed]
-    ] {
-      case (source: Source[A, NotUsed], _: Option[Nothing], _, _, _) =>
-        source.mapConcat(a => fun.apply(a).toList)
+    ] { case (source: Source[A, NotUsed], _: Option[Nothing], _, _, _) =>
+      source.mapConcat(a => fun.apply(a).toList)
     }
 
 }
@@ -33,27 +32,26 @@ trait MapConcatOps {
       taskVersion: Int,
       outName: Option[String] = None
   )(fun: Spore[A, Seq[B]]): Partial[EColl[A], EColl[B]] =
-    Partial({
-      case data1 =>
-        resourceRequest =>
-          tsc =>
-            val inner = MapConcat.mapConcatSpore[A, B](fun)
+    Partial({ case data1 =>
+      resourceRequest =>
+        tsc =>
+          val inner = MapConcat.mapConcatSpore[A, B](fun)
 
-            GenericMap.task(taskID, taskVersion)(
-              GenericMap.Input[A, Nothing, B](
-                data1,
-                None,
-                implicitly[SerDe[A]],
-                SerDe.nothing,
-                implicitly[SerDe[B]],
-                None,
-                inner,
-                true,
-                outName,
-                taskID,
-                taskVersion
-              )
-            )(resourceRequest)(tsc)
+          GenericMap.task(taskID, taskVersion)(
+            GenericMap.Input[A, Nothing, B](
+              data1,
+              None,
+              implicitly[SerDe[A]],
+              SerDe.nothing,
+              implicitly[SerDe[B]],
+              None,
+              inner,
+              true,
+              outName,
+              taskID,
+              taskVersion
+            )
+          )(resourceRequest)(tsc)
     })
 
 }

@@ -31,8 +31,8 @@ package object queue {
 
   def extractDataDependencies[T](
       deserializedInputData: T
-  )(
-      implicit ce: ComputationEnvironment
+  )(implicit
+      ce: ComputationEnvironment
   ): Future[DependenciesAndRuntimeMetadata] = {
     val logs = ce.currentLogRecords
     if (ce.components.tasksConfig.trackDataFlow) {

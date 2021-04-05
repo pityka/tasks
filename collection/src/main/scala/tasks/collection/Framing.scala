@@ -24,8 +24,8 @@ trait Framing { self: Constants =>
       parallelism: Int
   )(
       ecoll: SharedFile
-  )(
-      implicit ec: ExecutionContext,
+  )(implicit
+      ec: ExecutionContext,
       tsc: TaskSystemComponents
   ): Source[(String, T), _] =
     lame.BlockGunzip

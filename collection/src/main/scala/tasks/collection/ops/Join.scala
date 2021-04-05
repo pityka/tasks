@@ -41,17 +41,17 @@ private[ecoll] object Join {
     spore(() => implicitly[Serializer[EColl[B]]]),
     spore[Input[A, B], ComputationEnvironment => Future[EColl[B]]] {
       case Input(
-          data1,
-          serdeA,
-          serdeB,
-          fun,
-          transform,
-          dropRecordIfEmpty,
-          maxParallelJoins,
-          numberOfShards,
-          outName,
-          taskId,
-          _
+            data1,
+            serdeA,
+            serdeB,
+            fun,
+            transform,
+            dropRecordIfEmpty,
+            maxParallelJoins,
+            numberOfShards,
+            outName,
+            taskId,
+            _
           ) =>
         implicit ctx =>
           log.info(taskId)
@@ -69,13 +69,12 @@ private[ecoll] object Join {
 
           val catted = akka.stream.scaladsl
             .Source(data1.zipWithIndex)
-            .flatMapConcat(
-              x =>
-                x._1
-                  .sourceFrom(
-                    parallelismOfDeserialization = resourceAllocated.cpu
-                  )
-                  .map(y => x._2 -> y)
+            .flatMapConcat(x =>
+              x._1
+                .sourceFrom(
+                  parallelismOfDeserialization = resourceAllocated.cpu
+                )
+                .map(y => x._2 -> y)
             )
 
           val joinedSource = catted
@@ -113,8 +112,8 @@ trait JoinOps {
       maxParallelJoins: Option[Int],
       numberOfShards: Option[Int],
       outName: Option[String] = None
-  )(key: Spore[A, String])(
-      implicit sr: SerDe[Seq[Option[A]]]
+  )(key: Spore[A, String])(implicit
+      sr: SerDe[Seq[Option[A]]]
   ): Partial[List[(EColl[A], Boolean)], EColl[Seq[Option[A]]]] =
     joinThenMap(taskID, taskVersion, maxParallelJoins, numberOfShards, outName)(
       key,
@@ -131,25 +130,24 @@ trait JoinOps {
       key: Spore[A, String],
       transform: Spore[Seq[Seq[Option[A]]], List[B]]
   ): Partial[List[(EColl[A], Boolean)], EColl[B]] =
-    Partial({
-      case data1 =>
-        resourceRequest =>
-          tsc =>
-            Join.task(taskID, taskVersion)(
-              Join.Input(
-                data1.map(_._1),
-                implicitly[SerDe[A]],
-                implicitly[SerDe[B]],
-                key,
-                transform,
-                data1.zipWithIndex.filter(_._1._2).map(_._2),
-                maxParallelJoins,
-                numberOfShards,
-                outName,
-                taskID,
-                taskVersion
-              )
-            )(resourceRequest)(tsc)
+    Partial({ case data1 =>
+      resourceRequest =>
+        tsc =>
+          Join.task(taskID, taskVersion)(
+            Join.Input(
+              data1.map(_._1),
+              implicitly[SerDe[A]],
+              implicitly[SerDe[B]],
+              key,
+              transform,
+              data1.zipWithIndex.filter(_._1._2).map(_._2),
+              maxParallelJoins,
+              numberOfShards,
+              outName,
+              taskID,
+              taskVersion
+            )
+          )(resourceRequest)(tsc)
     })
 
 }

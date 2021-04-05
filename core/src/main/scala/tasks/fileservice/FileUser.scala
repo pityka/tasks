@@ -65,8 +65,8 @@ class FileUserSource(
 
     result = Some(
       Success(
-        StreamConverters.fromInputStream(
-          () => java.nio.channels.Channels.newInputStream(pipe.source)
+        StreamConverters.fromInputStream(() =>
+          java.nio.channels.Channels.newInputStream(pipe.source)
         )
       )
     )

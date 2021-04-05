@@ -122,19 +122,17 @@ class FileService(
 
           storage
             .importFile(file, proposedPath)
-            .flatMap {
-              case (length, hash, _, managedFilePath) =>
-                create(length, hash, managedFilePath)
-                  .recover {
-                    case e =>
-                      log.error(
-                        e,
-                        "Error in creation of SharedFile {} {}",
-                        file,
-                        proposedPath
-                      )
-                      throw e
-                  }
+            .flatMap { case (length, hash, _, managedFilePath) =>
+              create(length, hash, managedFilePath)
+                .recover { case e =>
+                  log.error(
+                    e,
+                    "Error in creation of SharedFile {} {}",
+                    file,
+                    proposedPath
+                  )
+                  throw e
+                }
             }
             .pipeTo(sender())
 
@@ -207,15 +205,14 @@ class FileService(
             storage.importFile(file, proposedPath).flatMap {
               case (length, hash, _, managedFilePath) =>
                 create(length, hash, managedFilePath)
-                  .recover {
-                    case e =>
-                      log.error(
-                        e,
-                        "Error in creation of SharedFile {} {}",
-                        file,
-                        proposedPath
-                      )
-                      throw e
+                  .recover { case e =>
+                    log.error(
+                      e,
+                      "Error in creation of SharedFile {} {}",
+                      file,
+                      proposedPath
+                    )
+                    throw e
                   }
 
             } pipeTo filesender

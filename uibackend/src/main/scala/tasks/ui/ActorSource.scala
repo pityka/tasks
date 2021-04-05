@@ -41,11 +41,11 @@ object ActorSource {
     val fw = AS.actorOf(Props[Forwarder]())
     val source = Source
       .actorRef[T](
-        completionMatcher = {
-          case akka.actor.Status.Success => CompletionStrategy.draining
+        completionMatcher = { case akka.actor.Status.Success =>
+          CompletionStrategy.draining
         }: PartialFunction[Any, CompletionStrategy],
-        failureMatcher = {
-          case akka.actor.Status.Failure(e) => e
+        failureMatcher = { case akka.actor.Status.Failure(e) =>
+          e
         }: PartialFunction[Any, Throwable],
         bufferSize = 1000000,
         overflowStrategy = OverflowStrategy.fail

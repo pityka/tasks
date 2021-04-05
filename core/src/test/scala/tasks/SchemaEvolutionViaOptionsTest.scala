@@ -116,7 +116,9 @@ class SchemaEvolutionViaOptionsTestSuite extends FunSuite with Matchers {
 
   test("schema evolution via options should work") {
     SchemaEvolutionViaOptionsTest.run shouldBe 3
-    SchemaEvolutionViaOptionsTest.sideEffect.count(_ == "execution of task") shouldBe 2
+    SchemaEvolutionViaOptionsTest.sideEffect.count(
+      _ == "execution of task"
+    ) shouldBe 2
   }
 
 }

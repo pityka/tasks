@@ -68,8 +68,8 @@ object TaskQueue {
   case class CacheHit(sch: ScheduleTask, result: UntypedResult) extends Event
 }
 
-class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
-    implicit config: TasksConfig
+class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(implicit
+    config: TasksConfig
 ) extends Actor
     with ActorLogging {
 
@@ -162,9 +162,8 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
     def scheduledButSentByADifferentProxy(sch: ScheduleTask, proxy: Proxy) =
       scheduledTasks
         .get(project(sch))
-        .map {
-          case (_, _, proxies, _) =>
-            !proxies.isEmpty && !proxies.contains(proxy)
+        .map { case (_, _, proxies, _) =>
+          !proxies.isEmpty && !proxies.contains(proxy)
         }
         .getOrElse(false)
 
@@ -230,49 +229,46 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
           sender(),
           availableResource,
           state.negotiation,
-          state.queuedTasks.map {
-            case (_, (sch, _)) => (sch.description.taskId, sch.resource)
+          state.queuedTasks.map { case (_, (sch, _)) =>
+            (sch.description.taskId, sch.resource)
           }.toSeq
         )
 
         val launcher = LauncherActor(sender())
 
         state.queuedTasks
-          .filter {
-            case (_, (sch, _)) =>
-              val ret = availableResource.canFulfillRequest(sch.resource)
-              if (!ret) {
-                log.debug(
-                  s"Can't fulfill request ${sch.resource} with available resources $availableResource"
-                )
-              }
-              ret
+          .filter { case (_, (sch, _)) =>
+            val ret = availableResource.canFulfillRequest(sch.resource)
+            if (!ret) {
+              log.debug(
+                s"Can't fulfill request ${sch.resource} with available resources $availableResource"
+              )
+            }
+            ret
           }
           .toSeq
-          .sortBy {
-            case (_, (sch, _)) =>
-              sch.priority.toInt
+          .sortBy { case (_, (sch, _)) =>
+            sch.priority.toInt
           }
           .headOption
-          .foreach {
-            case (_, (sch, _)) =>
-              val withNegotiation = state.update(Negotiating(launcher, sch))
-              log.info(
-                s"Dequeued task ${sch.description.taskId.id} with priority ${sch.priority}. Sending task to $launcher. (Negotation state of queue: ${state.negotiation})"
+          .foreach { case (_, (sch, _)) =>
+            val withNegotiation = state.update(Negotiating(launcher, sch))
+            log.info(
+              s"Dequeued task ${sch.description.taskId.id} with priority ${sch.priority}. Sending task to $launcher. (Negotation state of queue: ${state.negotiation})"
+            )
+
+            val newState = if (!state.knownLaunchers.contains(launcher)) {
+              HeartBeatActor.watch(
+                launcher.actor,
+                LauncherStopped(launcher),
+                self
               )
+              withNegotiation.update(LauncherJoined(launcher))
+            } else withNegotiation
 
-              val newState = if (!state.knownLaunchers.contains(launcher)) {
-                HeartBeatActor.watch(
-                  launcher.actor,
-                  LauncherStopped(launcher),
-                  self
-                )
-                withNegotiation.update(LauncherJoined(launcher))
-              } else withNegotiation
+            context.become(running(newState))
 
-              context.become(running(newState))
-
-              launcher.actor ! Schedule(sch)
+            launcher.actor ! Schedule(sch)
 
           }
       } else {
@@ -295,10 +291,10 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
       )
 
     case wire.TaskDone(
-        sch,
-        resultWithMetadata,
-        elapsedTime,
-        resourceAllocated
+          sch,
+          resultWithMetadata,
+          elapsedTime,
+          resourceAllocated
         ) =>
       log.debug(s"TaskDone $sch $resultWithMetadata")
 
@@ -372,8 +368,8 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
 
     case HowLoadedAreYou =>
       val qs = QueueStat(
-        state.queuedTasks.toList.map {
-          case (_, (sch, _)) => (sch.description.taskId.toString, sch.resource)
+        state.queuedTasks.toList.map { case (_, (sch, _)) =>
+          (sch.description.taskId.toString, sch.resource)
         }.toList,
         state.scheduledTasks.toSeq
           .map(x => x._1.description.taskId.toString -> x._2._2)
@@ -393,7 +389,7 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(
     log.info("TaskQueue stopped.")
   }
 
-  def receive: Receive = {
-    case _ => ???
+  def receive: Receive = { case _ =>
+    ???
   }
 }

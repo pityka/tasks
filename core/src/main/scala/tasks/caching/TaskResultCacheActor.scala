@@ -88,10 +88,9 @@ class TaskResultCacheActor(
       cacheMap
         .set(description, result)(prefix)
         .map(_ => SetDone)
-        .recover {
-          case e =>
-            log.error(e, "Error while saving into cache")
-            SetDone
+        .recover { case e =>
+          log.error(e, "Error while saving into cache")
+          SetDone
         }
         .pipeTo(self)
       sender() ! true
@@ -109,10 +108,9 @@ class TaskResultCacheActor(
       def lookup =
         cacheMap
           .get(scheduleTask.description)(queryFileServicePrefix)
-          .recover {
-            case e =>
-              log.error(e, "Error while looking up in cache")
-              None
+          .recover { case e =>
+            log.error(e, "Error while looking up in cache")
+            None
           }
 
       val answer = for {
@@ -140,17 +138,15 @@ class TaskResultCacheActor(
             val mutableFiles =
               cacheLookup.mutableFiles.toSeq.flatten.map(sf => (sf, false))
             Future
-              .traverse(files ++ mutableFiles) {
-                case (sf, checkContent) =>
-                  SharedFileHelper.isAccessible(sf, checkContent)
+              .traverse(files ++ mutableFiles) { case (sf, checkContent) =>
+                SharedFileHelper.isAccessible(sf, checkContent)
               }
               .map(seq => (seq, seq.forall(identity)))
-              .recover {
-                case e =>
-                  log.warning(
-                    s"Checking: $taskId. Got something ($cacheLookup), but failed to verify after cache with error: $e."
-                  )
-                  (Nil, false)
+              .recover { case e =>
+                log.warning(
+                  s"Checking: $taskId. Got something ($cacheLookup), but failed to verify after cache with error: $e."
+                )
+                (Nil, false)
               }
               .map {
                 case (accessibility, false) =>
@@ -176,10 +172,9 @@ class TaskResultCacheActor(
               }
         }
       } yield answer
-      answer.recover {
-        case e: Exception =>
-          log.error(e, "Cache check failed")
-          throw e
+      answer.recover { case e: Exception =>
+        log.error(e, "Cache check failed")
+        throw e
       }
       answer.pipeTo(savedSender)
 

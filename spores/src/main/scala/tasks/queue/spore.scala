@@ -44,10 +44,13 @@ case class Spore[A, B](fqcn: String, dependencies: Seq[Spore[_, _]]) {
         .asInstanceOf[tasks.queue.SporeFun[A, B]]
     } catch {
       case e: java.lang.NoSuchMethodException =>
-        throw SporeException(s"Available ctors: ${java.lang.Class
-          .forName(fqcn)
-          .getConstructors()
-          .toList}", e)
+        throw SporeException(
+          s"Available ctors: ${java.lang.Class
+            .forName(fqcn)
+            .getConstructors()
+            .toList}",
+          e
+        )
     }
   }
 

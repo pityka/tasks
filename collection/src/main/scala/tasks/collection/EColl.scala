@@ -61,8 +61,8 @@ case class EColl[T](
       range: Range,
       parallelismOfDeserialization: Int = 1,
       parsedIndex: Option[lame.index.Index] = None
-  )(
-      implicit decoder: Deserializer[T],
+  )(implicit
+      decoder: Deserializer[T],
       tsc: TaskSystemComponents
   ) =
     sourceFrom(range.fromIdx, parallelismOfDeserialization, parsedIndex)
@@ -72,8 +72,8 @@ case class EColl[T](
       fromIndex: Long = 0L,
       parallelismOfDeserialization: Int = 1,
       parsedIndex: Option[lame.index.Index] = None
-  )(
-      implicit decoder: Deserializer[T],
+  )(implicit
+      decoder: Deserializer[T],
       tsc: TaskSystemComponents
   ): Source[T, NotUsed] = {
 
@@ -119,8 +119,8 @@ case class EColl[T](
 
   // provide a specialized source for selective column retrieval
 
-  def toSeq(parallelismOfDeserialization: Int)(
-      implicit decoder: Deserializer[T],
+  def toSeq(parallelismOfDeserialization: Int)(implicit
+      decoder: Deserializer[T],
       tsc: TaskSystemComponents
   ): Future[Seq[T]] = {
     implicit val as = tsc.actorsystem
@@ -128,8 +128,8 @@ case class EColl[T](
       .runWith(Sink.seq)
   }
 
-  def take(n: Long, parallelismOfDeserialization: Int)(
-      implicit decoder: Deserializer[T],
+  def take(n: Long, parallelismOfDeserialization: Int)(implicit
+      decoder: Deserializer[T],
       tsc: TaskSystemComponents
   ): Future[Seq[T]] = {
     implicit val as = tsc.actorsystem
@@ -138,8 +138,8 @@ case class EColl[T](
       .runWith(Sink.seq)
   }
 
-  def head(
-      implicit decoder: Deserializer[T],
+  def head(implicit
+      decoder: Deserializer[T],
       tsc: TaskSystemComponents
   ): Future[Option[T]] = {
     implicit val as = tsc.actorsystem

@@ -36,8 +36,8 @@ trait EventListener[-E] {
 }
 
 trait UIComponentBootstrap {
-  def startQueueUI(
-      implicit actorSystem: ActorSystem,
+  def startQueueUI(implicit
+      actorSystem: ActorSystem,
       config: TasksConfig
   ): QueueUI
   def startAppUI(implicit actorSystem: ActorSystem, config: TasksConfig): AppUI

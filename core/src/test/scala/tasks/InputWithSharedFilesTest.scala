@@ -66,14 +66,13 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
     implicit val dec: Decoder[Input3] = deriveDecoder[Input3]
   }
 
-  val task3 = AsyncTask[Input3, SharedFile]("sharedfileinput2", 1) {
-    case _ =>
-      implicit computationEnvironment =>
-        sideEffect += "execution of task 3"
-        for {
-          sf3 <- SharedFile(Source.single(ByteString("abcd")), "f3")
-          r <- Future(sf3)
-        } yield r
+  val task3 = AsyncTask[Input3, SharedFile]("sharedfileinput2", 1) { case _ =>
+    implicit computationEnvironment =>
+      sideEffect += "execution of task 3"
+      for {
+        sf3 <- SharedFile(Source.single(ByteString("abcd")), "f3")
+        r <- Future(sf3)
+      } yield r
   }
 
   val task4 = AsyncTask[SharedFile, SharedFile]("sharedfileinput4", 1) {
@@ -152,10 +151,18 @@ class InputWithSharedFilesTestSuite extends FunSuite with Matchers {
     "a failing task should propagate its exception and not interfere with other tasks"
   ) {
     InputWithSharedFilesTest.run
-    InputWithSharedFilesTest.sideEffect.count(_ == "execution of task 1") shouldBe 2
-    InputWithSharedFilesTest.sideEffect.count(_ == "execution of task 2") shouldBe 1
-    InputWithSharedFilesTest.sideEffect.count(_ == "execution of task 5") shouldBe 0
-    InputWithSharedFilesTest.sideEffect.count(_ == "execution of task 6") shouldBe 1
+    InputWithSharedFilesTest.sideEffect.count(
+      _ == "execution of task 1"
+    ) shouldBe 2
+    InputWithSharedFilesTest.sideEffect.count(
+      _ == "execution of task 2"
+    ) shouldBe 1
+    InputWithSharedFilesTest.sideEffect.count(
+      _ == "execution of task 5"
+    ) shouldBe 0
+    InputWithSharedFilesTest.sideEffect.count(
+      _ == "execution of task 6"
+    ) shouldBe 1
   }
 
 }

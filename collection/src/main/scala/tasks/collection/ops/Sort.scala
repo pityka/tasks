@@ -88,46 +88,46 @@ private[ecoll] object Sort {
                   )
                 )
               }
-            result <- if (sortedPartitions.size == 1)
-              scala.concurrent.Future.successful(sortedPartitions.head)
-            else {
-              implicit val r = serdeA.deser(())
-              implicit val w = serdeA.ser(())
-              implicit val sk = new flatjoin.StringKey[A] {
-                def key(t: A) = fun(t)
-              }
-
-              val fileReader = (f: SharedFile) =>
-                EColl
-                  .decodeFileForFlatJoin(r, sk, resourceAllocated.cpu)(f)(
-                    ctx.components.executionContext,
-                    ctx.components
-                  )
-
-              val source = {
-                implicit val ordering: Ordering[(String, A)] =
-                  Ordering.by(_._1)
-                sortedPartitions.toList
-                  .map(_.data)
-                  .map(fileReader)
-                  .reduce((s1, s2) => s1.mergeSorted(s2))
-                  .map {
-                    case (_, t) =>
-                      t
-                  }
-              }
-
-              for {
-                merged <- {
-
-                  EColl.fromSource(source, outName, resourceAllocated.cpu)(
-                    w,
-                    ctx.components
-                  )
+            result <-
+              if (sortedPartitions.size == 1)
+                scala.concurrent.Future.successful(sortedPartitions.head)
+              else {
+                implicit val r = serdeA.deser(())
+                implicit val w = serdeA.ser(())
+                implicit val sk = new flatjoin.StringKey[A] {
+                  def key(t: A) = fun(t)
                 }
-                _ <- Future.traverse(sortedPartitions)(_.data.delete)
-              } yield merged
-            }
+
+                val fileReader = (f: SharedFile) =>
+                  EColl
+                    .decodeFileForFlatJoin(r, sk, resourceAllocated.cpu)(f)(
+                      ctx.components.executionContext,
+                      ctx.components
+                    )
+
+                val source = {
+                  implicit val ordering: Ordering[(String, A)] =
+                    Ordering.by(_._1)
+                  sortedPartitions.toList
+                    .map(_.data)
+                    .map(fileReader)
+                    .reduce((s1, s2) => s1.mergeSorted(s2))
+                    .map { case (_, t) =>
+                      t
+                    }
+                }
+
+                for {
+                  merged <- {
+
+                    EColl.fromSource(source, outName, resourceAllocated.cpu)(
+                      w,
+                      ctx.components
+                    )
+                  }
+                  _ <- Future.traverse(sortedPartitions)(_.data.delete)
+                } yield merged
+              }
           } yield result
     },
     TaskId(taskId, taskVersion)
@@ -141,22 +141,21 @@ trait SortOps {
       taskVersion: Int,
       outName: Option[String] = None
   )(fun: Spore[A, String]): Partial[EColl[A], EColl[A]] =
-    Partial({
-      case unsorted =>
-        resourceRequest =>
-          tsc =>
-            Sort.task(taskID, taskVersion)(
-              Sort
-                .Input(
-                  unsorted,
-                  implicitly[SerDe[A]],
-                  None,
-                  fun,
-                  outName,
-                  taskID,
-                  taskVersion
-                )
-            )(resourceRequest)(tsc)
+    Partial({ case unsorted =>
+      resourceRequest =>
+        tsc =>
+          Sort.task(taskID, taskVersion)(
+            Sort
+              .Input(
+                unsorted,
+                implicitly[SerDe[A]],
+                None,
+                fun,
+                outName,
+                taskID,
+                taskVersion
+              )
+          )(resourceRequest)(tsc)
     })
 
 }

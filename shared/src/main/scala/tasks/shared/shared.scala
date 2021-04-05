@@ -128,13 +128,12 @@ case class ResourceAvailable(
 
 object ResourceAvailable {
   def zipMultiplicities(l: List[Int]) =
-    l.sorted.foldLeft(List.empty[(Int, Int)]) {
-      case (acc, next) =>
-        acc match {
-          case (last, i) :: _ if last == next => (next, i + 1) :: acc
-          case _                              => (next, 0) :: acc
+    l.sorted.foldLeft(List.empty[(Int, Int)]) { case (acc, next) =>
+      acc match {
+        case (last, i) :: _ if last == next => (next, i + 1) :: acc
+        case _                              => (next, 0) :: acc
 
-        }
+      }
     }
   implicit val decoder: Decoder[ResourceAvailable] =
     deriveDecoder[ResourceAvailable]

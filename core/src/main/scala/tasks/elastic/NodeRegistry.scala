@@ -99,8 +99,8 @@ class NodeRegistry(
     context.become(running(state))
   }
 
-  def receive = {
-    case _ => ???
+  def receive = { case _ =>
+    ???
   }
 
   override def preStart(): Unit = {
@@ -122,14 +122,12 @@ class NodeRegistry(
   override def postStop(): Unit = {
     scheduler.cancel()
     log.info("NodeCreator stopping.")
-    currentState.running.foreach {
-      case (node, _) =>
-        log.info("Shutting down node " + node)
-        shutdownNode.shutdownRunningNode(node)
+    currentState.running.foreach { case (node, _) =>
+      log.info("Shutting down node " + node)
+      shutdownNode.shutdownRunningNode(node)
     }
-    currentState.pending.foreach {
-      case (node, _) =>
-        shutdownNode.shutdownPendingNode(node)
+    currentState.pending.foreach { case (node, _) =>
+      shutdownNode.shutdownPendingNode(node)
     }
     log.info("Shutted down all registered nodes.")
   }
@@ -156,8 +154,9 @@ class NodeRegistry(
 
         val skip = neededNodes.values.sum == 0
         if (!skip) {
-          val canRequest = config.maxNodes > (state.running.size + state.pending.size) &&
-            state.cumulativeRequested <= config.maxNodesCumulative
+          val canRequest =
+            config.maxNodes > (state.running.size + state.pending.size) &&
+              state.cumulativeRequested <= config.maxNodesCumulative
           if (!canRequest) {
             log.info(
               "New node request will not proceed: pending nodes or reached max nodes. max: " + config.maxNodes + ", pending: " + state.pending.size + ", running: " + state.running.size

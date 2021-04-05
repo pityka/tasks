@@ -112,24 +112,23 @@ object ResultWithSharedFilesTest extends TestHelpers {
 
       for {
         l <- Future.sequence(fs)
-      } yield
-        Output(
-          l(0),
-          l(1),
-          l(2),
-          Intermediate(l(3)),
-          List(Intermediate(l(4))),
-          List(List(Intermediate(l(5)))),
-          OtherCollection(Intermediate(l(6))),
-          OtherCollection(Intermediate(l(16))),
-          OtherCollection(Intermediate(l(15))),
-          IntermediateMutable(l(7), Some(l(8))),
-          Seq(IntermediateMutable(l(9), Some(l(10)))),
-          Some(l(11)),
-          Some(Intermediate(l(12))),
-          IntermediateMutable(l(13), Some(l(14))),
-          Map("1" -> Intermediate(l(17)))
-        )
+      } yield Output(
+        l(0),
+        l(1),
+        l(2),
+        Intermediate(l(3)),
+        List(Intermediate(l(4))),
+        List(List(Intermediate(l(5)))),
+        OtherCollection(Intermediate(l(6))),
+        OtherCollection(Intermediate(l(16))),
+        OtherCollection(Intermediate(l(15))),
+        IntermediateMutable(l(7), Some(l(8))),
+        Seq(IntermediateMutable(l(9), Some(l(10)))),
+        Some(l(11)),
+        Some(Intermediate(l(12))),
+        IntermediateMutable(l(13), Some(l(14))),
+        Map("1" -> Intermediate(l(17)))
+      )
   }
 
   def run = {
@@ -149,13 +148,12 @@ object ResultWithSharedFilesTest extends TestHelpers {
         t1Files <- Future.sequence(getFiles(t1))
         t2 <- f2
         t2Files <- Future.sequence(getFiles(t2))
-      } yield
-        (
-          t1Files,
-          t2Files,
-          t1.mutableFiles.map(_.name),
-          t1.immutableFiles.map(_.name)
-        )
+      } yield (
+        t1Files,
+        t2Files,
+        t1.mutableFiles.map(_.name),
+        t1.immutableFiles.map(_.name)
+      )
 
       await(future)
 
@@ -170,13 +168,14 @@ class WithSharedFilesTestSuite extends FunSuite with Matchers {
     val (t1Files, t2Files, t1MutablesFiles, t1ImmutablesFiles) =
       ResultWithSharedFilesTest.run.get
     t1Files.distinct.size shouldBe 18
-    (t1Files zip t2Files) foreach {
-      case (f1, f2) =>
-        f1 shouldBe f2
-        f1.length shouldBe f2.length
-        f1.length > 0 shouldBe true
+    (t1Files zip t2Files) foreach { case (f1, f2) =>
+      f1 shouldBe f2
+      f1.length shouldBe f2.length
+      f1.length > 0 shouldBe true
     }
-    ResultWithSharedFilesTest.sideEffect.count(_ == "execution of task") shouldBe 1
+    ResultWithSharedFilesTest.sideEffect.count(
+      _ == "execution of task"
+    ) shouldBe 1
     t1MutablesFiles.sorted shouldBe Seq("f11", "f14", "f15", "f16", "f3", "f9")
     t1ImmutablesFiles.sorted shouldBe Seq(
       "f1",
