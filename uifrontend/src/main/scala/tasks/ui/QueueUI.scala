@@ -40,9 +40,8 @@ object QueueMain {
     val websocket = WebSocketHelper.open(s"ws://$host/states")
 
     val uiStateSource = websocket.events
-      .map(
-        wsMessage =>
-          io.circe.parser.decode[UIQueueState](wsMessage).toOption.get
+      .map(wsMessage =>
+        io.circe.parser.decode[UIQueueState](wsMessage).toOption.get
       )
 
     val knownLaunchersTable = {
@@ -170,18 +169,17 @@ object QueueMain {
           ),
           tbody(
             uiState.queuedTasks.toSeq.zipWithIndex
-              .map {
-                case (taskDescription, idx) =>
-                  tr(
-                    td(cls := "collapsing", idx),
-                    td(
-                      cls := "collapsing",
-                      taskDescription.taskId.id + " @" + taskDescription.taskId.version
-                    ),
-                    td(
-                      code(prettyJson(taskDescription.input))
-                    )
+              .map { case (taskDescription, idx) =>
+                tr(
+                  td(cls := "collapsing", idx),
+                  td(
+                    cls := "collapsing",
+                    taskDescription.taskId.id + " @" + taskDescription.taskId.version
+                  ),
+                  td(
+                    code(prettyJson(taskDescription.input))
                   )
+                )
               }
               .take(10)
           )

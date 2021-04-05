@@ -86,21 +86,20 @@ trait SimpleMapOps {
       taskVersion: Int,
       outName: Option[String] = None
   )(fun: Spore[A, B]): Partial[EColl[A], EColl[B]] =
-    Partial(
-      data =>
-        resourceRequest =>
-          tsc =>
-            SimpleMap.task(taskID, taskVersion)(
-              SimpleMap.Input(
-                data,
-                implicitly[SerDe[A]],
-                implicitly[SerDe[B]],
-                None,
-                fun,
-                outName,
-                taskID,
-                taskVersion
-              )
-            )(resourceRequest)(tsc)
+    Partial(data =>
+      resourceRequest =>
+        tsc =>
+          SimpleMap.task(taskID, taskVersion)(
+            SimpleMap.Input(
+              data,
+              implicitly[SerDe[A]],
+              implicitly[SerDe[B]],
+              None,
+              fun,
+              outName,
+              taskID,
+              taskVersion
+            )
+          )(resourceRequest)(tsc)
     )
 }

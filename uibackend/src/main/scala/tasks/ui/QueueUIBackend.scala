@@ -71,11 +71,11 @@ class QueueUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
       path("states") {
         val source = Source
           .actorRef[UIQueueState](
-            completionMatcher = {
-              case akka.actor.Status.Success => CompletionStrategy.draining
+            completionMatcher = { case akka.actor.Status.Success =>
+              CompletionStrategy.draining
             }: PartialFunction[Any, CompletionStrategy],
-            failureMatcher = {
-              case akka.actor.Status.Failure(e) => e
+            failureMatcher = { case akka.actor.Status.Failure(e) =>
+              e
             }: PartialFunction[Any, Throwable],
             bufferSize = 100,
             overflowStrategy = OverflowStrategy.dropTail
@@ -86,9 +86,8 @@ class QueueUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
           }
           .viaMat(stateToTextMessage)(Keep.left)
           .watchTermination() { (actorRef, terminationFuture) =>
-            terminationFuture.foreach {
-              case akka.Done =>
-                multiplex ! Multiplex.Unsubscribe(actorRef)
+            terminationFuture.foreach { case akka.Done =>
+              multiplex ! Multiplex.Unsubscribe(actorRef)
             }
           }
         handleWebSocketMessages(Flow.fromSinkAndSource(Sink.ignore, source))
@@ -118,11 +117,10 @@ class QueueUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
   private val bindingFuture =
     Http().newServerAt(config.uiServerHost, config.uiServerPort).bind(route)
 
-  bindingFuture.andThen {
-    case scala.util.Success(serverBinding) =>
-      log.info(
-        s"Started UI queue backend http server at ${serverBinding.localAddress}"
-      )
+  bindingFuture.andThen { case scala.util.Success(serverBinding) =>
+    log.info(
+      s"Started UI queue backend http server at ${serverBinding.localAddress}"
+    )
   }
 
   def tasksQueueEventListener: EventListener[TaskQueue.Event] =

@@ -114,32 +114,30 @@ object Fib {
     * and the body of the task is running.
     */
   val fibtask: TaskDefinition[FibInput, Int] =
-    AsyncTask[FibInput, Int]("fib", 1) {
+    AsyncTask[FibInput, Int]("fib", 1) { case FibInput(n) =>
+      implicit cxt =>
+        n match {
+          case 0 => Future.successful(0)
+          case 1 => Future.successful(1)
+          case n => {
 
-      case FibInput(n) =>
-        implicit cxt =>
-          n match {
-            case 0 => Future.successful(0)
-            case 1 => Future.successful(1)
-            case n => {
+            val f1 = fibtask(FibInput(n - 1))(ResourceRequest(1, 1, 1))
+            val f2 = fibtask(FibInput(n - 2))(ResourceRequest(1, 1, 1))
 
-              val f1 = fibtask(FibInput(n - 1))(ResourceRequest(1, 1, 1))
-              val f2 = fibtask(FibInput(n - 2))(ResourceRequest(1, 1, 1))
+            val f3: Future[Int] = for {
+              r1 <- f1
+              r2 <- f2
+              r3 <- reduce(FibReduce(r1, r2))(ResourceRequest(1, 1, 1))
 
-              val f3: Future[Int] = for {
-                r1 <- f1
-                r2 <- f2
-                r3 <- reduce(FibReduce(r1, r2))(ResourceRequest(1, 1, 1))
+            } yield r3
 
-              } yield r3
+            releaseResources
 
-              releaseResources
-
-              f3
-
-            }
+            f3
 
           }
+
+        }
 
     }
 
@@ -150,10 +148,10 @@ object PiApp extends App {
   import PiTasks._
   import Fib._
 
-  /**
-    *Opens and closes a TaskSystem with default configuration
+  /** Opens and closes a TaskSystem with default configuration
     * On a slave node, the block is not executed,
-    * but it starts pulling jobs from the queue  */
+    * but it starts pulling jobs from the queue
+    */
   withTaskSystem { implicit ts =>
     val numTasks = 100
 

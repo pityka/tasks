@@ -183,7 +183,9 @@ class TransferSpec
       expectMsg(100 millis, FileSaved())
       writeablechannel.close
 
-      readBinaryStream(java.nio.channels.Channels.newInputStream(pipe.source)).toVector should equal(
+      readBinaryStream(
+        java.nio.channels.Channels.newInputStream(pipe.source)
+      ).toVector should equal(
         data.toVector
       )
 

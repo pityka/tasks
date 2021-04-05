@@ -226,8 +226,8 @@ class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig)
   }
 }
 
-class EC2CreateNodeFactory(
-    implicit config: TasksConfig,
+class EC2CreateNodeFactory(implicit
+    config: TasksConfig,
     ec2: AmazonEC2Client,
     elasticSupport: ElasticSupportFqcn
 ) extends CreateNodeFactory {

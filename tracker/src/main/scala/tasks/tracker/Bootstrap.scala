@@ -29,8 +29,8 @@ import tasks.util.config.TasksConfig
 
 /* Do not change the fqcn of this object! See core/Tracker.scala */
 object TrackerBootstrapImpl extends TrackerBootstrap {
-  def start(
-      implicit actorSystem: ActorSystem,
+  def start(implicit
+      actorSystem: ActorSystem,
       config: TasksConfig
   ): TrackerImpl =
     new TrackerImpl

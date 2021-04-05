@@ -42,8 +42,8 @@ import tasks.fileservice.{
   SharedFileHelper
 }
 
-private[tasks] class SharedFileCache(
-    implicit fileServiceComponent: FileServiceComponent,
+private[tasks] class SharedFileCache(implicit
+    fileServiceComponent: FileServiceComponent,
     AS: ActorSystem,
     EC: ExecutionContext,
     config: TasksConfig
@@ -74,19 +74,17 @@ private[tasks] class SharedFileCache(
             .runFold(ByteString.empty)(_ ++ _)
             .map { byteString =>
               val t = Try(deserializeResult(byteString.toArray))
-              t.failed.foreach {
-                case e: Exception =>
-                  logger.debug(s"Failed to deserialize due to $e")
+              t.failed.foreach { case e: Exception =>
+                logger.debug(s"Failed to deserialize due to $e")
               }
               t.toOption
             }
-            .recover {
-              case e =>
-                logger.error(
-                  e,
-                  s"Failed to locate cached result file: $fileName"
-                )
-                None
+            .recover { case e =>
+              logger.error(
+                e,
+                s"Failed to locate cached result file: $fileName"
+              )
+              None
             }
       }
 
@@ -107,13 +105,14 @@ private[tasks] class SharedFileCache(
             Source.single(ByteString(value)),
             name = "__meta__result__" + hash
           )
-        _ <- if (config.saveTaskDescriptionInCache)
-          SharedFileHelper
-            .createFromSource(
-              Source.single(ByteString(key)),
-              name = "__meta__input__" + hash
-            )
-        else Future.successful(())
+        _ <-
+          if (config.saveTaskDescriptionInCache)
+            SharedFileHelper
+              .createFromSource(
+                Source.single(ByteString(key)),
+                name = "__meta__input__" + hash
+              )
+          else Future.successful(())
       } yield ()
 
     } catch {

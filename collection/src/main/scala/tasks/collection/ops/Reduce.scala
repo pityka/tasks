@@ -96,20 +96,19 @@ trait ReduceOps {
   )(
       fun: Spore[(A, A), A]
   ): Partial[EColl[A], EColl[A]] =
-    Partial(
-      data =>
-        resourceRequest =>
-          tsc =>
-            Reduce.task(taskID, taskVersion)(
-              Reduce.Input(
-                data,
-                implicitly[SerDe[A]],
-                None,
-                fun,
-                outName,
-                taskID,
-                taskVersion
-              )
-            )(resourceRequest)(tsc)
+    Partial(data =>
+      resourceRequest =>
+        tsc =>
+          Reduce.task(taskID, taskVersion)(
+            Reduce.Input(
+              data,
+              implicitly[SerDe[A]],
+              None,
+              fun,
+              outName,
+              taskID,
+              taskVersion
+            )
+          )(resourceRequest)(tsc)
     )
 }

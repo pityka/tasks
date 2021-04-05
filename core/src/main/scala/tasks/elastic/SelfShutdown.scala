@@ -50,10 +50,9 @@ class SelfShutdown(
     HeartBeatActor.watch(queueActor.actor, QueueLostOrStopped, self)
   }
 
-  def receive = {
-    case QueueLostOrStopped =>
-      log.error("QueueLostOrStopped received. Shutting down.")
-      shutdown()
+  def receive = { case QueueLostOrStopped =>
+    log.error("QueueLostOrStopped received. Shutting down.")
+    shutdown()
 
   }
 }

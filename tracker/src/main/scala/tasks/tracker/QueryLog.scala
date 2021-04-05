@@ -75,31 +75,28 @@ object QueryLog {
       }
       .filter(_.toOption.isDefined)
       .map(_.toOption.get)
-      .filterNot(
-        elem =>
-          if (excludeTaskIds.isEmpty) false
-          else excludeTaskIds.contains(elem.taskId.id)
+      .filterNot(elem =>
+        if (excludeTaskIds.isEmpty) false
+        else excludeTaskIds.contains(elem.taskId.id)
       )
-      .filter(
-        elem =>
-          if (includeTaskIds.isEmpty) true
-          else includeTaskIds.contains(elem.taskId.id)
+      .filter(elem =>
+        if (includeTaskIds.isEmpty) true
+        else includeTaskIds.contains(elem.taskId.id)
       )
       .filter(elem => elem.metadata.isDefined)
-      .map(
-        elem =>
-          RawNode(
-            elem.taskId.id,
-            elem.labels,
-            "root" +: elem.metadata.get.lineage.lineage.map(_.toString),
-            elem.resource,
-            elem.elapsedTime,
-            elem.metadata.toSeq
-              .flatMap(_.dependencies.flatMap(_.context.toSeq.collect {
-                case h: tasks.fileservice.HistoryContextImpl => h.traceId.toList
-              }.flatten))
-              .distinct
-          )
+      .map(elem =>
+        RawNode(
+          elem.taskId.id,
+          elem.labels,
+          "root" +: elem.metadata.get.lineage.lineage.map(_.toString),
+          elem.resource,
+          elem.elapsedTime,
+          elem.metadata.toSeq
+            .flatMap(_.dependencies.flatMap(_.context.toSeq.collect {
+              case h: tasks.fileservice.HistoryContextImpl => h.traceId.toList
+            }.flatten))
+            .distinct
+        )
       )
       .toList
 
@@ -112,7 +109,8 @@ object QueryLog {
         if (node.pathFromRoot.size > 2)
           node.pathFromRoot.drop(1).sliding(2).toList.map { group =>
             (group(0) -> group(1))
-          } else Nil
+          }
+        else Nil
       }
       .groupBy(_._1)
     tree.map { raw =>
@@ -132,8 +130,8 @@ object QueryLog {
 
   private def topologicalSort(nodes: Seq[Node]): Seq[Node] = {
     val byId = nodes.groupBy(_.id)
-    val forwardEdges = byId.map {
-      case (id, group) => (id, group.head.bothChildren)
+    val forwardEdges = byId.map { case (id, group) =>
+      (id, group.head.bothChildren)
     }
     var order = List.empty[Node]
     var marks = Set.empty[String]
@@ -147,10 +145,10 @@ object QueryLog {
           ()
         } else {
           currentParents = currentParents + n.id
-          val children = forwardEdges.get(n.id).toSeq.flatten.flatMap {
-            childrenId =>
+          val children =
+            forwardEdges.get(n.id).toSeq.flatten.flatMap { childrenId =>
               byId(childrenId)
-          }
+            }
           children.foreach(visit)
           currentParents = currentParents - n.id
           marks = marks + n.id
@@ -196,23 +194,21 @@ object QueryLog {
 
   def recursiveChildrenBothTypes(tree: Seq[Node]): Map[String, Seq[String]] = {
     val sorted = topologicalSort(tree).reverse
-    sorted.foldLeft(Map.empty[String, Seq[String]]) {
-      case (map, elem) =>
-        val allChildren = (elem.bothChildren ++ elem.bothChildren.flatMap(
-          ch => map.get(ch).toSeq.flatten
-        )).distinct
-        map.updated(elem.id, allChildren)
+    sorted.foldLeft(Map.empty[String, Seq[String]]) { case (map, elem) =>
+      val allChildren = (elem.bothChildren ++ elem.bothChildren.flatMap(ch =>
+        map.get(ch).toSeq.flatten
+      )).distinct
+      map.updated(elem.id, allChildren)
     }
   }
   def recursiveChildren(tree: Seq[Node]): Map[String, Seq[String]] = {
     val sorted = topologicalSort(tree).reverse
-    sorted.foldLeft(Map.empty[String, Seq[String]]) {
-      case (map, elem) =>
-        val allChildren =
-          (elem.directChildren ++ elem.directChildren.flatMap(
-            ch => map.get(ch).toSeq.flatten
-          )).distinct
-        map.updated(elem.id, allChildren)
+    sorted.foldLeft(Map.empty[String, Seq[String]]) { case (map, elem) =>
+      val allChildren =
+        (elem.directChildren ++ elem.directChildren.flatMap(ch =>
+          map.get(ch).toSeq.flatten
+        )).distinct
+      map.updated(elem.id, allChildren)
     }
   }
 
@@ -235,7 +231,8 @@ object QueryLog {
           }
       ).getOrElse(0d)
 
-      val wallClockTime0 = node.elapsedTime.toDouble + maxWallClockTimeOfChildren
+      val wallClockTime0 =
+        node.elapsedTime.toDouble + maxWallClockTimeOfChildren
 
       val cpuNeed0 = {
         val dependentsNeededToComplete =
@@ -247,9 +244,10 @@ object QueryLog {
         else List(node)
       }
 
-      val cpuTime0 = node.elapsedTime.toDouble * node.resource.cpu + allChildren(
-        node.id
-      ).map(byId).map(n => n.elapsedTime.toDouble * n.resource.cpu).sum
+      val cpuTime0 =
+        node.elapsedTime.toDouble * node.resource.cpu + allChildren(
+          node.id
+        ).map(byId).map(n => n.elapsedTime.toDouble * n.resource.cpu).sum
 
       wallClockTime.update(node.id, wallClockTime0)
       cpuNeed.update(node.id, cpuNeed0)
@@ -280,23 +278,21 @@ object QueryLog {
       else {
         val dataChildrenByTaskId =
           parent.dataChildren.map(byId).groupBy(_.taskId)
-        val data1 = dataChildrenByTaskId.flatMap {
-          case (_, group) =>
-            val head = group.sortBy(_.id).head
-            group.sortBy(_.id).drop(1).foreach { n =>
-              blacklist += n.id
-            }
-            List.fill(group.size)(head.id)
+        val data1 = dataChildrenByTaskId.flatMap { case (_, group) =>
+          val head = group.sortBy(_.id).head
+          group.sortBy(_.id).drop(1).foreach { n =>
+            blacklist += n.id
+          }
+          List.fill(group.size)(head.id)
         }
         val directChildrenByTaskId =
           parent.directChildren.map(byId).groupBy(_.taskId)
-        val direct1 = directChildrenByTaskId.flatMap {
-          case (_, group) =>
-            val head = group.sortBy(_.id).head
-            group.sortBy(_.id).drop(1).foreach { n =>
-              blacklist += n.id
-            }
-            List.fill(group.size)(head.id)
+        val direct1 = directChildrenByTaskId.flatMap { case (_, group) =>
+          val head = group.sortBy(_.id).head
+          group.sortBy(_.id).drop(1).foreach { n =>
+            blacklist += n.id
+          }
+          List.fill(group.size)(head.id)
         }
         List(
           parent
@@ -309,10 +305,9 @@ object QueryLog {
 
   def ancestorsFinished(tree: Seq[RawNode]) = {
     val ids = tree.groupBy(_.id).map { case (id, nodes) => (id, nodes.head) }
-    tree.filter(
-      node =>
-        node.pathFromRoot
-          .forall(id => ids.contains(id) || node.pathFromRoot.head == id)
+    tree.filter(node =>
+      node.pathFromRoot
+        .forall(id => ids.contains(id) || node.pathFromRoot.head == id)
     )
   }
 
@@ -324,54 +319,53 @@ object QueryLog {
 
   def dot(s: Seq[Node], seconds: Boolean) = {
     val nodelist = s
-      .map {
-        case node =>
-          val labels = node.labels.values.toMap
-          val cpuTime = labels(cpuTimeKey).toDouble
-          val wallClockTime = labels(wallClockTimeKey).toDouble
-          val cpuNeed = labels(cpuNeedKey).toDouble
+      .map { case node =>
+        val labels = node.labels.values.toMap
+        val cpuTime = labels(cpuTimeKey).toDouble
+        val wallClockTime = labels(wallClockTimeKey).toDouble
+        val cpuNeed = labels(cpuNeedKey).toDouble
 
-          val timeUnit = if (seconds) "s" else "h"
+        val timeUnit = if (seconds) "s" else "h"
 
-          s""""${node.id}" [label="${node.taskId}(${formatTime(
-            node.elapsedTime.toDouble,
-            seconds
-          )}$timeUnit,${formatTime(wallClockTime, seconds)}wc$timeUnit,${formatTime(
-            cpuTime,
-            seconds
-          )}c$timeUnit,${node.resource.cpu}c,${cpuNeed}C)"] """
+        s""""${node.id}" [label="${node.taskId}(${formatTime(
+          node.elapsedTime.toDouble,
+          seconds
+        )}$timeUnit,${formatTime(
+          wallClockTime,
+          seconds
+        )}wc$timeUnit,${formatTime(
+          cpuTime,
+          seconds
+        )}c$timeUnit,${node.resource.cpu}c,${cpuNeed}C)"] """
       }
       .mkString(";")
     val edgelist = s
-      .flatMap {
-        case parent =>
-          val directEdges = parent.directChildren
-            .map { directChild =>
-              (parent.id, directChild)
-            }
-            .groupBy(identity)
-            .toSeq
-            .map {
-              case ((parent, child), group) =>
-                val multiplicityLabel =
-                  if (group.size < 2) "" else "[label= \"" + group.size + "x\"]"
-                s""""${parent}" -> "${child}" $multiplicityLabel """
-            }
-          val dataEdges = parent.dataChildren
-            .map { directChild =>
-              (parent.id, directChild)
-            }
-            .groupBy(identity)
-            .toSeq
-            .map {
-              case ((parent, child), group) =>
-                val multiplicityLabel =
-                  if (group.size < 2) "[color=\"red\"]"
-                  else "[color=\"red\" label= \"" + group.size + "x\"]"
-                s""""${parent}" -> "${child}" $multiplicityLabel """
-            }
+      .flatMap { case parent =>
+        val directEdges = parent.directChildren
+          .map { directChild =>
+            (parent.id, directChild)
+          }
+          .groupBy(identity)
+          .toSeq
+          .map { case ((parent, child), group) =>
+            val multiplicityLabel =
+              if (group.size < 2) "" else "[label= \"" + group.size + "x\"]"
+            s""""${parent}" -> "${child}" $multiplicityLabel """
+          }
+        val dataEdges = parent.dataChildren
+          .map { directChild =>
+            (parent.id, directChild)
+          }
+          .groupBy(identity)
+          .toSeq
+          .map { case ((parent, child), group) =>
+            val multiplicityLabel =
+              if (group.size < 2) "[color=\"red\"]"
+              else "[color=\"red\" label= \"" + group.size + "x\"]"
+            s""""${parent}" -> "${child}" $multiplicityLabel """
+          }
 
-          directEdges ++ dataEdges
+        directEdges ++ dataEdges
       }
       .mkString(";")
 

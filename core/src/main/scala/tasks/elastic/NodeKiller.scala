@@ -98,9 +98,11 @@ class NodeKiller(
     case TargetStopped =>
       shutdown()
     case MeasureTime =>
-      if (targetIsIdle &&
-          (System
-            .nanoTime() - lastIdleSessionStart) >= config.idleNodeTimeout.toNanos) {
+      if (
+        targetIsIdle &&
+        (System
+          .nanoTime() - lastIdleSessionStart) >= config.idleNodeTimeout.toNanos
+      ) {
         try {
           log.info(
             "Target is idle. Start shutdown sequence. Send PrepareForShutdown to " + targetLauncherActor

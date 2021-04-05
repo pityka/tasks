@@ -34,8 +34,8 @@ import scala.concurrent.{ExecutionContext, Future}
 import tasks.util.Uri
 import akka.http.scaladsl.Http
 
-class StreamHelper(s3stream: Option[S3ClientSupport])(
-    implicit as: ActorSystem,
+class StreamHelper(s3stream: Option[S3ClientSupport])(implicit
+    as: ActorSystem,
     actorMaterializer: Materializer,
     ec: ExecutionContext
 ) {
@@ -73,9 +73,8 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
 
     def getRangeOnce(range: headers.ByteRange) =
       Source
-        .lazyFuture(
-          () =>
-            queue(HttpRequest(uri = uri.akka).addHeader(headers.`Range`(range)))
+        .lazyFuture(() =>
+          queue(HttpRequest(uri = uri.akka).addHeader(headers.`Range`(range)))
         )
         .map(_.entity.dataBytes)
         .flatMapConcat(identity)
@@ -123,30 +122,29 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
 
     def makeParts(contentLength: Long) = {
 
-      val intervals = 0L until contentLength by partSize map (
-          s => (s, math.min(contentLength, s + partSize))
+      val intervals = 0L until contentLength by partSize map (s =>
+        (s, math.min(contentLength, s + partSize))
       )
 
       intervals
-        .map {
-          case (startIdx, openEndIdx) =>
-            () => {
-              val rangeHeader = headers.ByteRange(startIdx, openEndIdx - 1)
-              tasks.util.retryFuture(s"$uri @($startIdx-${openEndIdx - 1})")(
-                getRangeOnce(rangeHeader)
-                  .runFold(ByteString())(_ ++ _)
-                  .map { data =>
-                    val expectedLength = openEndIdx - startIdx
-                    if (data.size != expectedLength)
-                      throw new RuntimeException(
-                        s"Expected download length does not match. Got ${data.size} for header $rangeHeader."
-                      )
+        .map { case (startIdx, openEndIdx) =>
+          () => {
+            val rangeHeader = headers.ByteRange(startIdx, openEndIdx - 1)
+            tasks.util.retryFuture(s"$uri @($startIdx-${openEndIdx - 1})")(
+              getRangeOnce(rangeHeader)
+                .runFold(ByteString())(_ ++ _)
+                .map { data =>
+                  val expectedLength = openEndIdx - startIdx
+                  if (data.size != expectedLength)
+                    throw new RuntimeException(
+                      s"Expected download length does not match. Got ${data.size} for header $rangeHeader."
+                    )
 
-                    data
-                  },
-                retries
-              )
-            }
+                  data
+                },
+              retries
+            )
+          }
         }
     }
 
@@ -159,16 +157,15 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(
         .async
 
     Source
-      .lazyFuture(
-        () =>
-          getHeader.map {
-            case (Some(contentLength), true) =>
-              log.debug(s"Fetching $uri by parts.")
-              byPartsWithRetry(contentLength)
-            case _ =>
-              log.debug(s"Fetching $uri by one request.")
-              bySingleRequest
-          }
+      .lazyFuture(() =>
+        getHeader.map {
+          case (Some(contentLength), true) =>
+            log.debug(s"Fetching $uri by parts.")
+            byPartsWithRetry(contentLength)
+          case _ =>
+            log.debug(s"Fetching $uri by one request.")
+            bySingleRequest
+        }
       )
       .flatMapConcat(identity)
 

@@ -79,14 +79,13 @@ object UIBackendTest extends TestHelpersUI {
         t3 <- f3
       } yield t1 + t2 + t3
 
-      WebSocketClient.make("ws://localhost:28880/states")(
-        frame =>
-          synchronized {
-            websocketContents += io.circe.parser
-              .decode[UIQueueState](frame)
-              .toOption
-              .get
-          }
+      WebSocketClient.make("ws://localhost:28880/states")(frame =>
+        synchronized {
+          websocketContents += io.circe.parser
+            .decode[UIQueueState](frame)
+            .toOption
+            .get
+        }
       )
 
       Await.result(future, atMost = 30 seconds)

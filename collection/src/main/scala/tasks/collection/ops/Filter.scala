@@ -90,20 +90,19 @@ trait FilterOps {
   )(
       fun: Spore[A, Boolean]
   ): Partial[EColl[A], EColl[A]] =
-    Partial(
-      data =>
-        resourceRequest =>
-          tsc =>
-            Filter.task(taskID, taskVersion)(
-              Filter.Input(
-                data,
-                implicitly[SerDe[A]],
-                None,
-                fun,
-                outName,
-                taskID,
-                taskVersion
-              )
-            )(resourceRequest)(tsc)
+    Partial(data =>
+      resourceRequest =>
+        tsc =>
+          Filter.task(taskID, taskVersion)(
+            Filter.Input(
+              data,
+              implicitly[SerDe[A]],
+              None,
+              fun,
+              outName,
+              taskID,
+              taskVersion
+            )
+          )(resourceRequest)(tsc)
     )
 }
