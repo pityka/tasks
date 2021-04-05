@@ -111,7 +111,7 @@ lazy val core = project
       "com.typesafe" % "config" % "1.4.0",
       "io.github.pityka" %% "selfpackage" % "1.2.5",
       "io.github.pityka" %% "s3-stream-fork" % "0.0.8",
-      "org.scalatest" %% "scalatest" % "3.2.5" % "test",
+      "org.scalatest" %% "scalatest" % "3.2.7" % "test",
       "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value
     )
@@ -157,7 +157,7 @@ lazy val tracker = project
   .settings(
     name := "tasks-tracker",
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.5" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.7" % "test"
     ),
     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
   )
@@ -169,7 +169,7 @@ lazy val uibackend = project
   .settings(
     name := "tasks-ui-backend",
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.5" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.7" % "test"
     ),
     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
   )
@@ -221,7 +221,7 @@ lazy val jsoniter = project
     libraryDependencies ++= Seq(
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % jsoniterVersion % Compile,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % Provided,
-      "org.scalatest" %% "scalatest" % "3.2.5" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.7" % "test"
     )
   )
   .dependsOn(core)
@@ -234,7 +234,7 @@ lazy val ecoll = project
     libraryDependencies ++= Seq(
       "io.github.pityka" %% "flatjoin-akka-stream" % "0.0.17",
       "io.github.pityka" %% "lame-bgzip-index" % "0.0.4",
-      "org.scalatest" %% "scalatest" % "3.2.5" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.7" % "test"
     )
   )
   .dependsOn(core)
