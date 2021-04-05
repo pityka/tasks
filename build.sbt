@@ -112,7 +112,7 @@ lazy val core = project
       "io.github.pityka" %% "selfpackage" % "1.2.5",
       "io.github.pityka" %% "s3-stream-fork" % "0.0.8",
       "org.scalatest" %% "scalatest" % "3.2.7" % "test",
-      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
+      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.3",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value
     )
   )
