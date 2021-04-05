@@ -51,17 +51,17 @@ private[ecoll] object GenericMap2 {
       spore(() => implicitly[Serializer[EColl[C]]]),
       spore[Input[A, B, C], ComputationEnvironment => Future[EColl[C]]] {
         case Input(
-            data1,
-            data2,
-            serdeA,
-            serdeB,
-            serdeC,
-            mayRange,
-            fun,
-            _,
-            outName,
-            taskId,
-            _
+              data1,
+              data2,
+              serdeA,
+              serdeB,
+              serdeC,
+              mayRange,
+              fun,
+              _,
+              outName,
+              taskId,
+              _
             ) =>
           implicit ctx =>
             val range = mayRange.get
@@ -166,25 +166,24 @@ trait GenericMap2Ops {
         Source[C, NotUsed]
       ]
   ): Partial[(EColl[A], EColl[B]), EColl[C]] =
-    Partial({
-      case (data1, data2) =>
-        resourceRequest =>
-          tsc =>
-            GenericMap2.task(taskID, taskVersion)(
-              GenericMap2.Input(
-                data1,
-                data2,
-                implicitly[SerDe[A]],
-                implicitly[SerDe[B]],
-                implicitly[SerDe[C]],
-                None,
-                fun,
-                parallelize,
-                outName,
-                taskID,
-                taskVersion
-              )
-            )(resourceRequest)(tsc)
+    Partial({ case (data1, data2) =>
+      resourceRequest =>
+        tsc =>
+          GenericMap2.task(taskID, taskVersion)(
+            GenericMap2.Input(
+              data1,
+              data2,
+              implicitly[SerDe[A]],
+              implicitly[SerDe[B]],
+              implicitly[SerDe[C]],
+              None,
+              fun,
+              parallelize,
+              outName,
+              taskID,
+              taskVersion
+            )
+          )(resourceRequest)(tsc)
     })
 
 }

@@ -74,8 +74,8 @@ class FileServiceSpec
   implicit val sh = new StreamHelper(None)
 
   implicit val tconfig = tasks.util.config
-    .parse(
-      () => ConfigFactory.load().withFallback(ConfigFactory.load("akka.conf"))
+    .parse(() =>
+      ConfigFactory.load().withFallback(ConfigFactory.load("akka.conf"))
     )
 
   val remoteStore = new RemoteFileStorage
@@ -126,7 +126,9 @@ class FileServiceSpec
         30 seconds
       )
 
-      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).toVector should equal(
+      readBinaryFile(
+        new java.io.File(folder, "proba").getCanonicalPath
+      ).toVector should equal(
         data.toVector
       )
     }
@@ -159,7 +161,9 @@ class FileServiceSpec
         atMost = Duration.Inf
       )
 
-      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).toVector should equal(
+      readBinaryFile(
+        new java.io.File(folder, "proba").getCanonicalPath
+      ).toVector should equal(
         data.toVector
       )
     }
@@ -188,7 +192,9 @@ class FileServiceSpec
       implicit val historyContext = tasks.fileservice.NoHistory
       SharedFileHelper.createFromFile(input, "proba", false)
 
-      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).toVector should equal(
+      readBinaryFile(
+        new java.io.File(folder, "proba").getCanonicalPath
+      ).toVector should equal(
         data.toVector
       )
     }
@@ -217,7 +223,9 @@ class FileServiceSpec
       implicit val historyContext = tasks.fileservice.NoHistory
       SharedFileHelper.createFromFile(input, "proba", false)
 
-      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).toVector should equal(
+      readBinaryFile(
+        new java.io.File(folder, "proba").getCanonicalPath
+      ).toVector should equal(
         data.toVector
       )
     }
@@ -258,7 +266,9 @@ class FileServiceSpec
         30 seconds
       )
 
-      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).toVector should equal(
+      readBinaryFile(
+        new java.io.File(folder, "proba").getCanonicalPath
+      ).toVector should equal(
         data.toVector
       )
     }
@@ -299,7 +309,9 @@ class FileServiceSpec
         30 seconds
       )
 
-      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).toVector should equal(
+      readBinaryFile(
+        new java.io.File(folder, "proba").getCanonicalPath
+      ).toVector should equal(
         data.toVector
       )
     }
@@ -334,7 +346,9 @@ class FileServiceSpec
           50 seconds
         )
 
-      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).toVector should equal(
+      readBinaryFile(
+        new java.io.File(folder, "proba").getCanonicalPath
+      ).toVector should equal(
         data.toVector
       )
 
@@ -373,7 +387,9 @@ class FileServiceSpec
           50 seconds
         )
 
-      readBinaryFile(new java.io.File(folder, "proba").getCanonicalPath).toVector should equal(
+      readBinaryFile(
+        new java.io.File(folder, "proba").getCanonicalPath
+      ).toVector should equal(
         data.toVector
       )
 
@@ -419,7 +435,10 @@ class FileServiceSpec
       val path = Await.result(SharedFileHelper.getPathToFile(t), 50 seconds)
       readBinaryFile(path.getCanonicalPath).toVector should equal(data.toVector)
 
-      Await.result(SharedFileHelper.isAccessible(t, true), 30 seconds) should be(
+      Await.result(
+        SharedFileHelper.isAccessible(t, true),
+        30 seconds
+      ) should be(
         true
       )
 

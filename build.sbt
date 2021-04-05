@@ -58,7 +58,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val circeVersion = "0.13.0"
-lazy val jsoniterVersion = "2.6.3"
+lazy val jsoniterVersion = "2.6.4"
 lazy val akkaVersion = "2.6.13"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
@@ -103,15 +103,15 @@ lazy val core = project
       scalapb.gen() -> (sourceManaged in Compile).value
     ),
     libraryDependencies ++= Seq(
-      "com.google.guava" % "guava" % "22.0",
+      "com.google.guava" % "guava" % "30.1.1-jre",
       "com.typesafe.akka" %% "akka-actor" % akkaVersion,
       "com.typesafe.akka" %% "akka-remote" % akkaVersion,
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe.akka" %% "akka-http-core" % "10.1.14",
-      "com.typesafe" % "config" % "1.4.0",
+      "com.typesafe" % "config" % "1.4.1",
       "io.github.pityka" %% "selfpackage" % "1.2.5",
       "io.github.pityka" %% "s3-stream-fork" % "0.0.8",
-      "org.scalatest" %% "scalatest" % "3.2.5" % "test",
+      "org.scalatest" %% "scalatest" % "3.2.7" % "test",
       "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value
     )
@@ -135,7 +135,7 @@ lazy val ssh = project
   .settings(
     name := "tasks-ssh",
     libraryDependencies ++= Seq(
-      "ch.ethz.ganymed" % "ganymed-ssh2" % "261"
+      "ch.ethz.ganymed" % "ganymed-ssh2" % "262"
     )
   )
   .dependsOn(core % "compile->compile;test->test")
@@ -157,7 +157,7 @@ lazy val tracker = project
   .settings(
     name := "tasks-tracker",
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.5" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.7" % "test"
     ),
     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
   )
@@ -169,7 +169,7 @@ lazy val uibackend = project
   .settings(
     name := "tasks-ui-backend",
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.5" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.7" % "test"
     ),
     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
   )
@@ -181,7 +181,7 @@ lazy val uifrontend = project
   .settings(
     name := "tasks-ui-frontend",
     libraryDependencies ++= Seq(
-      "org.scala-js" %%% "scalajs-dom" % "1.0.0",
+      "org.scala-js" %%% "scalajs-dom" % "1.1.0",
       "io.circe" %%% "circe-core" % circeVersion,
       "io.circe" %%% "circe-parser" % circeVersion,
       "io.circe" %%% "circe-generic" % circeVersion,
@@ -209,7 +209,7 @@ lazy val upicklesupport = project
   .settings(commonSettings: _*)
   .settings(
     name := "tasks-upickle",
-    libraryDependencies += "com.lihaoyi" %% "upickle" % "1.2.3"
+    libraryDependencies += "com.lihaoyi" %% "upickle" % "1.3.11"
   )
   .dependsOn(core)
 
@@ -221,7 +221,7 @@ lazy val jsoniter = project
     libraryDependencies ++= Seq(
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % jsoniterVersion % Compile,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % Provided,
-      "org.scalatest" %% "scalatest" % "3.2.5" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.7" % "test"
     )
   )
   .dependsOn(core)
@@ -234,7 +234,7 @@ lazy val ecoll = project
     libraryDependencies ++= Seq(
       "io.github.pityka" %% "flatjoin-akka-stream" % "0.0.17",
       "io.github.pityka" %% "lame-bgzip-index" % "0.0.4",
-      "org.scalatest" %% "scalatest" % "3.2.5" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.7" % "test"
     )
   )
   .dependsOn(core)

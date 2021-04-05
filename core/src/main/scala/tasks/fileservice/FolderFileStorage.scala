@@ -45,8 +45,7 @@ object FolderFileStorage {
 
 }
 
-class FolderFileStorage(val basePath: File)(
-    implicit
+class FolderFileStorage(val basePath: File)(implicit
     ec: ExecutionContext,
     config: TasksConfig,
     as: akka.actor.ActorSystem
@@ -87,7 +86,8 @@ class FolderFileStorage(val basePath: File)(
       val canRead = file.canRead
       def contentMatch =
         canRead && FolderFileStorage.getContentHash(file) === expectedHash
-      val canDelete = canRead && (expectedSize < 0 || (sizeMatch && contentMatch))
+      val canDelete =
+        canRead && (expectedSize < 0 || (sizeMatch && contentMatch))
       if (canDelete) {
         file.delete
         logger.warning(s"File deleted $file $mp")
@@ -158,13 +158,12 @@ class FolderFileStorage(val basePath: File)(
       path: ManagedFilePath,
       fromOffset: Long
   ): Source[ByteString, _] =
-    Source.lazySource(
-      () =>
-        FileIO.fromPath(
-          assemblePath(path).toPath,
-          chunkSize = 8192,
-          startPosition = fromOffset
-        )
+    Source.lazySource(() =>
+      FileIO.fromPath(
+        assemblePath(path).toPath,
+        chunkSize = 8192,
+        startPosition = fromOffset
+      )
     )
 
   def exportFile(path: ManagedFilePath): Future[File] = {
@@ -251,12 +250,11 @@ class FolderFileStorage(val basePath: File)(
 
     Sink
       .lazyFutureSink(createSink)
-      .mapMaterializedValue(_.flatten.recoverWith {
-        case _ =>
-          // empty file, upstream terminated without emitting an element
-          val tmp = TempFile.createTempFile("foldertmp")
-          val r = importFile(tmp, path)
-          r.map(x => { tmp.delete; (x._1, x._2, x._4) })
+      .mapMaterializedValue(_.flatten.recoverWith { case _ =>
+        // empty file, upstream terminated without emitting an element
+        val tmp = TempFile.createTempFile("foldertmp")
+        val r = importFile(tmp, path)
+        r.map(x => { tmp.delete; (x._1, x._2, x._4) })
       })
   }
 
@@ -264,7 +262,9 @@ class FolderFileStorage(val basePath: File)(
     if (config.folderFileStorageCompleteFileCheck)
       com.google.common.io.Files.equal(file1, file2)
     else
-      file1.length == file2.length && FolderFileStorage.getContentHash(file1) == FolderFileStorage
+      file1.length == file2.length && FolderFileStorage.getContentHash(
+        file1
+      ) == FolderFileStorage
         .getContentHash(file2)
 
   def importFile(
@@ -313,10 +313,9 @@ class FolderFileStorage(val basePath: File)(
               .map(f => (parseVersion(f) + 1, f))
               .sortBy(_._1)
               .reverse
-              .foreach {
-                case (newversion, f) =>
-                  com.google.common.io.Files
-                    .move(f, assemblePath(managed, ".old." + newversion))
+              .foreach { case (newversion, f) =>
+                com.google.common.io.Files
+                  .move(f, assemblePath(managed, ".old." + newversion))
               }
 
             com.google.common.io.Files

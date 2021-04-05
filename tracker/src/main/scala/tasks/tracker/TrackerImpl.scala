@@ -61,9 +61,8 @@ class TrackerImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
 
   private val stateFlow =
     Flow[TaskQueue.Event]
-      .collect {
-        case taskDone: TaskQueue.TaskDone =>
-          taskDone
+      .collect { case taskDone: TaskQueue.TaskDone =>
+        taskDone
       }
 
   private val sink = Flow[TaskQueue.TaskDone]

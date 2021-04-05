@@ -74,11 +74,10 @@ object FailingTasksTest extends TestHelpers {
         case _: TestException => "recovered"
       }
       val f2 = success(Input(2))(ResourceRequest(1, 500))
-      val f3 = f1.flatMap(
-        _ =>
-          fail(Input(1))(ResourceRequest(1, 500)).recover {
-            case _: TestException => "recovered"
-          }
+      val f3 = f1.flatMap(_ =>
+        fail(Input(1))(ResourceRequest(1, 500)).recover {
+          case _: TestException => "recovered"
+        }
       )
       val future = for {
         t1 <- f1

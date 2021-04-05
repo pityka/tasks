@@ -93,8 +93,8 @@ case class SharedFile(
 object SharedFile {
 
   implicit val encoder: Encoder[SharedFile] =
-    Encoder.forProduct3("path", "byteSize", "hash")(
-      sf => (sf.path, sf.byteSize, sf.hash)
+    Encoder.forProduct3("path", "byteSize", "hash")(sf =>
+      (sf.path, sf.byteSize, sf.hash)
     )
 
   implicit val decoder: Decoder[SharedFile] =
@@ -114,23 +114,23 @@ object SharedFile {
   def apply(uri: Uri)(implicit tsc: TaskSystemComponents): Future[SharedFile] =
     SharedFileHelper.create(RemoteFilePath(uri), tsc.fs.remote)
 
-  def apply(file: File, name: String)(
-      implicit tsc: TaskSystemComponents
+  def apply(file: File, name: String)(implicit
+      tsc: TaskSystemComponents
   ): Future[SharedFile] =
     apply(file, name, false)
 
-  def apply(file: File, name: String, deleteFile: Boolean)(
-      implicit tsc: TaskSystemComponents
+  def apply(file: File, name: String, deleteFile: Boolean)(implicit
+      tsc: TaskSystemComponents
   ): Future[SharedFile] =
     SharedFileHelper.createFromFile(file, name, deleteFile)
 
-  def apply(source: Source[ByteString, _], name: String)(
-      implicit tsc: TaskSystemComponents
+  def apply(source: Source[ByteString, _], name: String)(implicit
+      tsc: TaskSystemComponents
   ): Future[SharedFile] =
     SharedFileHelper.createFromSource(source, name)
 
-  def sink(name: String)(
-      implicit tsc: TaskSystemComponents
+  def sink(name: String)(implicit
+      tsc: TaskSystemComponents
   ): Option[Sink[ByteString, Future[SharedFile]]] =
     SharedFileHelper.sink(name)
 

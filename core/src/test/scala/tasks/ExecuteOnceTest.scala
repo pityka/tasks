@@ -41,11 +41,10 @@ object ExecOnceTest extends TestHelpers with Matchers {
 
   val sideEffect = scala.collection.mutable.ArrayBuffer[String]()
 
-  val increment = AsyncTask[Input, Int]("execonce", 1) {
-    case Input(c) =>
-      implicit computationEnvironment =>
-        sideEffect += "executed"
-        Future(c + 1)
+  val increment = AsyncTask[Input, Int]("execonce", 1) { case Input(c) =>
+    implicit computationEnvironment =>
+      sideEffect += "executed"
+      Future(c + 1)
   }
 
   def run = {

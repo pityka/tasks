@@ -24,31 +24,30 @@ private[ecoll] object GroupBy {
           SerDe[Nothing]
       ),
       Source[B, NotUsed]
-    ] {
-      case (source: Source[A, NotUsed], _: Option[Nothing], ctx, serde, _) =>
-        implicit val r = serde.deser(())
-        implicit val w = serde.ser(())
-        implicit val ce = ctx
-        implicit val fmt = EColl.flatJoinFormat[A]
-        implicit val sk = new flatjoin.StringKey[A] { def key(t: A) = fun(t) }
-        implicit val as = ctx.components.actorsystem
-        val parallelismOfJoin =
-          math.min(
-            resourceAllocated.cpu,
-            maxParallelJoins(()).getOrElse(resourceAllocated.cpu)
-          )
+    ] { case (source: Source[A, NotUsed], _: Option[Nothing], ctx, serde, _) =>
+      implicit val r = serde.deser(())
+      implicit val w = serde.ser(())
+      implicit val ce = ctx
+      implicit val fmt = EColl.flatJoinFormat[A]
+      implicit val sk = new flatjoin.StringKey[A] { def key(t: A) = fun(t) }
+      implicit val as = ctx.components.actorsystem
+      val parallelismOfJoin =
+        math.min(
+          resourceAllocated.cpu,
+          maxParallelJoins(()).getOrElse(resourceAllocated.cpu)
+        )
 
-        source
-          .via(
-            flatjoin_akka
-              .Instance(
-                parallelismOfShardComputation = resourceAllocated.cpu,
-                numberOfShardsJoinedInParallel = parallelismOfJoin,
-                numberOfShards = numberOfShards(()).getOrElse(128)
-              )
-              .groupByShardsInMemory
-          )
-          .map(grouped => aggregate(grouped))
+      source
+        .via(
+          flatjoin_akka
+            .Instance(
+              parallelismOfShardComputation = resourceAllocated.cpu,
+              numberOfShardsJoinedInParallel = parallelismOfJoin,
+              numberOfShards = numberOfShards(()).getOrElse(128)
+            )
+            .groupByShardsInMemory
+        )
+        .map(grouped => aggregate(grouped))
     }
 
   def groupByPresortedSpore[A, B](
@@ -64,13 +63,12 @@ private[ecoll] object GroupBy {
           SerDe[Nothing]
       ),
       Source[B, NotUsed]
-    ] {
-      case (source: Source[A, NotUsed], _, _, _, _) =>
-        implicit val sk = new flatjoin.StringKey[A] { def key(t: A) = fun(t) }
+    ] { case (source: Source[A, NotUsed], _, _, _, _) =>
+      implicit val sk = new flatjoin.StringKey[A] { def key(t: A) = fun(t) }
 
-        source
-          .via(flatjoin_akka.adjacentSpan[A])
-          .map(grouped => aggregate(grouped))
+      source
+        .via(flatjoin_akka.adjacentSpan[A])
+        .map(grouped => aggregate(grouped))
     }
 
   def identitySpore[A] = spore((a: Seq[A]) => a)
@@ -101,33 +99,32 @@ trait GroupByOps {
       fun: Spore[A, String],
       aggregate: Spore[Seq[A], B]
   ): Partial[EColl[A], EColl[B]] =
-    Partial({
-      case data1 =>
-        resourceRequest =>
-          tsc =>
-            val inner =
-              GroupBy.groupBySpore[A, B](
-                fun,
-                aggregate,
-                maxParallelJoins,
-                numberOfShards
-              )
+    Partial({ case data1 =>
+      resourceRequest =>
+        tsc =>
+          val inner =
+            GroupBy.groupBySpore[A, B](
+              fun,
+              aggregate,
+              maxParallelJoins,
+              numberOfShards
+            )
 
-            GenericMap.task(taskID, taskVersion)(
-              GenericMap.Input[A, Nothing, B](
-                data1,
-                None,
-                implicitly[SerDe[A]],
-                SerDe.nothing,
-                implicitly[SerDe[B]],
-                None,
-                inner,
-                false,
-                outName,
-                taskID,
-                taskVersion
-              )
-            )(resourceRequest)(tsc)
+          GenericMap.task(taskID, taskVersion)(
+            GenericMap.Input[A, Nothing, B](
+              data1,
+              None,
+              implicitly[SerDe[A]],
+              SerDe.nothing,
+              implicitly[SerDe[B]],
+              None,
+              inner,
+              false,
+              outName,
+              taskID,
+              taskVersion
+            )
+          )(resourceRequest)(tsc)
     })
 
   def groupByPresorted[A: SerDe](taskID: String, taskVersion: Int)(
@@ -146,27 +143,26 @@ trait GroupByOps {
       fun: Spore[A, String],
       aggregate: Spore[Seq[A], B]
   ): Partial[EColl[A], EColl[B]] =
-    Partial({
-      case data1 =>
-        resourceRequest =>
-          tsc =>
-            val inner = GroupBy.groupByPresortedSpore[A, B](fun, aggregate)
+    Partial({ case data1 =>
+      resourceRequest =>
+        tsc =>
+          val inner = GroupBy.groupByPresortedSpore[A, B](fun, aggregate)
 
-            GenericMap.task(taskID, taskVersion)(
-              GenericMap.Input[A, Nothing, B](
-                data1,
-                None,
-                implicitly[SerDe[A]],
-                SerDe.nothing,
-                implicitly[SerDe[B]],
-                None,
-                inner,
-                false,
-                outName,
-                taskID,
-                taskVersion
-              )
-            )(resourceRequest)(tsc)
+          GenericMap.task(taskID, taskVersion)(
+            GenericMap.Input[A, Nothing, B](
+              data1,
+              None,
+              implicitly[SerDe[A]],
+              SerDe.nothing,
+              implicitly[SerDe[B]],
+              None,
+              inner,
+              false,
+              outName,
+              taskID,
+              taskVersion
+            )
+          )(resourceRequest)(tsc)
     })
 
 }

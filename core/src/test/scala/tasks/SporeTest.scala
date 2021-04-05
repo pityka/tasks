@@ -41,10 +41,9 @@ import com.typesafe.config.ConfigFactory
 object SporeTest extends TestHelpers with Matchers {
 
   val increment =
-    AsyncTask[Spore[Option[Int], String], String]("sporetest", 1) {
-      case sp =>
-        implicit computationEnvironment =>
-          Future(sp(Some(3)))
+    AsyncTask[Spore[Option[Int], String], String]("sporetest", 1) { case sp =>
+      implicit computationEnvironment =>
+        Future(sp(Some(3)))
     }
 
   def run = {
@@ -76,9 +75,8 @@ object MySpore {
   object User {
     // without this the compiler blows up
     implicit val encoder = implicitly[Encoder[User]]
-    implicit val encoderSpore = spore(
-      () => implicitly[tasks.queue.Serializer[User]]
-    )
+    implicit val encoderSpore =
+      spore(() => implicitly[tasks.queue.Serializer[User]])
   }
   val serializerSpore = spore { (_: String) =>
     implicitly[tasks.queue.Serializer[User]]
@@ -143,7 +141,9 @@ class SporeTestSuite extends FunSuite with Matchers {
 
   def freeze[A, B](s: Spore[A, B]) = s.copy[A, B]()
 
-  test("function literals should be implicitly converted if possible and work") {
+  test(
+    "function literals should be implicitly converted if possible and work"
+  ) {
 
     MySpore.implicitSporeResult shouldBe Some(3)
     MySpore.implicitSporeResult0 shouldBe Some(1)
@@ -158,7 +158,9 @@ class SporeTestSuite extends FunSuite with Matchers {
   }
 
   test("static serializer should revive from nullary spore") {
-    new String(freeze(MySpore.nullary)(()).apply(MySpore.User("1"))) shouldBe """{"a":"1"}"""
+    new String(
+      freeze(MySpore.nullary)(()).apply(MySpore.User("1"))
+    ) shouldBe """{"a":"1"}"""
   }
   test("static serializer should revive from nullary implicit spore") {
     val sp =
@@ -167,7 +169,9 @@ class SporeTestSuite extends FunSuite with Matchers {
   }
 
   test("static serializer should revive") {
-    new String(freeze(MySpore.serializerSpore)("").apply(MySpore.User("1"))) shouldBe """{"a":"1"}"""
+    new String(
+      freeze(MySpore.serializerSpore)("").apply(MySpore.User("1"))
+    ) shouldBe """{"a":"1"}"""
   }
 
   test("spores should work in tasks") {

@@ -53,8 +53,8 @@ object FileStorage {
   }
 }
 
-class RemoteFileStorage(
-    implicit mat: Materializer,
+class RemoteFileStorage(implicit
+    mat: Materializer,
     ec: ExecutionContext,
     streamHelper: StreamHelper,
     as: ActorSystem,
@@ -93,14 +93,12 @@ class RemoteFileStorage(
 
   def contains(path: RemoteFilePath, size: Long, hash: Int): Future[Boolean] =
     getSizeAndHash(path)
-      .map {
-        case (size1, hash1) =>
-          size < 0 || (size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1))
+      .map { case (size1, hash1) =>
+        size < 0 || (size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1))
       }
-      .recover {
-        case e =>
-          log.debug("Exception while looking up remote file. {}", e)
-          false
+      .recover { case e =>
+        log.debug("Exception while looking up remote file. {}", e)
+        false
       }
 
   def exportFile(path: RemoteFilePath): Future[File] = {

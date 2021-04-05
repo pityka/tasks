@@ -45,13 +45,12 @@ object AppMain {
     ) = {
       val body = tbody(children <-- signal.map { uiState =>
         project(uiState)
-          .map {
-            case (UIJobId(jobId), resource) =>
-              tr(
-                td(cls := "collapsing", jobId),
-                td(resource.cpu),
-                td(resource.memory)
-              )
+          .map { case (UIJobId(jobId), resource) =>
+            tr(
+              td(cls := "collapsing", jobId),
+              td(resource.cpu),
+              td(resource.memory)
+            )
           }
       })
 
@@ -67,8 +66,8 @@ object AppMain {
     val websocket = WebSocketHelper
       .open(s"ws://$host/states")
     val events = websocket.events
-      .map(
-        wsMessage => io.circe.parser.decode[UIAppState](wsMessage).toOption.get
+      .map(wsMessage =>
+        io.circe.parser.decode[UIAppState](wsMessage).toOption.get
       )
 
     val runningTable = makeTable("Running nodes", _.running.toList, events)

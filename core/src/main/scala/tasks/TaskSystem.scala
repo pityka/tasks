@@ -153,7 +153,9 @@ class TaskSystem private[tasks] (
     else if (!hostConfig.isQueue && config.forceNoManagedFileStorage) None
     else {
       val s3bucket =
-        if (config.storageURI.getScheme != null && config.storageURI.getScheme == "s3") {
+        if (
+          config.storageURI.getScheme != null && config.storageURI.getScheme == "s3"
+        ) {
           Some(
             (config.storageURI.getAuthority, config.storageURI.getPath.drop(1))
           )
@@ -204,34 +206,35 @@ class TaskSystem private[tasks] (
 
   tasksystemlog.info("File store: " + managedFileStorage)
 
-  val fileActor = try {
-    if (hostConfig.isQueue) {
+  val fileActor =
+    try {
+      if (hostConfig.isQueue) {
 
-      val threadpoolsize = config.fileServiceThreadPoolSize
+        val threadpoolsize = config.fileServiceThreadPoolSize
 
-      val localFileServiceActor = system.actorOf(
-        Props(new FileService(managedFileStorage.get, threadpoolsize))
-          .withDispatcher("fileservice-pinned"),
-        "fileservice"
-      )
-      reaperActor ! WatchMe(localFileServiceActor)
-      localFileServiceActor
-    } else {
-      val actorPath =
-        s"akka://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/fileservice"
-      val remoteFileServieActor = Await.result(
-        system.actorSelection(actorPath).resolveOne(600 seconds),
-        atMost = 600 seconds
-      )
+        val localFileServiceActor = system.actorOf(
+          Props(new FileService(managedFileStorage.get, threadpoolsize))
+            .withDispatcher("fileservice-pinned"),
+          "fileservice"
+        )
+        reaperActor ! WatchMe(localFileServiceActor)
+        localFileServiceActor
+      } else {
+        val actorPath =
+          s"akka://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/fileservice"
+        val remoteFileServieActor = Await.result(
+          system.actorSelection(actorPath).resolveOne(600 seconds),
+          atMost = 600 seconds
+        )
 
-      remoteFileServieActor
+        remoteFileServieActor
+      }
+    } catch {
+      case e: Throwable => {
+        initFailed()
+        throw e
+      }
     }
-  } catch {
-    case e: Throwable => {
-      initFailed()
-      throw e
-    }
-  }
 
   tasksystemlog.info("File service actor: " + fileActor)
 
@@ -246,41 +249,42 @@ class TaskSystem private[tasks] (
     nodeLocalCacheActor
   }
 
-  val cacheActor = try {
-    if (hostConfig.isQueue) {
+  val cacheActor =
+    try {
+      if (hostConfig.isQueue) {
 
-      val cache: Cache =
-        if (config.cacheEnabled)
-          new SharedFileCache()(
-            fileServiceComponent,
-            system,
-            system.dispatcher,
-            config
-          )
-        else new DisabledCache
+        val cache: Cache =
+          if (config.cacheEnabled)
+            new SharedFileCache()(
+              fileServiceComponent,
+              system,
+              system.dispatcher,
+              config
+            )
+          else new DisabledCache
 
-      val localCacheActor = system.actorOf(
-        Props(new TaskResultCacheActor(cache, fileServiceComponent))
-          .withDispatcher("cache-pinned"),
-        "cache"
-      )
-      reaperActor ! WatchMe(localCacheActor)
-      localCacheActor
-    } else {
-      val actorPath =
-        s"akka://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/cache"
-      Await.result(
-        system.actorSelection(actorPath).resolveOne(600 seconds),
-        atMost = 600 seconds
-      )
+        val localCacheActor = system.actorOf(
+          Props(new TaskResultCacheActor(cache, fileServiceComponent))
+            .withDispatcher("cache-pinned"),
+          "cache"
+        )
+        reaperActor ! WatchMe(localCacheActor)
+        localCacheActor
+      } else {
+        val actorPath =
+          s"akka://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/cache"
+        Await.result(
+          system.actorSelection(actorPath).resolveOne(600 seconds),
+          atMost = 600 seconds
+        )
 
+      }
+    } catch {
+      case e: Throwable => {
+        initFailed()
+        throw e
+      }
     }
-  } catch {
-    case e: Throwable => {
-      initFailed()
-      throw e
-    }
-  }
 
   val uiBootstrap = tasks.ui.UIComponentBootstrap.load
 
@@ -293,38 +297,40 @@ class TaskSystem private[tasks] (
 
   trackerEventListener.foreach(ev => reaperActor ! WatchMe(ev.watchable))
 
-  val queueActor = try {
-    if (hostConfig.isQueue) {
+  val queueActor =
+    try {
+      if (hostConfig.isQueue) {
 
-      val uiComponent = uiBootstrap.map(_.startQueueUI)
+        val uiComponent = uiBootstrap.map(_.startQueueUI)
 
-      val eventListeners = uiComponent.map(_.tasksQueueEventListener).toList ++
-        trackerEventListener.toList
+        val eventListeners =
+          uiComponent.map(_.tasksQueueEventListener).toList ++
+            trackerEventListener.toList
 
-      val localActor =
-        system.actorOf(
-          Props(new TaskQueue(eventListeners))
-            .withDispatcher("taskqueue"),
-          "queue"
+        val localActor =
+          system.actorOf(
+            Props(new TaskQueue(eventListeners))
+              .withDispatcher("taskqueue"),
+            "queue"
+          )
+        reaperActor ! WatchMe(localActor)
+        localActor
+      } else {
+        val actorPath =
+          s"akka://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/queue"
+        val remoteActor = Await.result(
+          system.actorSelection(actorPath).resolveOne(600 seconds),
+          atMost = 600 seconds
         )
-      reaperActor ! WatchMe(localActor)
-      localActor
-    } else {
-      val actorPath =
-        s"akka://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/queue"
-      val remoteActor = Await.result(
-        system.actorSelection(actorPath).resolveOne(600 seconds),
-        atMost = 600 seconds
-      )
 
-      remoteActor
+        remoteActor
+      }
+    } catch {
+      case e: Throwable => {
+        initFailed()
+        throw e
+      }
     }
-  } catch {
-    case e: Throwable => {
-      initFailed()
-      throw e
-    }
-  }
 
   tasksystemlog.info("Queue: " + queueActor)
 
@@ -352,21 +358,20 @@ class TaskSystem private[tasks] (
           )
         else None
 
-      elasticSupport.map(
-        es =>
-          es(
-            masterAddress = hostConfig.master,
-            queueActor = QueueActor(queueActor),
-            resource = ResourceAvailable(
-              cpu = hostConfig.availableCPU,
-              memory = hostConfig.availableMemory,
-              scratch = hostConfig.availableScratch,
-              gpu = hostConfig.availableGPU
-            ),
-            codeAddress = codeAddress,
-            eventListener =
-              uiComponent.flatMap(_.map(_.nodeRegistryEventListener))
-          )
+      elasticSupport.map(es =>
+        es(
+          masterAddress = hostConfig.master,
+          queueActor = QueueActor(queueActor),
+          resource = ResourceAvailable(
+            cpu = hostConfig.availableCPU,
+            memory = hostConfig.availableMemory,
+            scratch = hostConfig.availableScratch,
+            gpu = hostConfig.availableGPU
+          ),
+          codeAddress = codeAddress,
+          eventListener =
+            uiComponent.flatMap(_.map(_.nodeRegistryEventListener))
+        )
       )
     } else None
 
@@ -468,7 +473,9 @@ class TaskSystem private[tasks] (
       Some(localActor)
     } else None
 
-  if (!hostConfig.isApp && hostConfig.isWorker && elasticSupportFactory.isDefined && launcherActor.isDefined) {
+  if (
+    !hostConfig.isApp && hostConfig.isWorker && elasticSupportFactory.isDefined && launcherActor.isDefined
+  ) {
     tasksystemlog.info("Getting node name..")
     val nodeName = getNodeName
 

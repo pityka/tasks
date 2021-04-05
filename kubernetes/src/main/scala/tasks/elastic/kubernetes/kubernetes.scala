@@ -119,8 +119,8 @@ class K8SCreateNode(
 
 }
 
-class K8SCreateNodeFactory(k8s: KubernetesClient)(
-    implicit config: TasksConfig,
+class K8SCreateNodeFactory(k8s: KubernetesClient)(implicit
+    config: TasksConfig,
     fqcn: ElasticSupportFqcn
 ) extends CreateNodeFactory {
   def apply(master: InetSocketAddress, codeAddress: CodeAddress) =

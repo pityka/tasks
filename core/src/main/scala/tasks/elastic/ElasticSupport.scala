@@ -87,16 +87,15 @@ case class SimpleElasticSupport(
     new Inner {
       def getNodeName = self.getNodeName.getNodeName
       def createRegistry =
-        codeAddress.map(
-          codeAddress =>
-            new NodeRegistry(
-              unmanagedResource = resource,
-              createNode = createNodeFactory.apply(masterAddress, codeAddress),
-              decideNewNode = new SimpleDecideNewNode(codeAddress.codeVersion),
-              shutdownNode = shutdown,
-              targetQueue = queueActor,
-              eventListener = eventListener
-            )
+        codeAddress.map(codeAddress =>
+          new NodeRegistry(
+            unmanagedResource = resource,
+            createNode = createNodeFactory.apply(masterAddress, codeAddress),
+            decideNewNode = new SimpleDecideNewNode(codeAddress.codeVersion),
+            shutdownNode = shutdown,
+            targetQueue = queueActor,
+            eventListener = eventListener
+          )
         )
       def createSelfShutdown =
         new SelfShutdown(

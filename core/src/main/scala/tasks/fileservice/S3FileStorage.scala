@@ -45,8 +45,8 @@ class S3Storage(
     bucketName: String,
     folderPrefix: String,
     s3stream: S3ClientSupport
-)(
-    implicit mat: Materializer,
+)(implicit
+    mat: Materializer,
     as: ActorSystem,
     ec: ExecutionContext,
     config: TasksConfig
@@ -78,10 +78,9 @@ class S3Storage(
       metadata =>
         val (size1, hash1) = getLengthAndHash(metadata)
         Some(SharedFileHelper.create(size1, hash1, path))
-    } recover {
-      case x: Exception =>
-        log.debug("This might be an error, or likely a missing file. {}", x)
-        None
+    } recover { case x: Exception =>
+      log.debug("This might be an error, or likely a missing file. {}", x)
+      None
     }
 
   def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean] =
@@ -92,10 +91,9 @@ class S3Storage(
           val (size1, hash1) = getLengthAndHash(metadata)
           metadata.response.status.intValue == 200 && size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1)
         }
-    } recover {
-      case x: Exception =>
-        log.debug("This might be an error, or likely a missing file. {}", x)
-        false
+    } recover { case x: Exception =>
+      log.debug("This might be an error, or likely a missing file. {}", x)
+      false
     }
 
   def getLengthAndHash(metadata: ObjectMetadata): (Long, Int) =

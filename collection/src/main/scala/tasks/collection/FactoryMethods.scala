@@ -38,16 +38,16 @@ trait FactoryMethods extends StrictLogging { self: Constants =>
       source: Source[T, _],
       name: Option[String] = None,
       parallelism: Int = 1
-  )(
-      implicit encoder: Serializer[T],
+  )(implicit
+      encoder: Serializer[T],
       tsc: TaskSystemComponents
   ): Future[EColl[T]] = {
     implicit val as = tsc.actorsystem
     source.runWith(sink[T](name, parallelism))
   }
 
-  def sink[T](name: Option[String] = None, parallelism: Int = 1)(
-      implicit encoder: Serializer[T],
+  def sink[T](name: Option[String] = None, parallelism: Int = 1)(implicit
+      encoder: Serializer[T],
       tsc: TaskSystemComponents
   ): Sink[T, Future[EColl[T]]] = {
     implicit val as = tsc.actorsystem
@@ -58,8 +58,8 @@ trait FactoryMethods extends StrictLogging { self: Constants =>
 
     val encoderFlow =
       lame.Parallel
-        .mapAsync[T, ByteString](encoderPar, ElemBufferSize)(
-          elem => ByteString(encoder.apply(elem)) ++ Eol
+        .mapAsync[T, ByteString](encoderPar, ElemBufferSize)(elem =>
+          ByteString(encoder.apply(elem)) ++ Eol
         )
 
     val dataFileName = name.getOrElse(java.util.UUID.randomUUID.toString)
@@ -98,8 +98,8 @@ trait FactoryMethods extends StrictLogging { self: Constants =>
 
   }
 
-  def single[T](t: T, name: Option[String] = None)(
-      implicit encoder: Serializer[T],
+  def single[T](t: T, name: Option[String] = None)(implicit
+      encoder: Serializer[T],
       tsc: TaskSystemComponents
   ): Future[EColl[T]] =
     fromSource(Source.single(t), name)
