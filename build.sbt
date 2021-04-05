@@ -146,7 +146,7 @@ lazy val kubernetes = project
   .settings(
     name := "tasks-kubernetes",
     libraryDependencies ++= Seq(
-      "io.fabric8" % "kubernetes-client" % "4.0.4"
+      "io.fabric8" % "kubernetes-client" % "4.0.7"
     )
   )
   .dependsOn(core % "compile->compile;test->test")
