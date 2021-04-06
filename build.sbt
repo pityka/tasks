@@ -124,7 +124,7 @@ lazy val ec2 = project
   .settings(
     name := "tasks-ec2",
     libraryDependencies ++= Seq(
-      "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24"
+      "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.993"
     )
   )
   .dependsOn(core)
