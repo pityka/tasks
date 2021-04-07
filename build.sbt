@@ -103,7 +103,7 @@ lazy val core = project
       scalapb.gen() -> (sourceManaged in Compile).value
     ),
     libraryDependencies ++= Seq(
-      "com.google.guava" % "guava" % "30.1.1-jre",
+      "com.google.guava" % "guava" % "30.1.1-jre", // scala-steward:off
       "com.typesafe.akka" %% "akka-actor" % akkaVersion,
       "com.typesafe.akka" %% "akka-remote" % akkaVersion,
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
@@ -124,7 +124,7 @@ lazy val ec2 = project
   .settings(
     name := "tasks-ec2",
     libraryDependencies ++= Seq(
-      "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24"
+      "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24" // scala-steward:off
     )
   )
   .dependsOn(core)
@@ -146,7 +146,7 @@ lazy val kubernetes = project
   .settings(
     name := "tasks-kubernetes",
     libraryDependencies ++= Seq(
-      "io.fabric8" % "kubernetes-client" % "5.2.1"
+      "io.fabric8" % "kubernetes-client" % "5.2.1" // scala-steward:off
     )
   )
   .dependsOn(core % "compile->compile;test->test")
