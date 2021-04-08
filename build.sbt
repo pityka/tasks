@@ -54,7 +54,8 @@ lazy val commonSettings = Seq(
   )
 ) ++ Seq(
   fork := true,
-  cancelable in Global := true
+  cancelable in Global := true,
+  scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings"))
 )
 
 lazy val circeVersion = "0.13.0"
@@ -146,7 +147,7 @@ lazy val kubernetes = project
   .settings(
     name := "tasks-kubernetes",
     libraryDependencies ++= Seq(
-      "io.fabric8" % "kubernetes-client" % "5.2.1" // scala-steward:off
+      "io.fabric8" % "kubernetes-client" % "4.13.2" // scala-steward:off
     )
   )
   .dependsOn(core % "compile->compile;test->test")
