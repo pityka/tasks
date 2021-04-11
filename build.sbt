@@ -55,7 +55,10 @@ lazy val commonSettings = Seq(
 ) ++ Seq(
   fork := true,
   cancelable in Global := true,
-  scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings"))
+  scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
+  mimaPreviousArtifacts := Set(
+    organization.value %% moduleName.value % "0.3.2"
+  )
 )
 
 lazy val circeVersion = "0.13.0"
