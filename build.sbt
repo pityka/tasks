@@ -57,7 +57,7 @@ lazy val commonSettings = Seq(
   cancelable in Global := true,
   scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
   mimaPreviousArtifacts := Set(
-    organization.value %% moduleName.value % "0.3.2"
+    organization.value %% moduleName.value % "1.0.0-M1"
   )
 )
 
@@ -191,6 +191,7 @@ lazy val uifrontend = project
       "io.circe" %%% "circe-generic" % circeVersion,
       "com.raquo" %%% "laminar" % "0.11.0"
     ),
+    mimaPreviousArtifacts := Set.empty,
     fork := false
   )
   .dependsOn(sharedJS)
