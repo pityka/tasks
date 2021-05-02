@@ -4,7 +4,7 @@ addSbtPlugin("com.thesamet" % "sbt-protoc" % "1.0.3")
 
 libraryDependencies += "com.thesamet.scalapb" %% "compilerplugin" % "0.11.2"
 
-addSbtPlugin("org.scoverage" % "sbt-scoverage" % "1.6.1")
+addSbtPlugin("org.scoverage" % "sbt-scoverage" % "1.7.1")
 
 addSbtPlugin("org.scala-js" % "sbt-scalajs" % "1.5.1")
 
