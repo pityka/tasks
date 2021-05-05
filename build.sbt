@@ -189,7 +189,7 @@ lazy val uifrontend = project
       "io.circe" %%% "circe-core" % circeVersion,
       "io.circe" %%% "circe-parser" % circeVersion,
       "io.circe" %%% "circe-generic" % circeVersion,
-      "com.raquo" %%% "laminar" % "0.11.0"
+      "com.raquo" %%% "laminar" % "0.13.0"
     ),
     mimaPreviousArtifacts := Set.empty,
     fork := false
