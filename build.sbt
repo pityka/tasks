@@ -62,7 +62,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val circeVersion = "0.13.0"
-lazy val jsoniterVersion = "2.7.3"
+lazy val jsoniterVersion = "2.8.0"
 lazy val akkaVersion = "2.6.14"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
