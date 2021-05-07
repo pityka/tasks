@@ -60,7 +60,7 @@ private[tasks] class SharedFileCache(implicit
       taskDescription: TaskDescription
   )(implicit prefix: FileServicePrefix): Future[Option[UntypedResult]] = {
 
-    val hash = SerializedTaskDescription(taskDescription).hash.hash
+    val hash = SerializedTaskDescription.hash(taskDescription).hash
     val fileName = "__meta__result__" + hash
     SharedFileHelper
       .getByName(fileName, retrieveSizeAndHash = false)
@@ -95,10 +95,8 @@ private[tasks] class SharedFileCache(implicit
   ) = {
     try {
       implicit val historyContext = tasks.fileservice.NoHistory
-      val serializedTaskDescription = SerializedTaskDescription(taskDescription)
-      val hash = serializedTaskDescription.hash.hash
+      val hash = SerializedTaskDescription.hash(taskDescription).hash
       val value = serializeResult(untypedResult)
-      val key = serializedTaskDescription.value
       for {
         _ <- SharedFileHelper
           .createFromSource(
@@ -106,13 +104,14 @@ private[tasks] class SharedFileCache(implicit
             name = "__meta__result__" + hash
           )
         _ <-
-          if (config.saveTaskDescriptionInCache)
+          if (config.saveTaskDescriptionInCache) {
+            val key = SerializedTaskDescription(taskDescription).value
             SharedFileHelper
               .createFromSource(
                 Source.single(ByteString(key)),
                 name = "__meta__input__" + hash
               )
-          else Future.successful(())
+          } else Future.successful(())
       } yield ()
 
     } catch {
