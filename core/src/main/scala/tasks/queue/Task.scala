@@ -145,7 +145,8 @@ case class ComputationEnvironment(
     implicit val log: akka.event.LoggingAdapter,
     implicit val launcher: LauncherActor,
     implicit val executionContext: ExecutionContext,
-    val taskActor: ActorRef
+    val taskActor: ActorRef,
+    taskHash: HashedTaskDescription
 ) {
 
   private val logQueue =
@@ -197,7 +198,8 @@ private class Task(
     labels: Labels,
     input: Base64Data,
     taskId: TaskId,
-    lineage: TaskLineage
+    lineage: TaskLineage,
+    taskHash: HashedTaskDescription
 ) extends Actor
     with akka.actor.ActorLogging {
 
@@ -281,7 +283,8 @@ private class Task(
         ),
         LauncherActor(launcherActor),
         executionContextOfTask,
-        self
+        self,
+        taskHash
       )
 
       log.debug(

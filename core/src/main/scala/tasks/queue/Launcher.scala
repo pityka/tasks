@@ -123,6 +123,8 @@ class Launcher(
         )
       else scheduleTask.fileServicePrefix
 
+    val taskHash = SerializedTaskDescription(scheduleTask.description).hash
+
     val taskActor = context.actorOf(
       Props(
         classOf[Task],
@@ -146,7 +148,8 @@ class Launcher(
         scheduleTask.labels,
         scheduleTask.description.input,
         scheduleTask.description.taskId,
-        scheduleTask.lineage.inherit(scheduleTask.description)
+        scheduleTask.lineage.inherit(scheduleTask.description),
+        taskHash
       ).withDispatcher("task-worker-dispatcher")
     )
     log.debug("Actor constructed")
