@@ -61,7 +61,7 @@ lazy val commonSettings = Seq(
   )
 )
 
-lazy val circeVersion = "0.13.0"
+lazy val circeVersion = "0.14.1"
 lazy val jsoniterVersion = "2.8.2"
 lazy val akkaVersion = "2.6.14"
 
