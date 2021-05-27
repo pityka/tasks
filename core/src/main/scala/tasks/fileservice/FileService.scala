@@ -38,8 +38,8 @@ import tasks.util._
 import tasks.util.config._
 import tasks.wire._
 
-import io.circe.generic.semiauto._
-import io.circe.{Encoder, Decoder}
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 case class FileServiceComponent(
     actor: ActorRef,
@@ -54,10 +54,8 @@ case class FileServicePrefix(list: Vector[String]) {
     ProposedManagedFilePath(list :+ name)
 }
 object FileServicePrefix {
-  implicit val encoder: Encoder[FileServicePrefix] =
-    deriveEncoder[FileServicePrefix]
-  implicit val decoder: Decoder[FileServicePrefix] =
-    deriveDecoder[FileServicePrefix]
+  implicit val codec: JsonValueCodec[FileServicePrefix] = JsonCodecMaker.make
+
 }
 
 case class ProposedManagedFilePath(list: Vector[String]) {
@@ -66,10 +64,8 @@ case class ProposedManagedFilePath(list: Vector[String]) {
 }
 
 object ProposedManagedFilePath {
-  implicit val enc: Encoder[ProposedManagedFilePath] =
-    deriveEncoder[ProposedManagedFilePath]
-  implicit val dec: Decoder[ProposedManagedFilePath] =
-    deriveDecoder[ProposedManagedFilePath]
+  implicit val codec: JsonValueCodec[ProposedManagedFilePath] =
+    JsonCodecMaker.make
 }
 
 class FileService(

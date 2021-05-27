@@ -33,6 +33,7 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.ws.TextMessage
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 class AppUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
     extends AppUI {
@@ -63,7 +64,7 @@ class AppUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
   private val stateToTextMessage =
     Flow[UIAppState].map { state =>
       val json: String =
-        implicitly[io.circe.Encoder[UIAppState]].apply(state).noSpaces
+        writeToString(state)
       TextMessage(json)
     }
 

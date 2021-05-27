@@ -5,9 +5,11 @@ import tasks.ecoll._
 import tasks.queue._
 import tasks._
 import scala.concurrent.Future
-import tasks.circesupport._
+import tasks.jsonitersupport._
 import akka.stream.scaladsl.Source
 import akka.NotUsed
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 private[ecoll] object GenericMap2 {
 
@@ -35,13 +37,8 @@ private[ecoll] object GenericMap2 {
   )
 
   object Input {
-    import io.circe._
-    import io.circe.generic.semiauto._
-    import io.circe.generic.auto._
-    implicit def encoder[A, B, C]: Encoder[Input[A, B, C]] =
-      deriveEncoder[Input[A, B, C]]
-    implicit def decoder[A, B, C]: Decoder[Input[A, B, C]] =
-      deriveDecoder[Input[A, B, C]]
+    implicit def codec[A, B, C]: JsonValueCodec[Input[A, B, C]] =
+      JsonCodecMaker.make
 
   }
 

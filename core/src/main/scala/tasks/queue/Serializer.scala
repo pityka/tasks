@@ -4,20 +4,22 @@ import tasks.spore
 
 trait Serializer[A] {
   def apply(a: A): Array[Byte]
+  def hash(a: A): String
 }
 
 trait Deserializer[A] {
-  def apply(b: Array[Byte]): Either[String, A]
+  def apply(in: Array[Byte]): Either[String, A]
 }
 
 object Serializer {
   val nothing = new Serializer[Nothing] {
-    def apply(a: Nothing) = Array.empty
+    def apply(a: Nothing): Array[Byte] = Array.empty
+    def hash(a: Nothing): String = "nothing"
   }
 }
 object Deserializer {
   val nothing = new Deserializer[Nothing] {
-    def apply(a: Array[Byte]) = Left("deserializing into nothing?")
+    def apply(in: Array[Byte]) = Left("deserializing into nothing?")
   }
 }
 
@@ -27,10 +29,10 @@ case class SerDe[AA](
 )
 
 object SerDe {
-  import io.circe._
-  import io.circe.generic.semiauto._
-  implicit def encoder[A, B]: Encoder[SerDe[A]] = deriveEncoder[SerDe[A]]
-  implicit def decoder[A, B]: Decoder[SerDe[A]] = deriveDecoder[SerDe[A]]
+  import com.github.plokhotnyuk.jsoniter_scala.macros._
+  import com.github.plokhotnyuk.jsoniter_scala.core._
+
+  implicit def codec[A]: JsonValueCodec[SerDe[A]] = JsonCodecMaker.make
 
   implicit def makeFromComponents[A](implicit
       r: tasks.SDeserializer[A],

@@ -27,8 +27,8 @@ package tasks.tracker
 import scala.concurrent._
 import scala.concurrent.duration._
 
-import io.circe._
-import io.circe.generic.semiauto._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 import com.typesafe.config.ConfigFactory
 
@@ -38,8 +38,7 @@ trait TestHelpers {
 
   case class Input(i: Int)
   object Input {
-    implicit val enc: Encoder[Input] = deriveEncoder[Input]
-    implicit val dec: Decoder[Input] = deriveDecoder[Input]
+    implicit val codec: JsonValueCodec[Input] = JsonCodecMaker.make
   }
 
   def testConfig = {

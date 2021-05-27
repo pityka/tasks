@@ -4,14 +4,14 @@ import java.io.File
 
 import akka.actor._
 
-import io.circe.generic.semiauto._
-import io.circe._
-
 import tasks.util._
 import tasks.shared._
 import tasks.fileservice._
 import tasks.queue._
 import tasks.elastic._
+
+import com.github.plokhotnyuk.jsoniter_scala.core._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
 
 sealed trait StaticMessage
 
@@ -152,7 +152,7 @@ private[tasks] case class RemoveNode(node: Node) extends StaticMessage
 case class CacheActor(actor: ActorRef) extends StaticMessage
 
 private[tasks] case class SaveResult(
-    sch: TaskDescription,
+    sch: HashedTaskDescription,
     r: UntypedResult,
     prefix: FileServicePrefix
 ) extends StaticMessage
@@ -161,6 +161,10 @@ private[tasks] case class CheckResult(sch: ScheduleTask, sender: Proxy)
     extends StaticMessage
 
 private[tasks] case object PoisonPillToCacheActor extends StaticMessage
+
+private[tasks] case object NeedInput extends StaticMessage
+
+private[tasks] case class InputData(b64: Base64Data) extends StaticMessage
 
 private[tasks] case class AnswerFromCache(
     message: Either[String, Option[UntypedResult]],
@@ -177,12 +181,12 @@ private[tasks] case object Pong extends StaticMessage
 private[tasks] case class HeartBeatStopped(ac: ActorRef) extends StaticMessage
 
 object StaticMessage {
-  import io.circe.disjunctionCodecs._
-  implicit val encode: Encoder[StaticMessage] = deriveEncoder[StaticMessage]
-  implicit def decoder(implicit
+
+  implicit def codec(implicit
       as: ExtendedActorSystem
-  ): Decoder[StaticMessage] = {
-    val _ = as // suppress unused warning
-    deriveDecoder[StaticMessage]
+  ): JsonValueCodec[StaticMessage] = {
+    val _ = as
+    JsonCodecMaker.make
   }
+
 }

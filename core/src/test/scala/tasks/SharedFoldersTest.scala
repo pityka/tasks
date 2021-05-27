@@ -32,7 +32,7 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import tasks.util._
-import tasks.circesupport._
+import tasks.jsonitersupport._
 import tasks.fileservice.ManagedFilePath
 
 import com.typesafe.config.ConfigFactory

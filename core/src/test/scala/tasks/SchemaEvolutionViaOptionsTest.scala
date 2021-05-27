@@ -28,9 +28,10 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import org.scalatest.matchers.should.Matchers
 
-import tasks.circesupport._
+import tasks.jsonitersupport._
 import scala.concurrent.Future
-import io.circe.generic.semiauto._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 import com.typesafe.config.ConfigFactory
 
 object SchemaEvolutionViaOptionsTest extends TestHelpers {
@@ -51,14 +52,13 @@ object SchemaEvolutionViaOptionsTest extends TestHelpers {
 
   case class Input1(data1: Int)
   object Input1 {
-    implicit val enc = deriveEncoder[Input1]
-    implicit val dec = deriveDecoder[Input1]
+    implicit val codec: JsonValueCodec[Input1] = JsonCodecMaker.make
+
   }
 
   case class Input2(data1: Int, data2: Option[Int])
   object Input2 {
-    implicit val enc = deriveEncoder[Input2]
-    implicit val dec = deriveDecoder[Input2]
+    implicit val codec: JsonValueCodec[Input2] = JsonCodecMaker.make
   }
 
   val task1 = AsyncTask[Input1, Int]("schemaevolutionviaoptions", 1) {

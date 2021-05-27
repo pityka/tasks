@@ -46,8 +46,8 @@ import tasks.shared._
 import tasks.fileservice._
 import tasks.wire._
 
-import io.circe.{Encoder}
-import io.circe.generic.semiauto._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 object Base64DataHelpers {
   def toBytes(b64: Base64Data): Array[Byte] = base64(b64.value)
@@ -55,7 +55,7 @@ object Base64DataHelpers {
 }
 
 case class ScheduleTask(
-    description: TaskDescription,
+    description: HashedTaskDescription,
     inputDeserializer: Spore[AnyRef, AnyRef],
     outputSerializer: Spore[AnyRef, AnyRef],
     function: Spore[AnyRef, AnyRef],
@@ -67,15 +67,17 @@ case class ScheduleTask(
     tryCache: Boolean,
     priority: Priority,
     labels: Labels,
-    lineage: TaskLineage
+    lineage: TaskLineage,
+    proxy: ActorRef
 )
 
 object ScheduleTask {
-  implicit val encoder: Encoder[ScheduleTask] = deriveEncoder[ScheduleTask]
-  implicit def decoder(implicit as: ExtendedActorSystem) = {
-    val _ = as
-    deriveDecoder[ScheduleTask]
+  implicit def codec(as: ExtendedActorSystem): JsonValueCodec[ScheduleTask] = {
+    implicit val actorRefCod = tasks.wire.actorRefCodec(as)
+    val _ = (as, actorRefCod)
+    JsonCodecMaker.make
   }
+
 }
 
 class Launcher(
@@ -123,8 +125,6 @@ class Launcher(
         )
       else scheduleTask.fileServicePrefix
 
-    val taskHash = SerializedTaskDescription(scheduleTask.description).hash
-
     val taskActor = context.actorOf(
       Props(
         classOf[Task],
@@ -146,10 +146,10 @@ class Launcher(
         config,
         scheduleTask.priority,
         scheduleTask.labels,
-        scheduleTask.description.input,
         scheduleTask.description.taskId,
         scheduleTask.lineage.inherit(scheduleTask.description),
-        taskHash
+        scheduleTask.description,
+        scheduleTask.proxy
       ).withDispatcher("task-worker-dispatcher")
     )
     log.debug("Actor constructed")

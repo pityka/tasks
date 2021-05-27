@@ -28,7 +28,7 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import org.scalatest.matchers.should.Matchers
 
-import tasks.circesupport._
+import tasks.jsonitersupport._
 import com.typesafe.config.ConfigFactory
 import scala.concurrent._
 import scala.concurrent.duration._
@@ -141,7 +141,9 @@ class QueryLogTestSuite extends FunSuite with Matchers {
         .fromInputStream(inputStream)
         .getLines()
         .map { line =>
-          io.circe.parser.decode[ResourceUtilizationRecord](line).toOption.get
+          com.github.plokhotnyuk.jsoniter_scala.core
+            .readFromString[ResourceUtilizationRecord](line)
+
         }
         .filter(_.taskId.id == "work")
         .toList

@@ -28,10 +28,11 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import org.scalatest.matchers.should.Matchers
 
-import tasks.circesupport._
+import tasks.jsonitersupport._
 import com.typesafe.config.ConfigFactory
 import scala.concurrent._
 import scala.concurrent.duration._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 import tasks._
 
@@ -81,10 +82,7 @@ object UIBackendTest extends TestHelpersUI {
 
       WebSocketClient.make("ws://localhost:28880/states")(frame =>
         synchronized {
-          websocketContents += io.circe.parser
-            .decode[UIQueueState](frame)
-            .toOption
-            .get
+          websocketContents += readFromString[UIQueueState](frame)
         }
       )
 

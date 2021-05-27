@@ -37,8 +37,9 @@ case class Uri(uri: String) {
 }
 
 object Uri {
-  import io.circe.generic.semiauto._
-  import io.circe._
-  implicit val decoder: Decoder[Uri] = deriveDecoder[Uri]
-  implicit val encoder: Encoder[Uri] = deriveEncoder[Uri]
+  import com.github.plokhotnyuk.jsoniter_scala.macros._
+  import com.github.plokhotnyuk.jsoniter_scala.core._
+
+  implicit val codec: JsonValueCodec[Uri] = JsonCodecMaker.make
+
 }

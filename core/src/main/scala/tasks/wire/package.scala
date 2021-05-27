@@ -1,31 +1,45 @@
 package tasks
 
-import io.circe._
-import cats.syntax.either._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 import akka.actor._
 
 import java.io.File
 
 package object wire {
 
-  implicit val actorRefEncoder: Encoder[ActorRef] =
-    Encoder.encodeString.contramap[ActorRef](ar =>
-      akka.serialization.Serialization.serializedActorPath(ar)
-    )
-  implicit def actorRefDecoder(implicit
+  implicit def actorRefCodec(implicit
       as: ExtendedActorSystem
-  ): Decoder[ActorRef] =
-    Decoder.decodeString.emap(str =>
-      Either
-        .catchNonFatal(as.provider.resolveActorRef(str))
-        .leftMap(_ => "ActorRef")
-    )
+  ): JsonValueCodec[ActorRef] = {
+    val codec0: JsonValueCodec[String] = JsonCodecMaker.make
 
-  implicit val throwableEncoder: Encoder[Throwable] =
-    Encoder
-      .encodeTuple2[String, List[(String, String, String, Int)]]
-      .contramap[Throwable] { throwable =>
-        (
+    new JsonValueCodec[ActorRef] {
+      val nullValue: ActorRef = null.asInstanceOf[ActorRef]
+
+      def encodeValue(x: ActorRef, out: JsonWriter): _root_.scala.Unit = {
+        val path = akka.serialization.Serialization.serializedActorPath(x)
+        codec0.encodeValue(path, out)
+      }
+
+      def decodeValue(in: JsonReader, default: ActorRef): ActorRef = {
+        val dto = codec0.decodeValue(in, codec0.nullValue)
+        as.provider.resolveActorRef(dto)
+      }
+    }
+  }
+
+  implicit val throwableCodec: JsonValueCodec[Throwable] = {
+    type DTO = (String, List[(String, String, String, Int)])
+    val codec0: JsonValueCodec[DTO] = JsonCodecMaker.make
+
+    new JsonValueCodec[Throwable] {
+      val nullValue: Throwable = null.asInstanceOf[Throwable]
+
+      def encodeValue(
+          throwable: Throwable,
+          out: JsonWriter
+      ): _root_.scala.Unit = {
+        val dto = (
           throwable.getMessage,
           throwable.getStackTrace.toList.map(stackTraceElement =>
             (
@@ -36,23 +50,35 @@ package object wire {
             )
           )
         )
+        codec0.encodeValue(dto, out)
       }
-  implicit val throwableDecoder: Decoder[Throwable] =
-    Decoder.decodeTuple2[String, List[(String, String, String, Int)]].emap {
-      case (msg, stackTrace) =>
+
+      def decodeValue(in: JsonReader, default: Throwable): Throwable = {
+        val (msg, stackTrace) = codec0.decodeValue(in, codec0.nullValue)
         val exc = new Exception(msg)
         exc.setStackTrace(stackTrace.map { case (cls, method, file, line) =>
           new java.lang.StackTraceElement(cls, method, file, line)
         }.toArray)
-        Either
-          .catchNonFatal(exc)
-          .leftMap(_ => "Throwable")
+        exc
+      }
     }
+  }
 
-  implicit val fileEncoder: Encoder[File] =
-    Encoder.encodeString.contramap[File](_.getAbsolutePath)
-  implicit val fileDecoder: Decoder[File] = Decoder.decodeString.emap(str =>
-    Either.catchNonFatal(new File(str)).leftMap(_ => "File")
-  )
+  implicit val fileCodec: JsonValueCodec[File] = {
+    implicit val codec0: JsonValueCodec[String] = JsonCodecMaker.make
+    new JsonValueCodec[File] {
+      val nullValue: File = null.asInstanceOf[File]
+
+      def encodeValue(x: File, out: JsonWriter): _root_.scala.Unit = {
+        val path = x.getAbsolutePath()
+        codec0.encodeValue(path, out)
+      }
+
+      def decodeValue(in: JsonReader, default: File): File = {
+        val dto = codec0.decodeValue(in, codec0.nullValue)
+        new File(dto)
+      }
+    }
+  }
 
 }

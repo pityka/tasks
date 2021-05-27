@@ -223,7 +223,7 @@ private[tasks] object SharedFileHelper extends StrictLogging {
       case ctx: HistoryContextImpl if config.writeFileHistories =>
         val history = History(sf, Some(ctx))
         val serialized =
-          History.encoder.apply(history).noSpaces.getBytes("UTF-8")
+          com.github.plokhotnyuk.jsoniter_scala.core.writeToArray(history)
 
         implicit val hctx = NoHistory
         createFromSource(
@@ -259,13 +259,10 @@ private[tasks] object SharedFileHelper extends StrictLogging {
                 logger.warn("Truncating history due to file size.")
                 History(sf, None)
               } else {
-                val string = new String(byteArray)
 
-                io.circe.parser.decode[History](string) match {
-                  case Left(e) =>
-                    throw e
-                  case Right(history) => history
-                }
+                com.github.plokhotnyuk.jsoniter_scala.core
+                  .readFromArray[History](byteArray)
+
               }
             }
 

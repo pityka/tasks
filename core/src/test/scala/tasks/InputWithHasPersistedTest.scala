@@ -28,10 +28,10 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import org.scalatest.matchers.should.Matchers
 
-import tasks.circesupport._
+import tasks.jsonitersupport._
 import scala.concurrent.Future
-import io.circe.generic.semiauto._
-
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 object InputWithHasPersistentTest extends TestHelpers {
 
   val sideEffect = scala.collection.mutable.ArrayBuffer[String]()
@@ -43,8 +43,9 @@ object InputWithHasPersistentTest extends TestHelpers {
     def persistent = InputWithHasPersistent(None, persisted)
   }
   object InputWithHasPersistent {
-    implicit val enc = deriveEncoder[InputWithHasPersistent]
-    implicit val dec = deriveDecoder[InputWithHasPersistent]
+    implicit val codec: JsonValueCodec[InputWithHasPersistent] =
+      JsonCodecMaker.make
+
   }
 
   val task = AsyncTask[InputWithHasPersistent, Int]("haspersistenttest", 1) {
