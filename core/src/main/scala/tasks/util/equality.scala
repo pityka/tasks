@@ -19,8 +19,6 @@
 
 package tasks.util
 
-import scala.language.implicitConversions
-
 /** Type safe equality http://hseeberger.github.io/blog/2013/05/31/implicits-unchained-type-safe-equality-part2/
   */
 object eq {

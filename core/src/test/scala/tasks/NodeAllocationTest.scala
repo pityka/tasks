@@ -29,7 +29,7 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.Future
-import tasks.circesupport._
+import tasks.jsonitersupport._
 import com.typesafe.config.ConfigFactory
 
 object NodeAllocationTest extends TestHelpers {

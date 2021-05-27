@@ -26,20 +26,21 @@ package tasks.ui
 
 import scala.concurrent._
 import scala.concurrent.duration._
-
-import io.circe._
-import io.circe.generic.semiauto._
+import tasks.fileservice.SharedFile
 
 import com.typesafe.config.ConfigFactory
+
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 trait TestHelpersUI {
 
   def await[T](f: Future[T]) = Await.result(f, atMost = Duration.Inf)
 
-  case class Input(i: Int, sf: tasks.SharedFile)
+  case class Input(i: Int, sf: SharedFile)
   object Input {
-    implicit val enc: Encoder[Input] = deriveEncoder[Input]
-    implicit val dec: Decoder[Input] = deriveDecoder[Input]
+    implicit val codec: JsonValueCodec[Input] = JsonCodecMaker.make
+
   }
 
   def testConfig = {

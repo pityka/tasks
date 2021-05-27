@@ -38,18 +38,17 @@ case class LauncherActor(actor: ActorRef)
 case class Proxy(actor: ActorRef)
 
 object Proxy {
-  import io.circe._
-  import io.circe.generic.semiauto._
+  import com.github.plokhotnyuk.jsoniter_scala.macros._
+  import com.github.plokhotnyuk.jsoniter_scala.core._
 
-  import tasks.wire.actorRefEncoder
-  implicit val encoder: Encoder[Proxy] = deriveEncoder[Proxy]
-
-  implicit def decoder(implicit EAS: ExtendedActorSystem): Decoder[Proxy] = {
-    implicit val actorRefDecoder: Decoder[ActorRef] =
-      tasks.wire.actorRefDecoder(EAS)
-    val _ = actorRefDecoder // suppress unused warning
-    deriveDecoder[Proxy]
+  import tasks.wire.actorRefCodec
+  implicit def codec(implicit
+      EAS: ExtendedActorSystem
+  ): JsonValueCodec[Proxy] = {
+    val _ = EAS
+    JsonCodecMaker.make
   }
+
 }
 
 case class LauncherStopped(launcher: LauncherActor)

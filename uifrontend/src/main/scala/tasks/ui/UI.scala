@@ -50,50 +50,6 @@ object WebSocketHelper {
 
 object Helpers {
 
-  def prettyJson(b64: Base64Data): String =
-    io.circe.parser
-      .parse(new String(java.util.Base64.getDecoder.decode(b64.value)))
-      .fold(_.toString.take(100), extractFilePath)
-
-  def extractFilePath(json: io.circe.Json): String = {
-    import io.circe._
-    def loop(json: io.circe.Json): List[String] = json.arrayOrObject(
-      or = Nil,
-      jsonArray =
-        elements => elements.flatMap(element => loop(element)).distinct.toList,
-      jsonObject = obj =>
-        if (
-          obj.contains("path") && obj.contains("hash") && obj
-            .contains("byteSize")
-        ) {
-          obj("path").flatMap(_.asObject) match {
-            case Some(obj) if obj.contains("RemoteFilePath") =>
-              Json
-                .fromJsonObject(obj)
-                .hcursor
-                .downField("RemoteFilePath")
-                .downField("uri")
-                .as[String]
-                .toOption
-                .toList
-            case Some(obj) if obj.contains("ManagedFilePath") =>
-              Json
-                .fromJsonObject(obj)
-                .hcursor
-                .downField("ManagedFilePath")
-                .downField("pathElements")
-                .as[Vector[String]]
-                .toOption
-                .map(_.mkString("/"))
-                .toList
-            case _ => Nil
-          }
-        } else obj.values.flatMap(v => loop(v)).toList
-    )
-
-    loop(json).mkString(", ")
-  }
-
   def showUILauncher(launcher: UILauncherActor): String = {
     val url = new java.net.URI(launcher.actorPath)
     Option(url.getHost).getOrElse("local") + ":" + Option(url.getPort)
@@ -124,7 +80,7 @@ object Helpers {
 
   def renderTableBodyWithScheduledTasks(
       scheduledTasks: List[
-        (TaskDescription, (UILauncherActor, VersionedResourceAllocated))
+        (HashedTaskDescription, (UILauncherActor, VersionedResourceAllocated))
       ]
   ) =
     tbody(
@@ -136,7 +92,7 @@ object Helpers {
               taskDescription.taskId.id + " @" + taskDescription.taskId.version
             ),
             td(
-              code(prettyJson(taskDescription.input))
+              code(taskDescription.hash)
             ),
             td(showUILauncher(launcher)),
             td(resource.codeVersion),

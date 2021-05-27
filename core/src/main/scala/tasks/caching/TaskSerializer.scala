@@ -26,56 +26,16 @@
 package tasks.caching
 
 import tasks.queue._
-import tasks.fileservice._
-import tasks.fileservice.SharedFile._
 
-import io.circe._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 trait TaskSerializer {
 
   def serializeResult(original: UntypedResult): Array[Byte] = {
-    val mutableFilesField =
-      if (original.mutableFiles.isEmpty) Nil
-      else
-        List(
-          "mutablefiles" -> implicitly[Encoder[Set[SharedFile]]]
-            .apply(original.mutableFiles.get)
-        )
-
-    val fields = List(
-      "files" -> implicitly[Encoder[Set[SharedFile]]].apply(original.files),
-      "data" -> Json.fromString(original.data.value)
-    ) ++ mutableFilesField
-
-    val js = Json.obj(fields: _*)
-    js.noSpaces.getBytes("UTF8")
+    writeToArray(original)
   }
 
   def deserializeResult(byteArray: Array[Byte]): UntypedResult = {
-    val map = io.circe.parser
-      .parse(new String(byteArray, "UTF8"))
-      .toOption
-      .get
-      .asObject
-      .get
-
-    val files =
-      implicitly[Decoder[Set[SharedFile]]]
-        .decodeJson(map("files").get)
-        .toOption
-        .get
-
-    val mutableFiles = map.apply("mutablefiles") match {
-      case None => None
-      case Some(js) =>
-        Some(
-          implicitly[Decoder[Set[SharedFile]]]
-            .decodeJson(js)
-            .toOption
-            .get
-        )
-    }
-
-    UntypedResult(files, Base64Data(map("data").get.asString.get), mutableFiles)
+    readFromArray[UntypedResult](byteArray)
   }
 }

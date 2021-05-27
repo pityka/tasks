@@ -5,7 +5,9 @@ import tasks.ecoll._
 import tasks.queue._
 import tasks._
 import scala.concurrent.Future
-import tasks.circesupport._
+import tasks.jsonitersupport._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 private[ecoll] object Group2 {
 
@@ -29,13 +31,9 @@ private[ecoll] object Group2 {
   )
 
   object Input {
-    import io.circe._
-    import io.circe.generic.semiauto._
-    import io.circe.generic.auto._
-    implicit def encoder[AA, A, BB, B, CC]: Encoder[Input[AA, A, BB, B, CC]] =
-      deriveEncoder[Input[AA, A, BB, B, CC]]
-    implicit def decoder[AA, A, BB, B, CC]: Decoder[Input[AA, A, BB, B, CC]] =
-      deriveDecoder[Input[AA, A, BB, B, CC]]
+    implicit def codec[AA, A, BB, B, CC]
+        : JsonValueCodec[Input[AA, A, BB, B, CC]] =
+      JsonCodecMaker.make
 
   }
 

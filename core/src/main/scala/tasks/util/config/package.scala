@@ -27,7 +27,6 @@ package tasks.util
 
 import com.typesafe.config.Config
 import scala.concurrent.duration._
-import scala.language.implicitConversions
 
 package object config {
 

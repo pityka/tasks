@@ -29,8 +29,8 @@ import akka.stream.scaladsl._
 import tasks.queue.TaskQueue
 import tasks.ui.EventListener
 import tasks.util.config.TasksConfig
-import io.circe.{Encoder, Decoder}
-import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 import tasks.queue.{TaskId, ResultMetadata}
 import tasks.shared.ResourceAllocated
 import tasks.shared.{ElapsedTimeNanoSeconds, Labels}
@@ -47,10 +47,9 @@ case class ResourceUtilizationRecord(
 )
 
 object ResourceUtilizationRecord {
-  implicit val encoder: Encoder[ResourceUtilizationRecord] =
-    deriveEncoder[ResourceUtilizationRecord]
-  implicit val decoder: Decoder[ResourceUtilizationRecord] =
-    deriveDecoder[ResourceUtilizationRecord]
+  implicit val codec: JsonValueCodec[ResourceUtilizationRecord] =
+    JsonCodecMaker.make
+
 }
 
 class TrackerImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
@@ -76,8 +75,8 @@ class TrackerImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
         Some(td.result.untypedResult.files),
         Some(config.codeVersion)
       )
-      import io.circe.syntax._
-      akka.util.ByteString(dto.asJson.noSpaces + "\n")
+
+      akka.util.ByteString(writeToString(dto) + "\n")
     }
     .to(
       FileIO

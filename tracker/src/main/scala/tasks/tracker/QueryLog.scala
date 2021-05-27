@@ -3,6 +3,9 @@ package tasks.tracker
 import tasks.shared._
 import java.io.InputStream
 
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
+
 object QueryLog {
 
   val cpuTimeKey = "__cpuTime"
@@ -11,12 +14,8 @@ object QueryLog {
   val multiplicityKey = "__multiplicity"
 
   object Node {
-    import io.circe._
-    import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
-    implicit val encoder: Encoder[Node] =
-      deriveEncoder[Node]
-    implicit val decoder: Decoder[Node] =
-      deriveDecoder[Node]
+    implicit val codec: JsonValueCodec[Node] = JsonCodecMaker.make
+
   }
 
   case class RawNode(
@@ -31,12 +30,8 @@ object QueryLog {
   }
 
   object RawNode {
-    import io.circe._
-    import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
-    implicit val encoder: Encoder[RawNode] =
-      deriveEncoder[RawNode]
-    implicit val decoder: Decoder[RawNode] =
-      deriveDecoder[RawNode]
+    implicit val codec: JsonValueCodec[RawNode] = JsonCodecMaker.make
+
   }
 
   case class Node(
@@ -67,7 +62,10 @@ object QueryLog {
       .fromInputStream(source)
       .getLines()
       .map { line =>
-        val parsed = io.circe.parser.decode[ResourceUtilizationRecord](line)
+        val parsed =
+          scala.util
+            .Try(readFromString[ResourceUtilizationRecord](line))
+            .toEither
         // if (parsed.isLeft) {
         // println(parsed.left.get + " " + line)
         // }

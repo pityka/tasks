@@ -35,8 +35,8 @@ import tasks.util.config.TasksConfig
 import tasks.wire._
 import scala.util.Try
 
-import io.circe.{Encoder, Decoder}
-import io.circe.generic.semiauto._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 case class Node(
     name: RunningJobId,
@@ -45,10 +45,9 @@ case class Node(
 )
 
 object Node {
-  implicit val enc: Encoder[Node] = deriveEncoder[Node]
-  implicit def dec(implicit as: ExtendedActorSystem): Decoder[Node] = {
+  implicit def dec(implicit as: ExtendedActorSystem): JsonValueCodec[Node] = {
     val _ = as // suppressing unused warning
-    deriveDecoder[Node]
+    JsonCodecMaker.make
   }
 }
 

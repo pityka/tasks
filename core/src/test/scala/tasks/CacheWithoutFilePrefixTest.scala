@@ -28,7 +28,7 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import org.scalatest.matchers.should.Matchers
 
-import tasks.circesupport._
+import tasks.jsonitersupport._
 import scala.concurrent.Future
 import com.typesafe.config.ConfigFactory
 

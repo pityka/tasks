@@ -33,7 +33,7 @@ import org.scalatest.matchers.should.Matchers
 import scala.concurrent._
 
 import tasks.util._
-import tasks.jsonitersupport._
+import tasks.circesupport._
 
 import com.typesafe.config.ConfigFactory
 

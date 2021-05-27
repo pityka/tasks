@@ -30,13 +30,24 @@ package tasks.ecoll
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should._
 import tasks._
-import tasks.circesupport._
+import tasks.jsonitersupport._
 
 import scala.concurrent._
 import scala.concurrent.duration._
-import io.circe.generic.auto._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 object Tests {
+
+  implicit val codec0: JsonValueCodec[Option[Int]] = JsonCodecMaker.make
+  implicit val codec1: JsonValueCodec[Seq[Option[Int]]] = JsonCodecMaker.make
+  implicit val codec2: JsonValueCodec[Seq[Option[Option[Int]]]] =
+    JsonCodecMaker.make
+  implicit val codec3
+      : JsonValueCodec[(Option[Option[Int]], Option[Option[Int]])] =
+    JsonCodecMaker.make
+  implicit val codec4: JsonValueCodec[(Option[Option[Int]], Option[Int])] =
+    JsonCodecMaker.make
 
   implicit val s1l = makeSerDe[Long]
   implicit val s1l2 = makeSerDe[(Option[Option[Int]], Option[Int])]

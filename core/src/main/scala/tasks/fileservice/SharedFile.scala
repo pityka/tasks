@@ -36,8 +36,8 @@ import tasks.TaskSystemComponents
 import tasks.Implicits._
 import tasks.HasSharedFiles
 
-import io.circe.{Decoder, Encoder, DecodingFailure}
-import io.circe.generic.semiauto._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 sealed trait FilePath {
   def name: String
@@ -92,24 +92,7 @@ case class SharedFile(
 
 object SharedFile {
 
-  implicit val encoder: Encoder[SharedFile] =
-    Encoder.forProduct3("path", "byteSize", "hash")(sf =>
-      (sf.path, sf.byteSize, sf.hash)
-    )
-
-  implicit val decoder: Decoder[SharedFile] =
-    Decoder.instance { cursor =>
-      cursor.focus.flatMap(_.asObject) match {
-        case None => Left(DecodingFailure("not object", Nil))
-        case Some(_) =>
-          Decoder
-            .forProduct3("path", "byteSize", "hash")(
-              (a: FilePath, b: Long, c: Int) => new SharedFile(a, b, c)
-            )
-            .apply(cursor)
-
-      }
-    }
+  implicit val codec: JsonValueCodec[SharedFile] = JsonCodecMaker.make
 
   def apply(uri: Uri)(implicit tsc: TaskSystemComponents): Future[SharedFile] =
     SharedFileHelper.create(RemoteFilePath(uri), tsc.fs.remote)
@@ -147,18 +130,13 @@ object SharedFile {
 }
 
 object ManagedFilePath {
-  implicit val decoder: Decoder[ManagedFilePath] =
-    deriveDecoder[ManagedFilePath]
-  implicit val encoder: Encoder[ManagedFilePath] =
-    deriveEncoder[ManagedFilePath]
+  // implicit val codec: JsonValueCodec[ManagedFilePath] = JsonCodecMaker.make
 }
 
 object RemoteFilePath {
-  implicit val decoder: Decoder[RemoteFilePath] = deriveDecoder[RemoteFilePath]
-  implicit val encoder: Encoder[RemoteFilePath] = deriveEncoder[RemoteFilePath]
+  // implicit val codec: JsonValueCodec[RemoteFilePath] = JsonCodecMaker.make
 }
 
 object FilePath {
-  implicit val decoder: Decoder[FilePath] = deriveDecoder[FilePath]
-  implicit val encoder: Encoder[FilePath] = deriveEncoder[FilePath]
+  implicit val codec: JsonValueCodec[FilePath] = JsonCodecMaker.make
 }
