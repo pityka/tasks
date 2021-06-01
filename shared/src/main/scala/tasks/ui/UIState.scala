@@ -29,13 +29,6 @@ import tasks.queue._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 
-case class UIUntypedResult(files: Set[UISharedFile], data: Base64Data)
-
-object UIUntypedResult {
-  implicit val codec: JsonValueCodec[UIUntypedResult] =
-    JsonCodecMaker.make
-}
-
 sealed trait UIFilePath
 case class UIManagedFilePath(path: Vector[String]) extends UIFilePath {
   override def toString = path.mkString("/")

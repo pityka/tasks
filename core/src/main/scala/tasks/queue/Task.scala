@@ -118,7 +118,8 @@ object UntypedResult {
     UntypedResult(immut, Base64DataHelpers(ser(r)), m)
   }
 
-  implicit val codec: JsonValueCodec[UntypedResult] = JsonCodecMaker.make
+  implicit val codec: JsonValueCodec[UntypedResult] =
+    JsonCodecMaker.make(CodecMakerConfig.withSetMaxInsertNumber(2147483647))
 }
 
 case class ComputationEnvironment(
@@ -162,7 +163,7 @@ case class ComputationEnvironment(
     components
 
 }
- 
+
 private class Task(
     inputDeserializer: Spore[AnyRef, AnyRef],
     outputSerializer: Spore[AnyRef, AnyRef],
