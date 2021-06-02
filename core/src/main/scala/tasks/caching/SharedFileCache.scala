@@ -27,7 +27,6 @@
 
 package tasks.caching
 
-import scala.util._
 import scala.concurrent._
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Source
@@ -41,6 +40,7 @@ import tasks.fileservice.{
   FileServicePrefix,
   SharedFileHelper
 }
+import akka.stream.scaladsl.StreamConverters
 
 private[tasks] class SharedFileCache(implicit
     fileServiceComponent: FileServiceComponent,
@@ -75,11 +75,8 @@ private[tasks] class SharedFileCache(implicit
             .getSourceToFile(sf, fromOffset = 0L)
             .runFold(ByteString.empty)(_ ++ _)
             .map { byteString =>
-              val t = Try(deserializeResult(byteString.toArray))
-              t.failed.foreach { case e: Exception =>
-                logger.debug(s"Failed to deserialize due to $e")
-              }
-              t.toOption
+              val t = deserializeResult(byteString.toArray)
+              Some(t)
             }
             .recover { case e =>
               logger.error(
