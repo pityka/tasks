@@ -29,7 +29,7 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 import com.typesafe.config.ConfigFactory
 
-import tasks.circesupport._
+import tasks.jsonitersupport._
 import scala.concurrent.Future
 
 object FailingTasksTest extends TestHelpers {

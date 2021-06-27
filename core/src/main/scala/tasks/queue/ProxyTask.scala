@@ -71,12 +71,14 @@ class ProxyTask[Input, Output](
       case _                       => None
     }
 
-    val scheduleTask = ScheduleTask(
-      TaskDescription(
+    val hash: HashedTaskDescription =
+      HashedTaskDescription(
         taskId,
-        Base64DataHelpers(writer(input)),
-        persisted.map(x => Base64DataHelpers(writer(x)))
-      ),
+        writer.hash(persisted.getOrElse(input))
+      )
+
+    val scheduleTask = ScheduleTask(
+      hash,
       inputDeserializer.as[AnyRef, AnyRef],
       outputSerializer.as[AnyRef, AnyRef],
       function.as[AnyRef, AnyRef],
@@ -88,7 +90,8 @@ class ProxyTask[Input, Output](
       cache,
       priority,
       labels,
-      lineage
+      lineage,
+      self
     )
 
     log.debug("proxy submitting ScheduleTask object to queue.")
@@ -107,6 +110,8 @@ class ProxyTask[Input, Output](
   }
 
   def receive = {
+    case NeedInput =>
+      sender() ! InputData(Base64DataHelpers(writer(input)))
     case MessageFromTask(untypedOutput, retrievedFromCache) =>
       reader(Base64DataHelpers.toBytes(untypedOutput.data)) match {
         case Right(output) =>

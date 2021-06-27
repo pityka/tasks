@@ -25,8 +25,8 @@
 
 package tasks.shared
 
-import io.circe._
-import io.circe.generic.semiauto._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 import java.time.Instant
 
 case class ResourceRequest(
@@ -41,10 +41,8 @@ object ResourceRequest {
   def apply(cpu: Int, memory: Int, scratch: Int, gpu: Int): ResourceRequest =
     ResourceRequest((cpu, cpu), memory, scratch, gpu)
 
-  implicit val decoder: Decoder[ResourceRequest] =
-    deriveDecoder[ResourceRequest]
-  implicit val encoder: Encoder[ResourceRequest] =
-    deriveEncoder[ResourceRequest]
+  implicit val codec: JsonValueCodec[ResourceRequest] = JsonCodecMaker.make
+
 }
 
 case class ResourceAllocated(
@@ -57,10 +55,7 @@ case class ResourceAllocated(
 }
 
 object ResourceAllocated {
-  implicit val decoder: Decoder[ResourceAllocated] =
-    deriveDecoder[ResourceAllocated]
-  implicit val encoder: Encoder[ResourceAllocated] =
-    deriveEncoder[ResourceAllocated]
+  implicit val codec: JsonValueCodec[ResourceAllocated] = JsonCodecMaker.make
 }
 
 case class ResourceAvailable(
@@ -135,10 +130,7 @@ object ResourceAvailable {
 
       }
     }
-  implicit val decoder: Decoder[ResourceAvailable] =
-    deriveDecoder[ResourceAvailable]
-  implicit val encoder: Encoder[ResourceAvailable] =
-    deriveEncoder[ResourceAvailable]
+  implicit val codec: JsonValueCodec[ResourceAvailable] = JsonCodecMaker.make
 }
 
 case class VersionedResourceRequest(
@@ -163,10 +155,8 @@ object VersionedResourceRequest {
       ResourceRequest((cpu, cpu), memory, scratch, gpu)
     )
 
-  implicit val decoder: Decoder[VersionedResourceRequest] =
-    deriveDecoder[VersionedResourceRequest]
-  implicit val encoder: Encoder[VersionedResourceRequest] =
-    deriveEncoder[VersionedResourceRequest]
+  implicit val codec: JsonValueCodec[VersionedResourceRequest] =
+    JsonCodecMaker.make
 }
 
 case class VersionedResourceAllocated(
@@ -180,10 +170,8 @@ case class VersionedResourceAllocated(
 }
 
 object VersionedResourceAllocated {
-  implicit val decoder: Decoder[VersionedResourceAllocated] =
-    deriveDecoder[VersionedResourceAllocated]
-  implicit val encoder: Encoder[VersionedResourceAllocated] =
-    deriveEncoder[VersionedResourceAllocated]
+  implicit val codec: JsonValueCodec[VersionedResourceAllocated] =
+    JsonCodecMaker.make
 }
 
 case class VersionedResourceAvailable(
@@ -224,26 +212,22 @@ case class VersionedResourceAvailable(
 }
 
 object VersionedResourceAvailable {
-  implicit val decoder: Decoder[VersionedResourceAvailable] =
-    deriveDecoder[VersionedResourceAvailable]
-  implicit val encoder: Encoder[VersionedResourceAvailable] =
-    deriveEncoder[VersionedResourceAvailable]
+  implicit val codec: JsonValueCodec[VersionedResourceAvailable] =
+    JsonCodecMaker.make
 }
 
 case class RunningJobId(value: String)
 
 object RunningJobId {
-  implicit val decoder: Decoder[RunningJobId] =
-    deriveDecoder[RunningJobId]
-  implicit val encoder: Encoder[RunningJobId] =
-    deriveEncoder[RunningJobId]
+  implicit val codec: JsonValueCodec[RunningJobId] =
+    JsonCodecMaker.make
 }
 
 case class PendingJobId(value: String)
 
 object PendingJobId {
-  implicit val decoder: Decoder[PendingJobId] = deriveDecoder[PendingJobId]
-  implicit val encoder: Encoder[PendingJobId] = deriveEncoder[PendingJobId]
+  implicit val codec: JsonValueCodec[PendingJobId] =
+    JsonCodecMaker.make
 }
 
 case class Labels(values: List[(String, String)]) {
@@ -251,8 +235,8 @@ case class Labels(values: List[(String, String)]) {
 
 }
 object Labels {
-  implicit val decoder: Decoder[Labels] = deriveDecoder[Labels]
-  implicit val encoder: Encoder[Labels] = deriveEncoder[Labels]
+  implicit val codec: JsonValueCodec[Labels] =
+    JsonCodecMaker.make
   val empty = Labels(Nil)
 }
 
@@ -262,6 +246,6 @@ case class LogRecord(
 )
 
 object LogRecord {
-  implicit val decoder: Decoder[LogRecord] = deriveDecoder[LogRecord]
-  implicit val encoder: Encoder[LogRecord] = deriveEncoder[LogRecord]
+  implicit val codec: JsonValueCodec[LogRecord] =
+    JsonCodecMaker.make
 }

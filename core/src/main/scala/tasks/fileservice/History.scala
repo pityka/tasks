@@ -1,7 +1,7 @@
 package tasks.fileservice
 
-import io.circe.generic.semiauto._
-import io.circe.{Encoder, Decoder}
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 sealed trait HistoryContext
 case class HistoryContextImpl(
@@ -20,22 +20,14 @@ object History {
 
   case class TaskVersion(taskID: String, taskVersion: Int)
   object TaskVersion {
-    implicit val encoder: Encoder[TaskVersion] =
-      deriveEncoder[TaskVersion]
-    implicit val decoder: Decoder[TaskVersion] =
-      deriveDecoder[TaskVersion]
+    implicit val codec: JsonValueCodec[TaskVersion] = JsonCodecMaker.make
+
   }
 
-  implicit val encoder: Encoder[History] =
-    deriveEncoder[History]
-  implicit val decoder: Decoder[History] =
-    deriveDecoder[History]
+  implicit val codec: JsonValueCodec[History] = JsonCodecMaker.make
 
 }
 
 object HistoryContext {
-  implicit val encoder: Encoder[HistoryContext] =
-    deriveEncoder[HistoryContext]
-  implicit val decoder: Decoder[HistoryContext] =
-    deriveDecoder[HistoryContext]
+  implicit val codec: JsonValueCodec[HistoryContext] = JsonCodecMaker.make
 }

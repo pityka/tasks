@@ -39,8 +39,8 @@ import tasks.shared._
 import tasks._
 import tasks.wire._
 
-import io.circe.{Decoder, Encoder}
-import io.circe.generic.semiauto._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 import java.time.Instant
 
@@ -56,38 +56,29 @@ case class DependenciesAndRuntimeMetadata(
 )
 
 object DependenciesAndRuntimeMetadata {
-  implicit val encoder: Encoder[DependenciesAndRuntimeMetadata] =
-    deriveEncoder[DependenciesAndRuntimeMetadata]
-  implicit val decoder: Decoder[DependenciesAndRuntimeMetadata] =
-    deriveDecoder[DependenciesAndRuntimeMetadata]
+  implicit val codec: JsonValueCodec[DependenciesAndRuntimeMetadata] =
+    JsonCodecMaker.make
+
 }
 
 case class TaskInvocationId(id: TaskId, description: HashedTaskDescription) {
   override def toString = id.id + "_" + description.hash
 }
 object TaskInvocationId {
-  implicit val encoder: Encoder[TaskInvocationId] =
-    deriveEncoder[TaskInvocationId]
-
-  implicit val decoder: Decoder[TaskInvocationId] =
-    deriveDecoder[TaskInvocationId]
+  implicit val codec: JsonValueCodec[TaskInvocationId] = JsonCodecMaker.make
 }
 
 case class TaskLineage(lineage: Seq[TaskInvocationId]) {
   def leaf = lineage.last
-  def inherit(td: TaskDescription) =
+  def inherit(td: HashedTaskDescription) =
     TaskLineage(
-      lineage :+ TaskInvocationId(td.taskId, SerializedTaskDescription(td).hash)
+      lineage :+ TaskInvocationId(td.taskId, td)
     )
 }
 
 object TaskLineage {
   def root = TaskLineage(Seq.empty)
-  implicit val encoder: Encoder[TaskLineage] =
-    deriveEncoder[TaskLineage]
-
-  implicit val decoder: Decoder[TaskLineage] =
-    deriveDecoder[TaskLineage]
+  implicit val codec: JsonValueCodec[TaskLineage] = JsonCodecMaker.make
 }
 
 case class ResultMetadata(
@@ -99,11 +90,7 @@ case class ResultMetadata(
 )
 
 object ResultMetadata {
-  implicit val encoder: Encoder[ResultMetadata] =
-    deriveEncoder[ResultMetadata]
-
-  implicit val decoder: Decoder[ResultMetadata] =
-    deriveDecoder[ResultMetadata]
+  implicit val codec: JsonValueCodec[ResultMetadata] = JsonCodecMaker.make
 }
 
 case class UntypedResultWithMetadata(
@@ -112,11 +99,8 @@ case class UntypedResultWithMetadata(
 )
 
 object UntypedResultWithMetadata {
-  implicit val encoder: Encoder[UntypedResultWithMetadata] =
-    deriveEncoder[UntypedResultWithMetadata]
-
-  implicit val decoder: Decoder[UntypedResultWithMetadata] =
-    deriveDecoder[UntypedResultWithMetadata]
+  implicit val codec: JsonValueCodec[UntypedResultWithMetadata] =
+    JsonCodecMaker.make
 }
 
 object UntypedResult {
@@ -134,9 +118,8 @@ object UntypedResult {
     UntypedResult(immut, Base64DataHelpers(ser(r)), m)
   }
 
-  implicit val encoder: Encoder[UntypedResult] = deriveEncoder[UntypedResult]
-
-  implicit val decoder: Decoder[UntypedResult] = deriveDecoder[UntypedResult]
+  implicit val codec: JsonValueCodec[UntypedResult] =
+    JsonCodecMaker.make(CodecMakerConfig.withSetMaxInsertNumber(2147483647))
 }
 
 case class ComputationEnvironment(
@@ -196,23 +179,21 @@ private class Task(
     tasksConfig: TasksConfig,
     priority: Priority,
     labels: Labels,
-    input: Base64Data,
     taskId: TaskId,
     lineage: TaskLineage,
-    taskHash: HashedTaskDescription
+    taskHash: HashedTaskDescription,
+    proxy: ActorRef
 ) extends Actor
     with akka.actor.ActorLogging {
 
-  private case object Start
-
   override def preStart(): Unit = {
     log.debug("Prestart of Task class")
-    self ! Start
+    proxy ! NeedInput
   }
 
   override def postStop(): Unit = {
     fjp.shutdown
-    log.debug(s"Task stopped. Input was: ${input.value}.")
+    log.debug(s"Task stopped. $taskId")
   }
 
   val fjp = tasks.util.concurrent
@@ -253,8 +234,9 @@ private class Task(
       case Failure(error) => handleError(error)
     }(executionContextOfTask)
 
-  private def executeTaskAsynchronously()
-      : Future[(UntypedResult, DependenciesAndRuntimeMetadata)] =
+  private def executeTaskAsynchronously(
+      input: Base64Data
+  ): Future[(UntypedResult, DependenciesAndRuntimeMetadata)] =
     try {
       val history = HistoryContextImpl(
         task = History.TaskVersion(taskId.id, taskId.version),
@@ -309,9 +291,9 @@ private class Task(
     }
 
   def receive = {
-    case Start =>
+    case InputData(b64InputData) =>
       handleCompletion(
-        executeTaskAsynchronously(),
+        executeTaskAsynchronously(b64InputData),
         startTimeStamp = java.time.Instant.now
       )
 

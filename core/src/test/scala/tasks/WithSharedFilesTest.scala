@@ -28,10 +28,11 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import org.scalatest.matchers.should.Matchers
 
-import tasks.circesupport._
+import tasks.jsonitersupport._
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
-import io.circe.generic.semiauto._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 import scala.concurrent.Future
 import tasks.queue.UntypedResult
@@ -45,18 +46,18 @@ object ResultWithSharedFilesTest extends TestHelpers {
       extends WithSharedFiles(mutables = mut.toSeq)
 
   object Intermediate {
-    implicit val enc = deriveEncoder[Intermediate]
-    implicit val dec = deriveDecoder[Intermediate]
+    implicit val codec: JsonValueCodec[Intermediate] = JsonCodecMaker.make
+
   }
   object IntermediateMutable {
-    implicit val enc = deriveEncoder[IntermediateMutable]
-    implicit val dec = deriveDecoder[IntermediateMutable]
+    implicit val codec: JsonValueCodec[IntermediateMutable] =
+      JsonCodecMaker.make
   }
 
   case class OtherCollection(sf: Intermediate)
   object OtherCollection {
-    implicit val enc = deriveEncoder[OtherCollection]
-    implicit val dec = deriveDecoder[OtherCollection]
+    implicit val codec: JsonValueCodec[OtherCollection] = JsonCodecMaker.make
+
   }
 
   case class Output(
@@ -81,8 +82,7 @@ object ResultWithSharedFilesTest extends TestHelpers {
       )
 
   object Output {
-    implicit val enc = deriveEncoder[Output]
-    implicit val dec = deriveDecoder[Output]
+    implicit val codec: JsonValueCodec[Output] = JsonCodecMaker.make
   }
 
   val testTask = AsyncTask[Input, Output]("resultwithsharedfilestest", 1) {

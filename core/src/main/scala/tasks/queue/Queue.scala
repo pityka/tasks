@@ -76,7 +76,7 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(implicit
   import TaskQueue._
 
   case class ScheduleTaskEqualityProjection(
-      description: TaskDescription
+      description: HashedTaskDescription
   )
 
   def project(sch: ScheduleTask) =

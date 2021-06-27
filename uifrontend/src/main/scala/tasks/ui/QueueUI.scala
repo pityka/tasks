@@ -27,6 +27,7 @@ package tasks.ui
 import org.scalajs.dom
 import scala.scalajs.js.annotation._
 import com.raquo.laminar.api.L._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 @JSExportTopLevel("QueueMain")
 object QueueMain {
 
@@ -40,9 +41,7 @@ object QueueMain {
     val websocket = WebSocketHelper.open(s"ws://$host/states")
 
     val uiStateSource = websocket.events
-      .map(wsMessage =>
-        io.circe.parser.decode[UIQueueState](wsMessage).toOption.get
-      )
+      .map(wsMessage => readFromString[UIQueueState](wsMessage))
 
     val knownLaunchersTable = {
       val body = tbody(
@@ -177,7 +176,7 @@ object QueueMain {
                     taskDescription.taskId.id + " @" + taskDescription.taskId.version
                   ),
                   td(
-                    code(prettyJson(taskDescription.input))
+                    code(taskDescription.hash)
                   )
                 )
               }

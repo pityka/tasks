@@ -34,7 +34,9 @@ import scala.concurrent._
 import tasks.queue.Spore
 
 import tasks.util._
-import tasks.circesupport._
+import tasks.jsonitersupport._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 import com.typesafe.config.ConfigFactory
 
@@ -69,12 +71,12 @@ object MySpore {
   val s = spore { (a: Option[Int]) =>
     a.toString
   }
-  import io.circe._
-  import io.circe.generic.auto._
+
   case class User(a: String)
   object User {
     // without this the compiler blows up
-    implicit val encoder = implicitly[Encoder[User]]
+    implicit val codec: JsonValueCodec[User] = JsonCodecMaker.make
+
     implicit val encoderSpore =
       spore(() => implicitly[tasks.queue.Serializer[User]])
   }
@@ -187,12 +189,13 @@ class SporeTestSuite extends FunSuite with Matchers {
     spore("abcd") shouldBe "ABCD"
     val spore0 = MySpore.recursive0(MySpore.sporeLeaf0)
     spore0(()) shouldBe "abcd"
-    import io.circe.syntax._
-    spore.asJson.noSpaces shouldBe """{"fqcn":"tasks.MySpore$spore$macro$1$4","deps":[{"fqcn":"tasks.MySpore$spore$macro$32$1","deps":[]}]}"""
-    io.circe.parser
-      .decode[Spore[String, String]](spore.asJson.noSpaces)
-      .toOption
-      .get("qwerty") shouldBe "QWERTY"
+
+    writeToString(
+      spore
+    ) shouldBe """{"fqcn":"tasks.MySpore$spore$macro$1$4","deps":[{"fqcn":"tasks.MySpore$spore$macro$16$1"}]}"""
+    readFromString[Spore[String, String]](writeToString(spore)).apply(
+      "qwerty"
+    ) shouldBe "QWERTY"
   }
 
 }

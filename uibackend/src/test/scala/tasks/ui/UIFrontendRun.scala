@@ -26,7 +26,7 @@ package tasks.ui
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
-import tasks.circesupport._
+import tasks.jsonitersupport._
 import org.scalatest.matchers.should.Matchers
 import scala.concurrent.Future
 import com.typesafe.config.ConfigFactory

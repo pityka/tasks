@@ -31,9 +31,10 @@ import tasks.util.concurrent.await
 import scala.concurrent._
 import com.typesafe.config.ConfigFactory
 
-import tasks.circesupport._
+import tasks.jsonitersupport._
 
-import io.circe.generic.auto._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 object RercursiveTasksTest {
 
@@ -46,10 +47,16 @@ object RercursiveTasksTest {
   case class FibInput(n: Option[Int], tag: Option[List[Boolean]])
 
   object FibInput {
+    implicit val codec: JsonValueCodec[FibInput] = JsonCodecMaker.make
+
     def apply(n: Int): FibInput = FibInput(Some(n), tag = Some(Nil))
   }
 
   case class FibOut(n: Int)
+  object FibOut {
+    implicit val codec: JsonValueCodec[FibOut] = JsonCodecMaker.make
+
+  }
 
   val fibtask: TaskDefinition[FibInput, FibOut] =
     AsyncTask[FibInput, FibOut]("fib", 1) {

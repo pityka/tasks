@@ -28,6 +28,8 @@ import org.scalajs.dom
 import scala.scalajs.js.annotation._
 import com.raquo.laminar.api.L._
 import tasks.shared.ResourceAvailable
+import com.github.plokhotnyuk.jsoniter_scala.core._
+
 @JSExportTopLevel("AppMain")
 object AppMain {
 
@@ -66,9 +68,7 @@ object AppMain {
     val websocket = WebSocketHelper
       .open(s"ws://$host/states")
     val events = websocket.events
-      .map(wsMessage =>
-        io.circe.parser.decode[UIAppState](wsMessage).toOption.get
-      )
+      .map(wsMessage => readFromString[UIAppState](wsMessage))
 
     val runningTable = makeTable("Running nodes", _.running.toList, events)
     val pendingTable = makeTable("Pending nodes", _.pending.toList, events)

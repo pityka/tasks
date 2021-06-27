@@ -28,10 +28,13 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import org.scalatest.matchers.should.Matchers
 
-import tasks.circesupport._
+import tasks.jsonitersupport._
 import scala.concurrent.Future
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
+
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 object InputWithSharedFilesTest extends TestHelpers with Matchers {
 
@@ -60,10 +63,9 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
   case class Input3(t1: SharedFile, t2: SharedFile, t3: SharedFile)
 
   object Input3 {
-    import io.circe.generic.semiauto._
-    import io.circe._
-    implicit val enc: Encoder[Input3] = deriveEncoder[Input3]
-    implicit val dec: Decoder[Input3] = deriveDecoder[Input3]
+
+    implicit val codec: JsonValueCodec[Input3] = JsonCodecMaker.make
+
   }
 
   val task3 = AsyncTask[Input3, SharedFile]("sharedfileinput2", 1) { case _ =>
@@ -100,10 +102,8 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
       extends WithSharedFiles(mutables = List(sf))
 
   object MutableResult {
-    import io.circe.generic.semiauto._
-    import io.circe._
-    implicit val enc: Encoder[MutableResult] = deriveEncoder[MutableResult]
-    implicit val dec: Decoder[MutableResult] = deriveDecoder[MutableResult]
+    implicit val codec: JsonValueCodec[MutableResult] = JsonCodecMaker.make
+
   }
 
   val taskWithMutable = AsyncTask[Input, MutableResult]("mutabletask", 2) {

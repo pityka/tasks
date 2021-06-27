@@ -5,8 +5,9 @@ import tasks.ecoll._
 import tasks.queue._
 import tasks._
 import scala.concurrent.Future
-import tasks.circesupport._
-
+import tasks.jsonitersupport._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 private[ecoll] object Reduce {
 
   case class Input[AA](
@@ -20,12 +21,8 @@ private[ecoll] object Reduce {
   )
 
   object Input {
-    import io.circe._
-    import io.circe.generic.semiauto._
-    implicit def encoder[A]: Encoder[Input[A]] =
-      deriveEncoder[Input[A]]
-    implicit def decoder[A]: Decoder[Input[A]] =
-      deriveDecoder[Input[A]]
+    implicit def codec[A]: JsonValueCodec[Input[A]] =
+      JsonCodecMaker.make
 
   }
 

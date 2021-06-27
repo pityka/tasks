@@ -10,6 +10,9 @@ import akka.NotUsed
 import scala.concurrent.Future
 import lame.index.Index
 
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
+
 // open ended
 case class Range(fromIdx: Long, toIdx: Long) {
   def size = toIdx - fromIdx
@@ -18,10 +21,7 @@ case class Range(fromIdx: Long, toIdx: Long) {
 }
 
 object Range {
-  import io.circe._
-  import io.circe.generic.semiauto._
-  implicit val encoder: Encoder[Range] = deriveEncoder[Range]
-  implicit val decoder: Decoder[Range] = deriveDecoder[Range]
+  implicit val codec: JsonValueCodec[Range] = JsonCodecMaker.make
 }
 
 case class EColl[T](
@@ -157,10 +157,9 @@ case class EColl[T](
 }
 
 trait ECollSerializers {
-  import io.circe._
-  import io.circe.generic.semiauto._
-  implicit def encoder[A]: Encoder[EColl[A]] = deriveEncoder[EColl[A]]
-  implicit def decoder[A]: Decoder[EColl[A]] = deriveDecoder[EColl[A]]
+  implicit def codec[A]: JsonValueCodec[EColl[A]] =
+    JsonCodecMaker.make
+
 }
 
 object EColl

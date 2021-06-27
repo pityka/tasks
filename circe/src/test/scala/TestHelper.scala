@@ -27,8 +27,9 @@ package tasks
 import scala.concurrent._
 import scala.concurrent.duration._
 
-import com.github.plokhotnyuk.jsoniter_scala.core._
-import com.github.plokhotnyuk.jsoniter_scala.macros._
+import io.circe._
+import io.circe.generic.semiauto._
+import circesupport._
 
 import com.typesafe.config.ConfigFactory
 
@@ -38,14 +39,14 @@ trait TestHelpers {
 
   case class Input(i: Int)
   object Input {
-    implicit val codec: JsonValueCodec[Input] =
-      JsonCodecMaker.make[Input]
+    implicit val enc: Encoder[Input] = deriveEncoder[Input]
+    implicit val dec: Decoder[Input] = deriveDecoder[Input]
   }
 
   case class InputSF(files1: List[SharedFile]) extends WithSharedFiles(files1)
   object InputSF {
-    implicit val codec: JsonValueCodec[InputSF] =
-      JsonCodecMaker.make[InputSF]
+    implicit val enc: Encoder[InputSF] = deriveEncoder[InputSF]
+    implicit val dec: Decoder[InputSF] = deriveDecoder[InputSF]
   }
 
   def testConfig = {
@@ -58,8 +59,5 @@ trait TestHelpers {
       """
     )
   }
-
-  implicit val codec: JsonValueCodec[Int] =
-    JsonCodecMaker.make[Int]
 
 }

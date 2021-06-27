@@ -27,7 +27,6 @@
 
 package tasks.caching
 
-import scala.util._
 import scala.concurrent._
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Source
@@ -41,6 +40,7 @@ import tasks.fileservice.{
   FileServicePrefix,
   SharedFileHelper
 }
+import akka.stream.scaladsl.StreamConverters
 
 private[tasks] class SharedFileCache(implicit
     fileServiceComponent: FileServiceComponent,
@@ -57,27 +57,26 @@ private[tasks] class SharedFileCache(implicit
   def shutDown() = ()
 
   def get(
-      taskDescription: TaskDescription
+      hashedTaskDescription: HashedTaskDescription
   )(implicit prefix: FileServicePrefix): Future[Option[UntypedResult]] = {
 
-    val hash = SerializedTaskDescription.hash(taskDescription).hash
+    val hash = hashedTaskDescription.hash
     val fileName = "__meta__result__" + hash
     SharedFileHelper
       .getByName(fileName, retrieveSizeAndHash = false)
       .flatMap {
         case None =>
-          logger.debug(s"Not found $prefix $fileName for $taskDescription")
+          logger.debug(
+            s"Not found $prefix $fileName for $hashedTaskDescription"
+          )
           Future.successful(None)
         case Some(sf) =>
           SharedFileHelper
             .getSourceToFile(sf, fromOffset = 0L)
             .runFold(ByteString.empty)(_ ++ _)
             .map { byteString =>
-              val t = Try(deserializeResult(byteString.toArray))
-              t.failed.foreach { case e: Exception =>
-                logger.debug(s"Failed to deserialize due to $e")
-              }
-              t.toOption
+              val t = deserializeResult(byteString.toArray)
+              Some(t)
             }
             .recover { case e =>
               logger.error(
@@ -90,12 +89,15 @@ private[tasks] class SharedFileCache(implicit
 
   }
 
-  def set(taskDescription: TaskDescription, untypedResult: UntypedResult)(
-      implicit p: FileServicePrefix
+  def set(
+      hashedTaskDescription: HashedTaskDescription,
+      untypedResult: UntypedResult
+  )(implicit
+      p: FileServicePrefix
   ) = {
     try {
       implicit val historyContext = tasks.fileservice.NoHistory
-      val hash = SerializedTaskDescription.hash(taskDescription).hash
+      val hash = hashedTaskDescription.hash
       val value = serializeResult(untypedResult)
       for {
         _ <- SharedFileHelper
@@ -103,15 +105,7 @@ private[tasks] class SharedFileCache(implicit
             Source.single(ByteString(value)),
             name = "__meta__result__" + hash
           )
-        _ <-
-          if (config.saveTaskDescriptionInCache) {
-            val key = SerializedTaskDescription(taskDescription).value
-            SharedFileHelper
-              .createFromSource(
-                Source.single(ByteString(key)),
-                name = "__meta__input__" + hash
-              )
-          } else Future.successful(())
+
       } yield ()
 
     } catch {

@@ -25,11 +25,12 @@
 package example
 
 import tasks._
-import tasks.circesupport._
+import tasks.jsonitersupport._
 
 import scala.concurrent._
 import scala.concurrent.duration._
-import io.circe.generic.auto._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
 /** Definitions of subtasks for calculating Pi
   *
@@ -41,12 +42,24 @@ import io.circe.generic.auto._
   */
 object PiTasks {
   case class BatchResult(inside: Int, outside: Int)
+  object BatchResult {
+    implicit val codec: JsonValueCodec[BatchResult] = JsonCodecMaker.make
+  }
 
   case class BatchInput(batchSize: SharedFile, batchId: Int)
+  object BatchInput {
+    implicit val codec: JsonValueCodec[BatchInput] = JsonCodecMaker.make
+  }
 
   case class PiInput(inside: Int, outside: Int)
+  object PiInput {
+    implicit val codec: JsonValueCodec[PiInput] = JsonCodecMaker.make
+  }
 
   case class PiResult(pi: Double)
+  object PiResult {
+    implicit val codec: JsonValueCodec[PiResult] = JsonCodecMaker.make
+  }
 
   /** Task definition
     *
@@ -97,8 +110,14 @@ object PiTasks {
 object Fib {
 
   case class FibInput(n: Int)
+  object FibInput {
+    implicit val codec: JsonValueCodec[FibInput] = JsonCodecMaker.make
+  }
 
   case class FibReduce(f1: Int, f2: Int)
+  object FibReduce {
+    implicit val codec: JsonValueCodec[FibReduce] = JsonCodecMaker.make
+  }
 
   val reduce = AsyncTask[FibReduce, Int]("fibreduce", 1) {
     case FibReduce(f1, f2) =>

@@ -41,7 +41,6 @@ import tasks.deploy._
 import tasks.shared.LogRecord
 
 import scala.language.experimental.macros
-import scala.language.implicitConversions
 
 package object tasks {
 

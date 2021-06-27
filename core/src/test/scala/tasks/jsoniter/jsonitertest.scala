@@ -22,14 +22,14 @@
  * SOFTWARE.
  */
 
-package tasks
+package tasks.jsonitersupport
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should._
 
-import tasks.jsonitersupport._
 import tasks.fileservice.SharedFileHelper
 import tasks.queue.{Serializer, Deserializer}
+import tasks.fileservice.SharedFile
 
 class JsonIterSuite extends FunSuite with Matchers {
 

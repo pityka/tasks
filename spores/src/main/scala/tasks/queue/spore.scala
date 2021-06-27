@@ -65,30 +65,31 @@ case class Spore[A, B](fqcn: String, dependencies: Seq[Spore[_, _]]) {
 }
 
 object Spore {
-  import io.circe.{Decoder, Encoder}
-  @scala.annotation.nowarn
-  implicit def sporeDecoder[A, B]: io.circe.Decoder[Spore[A, B]] =
-    Decoder.decodeJsonObject.emap { jsonObject =>
-      val fqcn = jsonObject("fqcn").flatMap(_.asString)
-      val dependencies =
-        jsonObject("deps").toSeq.flatMap(_.asArray.toSeq.flatten)
-      fqcn match {
-        case None => Left("parsing failure. needs fqcn")
-        case Some(fqcn) =>
-          val decodedDependencies =
-            dependencies.map(d => sporeDecoder.decodeJson(d))
-          if (decodedDependencies.forall(_.isRight))
-            Right(Spore(fqcn, decodedDependencies.map(_.right.get)))
-          else Left("parsing failure")
-      }
+  import com.github.plokhotnyuk.jsoniter_scala.macros._
+  import com.github.plokhotnyuk.jsoniter_scala.core._
+  case class SporeDTO(fqcn: String, deps: Seq[SporeDTO]) {
+    def toSpore[A, B]: Spore[A, B] = Spore(fqcn, deps.map(_.toSpore))
+  }
+  object SporeDTO {
+    def apply[A, B](spore: Spore[A, B]): SporeDTO =
+      SporeDTO(fqcn = spore.fqcn, deps = spore.dependencies.map(SporeDTO(_)))
+  }
+  implicit val codec1: JsonValueCodec[SporeDTO] = JsonCodecMaker.make(
+    CodecMakerConfig.withAllowRecursiveTypes(true)
+  )
+
+  implicit def codec[A, B] = new JsonValueCodec[Spore[A, B]] {
+    val nullValue: Spore[A, B] = null.asInstanceOf[Spore[A, B]]
+
+    def encodeValue(x: Spore[A, B], out: JsonWriter): _root_.scala.Unit = {
+      val dto = SporeDTO(x)
+      codec1.encodeValue(dto, out)
     }
 
-  implicit def sporeEncoder[A, B]: io.circe.Encoder[Spore[A, B]] =
-    Encoder.encodeJsonObject.contramapObject[Spore[A, B]] { spore =>
-      val fqcn = io.circe.Json.fromString(spore.fqcn)
-      val dependencies =
-        io.circe.Json.fromValues(spore.dependencies.map(d => sporeEncoder(d)))
-      io.circe.JsonObject
-        .fromIterable(List("fqcn" -> fqcn, "deps" -> dependencies))
+    def decodeValue(in: JsonReader, default: Spore[A, B]): Spore[A, B] = {
+      val dto = codec1.decodeValue(in, codec1.nullValue)
+      dto.toSpore[A, B]
     }
+  }
+
 }
