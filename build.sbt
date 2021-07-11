@@ -199,7 +199,7 @@ lazy val uifrontend = project
       "org.scala-js" %%% "scalajs-dom" % "1.1.0",
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % jsoniterVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
-      "com.raquo" %%% "laminar" % "0.13.0"
+      "com.raquo" %%% "laminar" % "0.13.1"
     ),
     mimaPreviousArtifacts := Set.empty,
     fork := false
