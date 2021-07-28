@@ -164,7 +164,8 @@ private[tasks] case object PoisonPillToCacheActor extends StaticMessage
 
 private[tasks] case object NeedInput extends StaticMessage
 
-private[tasks] case class InputData(b64: Base64Data) extends StaticMessage
+private[tasks] case class InputData(b64: Base64Data, noCache: Boolean)
+    extends StaticMessage
 
 private[tasks] case class AnswerFromCache(
     message: Either[String, Option[UntypedResult]],
