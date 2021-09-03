@@ -113,8 +113,10 @@ package object util extends StrictLogging {
 
   /** Returns the result of the block, and closes the resource.
     *
-    * @param param closeable resource
-    * @param f block using the resource
+    * @param param
+    *   closeable resource
+    * @param f
+    *   block using the resource
     */
   def useResource[A <: { def close(): Unit }, B](param: A)(f: A => B): B =
     try {
@@ -195,7 +197,9 @@ package object util extends StrictLogging {
     byteString.toArray
   }
 
-  /** Opens a buffered java.io.BufferedOutputStream on the file. Closes it after the block is executed. */
+  /** Opens a buffered java.io.BufferedOutputStream on the file. Closes it after
+    * the block is executed.
+    */
   def openFileOutputStream[T](fileName: File, append: Boolean = false)(
       func: BufferedOutputStream => T
   ) =
@@ -203,30 +207,42 @@ package object util extends StrictLogging {
       new BufferedOutputStream(new FileOutputStream(fileName, append))
     )(func)
 
-  /** Opens a buffered java.io.BufferedInputStream on the file. Closes it after the block is executed. */
+  /** Opens a buffered java.io.BufferedInputStream on the file. Closes it after
+    * the block is executed.
+    */
   def openFileInputStream[T](fileName: File)(func: BufferedInputStream => T) =
     useResource(new BufferedInputStream(new FileInputStream(fileName)))(func)
 
   /** Execute command with user function to process each line of output.
     *
-    * Based on from http://www.jroller.com/thebugslayer/entry/executing_external_system_commands_in
+    * Based on from
+    * http://www.jroller.com/thebugslayer/entry/executing_external_system_commands_in
     * Creates 2 new threads: one for the stdout, one for the stderror.
-    * @param pb Description of the executable process
-    * @return Exit code of the process.
+    * @param pb
+    *   Description of the executable process
+    * @return
+    *   Exit code of the process.
     */
   def exec(pb: ProcessBuilder)(stdOutFunc: String => Unit = { _: String => })(
       implicit stdErrFunc: String => Unit = (_: String) => ()
   ): Int =
     pb.run(ProcessLogger(stdOutFunc, stdErrFunc)).exitValue()
 
-  /** Execute command. Returns stdout and stderr as strings, and true if it was successful.
+  /** Execute command. Returns stdout and stderr as strings, and true if it was
+    * successful.
     *
-    * A process is considered successful if its exit code is 0 and the error stream is empty.
-    * The latter criterion can be disabled with the unsuccessfulOnErrorStream parameter.
-    * @param pb The process description.
-    * @param unsuccessfulOnErrorStream if true, then the process is considered as a failure if its stderr is not empty.
-    * @param atMost max waiting time.
-    * @return (stdout,stderr,success) triples
+    * A process is considered successful if its exit code is 0 and the error
+    * stream is empty. The latter criterion can be disabled with the
+    * unsuccessfulOnErrorStream parameter.
+    * @param pb
+    *   The process description.
+    * @param unsuccessfulOnErrorStream
+    *   if true, then the process is considered as a failure if its stderr is
+    *   not empty.
+    * @param atMost
+    *   max waiting time.
+    * @return
+    *   (stdout,stderr,success) triples
     */
   def execGetStreamsAndCode(
       pb: ProcessBuilder,
@@ -246,7 +262,8 @@ package object util extends StrictLogging {
   }
 
   /** Merge maps with key collision
-    * @param fun Handles key collision
+    * @param fun
+    *   Handles key collision
     */
   def addMaps[K, V](a: Map[K, V], b: Map[K, V])(fun: (V, V) => V): Map[K, V] = {
     a ++ b.map { case (key, bval) =>
@@ -260,7 +277,8 @@ package object util extends StrictLogging {
   }
 
   /** Merge maps with key collision
-    * @param fun Handles key collision
+    * @param fun
+    *   Handles key collision
     */
   def addMaps[K, V](a: collection.Map[K, V], b: collection.Map[K, V])(
       fun: (V, V) => V

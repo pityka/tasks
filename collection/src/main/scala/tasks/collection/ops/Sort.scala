@@ -21,7 +21,7 @@ private[ecoll] object Sort {
   )
 
   object Input {
-      implicit def codec[A]: JsonValueCodec[Input[A]] =
+    implicit def codec[A]: JsonValueCodec[Input[A]] =
       JsonCodecMaker.make
 
   }
