@@ -44,8 +44,7 @@ object SporeTest extends TestHelpers with Matchers {
 
   val increment =
     AsyncTask[Spore[Option[Int], String], String]("sporetest", 1) { case sp =>
-      implicit computationEnvironment =>
-        Future(sp(Some(3)))
+      implicit computationEnvironment => Future(sp(Some(3)))
     }
 
   def run = {
