@@ -91,7 +91,7 @@ private[ecoll] object Group2 {
             def key(t: Either1[A, B]) = t match {
               case (Some(t), None) => funA(t)
               case (None, Some(t)) => funB(t)
-              case _               => throw new RuntimeException("should not happen")
+              case _ => throw new RuntimeException("should not happen")
             }
           }
 
