@@ -20,7 +20,7 @@ inThisBuild(
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.13.6",
-  crossScalaVersions := Seq("2.12.14", "2.13.6"),
+  crossScalaVersions := Seq("2.12.15", "2.13.6"),
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -63,8 +63,8 @@ lazy val commonSettings = Seq(
 )
 
 lazy val circeVersion = "0.13.0"
-lazy val jsoniterVersion = "2.9.1"
-lazy val akkaVersion = "2.6.14"
+lazy val jsoniterVersion = "2.9.0"
+lazy val akkaVersion = "2.6.16"
 lazy val shapelessVersion = "2.3.7"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
@@ -196,7 +196,7 @@ lazy val uifrontend = project
   .settings(
     name := "tasks-ui-frontend",
     libraryDependencies ++= Seq(
-      "org.scala-js" %%% "scalajs-dom" % "1.1.0",
+      "org.scala-js" %%% "scalajs-dom" % "1.2.0",
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % jsoniterVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.raquo" %%% "laminar" % "0.13.0"
@@ -227,7 +227,7 @@ lazy val upicklesupport = project
   .settings(commonSettings: _*)
   .settings(
     name := "tasks-upickle",
-    libraryDependencies += "com.lihaoyi" %% "upickle" % "1.3.15"
+    libraryDependencies += "com.lihaoyi" %% "upickle" % "1.4.1"
   )
   .dependsOn(core)
 

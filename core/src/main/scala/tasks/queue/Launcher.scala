@@ -218,32 +218,42 @@ class Launcher(
     val elapsedTime = ElapsedTimeNanoSeconds(
       resourceDeallocatedAt.get(taskActor).getOrElse(System.nanoTime) - elem._4
     )
-    import akka.pattern.ask
-    import context.dispatcher
-    (
-      scheduleTask.cacheActor
-        .?(
-          SaveResult(
-            scheduleTask.description,
-            receivedResult.untypedResult,
-            scheduleTask.fileServicePrefix
-              .append(scheduleTask.description.taskId.id)
+
+    if (!receivedResult.noCache) {
+      import akka.pattern.ask
+      import context.dispatcher
+      (
+        scheduleTask.cacheActor
+          .?(
+            SaveResult(
+              scheduleTask.description,
+              receivedResult.untypedResult,
+              scheduleTask.fileServicePrefix
+                .append(scheduleTask.description.taskId.id)
+            )
+          )(
+            timeout = config.cacheTimeout
           )
-        )(
-          timeout = config.cacheTimeout
         )
+        .onComplete {
+          case Failure(e) =>
+            log.error(e, s"Failed to save ${scheduleTask.description}")
+          case Success(_) =>
+            queueActor ! TaskDone(
+              scheduleTask,
+              receivedResult,
+              elapsedTime,
+              resourceAllocated.cpuMemoryAllocated
+            )
+        }
+    } else {
+      queueActor ! TaskDone(
+        scheduleTask,
+        receivedResult,
+        elapsedTime,
+        resourceAllocated.cpuMemoryAllocated
       )
-      .onComplete {
-        case Failure(e) =>
-          log.error(e, s"Failed to save ${scheduleTask.description}")
-        case Success(_) =>
-          queueActor ! TaskDone(
-            scheduleTask,
-            receivedResult,
-            elapsedTime,
-            resourceAllocated.cpuMemoryAllocated
-          )
-      }
+    }
 
     runningTasks = runningTasks.filterNot(_ == elem)
     if (!freed.contains(taskActor)) {

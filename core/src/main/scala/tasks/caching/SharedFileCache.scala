@@ -40,7 +40,6 @@ import tasks.fileservice.{
   FileServicePrefix,
   SharedFileHelper
 }
-import akka.stream.scaladsl.StreamConverters
 
 private[tasks] class SharedFileCache(implicit
     fileServiceComponent: FileServiceComponent,

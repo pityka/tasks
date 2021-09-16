@@ -95,7 +95,8 @@ object ResultMetadata {
 
 case class UntypedResultWithMetadata(
     untypedResult: UntypedResult,
-    metadata: ResultMetadata
+    metadata: ResultMetadata,
+    noCache: Boolean
 )
 
 object UntypedResultWithMetadata {
@@ -210,7 +211,8 @@ private class Task(
 
   private def handleCompletion(
       future: Future[(UntypedResult, DependenciesAndRuntimeMetadata)],
-      startTimeStamp: Instant
+      startTimeStamp: Instant,
+      noCache: Boolean
   ) =
     future.onComplete {
       case Success((result, dependencies)) =>
@@ -226,7 +228,8 @@ private class Task(
               ended = endTimeStamp,
               logs = dependencies.logs,
               lineage = lineage
-            )
+            ),
+            noCache = noCache
           )
         )
         self ! PoisonPill
@@ -291,10 +294,11 @@ private class Task(
     }
 
   def receive = {
-    case InputData(b64InputData) =>
+    case InputData(b64InputData, noCache) =>
       handleCompletion(
         executeTaskAsynchronously(b64InputData),
-        startTimeStamp = java.time.Instant.now
+        startTimeStamp = java.time.Instant.now,
+        noCache = noCache
       )
 
     case other => log.error("received unknown message" + other)

@@ -35,7 +35,8 @@ import com.github.plokhotnyuk.jsoniter_scala.core._
 /** Definitions of subtasks for calculating Pi
   *
   * We define two tasks:
-  *   - `batchCalc` throws points to a square and count those within the unit circle
+  *   - `batchCalc` throws points to a square and count those within the unit
+  *     circle
   *   - `piCalc` calculates Pi based on the number of points inside/outside
   *
   * Both of these need case classes to hold inputs and results.
@@ -63,8 +64,8 @@ object PiTasks {
 
   /** Task definition
     *
-    * Specifies input output types and name of task.
-    * The tasks's body is an Input => tasks.ComputationEnvironment => Output function
+    * Specifies input output types and name of task. The tasks's body is an
+    * Input => tasks.ComputationEnvironment => Output function
     */
   val batchCalc = AsyncTask[BatchInput, BatchResult]("batch", 1) {
 
@@ -126,11 +127,11 @@ object Fib {
 
   /** Recursive Fibonacci
     *
-    * Spawns new subtasks, which return in a future,
-    * thus this is an asynchronous task as well.
+    * Spawns new subtasks, which return in a future, thus this is an
+    * asynchronous task as well.
     *
-    * The implicit context provides an ExecutionContext in which the Futures
-    * and the body of the task is running.
+    * The implicit context provides an ExecutionContext in which the Futures and
+    * the body of the task is running.
     */
   val fibtask: TaskDefinition[FibInput, Int] =
     AsyncTask[FibInput, Int]("fib", 1) { case FibInput(n) =>
@@ -167,9 +168,8 @@ object PiApp extends App {
   import PiTasks._
   import Fib._
 
-  /** Opens and closes a TaskSystem with default configuration
-    * On a slave node, the block is not executed,
-    * but it starts pulling jobs from the queue
+  /** Opens and closes a TaskSystem with default configuration On a slave node,
+    * the block is not executed, but it starts pulling jobs from the queue
     */
   withTaskSystem { implicit ts =>
     val numTasks = 100
