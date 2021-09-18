@@ -20,7 +20,7 @@ inThisBuild(
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.13.6",
-  crossScalaVersions := Seq("2.12.14", "2.13.6"),
+  crossScalaVersions := Seq("2.12.15", "2.13.6"),
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -63,8 +63,8 @@ lazy val commonSettings = Seq(
 )
 
 lazy val circeVersion = "0.13.0"
-lazy val jsoniterVersion = "2.8.2"
-lazy val akkaVersion = "2.6.14"
+lazy val jsoniterVersion = "2.9.0"
+lazy val akkaVersion = "2.6.16"
 lazy val shapelessVersion = "2.3.7"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
@@ -123,8 +123,8 @@ lazy val core = project
       "com.typesafe" % "config" % "1.4.1",
       "io.github.pityka" %% "selfpackage" % "1.2.5",
       "io.github.pityka" %% "s3-stream-fork" % "0.0.8",
-      "org.scalatest" %% "scalatest" % "3.2.9" % "test",
-      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
+      "org.scalatest" %% "scalatest" % "3.2.10" % "test",
+      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test"
@@ -171,7 +171,7 @@ lazy val tracker = project
   .settings(
     name := "tasks-tracker",
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.9" % "test",
+      "org.scalatest" %% "scalatest" % "3.2.10" % "test",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
     ),
     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
@@ -184,7 +184,7 @@ lazy val uibackend = project
   .settings(
     name := "tasks-ui-backend",
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.9" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.10" % "test"
     ),
     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
   )
@@ -196,7 +196,7 @@ lazy val uifrontend = project
   .settings(
     name := "tasks-ui-frontend",
     libraryDependencies ++= Seq(
-      "org.scala-js" %%% "scalajs-dom" % "1.1.0",
+      "org.scala-js" %%% "scalajs-dom" % "1.2.0",
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % jsoniterVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.raquo" %%% "laminar" % "0.13.0"
@@ -227,7 +227,7 @@ lazy val upicklesupport = project
   .settings(commonSettings: _*)
   .settings(
     name := "tasks-upickle",
-    libraryDependencies += "com.lihaoyi" %% "upickle" % "1.3.15"
+    libraryDependencies += "com.lihaoyi" %% "upickle" % "1.4.1"
   )
   .dependsOn(core)
 
@@ -240,7 +240,7 @@ lazy val circe = project
       "io.circe" %% "circe-core" % circeVersion,
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,
-      "org.scalatest" %% "scalatest" % "3.2.9" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.10" % "test"
     )
   )
   .dependsOn(core)
@@ -256,7 +256,7 @@ lazy val ecoll = project
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % jsoniterVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test",
-      "org.scalatest" %% "scalatest" % "3.2.9" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.10" % "test"
     )
   )
   .dependsOn(core)

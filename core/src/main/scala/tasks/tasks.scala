@@ -45,8 +45,8 @@ object HasSharedFiles {
   )(f: HasSharedFiles => Seq[SharedFile]): Seq[SharedFile] = a match {
     case t: HasSharedFiles => f(t)
     case t: Traversable[_] => t.flatMap(r => recurse(r)(f)).toSeq
-    case t: Product        => t.productIterator.flatMap(r => recurse(r)(f)).toSeq
-    case _                 => Nil
+    case t: Product => t.productIterator.flatMap(r => recurse(r)(f)).toSeq
+    case _          => Nil
   }
 
 }
@@ -134,7 +134,8 @@ case class TaskDefinition[A: Serializer, B: Deserializer](
   def apply(a: A)(
       resource: ResourceRequest,
       priorityBase: Priority = Priority(0),
-      labels: Labels = Labels.empty
+      labels: Labels = Labels.empty,
+      noCache: Boolean = false
   )(implicit components: TaskSystemComponents): Future[B] = {
     implicit val queue = components.queue
     implicit val fileService = components.fs
@@ -167,7 +168,8 @@ case class TaskDefinition[A: Serializer, B: Deserializer](
             Priority(priorityBase.toInt + components.priority.toInt + 1),
           promise = promise,
           labels = components.labels ++ labels,
-          lineage = components.lineage
+          lineage = components.lineage,
+          noCache = noCache
         )
       ).withDispatcher("proxytask-dispatcher")
     )

@@ -52,7 +52,8 @@ class ProxyTask[Input, Output](
     priority: Priority,
     promise: Promise[Output],
     labels: Labels,
-    lineage: TaskLineage
+    lineage: TaskLineage,
+    noCache: Boolean
 ) extends Actor
     with akka.actor.ActorLogging {
 
@@ -111,7 +112,7 @@ class ProxyTask[Input, Output](
 
   def receive = {
     case NeedInput =>
-      sender() ! InputData(Base64DataHelpers(writer(input)))
+      sender() ! InputData(Base64DataHelpers(writer(input)), noCache)
     case MessageFromTask(untypedOutput, retrievedFromCache) =>
       reader(Base64DataHelpers.toBytes(untypedOutput.data)) match {
         case Right(output) =>
