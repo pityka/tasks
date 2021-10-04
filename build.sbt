@@ -227,7 +227,7 @@ lazy val upicklesupport = project
   .settings(commonSettings: _*)
   .settings(
     name := "tasks-upickle",
-    libraryDependencies += "com.lihaoyi" %% "upickle" % "1.4.1"
+    libraryDependencies += "com.lihaoyi" %% "upickle" % "1.4.2"
   )
   .dependsOn(core)
 
