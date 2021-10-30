@@ -53,7 +53,7 @@ trait FactoryMethods extends StrictLogging { self: Constants =>
     implicit val as = tsc.actorsystem
     implicit val ec = as.dispatcher
 
-    val gzipPar = 1 //if (parallelism == 1) 1 else parallelism / 2
+    val gzipPar = 1 // if (parallelism == 1) 1 else parallelism / 2
     val encoderPar = if (parallelism == 1) 1 else parallelism - gzipPar
 
     val encoderFlow =
