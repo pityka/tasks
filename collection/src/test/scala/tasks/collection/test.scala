@@ -96,7 +96,7 @@ object Tests {
 
   val mapconcat =
     EColl.mapConcat("mapconcat", 1)(
-      spore[Option[Int], Seq[Int]]((a: Option[Int]) => (1 to a.get).toIterable)
+      spore[Option[Int], Seq[Int]]((a: Option[Int]) => (1 to a.get).toSeq)
     )
 
   val sort =
