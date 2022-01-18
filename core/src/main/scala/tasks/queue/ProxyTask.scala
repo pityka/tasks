@@ -68,7 +68,7 @@ class ProxyTask[Input, Output](
   private def startTask(cache: Boolean): Unit = {
 
     val persisted: Option[Input] = input match {
-      case x: HasPersistent[Input] => Some(x.persistent)
+      case x: HasPersistent[_] => Some(x.persistent.asInstanceOf[Input])
       case _                       => None
     }
 
