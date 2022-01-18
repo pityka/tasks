@@ -1,5 +1,12 @@
 import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 
+ThisBuild / versionScheme := Some("early-semver")
+
+ThisBuild / versionPolicyIntention := Compatibility.None
+ThisBuild / versionPolicyIgnoredInternalDependencyVersions := Some(
+  "^\\d+\\.\\d+\\.\\d+\\+\\d+".r
+) 
+
 inThisBuild(
   List(
     organization := "io.github.pityka",
@@ -19,8 +26,8 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.6",
-  crossScalaVersions := Seq("2.12.15", "2.13.6"),
+  scalaVersion := "2.13.7",
+  crossScalaVersions := Seq("2.12.15", "2.13.7"),
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
