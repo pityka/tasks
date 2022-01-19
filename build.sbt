@@ -2,7 +2,7 @@ import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 
 ThisBuild / versionScheme := Some("early-semver")
 
-ThisBuild / versionPolicyIntention := Compatibility.None
+ThisBuild / versionPolicyIntention := Compatibility.BinaryAndSourceCompatible
 ThisBuild / versionPolicyIgnoredInternalDependencyVersions := Some(
   "^\\d+\\.\\d+\\.\\d+\\+\\d+".r
 ) 
@@ -63,10 +63,7 @@ lazy val commonSettings = Seq(
 ) ++ Seq(
   fork := true,
   cancelable in Global := true,
-  scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
-  mimaPreviousArtifacts := Set(
-    organization.value %% moduleName.value % "1.0.0-M1"
-  )
+  scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings"))
 )
 
 lazy val circeVersion = "0.13.0"
@@ -223,6 +220,7 @@ lazy val example = project
     executableScriptName := "entrypoint",
     topLevelDirectory := None,
     publishArtifact := false,
+    publish / skip := true,
     crossScalaVersions := Nil,
     libraryDependencies ++= Seq(
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
@@ -272,6 +270,7 @@ lazy val root = (project in file("."))
   .settings(commonSettings: _*)
   .settings(
     publishArtifact := false,
+    publish / skip := true,
     crossScalaVersions := Nil
   )
   .aggregate(
@@ -294,7 +293,8 @@ lazy val root = (project in file("."))
 lazy val testables = (project in file("testables"))
   .settings(commonSettings: _*)
   .settings(
-    publishArtifact := false
+    publishArtifact := false,
+    publish / skip := true
   )
   .aggregate(
     spores,
