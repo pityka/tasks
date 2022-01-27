@@ -5,7 +5,7 @@ ThisBuild / versionScheme := Some("early-semver")
 ThisBuild / versionPolicyIntention := Compatibility.BinaryAndSourceCompatible
 ThisBuild / versionPolicyIgnoredInternalDependencyVersions := Some(
   "^\\d+\\.\\d+\\.\\d+\\+\\d+".r
-) 
+)
 
 inThisBuild(
   List(
@@ -232,7 +232,7 @@ lazy val upicklesupport = project
   .settings(commonSettings: _*)
   .settings(
     name := "tasks-upickle",
-    libraryDependencies += "com.lihaoyi" %% "upickle" % "1.4.4"
+    libraryDependencies += "com.lihaoyi" %% "upickle" % "1.5.0"
   )
   .dependsOn(core)
 
