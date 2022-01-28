@@ -5,7 +5,7 @@ ThisBuild / versionScheme := Some("early-semver")
 ThisBuild / versionPolicyIntention := Compatibility.BinaryAndSourceCompatible
 ThisBuild / versionPolicyIgnoredInternalDependencyVersions := Some(
   "^\\d+\\.\\d+\\.\\d+\\+\\d+".r
-) 
+)
 
 inThisBuild(
   List(
@@ -126,7 +126,7 @@ lazy val core = project
       "com.typesafe.akka" %% "akka-http-core" % "10.1.11",
       "com.typesafe" % "config" % "1.4.1",
       "io.github.pityka" %% "selfpackage" % "1.2.5",
-      "io.github.pityka" %% "s3-stream-fork" % "0.0.8",
+      "io.github.pityka" %% "s3-stream-fork" % "0.0.10",
       "org.scalatest" %% "scalatest" % "3.2.10" % "test",
       "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
