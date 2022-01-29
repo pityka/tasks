@@ -234,7 +234,7 @@ lazy val upicklesupport = project
   .settings(
     name := "tasks-upickle",
     libraryDependencies ++= Seq(
-      "com.lihaoyi" %% "upickle" % "1.4.4"
+      "com.lihaoyi" %% "upickle" % "1.5.0"
     ) ++ akkaProvided
   )
   .dependsOn(core)
