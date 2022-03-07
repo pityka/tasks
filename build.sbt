@@ -124,7 +124,7 @@ lazy val core = project
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "30.1.1-jre", // scala-steward:off
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
-      "com.typesafe.akka" %% "akka-http" % "10.2.9",
+      "com.typesafe.akka" %% "akka-http" % "10.2.7",
       "com.typesafe" % "config" % "1.4.1",
       "io.github.pityka" %% "selfpackage" % "1.2.5",
       "io.github.pityka" %% "s3-stream-fork" % "0.0.10",
