@@ -69,7 +69,7 @@ lazy val commonSettings = Seq(
 lazy val circeVersion = "0.13.0"
 lazy val jsoniterVersion = "2.9.0"
 lazy val akkaVersion = "2.6.16"
-lazy val shapelessVersion = "2.3.7"
+lazy val shapelessVersion = "2.3.8"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
   .crossType(sbtcrossproject.CrossPlugin.autoImport.CrossType.Pure)
@@ -125,7 +125,7 @@ lazy val core = project
       "com.google.guava" % "guava" % "30.1.1-jre", // scala-steward:off
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe.akka" %% "akka-http" % "10.2.7",
-      "com.typesafe" % "config" % "1.4.1",
+      "com.typesafe" % "config" % "1.4.2",
       "io.github.pityka" %% "selfpackage" % "1.2.5",
       "io.github.pityka" %% "s3-stream-fork" % "0.0.10",
       "org.scalatest" %% "scalatest" % "3.2.10" % "test",
