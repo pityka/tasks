@@ -17,7 +17,7 @@ See the `example` project and the tests.
 
 Author: Istvan Bartha
 
-This repository is a fork of https://github.com/pityka/mybiotools/tree/master/Tasks , for which the copyright holder is `ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland, Group Fellay` and was released under the MIT license. (That repository holds my post-doc works in the laboratory of Professor Jacques Fellay.)
+This repository is a fork of https://github.com/pityka/mybiotools/tree/master/Tasks , for which the copyright holder is `ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland, Group Fellay` and was released under the MIT license. 
 
 Copyright of subsequent modifications belong to Istvan Bartha.
 
