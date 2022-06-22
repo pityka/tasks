@@ -25,7 +25,7 @@
 
 package tasks.util
 
-import com.amazonaws.services.ec2.AmazonEC2Client;
+import com.amazonaws.services.ec2.AmazonEC2
 import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
 
 import scala.jdk.CollectionConverters._
@@ -68,7 +68,7 @@ object EC2Operations {
       .find(_._1 == config.slaveInstanceType)
       .getOrElse(instanceTypes.head)
 
-  def terminateInstance(ec2: AmazonEC2Client, instanceId: String): Unit = {
+  def terminateInstance(ec2: AmazonEC2, instanceId: String): Unit = {
     retry(5) {
       val terminateRequest =
         new TerminateInstancesRequest(List(instanceId).asJava);

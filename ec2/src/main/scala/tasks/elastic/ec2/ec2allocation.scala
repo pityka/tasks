@@ -37,7 +37,6 @@ import tasks.shared._
 import tasks.util._
 import tasks.util.config._
 
-import com.amazonaws.services.ec2.AmazonEC2Client;
 import com.amazonaws.services.ec2.model.LaunchSpecification;
 import com.amazonaws.services.ec2.model.RequestSpotInstancesRequest;
 import com.amazonaws.services.ec2.model.GroupIdentifier
@@ -50,8 +49,10 @@ import com.amazonaws.services.ec2.model.SpotPlacement
 import com.amazonaws.services.ec2.model.CreateTagsRequest
 
 import scala.jdk.CollectionConverters._
+import com.amazonaws.services.ec2.AmazonEC2ClientBuilder
+import com.amazonaws.services.ec2.AmazonEC2
 
-class EC2Shutdown(ec2: AmazonEC2Client) extends ShutdownNode {
+class EC2Shutdown(ec2: AmazonEC2) extends ShutdownNode {
 
   def shutdownRunningNode(nodeName: RunningJobId): Unit =
     EC2Operations.terminateInstance(ec2, nodeName.value)
@@ -68,7 +69,7 @@ class EC2Shutdown(ec2: AmazonEC2Client) extends ShutdownNode {
 class EC2CreateNode(
     masterAddress: InetSocketAddress,
     codeAddress: CodeAddress,
-    ec2: AmazonEC2Client,
+    ec2: AmazonEC2,
     elasticSupport: ElasticSupportFqcn
 )(implicit config: TasksConfig)
     extends CreateNode {
@@ -213,8 +214,10 @@ class EC2CreateNode(
 class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig)
     extends Reaper {
 
-  val ec2 = new AmazonEC2Client()
-  ec2.setEndpoint(config.endpoint)
+  val ec2 =
+    if (config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
+    else AmazonEC2ClientBuilder.standard.withRegion(config.awsRegion).build
+
 
   def allSoulsReaped(): Unit = {
     log.debug("All souls reaped. Calling system.shutdown.")
@@ -228,7 +231,7 @@ class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig)
 
 class EC2CreateNodeFactory(implicit
     config: TasksConfig,
-    ec2: AmazonEC2Client,
+    ec2: AmazonEC2,
     elasticSupport: ElasticSupportFqcn
 ) extends CreateNodeFactory {
   def apply(master: InetSocketAddress, codeAddress: CodeAddress) =
@@ -252,8 +255,9 @@ object EC2ElasticSupport extends ElasticSupportFromConfig {
   implicit val fqcn = ElasticSupportFqcn("tasks.elastic.ec2.EC2ElasticSupport")
 
   def apply(implicit config: TasksConfig) = {
-    implicit val ec2 = new AmazonEC2Client()
-    ec2.setEndpoint(config.endpoint)
+    implicit val ec2 =
+      if (config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
+      else AmazonEC2ClientBuilder.standard.withRegion(config.awsRegion).build
     SimpleElasticSupport(
       fqcn = fqcn,
       hostConfig = Some(new EC2MasterSlave),

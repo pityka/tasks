@@ -148,7 +148,7 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   def logQueueStatus = raw.getBoolean("tasks.elastic.logQueueStatus")
 
-  val endpoint: String = raw.getString("tasks.elastic.aws.endpoint")
+  val awsRegion: String = raw.getString("tasks.elastic.aws.region")
 
   def spotPrice: Double = raw.getDouble("tasks.elastic.aws.spotPrice")
 

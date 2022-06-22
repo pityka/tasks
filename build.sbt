@@ -143,7 +143,7 @@ lazy val ec2 = project
   .settings(
     name := "tasks-ec2",
     libraryDependencies ++= Seq(
-      "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24" // scala-steward:off
+      "com.amazonaws" % "aws-java-sdk-ec2" % "1.12.244" // scala-steward:off
     ) ++ akkaProvided
   )
   .dependsOn(core)
