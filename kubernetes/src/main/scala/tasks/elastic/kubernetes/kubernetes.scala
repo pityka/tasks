@@ -33,21 +33,22 @@ import tasks.shared._
 import tasks.util.config._
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.api.model.{EnvVar}
-import io.fabric8.kubernetes.client.DefaultKubernetesClient
 import scala.jdk.CollectionConverters._
 import com.typesafe.scalalogging.StrictLogging
+import io.fabric8.kubernetes.api.model.PodBuilder
+import io.fabric8.kubernetes.client.KubernetesClientBuilder
 
-class K8SShutdown(k8s: KubernetesClient)
+class K8SShutdown(k8s: KubernetesClient, namespace: String)
     extends ShutdownNode
     with StrictLogging {
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
     logger.info(s"Shut down $nodeName")
-    k8s.pods.withName(nodeName.value).delete
+    k8s.pods.withName(nodeName.value).delete()
   }
 
   def shutdownPendingNode(nodeName: PendingJobId): Unit = {
     logger.info(s"Shut down $nodeName")
-    k8s.pods.withName(nodeName.value).delete
+    k8s.pods.inNamespace(namespace).withName(nodeName.value).delete()
   }
 
 }
@@ -89,21 +90,25 @@ class K8SCreateNode(
     val imageName = config.kubernetesImageName
 
     Try {
-
-      k8s.pods.createNew.withNewMetadata
-        .withName(name)
-        .endMetadata
-        .withNewSpec
-        .addNewContainer
-        .withImage(imageName)
-        .withCommand(command.asJava)
-        .withName("tasks")
-        .withImagePullPolicy(config.kubernetesImagePullPolicy)
-        .withEnv(new EnvVar("TASKS_JOB_NAME", name, null))
-        .endContainer
-        .withRestartPolicy("Never")
-        .endSpec
-        .done
+      k8s.pods
+        .inNamespace(config.kubernetesNamespace)
+        .resource(
+          new PodBuilder().withNewMetadata
+            .withName(name)
+            .endMetadata()
+            .withNewSpec()
+            .addNewContainer
+            .withImage(imageName)
+            .withCommand(command.asJava)
+            .withName("tasks")
+            .withImagePullPolicy(config.kubernetesImagePullPolicy)
+            .withEnv(new EnvVar("TASKS_JOB_NAME", name, null))
+            .endContainer
+            .withRestartPolicy("Never")
+            .endSpec
+            .build()
+        )
+        .create()
 
       val available = ResourceAvailable(
         cpu = requestSize.cpu._1,
@@ -137,12 +142,12 @@ object K8SElasticSupport extends ElasticSupportFromConfig {
   )
   def apply(implicit config: TasksConfig) = {
     val k8s =
-      (new DefaultKubernetesClient).inNamespace(config.kubernetesNamespace)
+      (new KubernetesClientBuilder).build
     SimpleElasticSupport(
       fqcn = fqcn,
       hostConfig = None,
       reaperFactory = None,
-      shutdown = new K8SShutdown(k8s),
+      shutdown = new K8SShutdown(k8s, config.kubernetesNamespace),
       createNodeFactory = new K8SCreateNodeFactory(k8s),
       getNodeName = K8SGetNodeName
     )
