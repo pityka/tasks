@@ -66,8 +66,8 @@ lazy val commonSettings = Seq(
   scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings"))
 )
 
-lazy val circeVersion = "0.13.0"
-lazy val jsoniterVersion = "2.9.0"
+lazy val circeVersion = "0.14.2"
+lazy val jsoniterVersion = "2.13.31"
 lazy val akkaVersion = "2.6.19"
 lazy val shapelessVersion = "2.3.8"
 
@@ -124,12 +124,12 @@ lazy val core = project
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "30.1.1-jre", // scala-steward:off
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
-      "com.typesafe.akka" %% "akka-http" % "10.2.7",
+      "com.typesafe.akka" %% "akka-http" % "10.2.9",
       "com.typesafe" % "config" % "1.4.2",
       "io.github.pityka" %% "selfpackage" % "1.2.5",
       "io.github.pityka" %% "s3-stream-fork" % "0.0.10",
       "org.scalatest" %% "scalatest" % "3.2.10" % "test",
-      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
+      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test"
