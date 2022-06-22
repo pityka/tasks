@@ -52,7 +52,10 @@ object EC2Operations {
     "r3.4xlarge" -> ResourceAvailable(16, 120000, scratch, Nil),
     "r3.8xlarge" -> ResourceAvailable(32, 240000, scratch, Nil),
     "p2.xlarge" -> ResourceAvailable(4, 61000, scratch, List(0)),
-    "p2.8xlarge" -> ResourceAvailable(32, 488000, scratch, List(0 until 8: _*))
+    "p2.8xlarge" -> ResourceAvailable(32, 488000, scratch, List(0 until 8: _*)),
+    "p3.2xlarge" -> ResourceAvailable(8, 61000, scratch, List(0)),
+    "p3.8xlarge" -> ResourceAvailable(32, 244000, scratch, List(0 until 4: _*)),
+    "p3.8xlarge" -> ResourceAvailable(64, 488000, scratch, List(0 until 8: _*))
   )
 
   def currentInstanceType =
