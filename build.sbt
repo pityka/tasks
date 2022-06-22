@@ -111,7 +111,8 @@ lazy val spores = project
   )
 lazy val akkaProvided = List(
   "com.typesafe.akka" %% "akka-actor" % akkaVersion % Provided,
-  "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided
+  "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided,
+  "com.typesafe.akka" %% "akka-http" % "10.2.9" % Provided
 )
 lazy val core = project
   .in(file("core"))
@@ -124,10 +125,9 @@ lazy val core = project
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "30.1.1-jre", // scala-steward:off
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
-      "com.typesafe.akka" %% "akka-http" % "10.2.9",
       "com.typesafe" % "config" % "1.4.2",
       "io.github.pityka" %% "selfpackage" % "2.0.0",
-      "io.github.pityka" %% "s3-stream-fork" % "0.0.11",
+      "io.github.pityka" %% "s3-stream-fork" % "0.0.12",
       "org.scalatest" %% "scalatest" % "3.2.10" % "test",
       "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
