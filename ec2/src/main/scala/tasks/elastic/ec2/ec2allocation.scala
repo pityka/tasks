@@ -80,7 +80,7 @@ class EC2CreateNode(
     gzip.write(str.getBytes());
     gzip.close();
     val bytes = out.toByteArray
-    javax.xml.bind.DatatypeConverter.printBase64Binary(bytes)
+    java.util.Base64.getEncoder.encodeToString(bytes)
   }
 
   def requestOneNewJobFromJobScheduler(
