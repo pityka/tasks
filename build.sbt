@@ -166,7 +166,7 @@ lazy val kubernetes = project
     name := "tasks-kubernetes",
     libraryDependencies ++= Seq(
       "io.fabric8" % "kubernetes-client" % "6.0.0-RC1" // scala-steward:off
-    )
+    ) ++ akkaProvided
   )
   .dependsOn(core % "compile->compile;test->test")
 
