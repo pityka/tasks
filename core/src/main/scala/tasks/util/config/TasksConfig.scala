@@ -223,6 +223,11 @@ class TasksConfig(load: () => Config) extends StrictLogging {
   val appUIServerPort = raw.getInt("tasks.ui.app.port")
 
   def kubernetesImageName = raw.getString("tasks.kubernetes.image")
+  
+  def kubernetesHostNameOrIPEnvVar = raw.getString("tasks.kubernetes.hostnameOrIPEnvVar")
+  def kubernetesCpuLimitEnvVar = raw.getString("tasks.kubernetes.cpuLimitEnvVar")
+  def kubernetesRamLimitEnvVar = raw.getString("tasks.kubernetes.ramLimitEnvVar")
+  def kubernetesScratchLimitEnvVar = raw.getString("tasks.kubernetes.scratchLimitEnvVar")
 
   def kubernetesGpuTaintToleration = {
     val l = raw.getStringList("tasks.kubernetes.gpuTaintToleration").asScala

@@ -38,6 +38,8 @@ import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClientBuilder
 import io.fabric8.kubernetes.api.model.Quantity
 import io.fabric8.kubernetes.api.model.Toleration
+import tasks.deploy.HostConfigurationFromConfig
+
 
 class K8SShutdown(k8s: KubernetesClient, namespace: String)
     extends ShutdownNode
@@ -110,6 +112,45 @@ class K8SCreateNode(
             .withCommand(command.asJava)
             .withName("tasks-worker")
             .withImagePullPolicy(config.kubernetesImagePullPolicy)
+            //  IP
+            .addNewEnv()
+            .withName(config.kubernetesHostNameOrIPEnvVar)
+            .withNewValueFrom()
+            .withNewFieldRef()
+            .withFieldPath("status.podIP")
+            .endFieldRef()
+            .endValueFrom()
+            .endEnv()
+            //  CPU
+            .addNewEnv()
+            .withName(config.kubernetesCpuLimitEnvVar)
+            .withNewValueFrom()
+            .withNewResourceFieldRef()
+            .withContainerName("tasks-worker")
+            .withResource("limits.cpu")
+            .endResourceFieldRef()
+            .endValueFrom()
+            .endEnv()
+            //  RAM
+            .addNewEnv()
+            .withName(config.kubernetesRamLimitEnvVar)
+            .withNewValueFrom()
+            .withNewResourceFieldRef()
+            .withContainerName("tasks-worker")
+            .withResource("limits.memory")
+            .endResourceFieldRef()
+            .endValueFrom()
+            .endEnv()
+            //  SCRATCH
+            .addNewEnv()
+            .withName(config.kubernetesScratchLimitEnvVar)
+            .withNewValueFrom()
+            .withNewResourceFieldRef()
+            .withContainerName("tasks-worker")
+            .withResource("limits.ephemeral-storage")
+            .endResourceFieldRef()
+            .endValueFrom()
+            .endEnv()
             .withEnv(new EnvVar("TASKS_JOB_NAME", name, null))
             .withNewResources()
             .withLimits(
@@ -171,7 +212,7 @@ object K8SElasticSupport extends ElasticSupportFromConfig {
       (new KubernetesClientBuilder).build
     SimpleElasticSupport(
       fqcn = fqcn,
-      hostConfig = None,
+      hostConfig = Some(new K8SHostConfig()),
       reaperFactory = None,
       shutdown = new K8SShutdown(k8s, config.kubernetesNamespace),
       createNodeFactory = new K8SCreateNodeFactory(k8s),
@@ -179,3 +220,31 @@ object K8SElasticSupport extends ElasticSupportFromConfig {
     )
   }
 }
+
+trait K8SHostConfigurationImpl extends HostConfigurationFromConfig {
+
+  implicit def config: TasksConfig
+
+  private lazy val myhostname =
+    Option(System.getenv(config.kubernetesHostNameOrIPEnvVar))
+      .getOrElse(config.hostName)
+
+  override lazy val myAddress = new InetSocketAddress(myhostname, myPort)
+
+  override lazy val availableMemory = Option(
+    System.getenv(config.kubernetesRamLimitEnvVar)
+  ).map(_.toInt).getOrElse(config.hostRAM)
+
+  override lazy val availableScratch = Option(
+    System.getenv(config.kubernetesScratchLimitEnvVar)
+  ).map(_.toInt).getOrElse(config.hostScratch)
+
+  override lazy val availableCPU =
+    Option(System.getenv(config.kubernetesCpuLimitEnvVar))
+      .map(_.toInt)
+      .getOrElse(config.hostNumCPU)
+
+}
+
+class K8SHostConfig(implicit val config: TasksConfig)
+    extends K8SHostConfigurationImpl
