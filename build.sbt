@@ -127,7 +127,7 @@ lazy val core = project
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe" % "config" % "1.4.2",
       "io.github.pityka" %% "selfpackage" % "2.0.0",
-      "io.github.pityka" %% "s3-stream-fork" % "0.0.11",
+      "io.github.pityka" %% "s3-stream-fork" % "0.0.14",
       "org.scalatest" %% "scalatest" % "3.2.10" % "test",
       "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
