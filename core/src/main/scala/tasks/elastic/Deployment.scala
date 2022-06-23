@@ -62,10 +62,13 @@ object Deployment {
       case Some(host) => s"-Dhosts.hostname=$host"
     }
 
-    val gpuString = gpus.map(_.toString).mkString(",")
+    val gpuString =
+      if (gpus.size > 0)
+        s"-Dhosts.gpusAsCommaString=${gpus.map(_.toString).mkString(",")}"
+      else ""
 
     val edited =
-      s"./$packageFileName -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch -Dhosts.gpusAsCommaString=$gpuString $hostnameString"
+      s"./$packageFileName -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString"
         .replace(
           "{RAM}",
           math
