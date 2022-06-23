@@ -18,12 +18,12 @@ Akka is marked as a 'provided' dependency. This is to make sure that the applica
 
 The following Akka modules are needed:
   
-- akka-actor compatible with 2.6.19
-- akka-remote compatible with 2.6.19
-- akka-stream compatible with 2.6.19
-- akka-http compatible with 10.2.9
-- akka-http-xml compatible with 10.2.9 only if S3 is used
-- akka-http-spray-json compatible with 10.2.9 only if S3 is used
+- `"com.typesafe.akka" %% "akka-actor"`  compatible with 2.6.19
+- `"com.typesafe.akka" %% "akka-remote"` compatible with 2.6.19
+- `"com.typesafe.akka" %% "akka-stream"` compatible with 2.6.19
+- `"com.typesafe.akka" %% "akka-http"` compatible with 10.2.9
+- `"com.lightbend.akka" %% "akka-stream-alpakka-s3" % "3.0.4"` (or compatible veresion)  if S3 is used
+- `"com.typesafe.akka" %% "akka-http-xml"` compatible with 10.2.9 if S3 is used and alpakka is on the classpath
 
 
 

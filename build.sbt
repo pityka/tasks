@@ -63,7 +63,8 @@ lazy val commonSettings = Seq(
 ) ++ Seq(
   fork := true,
   cancelable in Global := true,
-  scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings"))
+  scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
+  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings")),
 )
 
 lazy val circeVersion = "0.14.2"
@@ -112,7 +113,9 @@ lazy val spores = project
 lazy val akkaProvided = List(
   "com.typesafe.akka" %% "akka-actor" % akkaVersion % Provided,
   "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided,
-  "com.typesafe.akka" %% "akka-http" % "10.2.9" % Provided
+  "com.typesafe.akka" %% "akka-http" % "10.2.9" % Provided,
+  "com.typesafe.akka" %% "akka-http-xml" % "10.2.9" % Provided,
+  "com.lightbend.akka" %% "akka-stream-alpakka-s3" % "3.0.4" % Provided
 )
 lazy val core = project
   .in(file("core"))
@@ -127,7 +130,6 @@ lazy val core = project
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe" % "config" % "1.4.2",
       "io.github.pityka" %% "selfpackage" % "2.0.0",
-      "io.github.pityka" %% "s3-stream-fork" % "0.0.14",
       "org.scalatest" %% "scalatest" % "3.2.10" % "test",
       "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,

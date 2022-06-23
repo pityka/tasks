@@ -29,12 +29,12 @@ import akka.stream._
 import akka.stream.scaladsl._
 import akka.http.scaladsl.model.{HttpRequest, headers, HttpMethods, StatusCodes}
 import akka.util._
-import com.bluelabs.s3stream._
 import scala.concurrent.{ExecutionContext, Future}
 import tasks.util.Uri
 import akka.http.scaladsl.Http
+import akka.stream.alpakka.s3.scaladsl.S3
 
-class StreamHelper(s3stream: Option[S3ClientSupport])(implicit
+class StreamHelper(implicit
     as: ActorSystem,
     actorMaterializer: Materializer,
     ec: ExecutionContext
@@ -50,7 +50,7 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(implicit
   def s3Loc(uri: Uri) = {
     val bucket = uri.authority.toString
     val key = uri.path.toString.drop(1)
-    S3Location(bucket, key)
+    (bucket, key)
   }
 
   private def createSourceHttp(
@@ -179,7 +179,11 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(implicit
       fromOffset == 0L,
       "Seeking into S3 file not implemented. Use GetObjectMetaData.range to implement it."
     )
-    s3stream.get.getData(s3Loc(uri), parallelism = 1)
+    val (bucket,key) = s3Loc(uri)
+    S3.download(bucket,key).flatMapConcat{
+      case Some((src,_)) => src 
+      case _ => Source.empty
+    }
   }
 
   private def createSourceFile(
@@ -208,8 +212,14 @@ class StreamHelper(s3stream: Option[S3ClientSupport])(implicit
 
   private def getContentLengthAndETagS3(
       uri: Uri
-  ): Future[(Option[Long], Option[String])] =
-    s3stream.get.getMetadata(s3Loc(uri)).map(x => x.contentLength -> x.eTag)
+  ): Future[(Option[Long], Option[String])] = {
+    val (bucket,key) = s3Loc(uri)
+    S3.getObjectMetadata(bucket,key).map{
+      case None => (None,None)
+      case Some(x) => Some(x.contentLength) -> x.eTag
+    }.runWith(Sink.head)
+  }
+   
 
   def getContentLengthAndETag(
       uri: Uri
