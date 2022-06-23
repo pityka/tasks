@@ -52,6 +52,8 @@ class S3Storage(
     config: TasksConfig
 ) extends ManagedFileStorage {
 
+  override def toString = s"S3Storage(bucket=$bucketName, prefix=$folderPrefix)"
+
   implicit val log = akka.event.Logging(as.eventStream, getClass)
 
   val putObjectParams = {
