@@ -170,9 +170,10 @@ class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
       .iterator
       .map { case (name, (host, _)) =>
         val script = Deployment.script(
-          memory = requestSize.memory,
-          cpu = requestSize.cpu._2,
-          scratch = requestSize.scratch,
+          memory = host.memory,
+          cpu = host.cpu,
+          scratch = host.scratch,
+          gpus = host.gpu,
           elasticSupport = elasticSupport,
           masterAddress = masterAddress,
           download = new java.net.URL(

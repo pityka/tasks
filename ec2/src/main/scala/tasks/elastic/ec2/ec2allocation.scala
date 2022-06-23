@@ -122,7 +122,7 @@ class EC2CreateNode(
 
   private def requestSpotInstance = {
     // size is ignored, instance specification is set in configuration
-    val selectedInstanceType = EC2Operations.slaveInstanceType
+    val selectedInstanceType = EC2Operations.workerInstanceType
 
     // Initializes a Spot Instance Request
     val requestRequest = new RequestSpotInstancesRequest();
@@ -166,6 +166,7 @@ class EC2CreateNode(
       memory = selectedInstanceType._2.memory,
       cpu = selectedInstanceType._2.cpu,
       scratch = selectedInstanceType._2.scratch,
+      gpus = selectedInstanceType._2.gpu,
       elasticSupport = elasticSupport,
       masterAddress = masterAddress,
       download = new java.net.URL(

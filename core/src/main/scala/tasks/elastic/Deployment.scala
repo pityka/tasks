@@ -33,7 +33,7 @@ object Deployment {
 
   def pack(implicit config: TasksConfig): File = {
     val tmp = TempFile.createTempFile("package")
-    val mainClassName = config.slaveMainClass match {
+    val mainClassName = config.workerMainClass match {
       case ""    => None
       case other => Some(other)
     }
@@ -45,6 +45,7 @@ object Deployment {
       memory: Int,
       cpu: Int,
       scratch: Int,
+      gpus: List[Int],
       elasticSupport: ElasticSupportFqcn,
       masterAddress: InetSocketAddress,
       download: URL,
@@ -61,8 +62,10 @@ object Deployment {
       case Some(host) => s"-Dhosts.hostname=$host"
     }
 
+    val gpuString = gpus.map(_.toString).mkString(",")
+
     val edited =
-      s"./$packageFileName -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $hostnameString"
+      s"./$packageFileName -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch -Dhosts.gpusAsCommaString=$gpuString $hostnameString"
         .replace(
           "{RAM}",
           math

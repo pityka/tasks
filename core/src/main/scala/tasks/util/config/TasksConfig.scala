@@ -94,7 +94,12 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   val hostNumCPU = raw.getInt("hosts.numCPU")
 
-  val hostGPU = raw.getIntList("hosts.gpus").asScala.toList.map(_.toInt)
+  val hostGPU = raw.getIntList("hosts.gpus").asScala.toList.map(_.toInt) ++ raw
+    .getString("hosts.gpusAsCommaString")
+    .split(",")
+    .toList
+    .filter(_.nonEmpty)
+    .map(_.toInt)
 
   val hostRAM = raw.getInt("hosts.RAM")
 
@@ -154,7 +159,7 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   def amiID: String = raw.getString("tasks.elastic.aws.ami")
 
-  def slaveInstanceType = raw.getString("tasks.elastic.aws.instanceType")
+  def workerInstanceType = raw.getString("tasks.elastic.aws.instanceType")
 
   def securityGroup: String = raw.getString("tasks.elastic.aws.securityGroup")
 
@@ -219,12 +224,20 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   def kubernetesImageName = raw.getString("tasks.kubernetes.image")
 
+  def kubernetesGpuTaintToleration = {
+    val l = raw.getStringList("tasks.kubernetes.gpuTaintToleration").asScala
+    l.grouped(5).toList.filter(_.size == 5).map { l =>
+      // effect,key,operator,seconds,value
+      (l(0), l(1), l(2), l(3), l(4))
+    }
+  }
+
   def kubernetesNamespace = raw.getString("tasks.kubernetes.namespace")
 
   def kubernetesImagePullPolicy =
     raw.getString("tasks.kubernetes.image-pull-policy")
 
-  val slaveMainClass = raw.getString("tasks.slave-main-class")
+  val workerMainClass = raw.getString("tasks.worker-main-class")
 
   val createFilePrefixForTaskId =
     raw.getBoolean("tasks.createFilePrefixForTaskId")

@@ -33,10 +33,11 @@ import tasks.shared._
 import tasks.util.config._
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.api.model.{EnvVar}
-import scala.jdk.CollectionConverters._
 import com.typesafe.scalalogging.StrictLogging
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClientBuilder
+import io.fabric8.kubernetes.api.model.Quantity
+import io.fabric8.kubernetes.api.model.Toleration
 
 class K8SShutdown(k8s: KubernetesClient, namespace: String)
     extends ShutdownNode
@@ -71,6 +72,7 @@ class K8SCreateNode(
       memory = requestSize.memory,
       cpu = requestSize.cpu._2,
       scratch = requestSize.scratch,
+      gpus = 0 until requestSize.gpu toList,
       elasticSupport = elasticSupport,
       masterAddress = masterAddress,
       download = new java.net.URL(
@@ -89,6 +91,12 @@ class K8SCreateNode(
 
     val imageName = config.kubernetesImageName
 
+    val gpuTaintTolerations = config.kubernetesGpuTaintToleration.map {
+      case (effect, key, operator, seconds, value) =>
+        new Toleration(effect, key, operator, seconds.toLong, value)
+    }
+
+    import scala.jdk.CollectionConverters._
     Try {
       k8s.pods
         .inNamespace(config.kubernetesNamespace)
@@ -100,11 +108,29 @@ class K8SCreateNode(
             .addNewContainer
             .withImage(imageName)
             .withCommand(command.asJava)
-            .withName("tasks")
+            .withName("tasks-worker")
             .withImagePullPolicy(config.kubernetesImagePullPolicy)
             .withEnv(new EnvVar("TASKS_JOB_NAME", name, null))
+            .withNewResources()
+            .withLimits(
+              (Map(
+                "cpu" ->
+                  new Quantity(requestSize.cpu._2.toString),
+                "memory" -> new Quantity(s"${requestSize.memory}M")
+              ) ++ (if (requestSize.gpu > 0)
+                      Map(
+                        "nvidia.com/gpu" -> new Quantity(
+                          requestSize.gpu.toString
+                        )
+                      )
+                    else Map.empty)).asJava
+            )
+            .endResources()
             .endContainer
             .withRestartPolicy("Never")
+            .withTolerations(
+              (if (requestSize.gpu > 0) gpuTaintTolerations else Nil).asJava
+            )
             .endSpec
             .build()
         )

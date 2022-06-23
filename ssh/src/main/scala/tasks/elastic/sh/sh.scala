@@ -57,6 +57,7 @@ class SHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
       memory = requestSize.memory,
       cpu = requestSize.cpu._2,
       scratch = requestSize.scratch,
+      gpus = 0 until requestSize.gpu toList,
       elasticSupport = elasticSupport,
       masterAddress = masterAddress,
       download = new java.net.URL(
