@@ -41,23 +41,29 @@ import io.fabric8.kubernetes.api.model.Toleration
 import tasks.deploy.HostConfigurationFromConfig
 
 
-class K8SShutdown(k8s: KubernetesClient, namespace: String)
+class K8SShutdown(k8s: KubernetesClient)
     extends ShutdownNode
     with StrictLogging {
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
-    logger.info(s"Shut down $nodeName in ns $namespace")
-    k8s.pods.inNamespace(namespace).withName(nodeName.value).delete()
+    logger.info(s"Shut down $nodeName")
+    val spl = nodeName.value.split("/")
+    val ns = spl(0)
+    val podName = spl(1)
+    k8s.pods.inNamespace(ns).withName(podName).delete()
   }
 
   def shutdownPendingNode(nodeName: PendingJobId): Unit = {
-    logger.info(s"Shut down $nodeName in ns $namespace")
-    k8s.pods.inNamespace(namespace).withName(nodeName.value).delete()
+    logger.info(s"Shut down $nodeName")
+    val spl = nodeName.value.split("/")
+    val ns = spl(0)
+    val podName = spl(1)
+    k8s.pods.inNamespace(ns).withName(podName).delete()
   }
 
 }
 
 object KubernetesHelpers {
-  def newName = Random.alphanumeric.take(170).mkString.toLowerCase
+  def newName(namespace:String) = namespace+"/"+Random.alphanumeric.take(128).mkString.toLowerCase
 }
 
 class K8SCreateNode(
@@ -89,7 +95,7 @@ class K8SCreateNode(
 
     val command = Seq("/bin/bash", "-c", script)
 
-    val name = KubernetesHelpers.newName
+    val name = KubernetesHelpers.newName(config.kubernetesNamespace)
 
     val imageName = config.kubernetesImageName
 
@@ -217,7 +223,7 @@ object K8SElasticSupport extends ElasticSupportFromConfig {
       fqcn = fqcn,
       hostConfig = Some(new K8SHostConfig()),
       reaperFactory = None,
-      shutdown = new K8SShutdown(k8s, config.kubernetesNamespace),
+      shutdown = new K8SShutdown(k8s),
       createNodeFactory = new K8SCreateNodeFactory(k8s),
       getNodeName = K8SGetNodeName
     )
