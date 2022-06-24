@@ -45,12 +45,12 @@ class K8SShutdown(k8s: KubernetesClient, namespace: String)
     extends ShutdownNode
     with StrictLogging {
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
-    logger.info(s"Shut down $nodeName")
-    k8s.pods.withName(nodeName.value).delete()
+    logger.info(s"Shut down $nodeName in ns $namespace")
+    k8s.pods.inNamespace(namespace).withName(nodeName.value).delete()
   }
 
   def shutdownPendingNode(nodeName: PendingJobId): Unit = {
-    logger.info(s"Shut down $nodeName")
+    logger.info(s"Shut down $nodeName in ns $namespace")
     k8s.pods.inNamespace(namespace).withName(nodeName.value).delete()
   }
 
