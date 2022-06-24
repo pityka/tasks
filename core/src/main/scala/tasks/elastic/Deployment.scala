@@ -26,7 +26,6 @@ package tasks.elastic
 import tasks.util._
 import tasks.util.config._
 
-import java.net._
 import java.io.File
 
 object Deployment {
@@ -47,8 +46,8 @@ object Deployment {
       scratch: Int,
       gpus: List[Int],
       elasticSupport: ElasticSupportFqcn,
-      masterAddress: InetSocketAddress,
-      download: URL,
+      masterAddress: SimpleSocketAddress,
+      download: Uri,
       slaveHostname: Option[String],
       background: Boolean
   )(implicit config: TasksConfig): String = {

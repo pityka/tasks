@@ -27,6 +27,7 @@
 
 package tasks.util.config
 
+import tasks.util.SimpleSocketAddress
 import com.typesafe.config.Config
 import scala.jdk.CollectionConverters._
 import com.typesafe.scalalogging.StrictLogging
@@ -113,7 +114,7 @@ class TasksConfig(load: () => Config) extends StrictLogging {
     if (raw.hasPath("hosts.master")) {
       val h = raw.getString("hosts.master").split(":")(0)
       val p = raw.getString("hosts.master").split(":")(1).toInt
-      Some(new java.net.InetSocketAddress(h, p))
+      Some(SimpleSocketAddress(h, p))
     } else None
 
   val startApp = raw.getBoolean("hosts.app")

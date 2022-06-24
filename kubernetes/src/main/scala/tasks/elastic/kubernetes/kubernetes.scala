@@ -25,7 +25,6 @@
 
 package tasks.elastic.kubernetes
 
-import java.net.InetSocketAddress
 import scala.util._
 
 import tasks.elastic._
@@ -38,7 +37,8 @@ import io.fabric8.kubernetes.client.KubernetesClientBuilder
 import io.fabric8.kubernetes.api.model.Quantity
 import io.fabric8.kubernetes.api.model.Toleration
 import tasks.deploy.HostConfigurationFromConfig
-
+import tasks.util.Uri
+import tasks.util.SimpleSocketAddress
 
 class K8SShutdown(k8s: KubernetesClient)
     extends ShutdownNode
@@ -66,7 +66,7 @@ object KubernetesHelpers {
 }
 
 class K8SCreateNode(
-    masterAddress: InetSocketAddress,
+    masterAddress: SimpleSocketAddress,
     codeAddress: CodeAddress,
     k8s: KubernetesClient
 )(implicit config: TasksConfig, elasticSupport: ElasticSupportFqcn)
@@ -82,11 +82,11 @@ class K8SCreateNode(
       gpus = 0 until requestSize.gpu toList,
       elasticSupport = elasticSupport,
       masterAddress = masterAddress,
-      download = new java.net.URL(
-        "http",
-        codeAddress.address.getHostName,
-        codeAddress.address.getPort,
-        "/"
+      download = Uri(
+        scheme = "http",
+        hostname = codeAddress.address.getHostName,
+        port = codeAddress.address.getPort,
+        path = "/"
       ),
       slaveHostname = None,
       background = false
@@ -192,7 +192,7 @@ class K8SCreateNode(
         gpu = 0 until requestSize.gpu toList
       )
 
-      val nameWithNameSpace = config.kubernetesNamespace+"/"+name
+      val nameWithNameSpace = config.kubernetesNamespace + "/" + name
 
       (PendingJobId(nameWithNameSpace), available)
     }
@@ -205,7 +205,7 @@ class K8SCreateNodeFactory(k8s: KubernetesClient)(implicit
     config: TasksConfig,
     fqcn: ElasticSupportFqcn
 ) extends CreateNodeFactory {
-  def apply(master: InetSocketAddress, codeAddress: CodeAddress) =
+  def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
     new K8SCreateNode(master, codeAddress, k8s)
 }
 
@@ -239,7 +239,7 @@ trait K8SHostConfigurationImpl extends HostConfigurationFromConfig {
     Option(System.getenv(config.kubernetesHostNameOrIPEnvVar))
       .getOrElse(config.hostName)
 
-  override lazy val myAddress = new InetSocketAddress(myhostname, myPort)
+  override lazy val myAddress = SimpleSocketAddress(myhostname, myPort)
 
   override lazy val availableMemory = Option(
     System.getenv(config.kubernetesRamLimitEnvVar)

@@ -349,7 +349,7 @@ class TaskSystem private[tasks] (
         if (hostConfig.isApp)
           Some(
             elastic.CodeAddress(
-              new java.net.InetSocketAddress(
+              SimpleSocketAddress(
                 packageServerHostname,
                 packageServerPort
               ),

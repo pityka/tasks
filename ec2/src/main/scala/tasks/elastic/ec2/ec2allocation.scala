@@ -29,7 +29,6 @@
 package tasks.elastic.ec2
 
 import akka.actor.{ActorSystem, Props, ActorRef}
-import java.net.InetSocketAddress
 import scala.util._
 
 import tasks.elastic._
@@ -67,7 +66,7 @@ class EC2Shutdown(ec2: AmazonEC2) extends ShutdownNode {
 }
 
 class EC2CreateNode(
-    masterAddress: InetSocketAddress,
+    masterAddress: SimpleSocketAddress,
     codeAddress: CodeAddress,
     ec2: AmazonEC2,
     elasticSupport: ElasticSupportFqcn
@@ -169,11 +168,11 @@ class EC2CreateNode(
       gpus = selectedInstanceType._2.gpu,
       elasticSupport = elasticSupport,
       masterAddress = masterAddress,
-      download = new java.net.URL(
-        "http",
-        codeAddress.address.getHostName,
-        codeAddress.address.getPort,
-        "/"
+      download = Uri(
+        scheme = "http",
+        hostname = codeAddress.address.getHostName,
+        port = codeAddress.address.getPort,
+        path = "/"
       ),
       slaveHostname = None,
       background = true
@@ -219,7 +218,6 @@ class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig)
     if (config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
     else AmazonEC2ClientBuilder.standard.withRegion(config.awsRegion).build
 
-
   def allSoulsReaped(): Unit = {
     log.debug("All souls reaped. Calling system.shutdown.")
     if (terminateSelf) {
@@ -235,7 +233,7 @@ class EC2CreateNodeFactory(implicit
     ec2: AmazonEC2,
     elasticSupport: ElasticSupportFqcn
 ) extends CreateNodeFactory {
-  def apply(master: InetSocketAddress, codeAddress: CodeAddress) =
+  def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
     new EC2CreateNode(master, codeAddress, ec2, elasticSupport)
 }
 
