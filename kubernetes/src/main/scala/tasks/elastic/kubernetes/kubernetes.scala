@@ -243,7 +243,7 @@ trait K8SHostConfigurationImpl extends HostConfigurationFromConfig {
 
   override lazy val availableMemory = Option(
     System.getenv(config.kubernetesRamLimitEnvVar)
-  ).map(v => (v.toLong / 1000).toInt).getOrElse(config.hostRAM)
+  ).map(v => (v.toLong / 1000000).toInt).getOrElse(config.hostRAM)
 
   override lazy val availableScratch = Option(
     System.getenv(config.kubernetesScratchLimitEnvVar)
