@@ -133,8 +133,8 @@ class TaskSystem private[tasks] (
         case Success(nr) => Some(nr)
         case Failure(e) =>
           tasksystemlog.error(
-            "Failed to contact remote node registry. Shut down job.",
-            e
+            e,
+            "Failed to contact remote node registry. Shut down job."
           )
           try {
             elasticSupport.get.selfShutdownNow()

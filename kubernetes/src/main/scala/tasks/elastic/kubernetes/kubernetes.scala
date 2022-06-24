@@ -62,7 +62,7 @@ class K8SShutdown(k8s: KubernetesClient)
 }
 
 object KubernetesHelpers {
-  def newName(namespace:String) = namespace+"/"+Random.alphanumeric.take(128).mkString.toLowerCase
+  def newName = Random.alphanumeric.take(128).mkString.toLowerCase
 }
 
 class K8SCreateNode(
@@ -94,7 +94,7 @@ class K8SCreateNode(
 
     val command = Seq("/bin/bash", "-c", script)
 
-    val name = KubernetesHelpers.newName(config.kubernetesNamespace)
+    val name = KubernetesHelpers.newName
 
     val imageName = config.kubernetesImageName
 
@@ -192,7 +192,9 @@ class K8SCreateNode(
         gpu = 0 until requestSize.gpu toList
       )
 
-      (PendingJobId(name), available)
+      val nameWithNameSpace = config.kubernetesNamespace+"/"+name
+
+      (PendingJobId(nameWithNameSpace), available)
     }
 
   }
