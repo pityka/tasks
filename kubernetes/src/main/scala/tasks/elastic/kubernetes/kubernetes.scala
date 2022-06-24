@@ -151,7 +151,10 @@ class K8SCreateNode(
             .endResourceFieldRef()
             .endValueFrom()
             .endEnv()
-            .withEnv(new EnvVar("TASKS_JOB_NAME", name, null))
+            .addNewEnv()
+            .withName("TASKS_JOB_NAME")
+            .withValue(name)
+            .endEnv()
             .withNewResources()
             .withLimits(
               (Map(
