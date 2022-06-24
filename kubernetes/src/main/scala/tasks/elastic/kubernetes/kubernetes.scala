@@ -32,7 +32,6 @@ import tasks.elastic._
 import tasks.shared._
 import tasks.util.config._
 import io.fabric8.kubernetes.client.KubernetesClient
-import io.fabric8.kubernetes.api.model.{EnvVar}
 import com.typesafe.scalalogging.StrictLogging
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClientBuilder
