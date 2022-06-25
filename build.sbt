@@ -123,7 +123,7 @@ lazy val core = project
       scalapb.gen() -> (sourceManaged in Compile).value
     ),
     libraryDependencies ++= Seq(
-      "com.google.guava" % "guava" % "30.1.1-jre", // scala-steward:off
+      "com.google.guava" % "guava" % "31.1-jre", // scala-steward:off
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe" % "config" % "1.4.2",
       "io.github.pityka" %% "selfpackage" % "2.0.0",
