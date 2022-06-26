@@ -56,4 +56,7 @@ package object upicklesupport {
   implicit val sharedFileRW =
     upickle.default.macroRW[tasks.fileservice.SharedFile]
 
+  implicit val serializedActorRefRW =
+    upickle.default.macroRW[tasks.util.SerializedActorRef]
+
 }
