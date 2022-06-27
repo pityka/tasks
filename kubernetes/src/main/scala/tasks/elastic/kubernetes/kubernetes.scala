@@ -94,7 +94,8 @@ class K8SCreateNode(
 
     val command = Seq("/bin/bash", "-c", script)
 
-    val name = KubernetesHelpers.newName
+    val podName = KubernetesHelpers.newName
+    val jobName = config.kubernetesNamespace +"/"+podName
 
     val imageName = config.kubernetesImageName
 
@@ -109,7 +110,7 @@ class K8SCreateNode(
         .inNamespace(config.kubernetesNamespace)
         .resource(
           new PodBuilder().withNewMetadata
-            .withName(name)
+            .withName(podName)
             .endMetadata()
             .withNewSpec()
             .addNewContainer
@@ -158,7 +159,7 @@ class K8SCreateNode(
             .endEnv()
             .addNewEnv()
             .withName("TASKS_JOB_NAME")
-            .withValue(name)
+            .withValue(jobName)
             .endEnv()
             .withNewResources()
             .withLimits(
@@ -192,9 +193,7 @@ class K8SCreateNode(
         gpu = 0 until requestSize.gpu toList
       )
 
-      val nameWithNameSpace = config.kubernetesNamespace + "/" + name
-
-      (PendingJobId(nameWithNameSpace), available)
+      (PendingJobId(jobName), available)
     }
 
   }
