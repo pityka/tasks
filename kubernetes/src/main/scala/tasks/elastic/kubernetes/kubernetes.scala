@@ -39,6 +39,8 @@ import io.fabric8.kubernetes.api.model.Toleration
 import tasks.deploy.HostConfigurationFromConfig
 import tasks.util.Uri
 import tasks.util.SimpleSocketAddress
+import io.fabric8.kubernetes.api.model.TolerationFluent
+import io.fabric8.kubernetes.api.model.TolerationBuilder
 
 class K8SShutdown(k8s: KubernetesClient)
     extends ShutdownNode
@@ -70,7 +72,8 @@ class K8SCreateNode(
     codeAddress: CodeAddress,
     k8s: KubernetesClient
 )(implicit config: TasksConfig, elasticSupport: ElasticSupportFqcn)
-    extends CreateNode {
+    extends CreateNode
+    with StrictLogging {
 
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest
@@ -95,13 +98,35 @@ class K8SCreateNode(
     val command = Seq("/bin/bash", "-c", script)
 
     val podName = KubernetesHelpers.newName
-    val jobName = config.kubernetesNamespace +"/"+podName
+    val jobName = config.kubernetesNamespace + "/" + podName
 
     val imageName = config.kubernetesImageName
 
     val gpuTaintTolerations = config.kubernetesGpuTaintToleration.map {
       case (effect, key, operator, seconds, value) =>
-        new Toleration(effect, key, operator, seconds.toLong, value)
+        val builder0 = (new TolerationBuilder)
+          .withKey(key)
+          .withEffect(effect)
+          .withOperator(operator)
+        val builder1 = operator match {
+          case "Exists" =>
+            builder0
+          case "Equal" =>
+            builder0.withValue(value)
+          case _ =>
+            logger.info(s"Unknown operator $operator")
+            builder0
+        }
+
+        val builder2 = effect match {
+          case "NoExecute" =>
+            val s = seconds.toLong
+            if (s >= 0) builder1.withTolerationSeconds(s)
+            else builder1
+          case _ => builder1
+        }
+
+        builder2.build
     }
 
     import scala.jdk.CollectionConverters._
