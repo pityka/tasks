@@ -35,11 +35,9 @@ import com.typesafe.scalalogging.StrictLogging
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClientBuilder
 import io.fabric8.kubernetes.api.model.Quantity
-import io.fabric8.kubernetes.api.model.Toleration
 import tasks.deploy.HostConfigurationFromConfig
 import tasks.util.Uri
 import tasks.util.SimpleSocketAddress
-import io.fabric8.kubernetes.api.model.TolerationFluent
 import io.fabric8.kubernetes.api.model.TolerationBuilder
 
 class K8SShutdown(k8s: KubernetesClient)
