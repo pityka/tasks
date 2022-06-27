@@ -186,8 +186,6 @@ class TasksConfig(load: () => Config) extends StrictLogging {
       case x            => Some(x)
     }
 
-  val s3Region = raw.getString("tasks.s3.region")
-
   val s3ServerSideEncryption = raw.getBoolean("tasks.s3.serverSideEncryption")
 
   val s3CannedAcl = raw.getStringList("tasks.s3.cannedAcls").asScala.toList
