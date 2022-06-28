@@ -31,42 +31,26 @@ import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
 import scala.jdk.CollectionConverters._
 
 import tasks.shared._
-import tasks.util.config._
+import tasks.util.config.TasksConfig
 
 object EC2Operations {
 
   val scratch = Int.MaxValue
 
-  val instanceTypes = List(
-    "m3.medium" -> ResourceAvailable(1, 3750, scratch, Nil),
-    "c3.large" -> ResourceAvailable(2, 3750, scratch, Nil),
-    "m3.xlarge" -> ResourceAvailable(4, 7500, scratch, Nil),
-    "c3.xlarge" -> ResourceAvailable(4, 7500, scratch, Nil),
-    "r3.large" -> ResourceAvailable(2, 15000, scratch, Nil),
-    "m3.2xlarge" -> ResourceAvailable(8, 15000, scratch, Nil),
-    "c3.2xlarge" -> ResourceAvailable(8, 15000, scratch, Nil),
-    "r3.xlarge" -> ResourceAvailable(4, 30000, scratch, Nil),
-    "c3.4xlarge" -> ResourceAvailable(16, 30000, scratch, Nil),
-    "r3.2xlarge" -> ResourceAvailable(8, 60000, scratch, Nil),
-    "c3.8xlarge" -> ResourceAvailable(32, 60000, scratch, Nil),
-    "r3.4xlarge" -> ResourceAvailable(16, 120000, scratch, Nil),
-    "r3.8xlarge" -> ResourceAvailable(32, 240000, scratch, Nil),
-    "p2.xlarge" -> ResourceAvailable(4, 61000, scratch, List(0)),
-    "p2.8xlarge" -> ResourceAvailable(32, 488000, scratch, List(0 until 8: _*)),
-    "p3.2xlarge" -> ResourceAvailable(8, 61000, scratch, List(0)),
-    "p3.8xlarge" -> ResourceAvailable(32, 244000, scratch, List(0 until 4: _*)),
-    "p3.8xlarge" -> ResourceAvailable(64, 488000, scratch, List(0 until 8: _*))
-  )
+  def instanceTypes(implicit config: TasksConfig) = config.ec2InstanceTypes
 
-  def currentInstanceType =
+  def currentInstanceType(implicit config: TasksConfig) =
     instanceTypes
       .find(_._1 == readMetadata("instance-type").head)
       .getOrElse(instanceTypes.head)
 
-  def workerInstanceType(implicit config: TasksConfig) =
+  def workerInstanceType(
+      requestSize: ResourceRequest
+  )(implicit config: TasksConfig) =
     instanceTypes
-      .find(_._1 == config.workerInstanceType)
-      .getOrElse(instanceTypes.head)
+      .find { case (_, instancetype) =>
+        instancetype.cpu >= requestSize.cpu._1 && instancetype.memory >= requestSize.memory && instancetype.scratch >= requestSize.scratch && instancetype.gpu.size >= requestSize.gpu
+      }
 
   def terminateInstance(ec2: AmazonEC2, instanceId: String): Unit = {
     retry(5) {

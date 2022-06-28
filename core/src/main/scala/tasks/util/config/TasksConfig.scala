@@ -31,6 +31,7 @@ import tasks.util.SimpleSocketAddress
 import com.typesafe.config.Config
 import scala.jdk.CollectionConverters._
 import com.typesafe.scalalogging.StrictLogging
+import tasks.shared.ResourceAvailable
 
 class TasksConfig(load: () => Config) extends StrictLogging {
 
@@ -160,9 +161,17 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   def amiID: String = raw.getString("tasks.elastic.aws.ami")
 
-  def workerInstanceType = raw.getString("tasks.elastic.aws.instanceType")
-
   def securityGroup: String = raw.getString("tasks.elastic.aws.securityGroup")
+
+  def ec2InstanceTypes =
+    raw.getConfigList("tasks.elastic.aws.instances").asScala.toList.map {
+      conf =>
+        val name = conf.getString("name")
+        val cpu = conf.getInt("cpu")
+        val ram = conf.getInt("ram")
+        val gpu = conf.getInt("gpu")
+        name -> ResourceAvailable(cpu, ram, Int.MaxValue, 0 until gpu toList)
+    }
 
   def securityGroups: List[String] =
     raw.getStringList("tasks.elastic.aws.securityGroups").asScala.toList
@@ -222,13 +231,16 @@ class TasksConfig(load: () => Config) extends StrictLogging {
   val appUIServerPort = raw.getInt("tasks.ui.app.port")
 
   def kubernetesImageName = raw.getString("tasks.kubernetes.image")
-  
-  def kubernetesHostNameOrIPEnvVar = raw.getString("tasks.kubernetes.hostnameOrIPEnvVar")
-  def kubernetesCpuLimitEnvVar = raw.getString("tasks.kubernetes.cpuLimitEnvVar")
-  def kubernetesRamLimitEnvVar = raw.getString("tasks.kubernetes.ramLimitEnvVar")
-  def kubernetesScratchLimitEnvVar = raw.getString("tasks.kubernetes.scratchLimitEnvVar")
 
-  
+  def kubernetesHostNameOrIPEnvVar =
+    raw.getString("tasks.kubernetes.hostnameOrIPEnvVar")
+  def kubernetesCpuLimitEnvVar =
+    raw.getString("tasks.kubernetes.cpuLimitEnvVar")
+  def kubernetesRamLimitEnvVar =
+    raw.getString("tasks.kubernetes.ramLimitEnvVar")
+  def kubernetesScratchLimitEnvVar =
+    raw.getString("tasks.kubernetes.scratchLimitEnvVar")
+
   def kubernetesCpuExtra = raw.getInt("tasks.kubernetes.extralimits.cpu")
   def kubernetesCpuMin = raw.getInt("tasks.kubernetes.minimumlimits.cpu")
   def kubernetesRamExtra = raw.getInt("tasks.kubernetes.extralimits.ram")

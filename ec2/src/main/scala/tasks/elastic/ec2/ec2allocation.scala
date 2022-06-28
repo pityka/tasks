@@ -87,7 +87,7 @@ class EC2CreateNode(
       requestSize: ResourceRequest
   ): Try[(PendingJobId, ResourceAvailable)] =
     Try {
-      val (requestid, instancetype) = requestSpotInstance
+      val (requestid, instancetype) = requestSpotInstance(requestSize)
       val jobid = PendingJobId(requestid)
       val size = instancetype._2
       (jobid, size)
@@ -119,9 +119,11 @@ class EC2CreateNode(
 
   }
 
-  private def requestSpotInstance = {
+  private def requestSpotInstance(requestSize: ResourceRequest) = {
     // size is ignored, instance specification is set in configuration
-    val selectedInstanceType = EC2Operations.workerInstanceType
+    val selectedInstanceType = EC2Operations.workerInstanceType(requestSize).getOrElse(
+      throw new RuntimeException("No instance type could fullfill request")
+    )
 
     // Initializes a Spot Instance Request
     val requestRequest = new RequestSpotInstancesRequest();
