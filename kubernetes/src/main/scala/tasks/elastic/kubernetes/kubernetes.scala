@@ -77,8 +77,8 @@ class K8SCreateNode(
       requestSize: ResourceRequest
   ): Try[(PendingJobId, ResourceAvailable)] = {
 
-    val userCPURequest = math.max(requestSize.cpu._2,config.kubernetesCpuMin)
-    val userRamRequest = math.max(requestSize.memory,config.kubernetesRamMin)
+    val userCPURequest = math.max(requestSize.cpu._2, config.kubernetesCpuMin)
+    val userRamRequest = math.max(requestSize.memory, config.kubernetesRamMin)
 
     val kubeCPURequest = userCPURequest + config.kubernetesCpuExtra
     val kubeRamRequest = userRamRequest + config.kubernetesRamExtra
@@ -192,18 +192,27 @@ class K8SCreateNode(
             .withValue(jobName)
             .endEnv()
             .withNewResources()
-            .withLimits(
+            .withRequests(
               (Map(
                 "cpu" ->
                   new Quantity(kubeCPURequest.toString),
-                "memory" -> new Quantity(s"${kubeRamRequest.memory}M")
-              ) ++ (if (requestSize.gpu > 0)
+                "memory" -> new Quantity(s"${kubeRamRequest}M")
+              ) ++ (if (requestSize.scratch > 0)
                       Map(
-                        "nvidia.com/gpu" -> new Quantity(
-                          requestSize.gpu.toString
+                        "ephemeral-storage" -> new Quantity(
+                          s"${requestSize.scratch.toString}M"
                         )
                       )
                     else Map.empty)).asJava
+            )
+            .withLimits(
+              (if (requestSize.gpu > 0)
+                 Map(
+                   "nvidia.com/gpu" -> new Quantity(
+                     requestSize.gpu.toString
+                   )
+                 )
+               else Map.empty[String, Quantity]).asJava
             )
             .endResources()
             .endContainer
