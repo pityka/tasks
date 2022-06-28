@@ -168,7 +168,7 @@ class SSHCreateNode(
     settings.hosts
       .filter(x => x._2._2 == true)
       .filter(x =>
-        x._2._1.cpu >= requestSize.cpu._1 && x._2._1.memory >= requestSize.memory
+        x._2._1.cpu >= requestSize.cpu._1 && x._2._1.memory >= requestSize.memory && x._2._1.scratch >= requestSize.scratch && x._2._1.gpu.size >= requestSize.gpu
       )
       .iterator
       .map { case (name, (host, _)) =>
