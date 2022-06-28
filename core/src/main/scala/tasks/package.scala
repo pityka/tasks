@@ -225,8 +225,6 @@ package object tasks {
             artery {
               canonical.hostname = "${hostConfig.myAddress.getHostName}"
               canonical.port = ${hostConfig.myAddress.getPort.toString}
-              large-message-destinations = ["/user/launcher/*","/temp/cache*","/user/cache","/user/queue"]
-              advanced.maximum-large-frame-size = 8 MiB
             }
             
          }
