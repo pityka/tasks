@@ -76,9 +76,16 @@ class K8SCreateNode(
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest
   ): Try[(PendingJobId, ResourceAvailable)] = {
+
+    val userCPURequest = math.max(requestSize.cpu._2,config.kubernetesCpuMin)
+    val userRamRequest = math.max(requestSize.memory,config.kubernetesRamMin)
+
+    val kubeCPURequest = userCPURequest + config.kubernetesCpuExtra
+    val kubeRamRequest = userRamRequest + config.kubernetesRamExtra
+
     val script = Deployment.script(
-      memory = requestSize.memory,
-      cpu = requestSize.cpu._2,
+      memory = userRamRequest,
+      cpu = userCPURequest,
       scratch = requestSize.scratch,
       gpus = 0 until requestSize.gpu toList,
       elasticSupport = elasticSupport,
@@ -188,8 +195,8 @@ class K8SCreateNode(
             .withLimits(
               (Map(
                 "cpu" ->
-                  new Quantity(requestSize.cpu._2.toString),
-                "memory" -> new Quantity(s"${requestSize.memory}M")
+                  new Quantity(kubeCPURequest.toString),
+                "memory" -> new Quantity(s"${kubeRamRequest.memory}M")
               ) ++ (if (requestSize.gpu > 0)
                       Map(
                         "nvidia.com/gpu" -> new Quantity(
@@ -210,8 +217,8 @@ class K8SCreateNode(
         .create()
 
       val available = ResourceAvailable(
-        cpu = requestSize.cpu._1,
-        memory = requestSize.memory,
+        cpu = userCPURequest,
+        memory = userRamRequest,
         scratch = requestSize.scratch,
         gpu = 0 until requestSize.gpu toList
       )

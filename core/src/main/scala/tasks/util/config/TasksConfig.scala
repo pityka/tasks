@@ -228,6 +228,12 @@ class TasksConfig(load: () => Config) extends StrictLogging {
   def kubernetesRamLimitEnvVar = raw.getString("tasks.kubernetes.ramLimitEnvVar")
   def kubernetesScratchLimitEnvVar = raw.getString("tasks.kubernetes.scratchLimitEnvVar")
 
+  
+  def kubernetesCpuExtra = raw.getInt("tasks.kubernetes.extralimits.cpu")
+  def kubernetesCpuMin = raw.getInt("tasks.kubernetes.minimumlimits.cpu")
+  def kubernetesRamExtra = raw.getInt("tasks.kubernetes.extralimits.ram")
+  def kubernetesRamMin = raw.getInt("tasks.kubernetes.minimumlimits.ram")
+
   def kubernetesGpuTaintToleration = {
     val l = raw.getStringList("tasks.kubernetes.gpuTaintToleration").asScala
     l.grouped(5).toList.filter(_.size == 5).map { l =>
