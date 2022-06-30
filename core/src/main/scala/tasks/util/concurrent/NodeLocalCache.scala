@@ -64,7 +64,7 @@ object NodeLocalCache {
               "Decrement a resource with a counter and waiting offerers."
             )
           case Some((Some(((_, release), 1)), Nil)) =>
-            State(map.removed(id)) -> release
+            State(map.-(id)) -> release
           case Some((Some(((v, release), counter)), offerers)) =>
             State(
               map.updated(id, (Some(((v, release), counter - 1)), offerers))
