@@ -38,6 +38,9 @@ import tasks.HasSharedFiles
 
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
+import cats.effect.IO
+import cats.effect.kernel.Resource
+import akka.NotUsed
 
 sealed trait FilePath {
   def name: String
@@ -66,25 +69,25 @@ case class SharedFile(
   override def toString =
     s"SharedFile($path, size=$byteSize, hash=$hash)"
 
-  def file(implicit tsc: TaskSystemComponents) =
+  def file(implicit tsc: TaskSystemComponents): Resource[IO,File] =
     SharedFileHelper.getPathToFile(this)
 
   def history(implicit tsc: TaskSystemComponents): Future[History] =
     SharedFileHelper.getHistory(this)
 
-  def source(implicit tsc: TaskSystemComponents) =
+  def source(implicit tsc: TaskSystemComponents): Source[ByteString,NotUsed] =
     SharedFileHelper.getSourceToFile(this, 0L)
 
-  def source(fromOffset: Long)(implicit tsc: TaskSystemComponents) =
+  def source(fromOffset: Long)(implicit tsc: TaskSystemComponents): Source[ByteString,NotUsed] =
     SharedFileHelper.getSourceToFile(this, fromOffset)
 
-  def isAccessible(implicit tsc: TaskSystemComponents) =
+  def isAccessible(implicit tsc: TaskSystemComponents): Future[Boolean] =
     SharedFileHelper.isAccessible(this, true)
 
   def uri(implicit tsc: TaskSystemComponents): Future[Uri] =
     SharedFileHelper.getUri(this)
 
-  def name = path.name
+  def name: String = path.name
 
   def delete(implicit tsc: TaskSystemComponents): Future[Boolean] =
     SharedFileHelper.delete(this)
@@ -114,7 +117,7 @@ object SharedFile {
 
   def sink(name: String)(implicit
       tsc: TaskSystemComponents
-  ): Option[Sink[ByteString, Future[SharedFile]]] =
+  ): Sink[ByteString, Future[SharedFile]] =
     SharedFileHelper.sink(name)
 
   def fromFolder(

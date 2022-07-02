@@ -154,8 +154,6 @@ case class ComputationEnvironment(
 
   implicit def filePrefix: FileServicePrefix = components.filePrefix
 
-  implicit def nodeLocalCache: NodeLocalCacheActor = components.nodeLocalCache
-
   implicit def queue: QueueActor = components.queue
 
   implicit def cache: CacheActor = components.cache
@@ -173,7 +171,7 @@ private class Task(
     queueActor: ActorRef,
     fileServiceComponent: FileServiceComponent,
     cacheActor: ActorRef,
-    nodeLocalCache: ActorRef,
+    nodeLocalCache: NodeLocalCache.State,
     resourceAllocated: ResourceAllocated,
     fileServicePrefix: FileServicePrefix,
     auxExecutionContext: ExecutionContext,
@@ -253,7 +251,7 @@ private class Task(
           fileServiceComponent,
           context.system,
           CacheActor(cacheActor),
-          NodeLocalCacheActor(nodeLocalCache),
+          nodeLocalCache,
           fileServicePrefix,
           auxExecutionContext,
           tasksConfig,

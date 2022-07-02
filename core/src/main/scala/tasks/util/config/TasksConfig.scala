@@ -125,6 +125,8 @@ class TasksConfig(load: () => Config) extends StrictLogging {
   val storageURI =
     new java.net.URI(raw.getString("tasks.fileservice.storageURI"))
 
+  val proxyStorage = raw.getBoolean("tasks.fileservice.proxyStorage")
+
   val fileServiceThreadPoolSize =
     raw.getInt("tasks.fileservice.threadPoolSize")
 
@@ -291,6 +293,6 @@ class TasksConfig(load: () => Config) extends StrictLogging {
   val shWorkDir = raw.getString("tasks.elastic.sh.workdir")
 
   val forceNoManagedFileStorage =
-    raw.getBoolean("tasks.fileservice.disableOnSlave")
+    raw.getBoolean("tasks.fileservice.disable")
 
 }

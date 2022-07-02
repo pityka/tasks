@@ -139,9 +139,17 @@ object ResultWithSharedFilesTest extends TestHelpers {
       val f2 = testTask(Input(1))(ResourceRequest(1, 500))
       def getFiles(o: Output) = {
         val untyped = UntypedResult.make(o)
-        untyped.files.toSeq.map(_.file) ++ untyped.mutableFiles.toSeq
+        untyped.files.toSeq.map(
+          _.file.allocated
+            .map(_._1)
+            .unsafeToFuture()(cats.effect.unsafe.implicits.global)
+        ) ++ untyped.mutableFiles.toSeq
           .flatMap(_.toSeq)
-          .map(_.file)
+          .map(
+            _.file.allocated
+              .map(_._1)
+              .unsafeToFuture()(cats.effect.unsafe.implicits.global)
+          )
       }
       val future = for {
         t1 <- f1

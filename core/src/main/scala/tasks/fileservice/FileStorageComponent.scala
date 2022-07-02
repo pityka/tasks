@@ -25,48 +25,11 @@
  * SOFTWARE.
  */
 
-package tasks
+package tasks.fileservice
 
-import akka.actor.ActorSystem
-import scala.concurrent.ExecutionContext
 
-import tasks.queue._
-import tasks.fileservice._
-import tasks.wire._
 
-private[tasks] object Implicits {
-
-  implicit def executionContext(implicit
-      component: TaskSystemComponents
-  ): ExecutionContext =
-    component.executionContext
-
-  implicit def actorsystem(implicit
-      component: TaskSystemComponents
-  ): ActorSystem =
-    component.actorsystem
-
-  implicit def filePrefix(implicit
-      component: TaskSystemComponents
-  ): FileServicePrefix =
-    component.filePrefix
-
-  implicit def nodeLocalCache(implicit
-      component: TaskSystemComponents
-  ): NodeLocalCache.State =
-    component.nodeLocalCache
-
-  implicit def queueActor(implicit
-      component: TaskSystemComponents
-  ): QueueActor = component.queue
-
-  implicit def cacheActor(implicit
-      component: TaskSystemComponents
-  ): CacheActor = component.cache
-
-  implicit def historyContext(implicit
-      component: TaskSystemComponents
-  ): HistoryContext =
-    component.historyContext
-
-}
+case class FileServiceComponent(
+    storage: ManagedFileStorage,
+    remote: RemoteFileStorage
+)
