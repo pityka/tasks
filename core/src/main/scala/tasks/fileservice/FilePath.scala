@@ -25,48 +25,31 @@
  * SOFTWARE.
  */
 
-package tasks
+package tasks.fileservice
 
-import akka.actor.ActorSystem
-import scala.concurrent.ExecutionContext
 
-import tasks.queue._
-import tasks.fileservice._
-import tasks.wire._
 
-private[tasks] object Implicits {
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
-  implicit def executionContext(implicit
-      component: TaskSystemComponents
-  ): ExecutionContext =
-    component.executionContext
 
-  implicit def actorsystem(implicit
-      component: TaskSystemComponents
-  ): ActorSystem =
-    component.actorsystem
+case class FileServicePrefix(list: Vector[String]) {
+  def append(n: String) = FileServicePrefix(list :+ n)
+  def append(ns: Seq[String]) = FileServicePrefix(list ++ ns)
+  private[fileservice] def propose(name: String) =
+    ProposedManagedFilePath(list :+ name)
+}
+object FileServicePrefix {
+  implicit val codec: JsonValueCodec[FileServicePrefix] = JsonCodecMaker.make
 
-  implicit def filePrefix(implicit
-      component: TaskSystemComponents
-  ): FileServicePrefix =
-    component.filePrefix
+}
 
-  implicit def nodeLocalCache(implicit
-      component: TaskSystemComponents
-  ): NodeLocalCache.State =
-    component.nodeLocalCache
+case class ProposedManagedFilePath(list: Vector[String]) {
+  def name = list.last
+  def toManaged = ManagedFilePath(list)
+}
 
-  implicit def queueActor(implicit
-      component: TaskSystemComponents
-  ): QueueActor = component.queue
-
-  implicit def cacheActor(implicit
-      component: TaskSystemComponents
-  ): CacheActor = component.cache
-
-  implicit def historyContext(implicit
-      component: TaskSystemComponents
-  ): HistoryContext =
-    component.historyContext
-
+object ProposedManagedFilePath {
+  implicit val codec: JsonValueCodec[ProposedManagedFilePath] =
+    JsonCodecMaker.make
 }

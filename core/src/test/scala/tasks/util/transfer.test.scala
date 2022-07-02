@@ -11,6 +11,8 @@ import com.typesafe.config.ConfigFactory
 import org.scalatest.matchers.should.Matchers
 
 import tasks.wire.filetransfermessages._
+import tasks.fileservice.actorfilestorage._
+import cats.effect.IO
 
 object Conf {
   val str = """my-pinned-dispatcher {
@@ -56,7 +58,7 @@ class TransferSpec
       val transferin =
         system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
       system.actorOf(
-        Props(new TransferOut(readablechannel, transferin, chunksize))
+        Props(new TransferOut(readablechannel, transferin, chunksize, IO.unit))
       )
 
       expectMsg(1000 millis, FileSaved())
@@ -80,7 +82,7 @@ class TransferSpec
       val transferin =
         system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
       system.actorOf(
-        Props(new TransferOut(readablechannel, transferin, chunksize))
+        Props(new TransferOut(readablechannel, transferin, chunksize, IO.unit))
       )
 
       expectMsg(100 millis, FileSaved())
@@ -104,7 +106,7 @@ class TransferSpec
       val transferin =
         system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
       system.actorOf(
-        Props(new TransferOut(readablechannel, transferin, chunksize))
+        Props(new TransferOut(readablechannel, transferin, chunksize, IO.unit))
       )
 
       expectMsg(100 millis, FileSaved())
@@ -128,7 +130,7 @@ class TransferSpec
       val transferin =
         system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
       system.actorOf(
-        Props(new TransferOut(readablechannel, transferin, chunksize))
+        Props(new TransferOut(readablechannel, transferin, chunksize, IO.unit))
       )
 
       expectMsg(100 millis, FileSaved())
@@ -152,7 +154,7 @@ class TransferSpec
       val transferin =
         system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
       system.actorOf(
-        Props(new TransferOut(readablechannel, transferin, chunksize))
+        Props(new TransferOut(readablechannel, transferin, chunksize, IO.unit))
       )
 
       expectMsg(100 millis, FileSaved())
@@ -177,7 +179,7 @@ class TransferSpec
       val transferin =
         system.actorOf(Props(new TransferIn(writeablechannel, testActor)))
       system.actorOf(
-        Props(new TransferOut(readablechannel, transferin, chunksize))
+        Props(new TransferOut(readablechannel, transferin, chunksize, IO.unit))
       )
 
       expectMsg(100 millis, FileSaved())

@@ -41,6 +41,8 @@ import java.io.{File, InputStream}
 import tasks.util._
 import tasks.util.config.TasksConfig
 import tasks.util.eq._
+import cats.effect.kernel.Resource
+import cats.effect.IO
 
 object FileStorage {
   def getContentHash(is: InputStream): Int = {
@@ -101,16 +103,18 @@ class RemoteFileStorage(implicit
         false
       }
 
-  def exportFile(path: RemoteFilePath): Future[File] = {
+  def exportFile(path: RemoteFilePath): Resource[IO, File] = {
     val localFile = path.uri.akka.scheme == "file" && new File(
       path.uri.akka.path.toString
     ).canRead
-    if (localFile) Future.successful(new File(path.uri.akka.path.toString))
+    if (localFile) Resource.pure(new File(path.uri.akka.path.toString))
     else {
-      val file = TempFile.createTempFile("")
-      createSource(path, fromOffset = 0L)
-        .runWith(FileIO.toPath(file.toPath))
-        .map(_ => file)
+      Resource.make(IO.fromFuture(IO {
+        val file = TempFile.createTempFile("")
+        createSource(path, fromOffset = 0L)
+          .runWith(FileIO.toPath(file.toPath))
+          .map(_ => file)
+      }))(file => IO(file.delete()))
     }
 
   }
@@ -119,7 +123,7 @@ class RemoteFileStorage(implicit
 
 trait ManagedFileStorage {
 
-  def uri(mp: ManagedFilePath): Uri
+  def uri(mp: ManagedFilePath): Future[Uri]
 
   def createSource(
       path: ManagedFilePath,
@@ -139,22 +143,59 @@ trait ManagedFileStorage {
   def importFile(
       f: File,
       path: ProposedManagedFilePath
-  ): Future[(Long, Int, File, ManagedFilePath)]
+  ): Future[(Long, Int, ManagedFilePath)]
 
   def sink(
       path: ProposedManagedFilePath
   ): Sink[ByteString, Future[(Long, Int, ManagedFilePath)]]
 
-  def exportFile(path: ManagedFilePath): Future[File]
+  def exportFile(path: ManagedFilePath): Resource[IO,File]
 
-  def list(regexp: String): List[SharedFile]
-
-  def sharedFolder(prefix: Seq[String]): Option[File]
+  def sharedFolder(prefix: Seq[String]): Future[Option[File]]
 
   def delete(
       path: ManagedFilePath,
       expectedSize: Long,
       expectedHash: Int
   ): Future[Boolean]
+
+}
+object NoOpManagedFileStorage extends ManagedFileStorage {
+
+  def uri(mp: ManagedFilePath): Future[Uri] = ???
+
+  def createSource(
+      path: ManagedFilePath,
+      fromOffset: Long
+  ): Source[ByteString, _] = ???
+
+  /* If size < 0 then it must not check the size and the hash
+   *  but must return true iff the file is readable
+   */
+  def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean] = ???
+
+  def contains(
+      path: ManagedFilePath,
+      retrieveSizeAndHash: Boolean
+  ): Future[Option[SharedFile]] = ???
+
+  def importFile(
+      f: File,
+      path: ProposedManagedFilePath
+  ): Future[(Long, Int, ManagedFilePath)] = ???
+
+  def sink(
+      path: ProposedManagedFilePath
+  ): Sink[ByteString, Future[(Long, Int, ManagedFilePath)]] = ???
+
+  def exportFile(path: ManagedFilePath): Resource[IO,File] = ???
+
+  def sharedFolder(prefix: Seq[String]): Future[Option[File]] = ???
+
+  def delete(
+      path: ManagedFilePath,
+      expectedSize: Long,
+      expectedHash: Int
+  ): Future[Boolean] = ???
 
 }

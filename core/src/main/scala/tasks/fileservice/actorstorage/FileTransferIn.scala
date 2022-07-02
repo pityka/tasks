@@ -23,13 +23,16 @@
  * SOFTWARE.
  */
 
-package tasks.util
+package tasks.fileservice.actorfilestorage
 
 import akka.actor.{Actor, ActorRef, PoisonPill}
 import java.nio.channels.{WritableByteChannel, ReadableByteChannel}
 import java.nio.ByteBuffer
 import scala.util.{Try, Failure, Success}
 import tasks.wire.filetransfermessages._
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
+import scala.concurrent.duration._
 
 class TransferIn(output: WritableByteChannel, notification: ActorRef)
     extends Actor
@@ -40,14 +43,17 @@ class TransferIn(output: WritableByteChannel, notification: ActorRef)
       Try {
         output.write(bytestring.asReadOnlyByteBuffer)
       } match {
-        case Success(_) => sender() ! Ack()
+        case Success(_) =>
+          sender() ! Ack()
         case Failure(e) => {
           notification ! CannotSaveFile(e.getMessage)
           sender() ! CannotSaveFile(e.getMessage)
           self ! PoisonPill
         }
       }
-
+    case CannotSaveFile(ex, _) =>
+      notification ! CannotSaveFile(ex)
+      self ! PoisonPill
     case EndChunk(_) =>
       notification ! FileSaved()
       self ! PoisonPill
@@ -58,7 +64,8 @@ class TransferIn(output: WritableByteChannel, notification: ActorRef)
 class TransferOut(
     file: ReadableByteChannel,
     transferIn: ActorRef,
-    chunkSize: Int
+    chunkSize: Int,
+    release: IO[Unit]
 ) extends Actor
     with akka.actor.ActorLogging {
 
@@ -84,6 +91,7 @@ class TransferOut(
     if (eof) {
       transferIn ! EndChunk()
       self ! PoisonPill
+      release.timeout(120 seconds).unsafeRunSync()
     } else {
       transferIn ! Chunk(com.google.protobuf.ByteString.copyFrom(buffer))
     }
@@ -97,7 +105,9 @@ class TransferOut(
   }
 
   def receive = {
-    case Ack(_)               => send()
-    case CannotSaveFile(_, _) => self ! PoisonPill
+    case Ack(_) => send()
+    case CannotSaveFile(_, _) =>
+      self ! PoisonPill
+      release.timeout(120 seconds).unsafeRunSync()
   }
 }

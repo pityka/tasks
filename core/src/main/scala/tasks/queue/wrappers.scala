@@ -29,8 +29,6 @@ package tasks.queue
 
 import akka.actor._
 
-case class NodeLocalCacheActor(actor: ActorRef)
-
 case class QueueActor(actor: ActorRef)
 
 case class LauncherActor(actor: ActorRef)

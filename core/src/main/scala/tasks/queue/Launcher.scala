@@ -61,7 +61,6 @@ case class ScheduleTask(
     function: Spore[AnyRef, AnyRef],
     resource: VersionedResourceRequest,
     queueActor: ActorRef,
-    fileServiceActor: ActorRef,
     fileServicePrefix: FileServicePrefix,
     cacheActor: ActorRef,
     tryCache: Boolean,
@@ -82,12 +81,12 @@ object ScheduleTask {
 
 class Launcher(
     queueActor: ActorRef,
-    nodeLocalCache: ActorRef,
+    nodeLocalCache: NodeLocalCache.State,
     slots: VersionedResourceAvailable,
     refreshInterval: FiniteDuration,
     auxExecutionContext: ExecutionContext,
     remoteStorage: RemoteFileStorage,
-    managedStorage: Option[ManagedFileStorage]
+    managedStorage: ManagedFileStorage
 )(implicit config: TasksConfig)
     extends Actor
     with akka.actor.ActorLogging {
@@ -134,7 +133,6 @@ class Launcher(
         self,
         scheduleTask.queueActor,
         FileServiceComponent(
-          scheduleTask.fileServiceActor,
           managedStorage,
           remoteStorage
         ),
@@ -295,7 +293,7 @@ class Launcher(
           idleState += 1
         }
         val allocated = launch(scheduleTask)
-        sender() ! Ack(allocated)
+        sender() ! QueueAck(allocated)
         askForWork()
       }
 

@@ -51,20 +51,18 @@ class CatsNodeLocalCacheTest extends FunSuite {
               .offer(
                 "id" + i / 10,
                 Resource.make(IO {
-                  println(s"allocating $i")
                   i
                 }.delayBy(Random.nextInt(5000).millis))(i =>
-                  IO.println(s"dealloc $i") *> garbage.update(_ + i)
+                  garbage.update(_ + i)
                 ),
                 nlc
               )
               .use(i =>
-                IO { println(s"using $i"); i }
+                IO { i }
                   .delayBy(Random.nextInt(5000).millis)
               )
           }.delayBy(Random.nextInt(5000).millis).flatten.map(r => (i, r))
         )
-      _ <- IO.println("==================")
       s2 <- Random
         .shuffle((0 until 100).toList)
         .parTraverseN(100)(i =>
@@ -73,15 +71,14 @@ class CatsNodeLocalCacheTest extends FunSuite {
               .offer(
                 "id" + i / 10,
                 Resource.make(IO {
-                  println(s"allocating $i")
                   i
                 }.delayBy(Random.nextInt(5000).millis))(i =>
-                  IO.println(s"dealloc $i") *> garbage.update(_ + i)
+                  garbage.update(_ + i)
                 ),
                 nlc
               )
               .use(i =>
-                IO { println(s"using $i"); i }
+                IO { i }
                   .delayBy(Random.nextInt(5000).millis)
               )
           }.delayBy(Random.nextInt(5000).millis).flatten.map(r => (i, r))

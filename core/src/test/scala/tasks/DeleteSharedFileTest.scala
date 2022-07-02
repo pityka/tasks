@@ -44,7 +44,9 @@ object DeleteSharedFileTest extends TestHelpers {
 
       val future = for {
         sf <- SharedFile(file, "boo", deleteFile = true)
-        local <- sf.file
+        local <- sf.file.allocated
+          .map(_._1)
+          .unsafeToFuture()(cats.effect.unsafe.implicits.global)
         _ <- sf.delete
       } yield local
 

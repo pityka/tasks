@@ -6,6 +6,8 @@ import cats.syntax.all._
 
 object NodeLocalCache {
 
+  type StateR[A] = Ref[IO,State[A]]
+
   case class State[A](
       map: Map[
         String,
@@ -13,7 +15,7 @@ object NodeLocalCache {
       ]
   ) {}
 
-  def make[A] = Ref.of[IO, State[A]](State(Map.empty))
+  def make[A]: IO[StateR[A]] = Ref.of[IO, State[A]](State(Map.empty))
 
   def offer[A](
       id: String,

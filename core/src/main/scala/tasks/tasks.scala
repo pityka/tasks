@@ -138,7 +138,6 @@ case class TaskDefinition[A: Serializer, B: Deserializer](
       noCache: Boolean = false
   )(implicit components: TaskSystemComponents): Future[B] = {
     implicit val queue = components.queue
-    implicit val fileService = components.fs
     implicit val cache = components.cache
     implicit val context = components.actorsystem
     implicit val prefix = components.filePrefix
@@ -161,7 +160,6 @@ case class TaskDefinition[A: Serializer, B: Deserializer](
           reader = reader2,
           resourceConsumed = resource,
           queueActor = queue.actor,
-          fileServiceComponent = fileService,
           fileServicePrefix = prefix,
           cacheActor = cache.actor,
           priority =
