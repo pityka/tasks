@@ -292,7 +292,7 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   val shWorkDir = raw.getString("tasks.elastic.sh.workdir")
 
-  val forceNoManagedFileStorage =
-    raw.getBoolean("tasks.fileservice.disable")
+  val connectToProxyFileServiceOnMain =
+    raw.getBoolean("tasks.fileservice.connectToProxy")
 
 }
