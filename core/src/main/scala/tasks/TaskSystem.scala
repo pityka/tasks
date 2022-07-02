@@ -149,8 +149,8 @@ class TaskSystem private[tasks] (
     val fileStore =
       if (config.storageURI.toString == "" && !hostConfig.isQueue) {
         ActorFileStorage.connectToRemote(masterAddress)
-      } else if (config.forceNoManagedFileStorage && !config.cacheEnabled)
-        NoOpManagedFileStorage
+      } else if (!hostConfig.isQueue && config.connectToProxyFileServiceOnMain)
+        ActorFileStorage.connectToRemote(masterAddress)
       else {
         val s3bucket =
           if (

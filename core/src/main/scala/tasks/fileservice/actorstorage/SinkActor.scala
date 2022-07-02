@@ -89,8 +89,8 @@ class SinkActor(
 
     case t: SharedFile =>
       sharedFile = Some(t)
-      finalResultActor ! (t.byteSize, t.hash, t.path
-        .asInstanceOf[ManagedFilePath])
+      finalResultActor ! ((t.byteSize, t.hash, t.path
+        .asInstanceOf[ManagedFilePath]))
       finalResultActor ! akka.actor.Status.Success(())
       self ! PoisonPill
 

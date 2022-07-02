@@ -114,7 +114,7 @@ object SHRemoteActorTest extends TestHelpers {
     println(tmp)
     val testConfig2 =
       ConfigFactory.parseString(
-        s"""tasks.fileservice.disableOnSlave = true
+        s"""tasks.fileservice.connectToProxy = true
         akka.loglevel= INFO
         tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=1
@@ -125,7 +125,7 @@ object SHRemoteActorTest extends TestHelpers {
       tasks.failuredetector.acceptable-heartbeat-pause = 5 s
       tasks.worker-main-class = "tasks.TestSlave"
       tasks.elastic.sh.workdir = ${tmp.getAbsolutePath}
-      tasks.elastic.javaCommandLine = "-Dtasks.fileservice.disableOnSlave=true"
+      tasks.elastic.javaCommandLine = "-Dtasks.fileservice.connectToProxy=true"
       """
       )
 
