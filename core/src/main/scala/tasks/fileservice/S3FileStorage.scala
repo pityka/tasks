@@ -37,14 +37,16 @@ import java.io.File
 import akka.stream._
 import akka.actor._
 import akka.util._
-import com.bluelabs.s3stream._
 import akka.stream.scaladsl._
 import scala.concurrent._
+import akka.stream.alpakka.s3.headers.CannedAcl
+import akka.stream.alpakka.s3.headers.ServerSideEncryption
+import akka.stream.alpakka.s3.ObjectMetadata
+import akka.stream.alpakka.s3.scaladsl.S3
 
 class S3Storage(
     bucketName: String,
-    folderPrefix: String,
-    s3stream: S3ClientSupport
+    folderPrefix: String
 )(implicit
     mat: Materializer,
     as: ActorSystem,
@@ -52,18 +54,34 @@ class S3Storage(
     config: TasksConfig
 ) extends ManagedFileStorage {
 
+  override def toString = s"S3Storage(bucket=$bucketName, prefix=$folderPrefix)"
+
   implicit val log = akka.event.Logging(as.eventStream, getClass)
 
-  val putObjectParams = {
+  val s3Headers = {
     val sse = config.s3ServerSideEncryption
     val cannedAcls = config.s3CannedAcl
     val grantFullControl = config.s3GrantFullControl
 
     val rq = grantFullControl.foldLeft(
       cannedAcls
-        .foldLeft(PostObjectRequest.default)((rq, acl) => rq.cannedAcl(acl))
-    )((rq, acl) => rq.grantFullControl(acl._1, acl._2))
-    if (sse) rq.serverSideEncryption else rq
+        .foldLeft(akka.stream.alpakka.s3.S3Headers.empty)((rq, acl) =>
+          rq.withCannedAcl(acl match {
+            case "authenticated-read"        => CannedAcl.AuthenticatedRead
+            case "aws-exec-read"             => CannedAcl.AwsExecRead
+            case "bucket-owner-full-control" => CannedAcl.BucketOwnerFullControl
+            case "bucket-owner-read"         => CannedAcl.BucketOwnerRead
+            case "private"                   => CannedAcl.Private
+            case "public-read"               => CannedAcl.PublicRead
+            case "public-read-write"         => CannedAcl.PublicReadWrite
+          })
+        )
+    )((rq, acl) =>
+      rq.withCustomHeaders(
+        Map(("x-amz-grant-full-control", acl._1 + "=" + acl._2))
+      )
+    )
+    if (sse) rq.withServerSideEncryption(ServerSideEncryption.aes256()) else rq
   }
 
   def sharedFolder(prefix: Seq[String]): Option[File] = None
@@ -74,30 +92,32 @@ class S3Storage(
       path: ManagedFilePath,
       retrieveSizeAndHash: Boolean
   ): Future[Option[SharedFile]] =
-    s3stream.getMetadata(S3Location(bucketName, assembleName(path))).map {
-      metadata =>
-        val (size1, hash1) = getLengthAndHash(metadata)
-        Some(SharedFileHelper.create(size1, hash1, path))
-    } recover { case x: Exception =>
-      log.debug("This might be an error, or likely a missing file. {}", x)
-      None
-    }
+    S3
+      .getObjectMetadata(bucketName, assembleName(path))
+      .map { meta =>
+        meta.map { meta =>
+          val (size1, hash1) = getLengthAndHash(meta)
+          SharedFileHelper.create(size1, hash1, path)
+        }
+      }
+      .runWith(Sink.head)
 
   def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean] =
-    s3stream.getMetadata(S3Location(bucketName, assembleName(path))).map {
-      metadata =>
-        if (size < 0 && metadata.response.status.intValue == 200) true
-        else {
-          val (size1, hash1) = getLengthAndHash(metadata)
-          metadata.response.status.intValue == 200 && size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1)
-        }
-    } recover { case x: Exception =>
-      log.debug("This might be an error, or likely a missing file. {}", x)
-      false
-    }
+    S3
+      .getObjectMetadata(bucketName, assembleName(path))
+      .map {
+        case Some(metadata) =>
+          if (size < 0) true
+          else {
+            val (size1, hash1) = getLengthAndHash(metadata)
+            size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1)
+          }
+        case None => false
+      }
+      .runWith(Sink.head)
 
   def getLengthAndHash(metadata: ObjectMetadata): (Long, Int) =
-    metadata.contentLength.get -> metadata.eTag.get.hashCode
+    metadata.contentLength -> metadata.eTag.get.hashCode
 
   private def assembleName(path: ManagedFilePath) =
     ((if (folderPrefix != "") folderPrefix + "/" else "") +: path.pathElements)
@@ -111,15 +131,29 @@ class S3Storage(
   ): Sink[ByteString, Future[(Long, Int, ManagedFilePath)]] = {
     val managed = path.toManaged
     val key = assembleName(managed)
-    val s3loc = S3Location(bucketName, key)
 
-    val sink = s3stream.multipartUpload(s3loc, params = putObjectParams)
+    val sink = S3.multipartUploadWithHeaders(
+      bucket = bucketName,
+      key = key,
+      s3Headers = s3Headers
+    )
 
-    sink.mapMaterializedValue(_.flatMap(_ => s3stream.getMetadata(s3loc)).map {
-      metadata =>
-        val (size1, hash1) = getLengthAndHash(metadata)
-        (size1, hash1, managed)
-    })
+    sink.mapMaterializedValue(
+      _.flatMap(_ =>
+        S3
+          .getObjectMetadata(bucketName, key)
+          .runWith(Sink.head)
+      ).map {
+        case None =>
+          throw new RuntimeException(
+            "Failed to fetch metadata of just uploaded file"
+          )
+
+        case Some(metadata) =>
+          val (size1, hash1) = getLengthAndHash(metadata)
+          (size1, hash1, managed)
+      }
+    )
 
   }
 
@@ -135,19 +169,31 @@ class S3Storage(
   ): Future[(Long, Int, File, ManagedFilePath)] = {
     val managed = path.toManaged
     val key = assembleName(managed)
-    val s3loc = S3Location(bucketName, key)
 
-    val sink = s3stream.multipartUpload(s3loc, params = putObjectParams)
+    val sink = S3.multipartUploadWithHeaders(
+      bucket = bucketName,
+      key = key,
+      s3Headers = s3Headers
+    )
+
 
     FileIO.fromPath(f.toPath).runWith(sink).flatMap { _ =>
-      s3stream.getMetadata(s3loc).map { metadata =>
-        val (size1, hash1) = getLengthAndHash(metadata)
+      S3
+        .getObjectMetadata(bucketName, key)
+        .runWith(Sink.head)
+        .map {
+          case None =>
+            throw new RuntimeException(
+              "Failed to fetch metadata of just uploaded file"
+            )
+          case Some(metadata) =>
+            val (size1, hash1) = getLengthAndHash(metadata)
 
-        if (size1 !== f.length)
-          throw new RuntimeException("S3: Uploaded file length != on disk")
+            if (size1 !== f.length)
+              throw new RuntimeException("S3: Uploaded file length != on disk")
 
-        (size1, hash1, f, managed)
-      }
+            (size1, hash1, f, managed)
+        }
     }
 
   }
@@ -157,22 +203,41 @@ class S3Storage(
       fromOffset: Long
   ): Source[ByteString, _] = {
     assert(fromOffset == 0L, "seeking into s3 not implemented ")
-    s3stream.getData(
-      S3Location(bucketName, assembleName(path)),
-      parallelism = 1
-    )
+    S3
+      .download(bucketName, assembleName(path))
+      .flatMapConcat {
+        case None                  => Source.empty
+        case Some((dataSource, _)) => dataSource
+      }
   }
 
   def exportFile(path: ManagedFilePath): Future[File] = {
     val file = TempFile.createTempFile("")
-    val s3loc = S3Location(bucketName, assembleName(path))
 
-    val f1 = s3stream
-      .getData(s3loc, parallelism = 1)
+    val assembledPath = assembleName(path)
+
+    val f1 = S3
+      .download(bucketName, assembledPath)
+      .flatMapConcat {
+        case None                  => Source.empty
+        case Some((dataSource, _)) => dataSource
+      }
       .runWith(FileIO.toPath(file.toPath))
 
-    f1.flatMap(_ => s3stream.getMetadata(s3loc)).map { metadata =>
-      val (size1, _) = getLengthAndHash(metadata)
+    val f2 = S3
+      .getObjectMetadata(bucketName, assembledPath)
+      .flatMapConcat {
+        case None        => Source.empty
+        case Some(value) => Source.single(value)
+      }
+      .runWith(Sink.headOption)
+
+    f1.flatMap(_ => f2).map { metadata =>
+      if (metadata.isEmpty) {
+        throw new RuntimeException("S3: File does not exists")
+      }
+
+      val (size1, _) = getLengthAndHash(metadata.get)
       if (size1 !== file.length)
         throw new RuntimeException("S3: Downloaded file length != metadata")
 

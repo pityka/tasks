@@ -48,7 +48,6 @@ import scala.concurrent.duration._
 import scala.concurrent._
 import scala.util._
 
-import com.bluelabs.s3stream.S3ClientQueued
 
 case class TaskSystemComponents(
     queue: QueueActor,
@@ -85,10 +84,8 @@ class TaskSystem private[tasks] (
 
   implicit val AS = system
   import AS.dispatcher
-  implicit val s3Stream = scala.util
-    .Try(new S3ClientQueued(config.s3Region))
-    .toOption
-  implicit val streamHelper = new StreamHelper(s3Stream)
+  
+  implicit val streamHelper = new StreamHelper
 
   private val tasksystemlog = akka.event.Logging(AS.eventStream, "tasks.boot")
 
@@ -133,8 +130,8 @@ class TaskSystem private[tasks] (
         case Success(nr) => Some(nr)
         case Failure(e) =>
           tasksystemlog.error(
-            "Failed to contact remote node registry. Shut down job.",
-            e
+            e,
+            "Failed to contact remote node registry. Shut down job."
           )
           try {
             elasticSupport.get.selfShutdownNow()
@@ -164,7 +161,7 @@ class TaskSystem private[tasks] (
       if (s3bucket.isDefined) {
         val actorsystem = 1 // shade implicit conversion
         val _ = actorsystem // suppress unused warning
-        Some(new S3Storage(s3bucket.get._1, s3bucket.get._2, s3Stream.get))
+        Some(new S3Storage(s3bucket.get._1, s3bucket.get._2))
       } else {
         val storageFolderPath =
           if (config.storageURI.getScheme == null)
@@ -349,7 +346,7 @@ class TaskSystem private[tasks] (
         if (hostConfig.isApp)
           Some(
             elastic.CodeAddress(
-              new java.net.InetSocketAddress(
+              SimpleSocketAddress(
                 packageServerHostname,
                 packageServerPort
               ),

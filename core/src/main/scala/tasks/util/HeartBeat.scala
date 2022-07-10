@@ -95,6 +95,7 @@ class HeartBeatActor(target: ActorRef, signal: Any, listener: ActorRef)(implicit
     self ! PoisonPill
   }
 
+  @scala.annotation.nowarn
   def receive = {
     case DisassociatedEvent(_, remoteAddress, _)
         if remoteAddress === target.path.address =>

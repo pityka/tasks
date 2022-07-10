@@ -25,7 +25,6 @@
 
 package tasks.elastic.ssh
 
-import java.net.InetSocketAddress
 import scala.util._
 
 import scala.jdk.CollectionConverters._
@@ -35,6 +34,8 @@ import com.typesafe.config.{Config, ConfigObject}
 import tasks.elastic._
 import tasks.shared._
 import tasks.util.config._
+import tasks.util.SimpleSocketAddress
+import tasks.util.Uri
 
 object SSHSettings {
   case class Host(
@@ -151,8 +152,10 @@ class SSHShutdown(implicit config: TasksConfig) extends ShutdownNode {
 
 }
 
-class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
-    implicit
+class SSHCreateNode(
+    masterAddress: SimpleSocketAddress,
+    codeAddress: CodeAddress
+)(implicit
     config: TasksConfig,
     elasticSupport: ElasticSupportFqcn
 ) extends CreateNode {
@@ -165,21 +168,22 @@ class SSHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
     settings.hosts
       .filter(x => x._2._2 == true)
       .filter(x =>
-        x._2._1.cpu >= requestSize.cpu._1 && x._2._1.memory >= requestSize.memory
+        x._2._1.cpu >= requestSize.cpu._1 && x._2._1.memory >= requestSize.memory && x._2._1.scratch >= requestSize.scratch && x._2._1.gpu.size >= requestSize.gpu
       )
       .iterator
       .map { case (name, (host, _)) =>
         val script = Deployment.script(
-          memory = requestSize.memory,
-          cpu = requestSize.cpu._2,
-          scratch = requestSize.scratch,
+          memory = host.memory,
+          cpu = host.cpu,
+          scratch = host.scratch,
+          gpus = host.gpu,
           elasticSupport = elasticSupport,
           masterAddress = masterAddress,
-          download = new java.net.URL(
-            "http",
-            codeAddress.address.getHostName,
-            codeAddress.address.getPort,
-            "/"
+          download = Uri(
+            scheme = "http",
+            hostname = codeAddress.address.getHostName,
+            port = codeAddress.address.getPort,
+            path = "/"
           ),
           slaveHostname = Some(host.hostname),
           background = true
@@ -225,7 +229,7 @@ class SSHCreateNodeFactory(implicit
     config: TasksConfig,
     elasticSupport: ElasticSupportFqcn
 ) extends CreateNodeFactory {
-  def apply(master: InetSocketAddress, codeAddress: CodeAddress) =
+  def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
     new SSHCreateNode(master, codeAddress)
 }
 

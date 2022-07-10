@@ -70,8 +70,7 @@ class FileServiceSpec
 
   val as = implicitly[ActorSystem]
   import as.dispatcher
-  // implicit val s3stream = new S3StreamQueued(AWSCredentials("na", "na"), "na")
-  implicit val sh = new StreamHelper(None)
+  implicit val sh = new StreamHelper
 
   implicit val tconfig = tasks.util.config
     .parse(() =>

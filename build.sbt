@@ -26,8 +26,8 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.7",
-  crossScalaVersions := Seq("2.12.15", "2.13.7"),
+  scalaVersion := "2.13.8",
+  crossScalaVersions := Seq("2.12.15", "2.13.8"),
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -63,11 +63,12 @@ lazy val commonSettings = Seq(
 ) ++ Seq(
   fork := true,
   cancelable in Global := true,
-  scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings"))
+  scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
+  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings")),
 )
 
-lazy val circeVersion = "0.13.0"
-lazy val jsoniterVersion = "2.9.0"
+lazy val circeVersion = "0.14.2"
+lazy val jsoniterVersion = "2.13.31"
 lazy val akkaVersion = "2.6.19"
 lazy val shapelessVersion = "2.3.8"
 
@@ -111,7 +112,10 @@ lazy val spores = project
   )
 lazy val akkaProvided = List(
   "com.typesafe.akka" %% "akka-actor" % akkaVersion % Provided,
-  "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided
+  "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided,
+  "com.typesafe.akka" %% "akka-http" % "10.2.9" % Provided,
+  "com.typesafe.akka" %% "akka-http-xml" % "10.2.9" % Provided,
+  "com.lightbend.akka" %% "akka-stream-alpakka-s3" % "3.0.4" % Provided
 )
 lazy val core = project
   .in(file("core"))
@@ -122,14 +126,12 @@ lazy val core = project
       scalapb.gen() -> (sourceManaged in Compile).value
     ),
     libraryDependencies ++= Seq(
-      "com.google.guava" % "guava" % "30.1.1-jre", // scala-steward:off
+      "com.google.guava" % "guava" % "31.1-jre", // scala-steward:off
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
-      "com.typesafe.akka" %% "akka-http" % "10.2.7",
       "com.typesafe" % "config" % "1.4.2",
-      "io.github.pityka" %% "selfpackage" % "1.2.5",
-      "io.github.pityka" %% "s3-stream-fork" % "0.0.10",
+      "io.github.pityka" %% "selfpackage" % "2.0.0",
       "org.scalatest" %% "scalatest" % "3.2.10" % "test",
-      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
+      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test"
@@ -143,7 +145,7 @@ lazy val ec2 = project
   .settings(
     name := "tasks-ec2",
     libraryDependencies ++= Seq(
-      "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24" // scala-steward:off
+      "com.amazonaws" % "aws-java-sdk-ec2" % "1.12.244" // scala-steward:off
     ) ++ akkaProvided
   )
   .dependsOn(core)
@@ -165,8 +167,8 @@ lazy val kubernetes = project
   .settings(
     name := "tasks-kubernetes",
     libraryDependencies ++= Seq(
-      "io.fabric8" % "kubernetes-client" % "4.13.2" // scala-steward:off
-    )
+      "io.fabric8" % "kubernetes-client" % "6.0.0-RC1" // scala-steward:off
+    ) ++ akkaProvided
   )
   .dependsOn(core % "compile->compile;test->test")
 

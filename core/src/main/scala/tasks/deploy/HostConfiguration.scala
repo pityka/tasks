@@ -31,8 +31,6 @@ import tasks.util._
 import tasks.util.config._
 import tasks._
 
-import java.net.InetSocketAddress
-
 sealed trait Role
 object App extends Role
 object Queue extends Role
@@ -40,7 +38,7 @@ object Worker extends Role
 
 trait HostConfiguration {
 
-  def myAddress: InetSocketAddress
+  def myAddress: SimpleSocketAddress
 
   def availableCPU: Int
 
@@ -50,7 +48,7 @@ trait HostConfiguration {
 
   def availableScratch: Int
 
-  def master: InetSocketAddress
+  def master: SimpleSocketAddress
 
   def myRoles: Set[Role]
 
@@ -67,7 +65,7 @@ trait HostConfigurationFromConfig extends HostConfiguration {
 
   private def myHostname = config.hostName
 
-  lazy val myAddress = new java.net.InetSocketAddress(myHostname, myPort)
+  lazy val myAddress = SimpleSocketAddress(myHostname, myPort)
 
   lazy val availableCPU = config.hostNumCPU
 
@@ -77,7 +75,7 @@ trait HostConfigurationFromConfig extends HostConfiguration {
 
   lazy val availableScratch = config.hostScratch
 
-  lazy val master: InetSocketAddress = config.masterAddress.getOrElse(myAddress)
+  lazy val master = config.masterAddress.getOrElse(myAddress)
 
   private def startApp = config.startApp
 
@@ -100,7 +98,7 @@ class LocalConfiguration(
 
   override lazy val myRoles = Set(App, Queue, Worker)
 
-  override lazy val master = new InetSocketAddress("localhost", 0)
+  override lazy val master = SimpleSocketAddress("localhost", 0)
 
   val myAddress = master
 }

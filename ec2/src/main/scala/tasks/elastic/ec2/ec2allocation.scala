@@ -29,7 +29,6 @@
 package tasks.elastic.ec2
 
 import akka.actor.{ActorSystem, Props, ActorRef}
-import java.net.InetSocketAddress
 import scala.util._
 
 import tasks.elastic._
@@ -37,7 +36,6 @@ import tasks.shared._
 import tasks.util._
 import tasks.util.config._
 
-import com.amazonaws.services.ec2.AmazonEC2Client;
 import com.amazonaws.services.ec2.model.LaunchSpecification;
 import com.amazonaws.services.ec2.model.RequestSpotInstancesRequest;
 import com.amazonaws.services.ec2.model.GroupIdentifier
@@ -50,8 +48,10 @@ import com.amazonaws.services.ec2.model.SpotPlacement
 import com.amazonaws.services.ec2.model.CreateTagsRequest
 
 import scala.jdk.CollectionConverters._
+import com.amazonaws.services.ec2.AmazonEC2ClientBuilder
+import com.amazonaws.services.ec2.AmazonEC2
 
-class EC2Shutdown(ec2: AmazonEC2Client) extends ShutdownNode {
+class EC2Shutdown(ec2: AmazonEC2) extends ShutdownNode {
 
   def shutdownRunningNode(nodeName: RunningJobId): Unit =
     EC2Operations.terminateInstance(ec2, nodeName.value)
@@ -66,9 +66,9 @@ class EC2Shutdown(ec2: AmazonEC2Client) extends ShutdownNode {
 }
 
 class EC2CreateNode(
-    masterAddress: InetSocketAddress,
+    masterAddress: SimpleSocketAddress,
     codeAddress: CodeAddress,
-    ec2: AmazonEC2Client,
+    ec2: AmazonEC2,
     elasticSupport: ElasticSupportFqcn
 )(implicit config: TasksConfig)
     extends CreateNode {
@@ -80,14 +80,14 @@ class EC2CreateNode(
     gzip.write(str.getBytes());
     gzip.close();
     val bytes = out.toByteArray
-    javax.xml.bind.DatatypeConverter.printBase64Binary(bytes)
+    java.util.Base64.getEncoder.encodeToString(bytes)
   }
 
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest
   ): Try[(PendingJobId, ResourceAvailable)] =
     Try {
-      val (requestid, instancetype) = requestSpotInstance
+      val (requestid, instancetype) = requestSpotInstance(requestSize)
       val jobid = PendingJobId(requestid)
       val size = instancetype._2
       (jobid, size)
@@ -119,9 +119,11 @@ class EC2CreateNode(
 
   }
 
-  private def requestSpotInstance = {
+  private def requestSpotInstance(requestSize: ResourceRequest) = {
     // size is ignored, instance specification is set in configuration
-    val selectedInstanceType = EC2Operations.slaveInstanceType
+    val selectedInstanceType = EC2Operations.workerInstanceType(requestSize).getOrElse(
+      throw new RuntimeException("No instance type could fullfill request")
+    )
 
     // Initializes a Spot Instance Request
     val requestRequest = new RequestSpotInstancesRequest();
@@ -165,13 +167,14 @@ class EC2CreateNode(
       memory = selectedInstanceType._2.memory,
       cpu = selectedInstanceType._2.cpu,
       scratch = selectedInstanceType._2.scratch,
+      gpus = selectedInstanceType._2.gpu,
       elasticSupport = elasticSupport,
       masterAddress = masterAddress,
-      download = new java.net.URL(
-        "http",
-        codeAddress.address.getHostName,
-        codeAddress.address.getPort,
-        "/"
+      download = Uri(
+        scheme = "http",
+        hostname = codeAddress.address.getHostName,
+        port = codeAddress.address.getPort,
+        path = "/"
       ),
       slaveHostname = None,
       background = true
@@ -213,8 +216,9 @@ class EC2CreateNode(
 class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig)
     extends Reaper {
 
-  val ec2 = new AmazonEC2Client()
-  ec2.setEndpoint(config.endpoint)
+  val ec2 =
+    if (config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
+    else AmazonEC2ClientBuilder.standard.withRegion(config.awsRegion).build
 
   def allSoulsReaped(): Unit = {
     log.debug("All souls reaped. Calling system.shutdown.")
@@ -228,10 +232,10 @@ class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig)
 
 class EC2CreateNodeFactory(implicit
     config: TasksConfig,
-    ec2: AmazonEC2Client,
+    ec2: AmazonEC2,
     elasticSupport: ElasticSupportFqcn
 ) extends CreateNodeFactory {
-  def apply(master: InetSocketAddress, codeAddress: CodeAddress) =
+  def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
     new EC2CreateNode(master, codeAddress, ec2, elasticSupport)
 }
 
@@ -252,8 +256,9 @@ object EC2ElasticSupport extends ElasticSupportFromConfig {
   implicit val fqcn = ElasticSupportFqcn("tasks.elastic.ec2.EC2ElasticSupport")
 
   def apply(implicit config: TasksConfig) = {
-    implicit val ec2 = new AmazonEC2Client()
-    ec2.setEndpoint(config.endpoint)
+    implicit val ec2 =
+      if (config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
+      else AmazonEC2ClientBuilder.standard.withRegion(config.awsRegion).build
     SimpleElasticSupport(
       fqcn = fqcn,
       hostConfig = Some(new EC2MasterSlave),
