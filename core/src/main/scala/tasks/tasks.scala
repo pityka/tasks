@@ -44,7 +44,7 @@ object HasSharedFiles {
       a: Any
   )(f: HasSharedFiles => Seq[SharedFile]): Seq[SharedFile] = a match {
     case t: HasSharedFiles => f(t)
-    case t: Traversable[_] => t.flatMap(r => recurse(r)(f)).toSeq
+    case t: Iterable[_] => t.flatMap(r => recurse(r)(f)).toSeq
     case t: Product => t.productIterator.flatMap(r => recurse(r)(f)).toSeq
     case _          => Nil
   }

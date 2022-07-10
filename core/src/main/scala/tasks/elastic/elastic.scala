@@ -26,7 +26,6 @@
 package tasks.elastic
 
 import akka.actor.{ActorRef, ExtendedActorSystem, ActorSystem}
-import java.net.InetSocketAddress
 
 import tasks.shared.monitor._
 import tasks.shared._
@@ -79,7 +78,7 @@ trait CreateNode {
 
 trait CreateNodeFactory {
   def apply(
-      masterAddress: InetSocketAddress,
+      masterAddress: SimpleSocketAddress,
       codeAddres: CodeAddress
   ): CreateNode
 }
@@ -105,4 +104,4 @@ class ShutdownReaper(id: RunningJobId, shutdown: ShutdownRunningNode)
   }
 }
 
-case class CodeAddress(address: InetSocketAddress, codeVersion: CodeVersion)
+case class CodeAddress(address: SimpleSocketAddress, codeVersion: CodeVersion)

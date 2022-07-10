@@ -59,7 +59,7 @@ object KubernetesTest extends TestHelpers {
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
       tasks.kubernetes.image = "alpine37-openjdk8-curl:latest"
       tasks.kubernetes.image-pull-policy = "Never"
-      tasks.slave-main-class = "tasks.KubernetesTestSlave"
+      tasks.worker-main-class = "tasks.KubernetesTestSlave"
       """
     )
   }

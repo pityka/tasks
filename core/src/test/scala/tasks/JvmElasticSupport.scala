@@ -24,12 +24,12 @@
 
 package tasks
 
-import java.net.InetSocketAddress
 import scala.util._
 
 import tasks.elastic._
 import tasks.shared._
 import tasks.util.config._
+import tasks.util.SimpleSocketAddress
 
 import scala.concurrent.Future
 
@@ -59,7 +59,7 @@ object JvmElasticSupport {
 
   }
 
-  class JvmCreateNode(masterAddress: InetSocketAddress)(implicit
+  class JvmCreateNode(masterAddress: SimpleSocketAddress)(implicit
       config: TasksConfig
   ) extends CreateNode {
 
@@ -106,7 +106,7 @@ object JvmElasticSupport {
 
   class JvmCreateNodeFactory(implicit config: TasksConfig)
       extends CreateNodeFactory {
-    def apply(master: InetSocketAddress, codeAddress: CodeAddress) =
+    def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
       new JvmCreateNode(master)
   }
 

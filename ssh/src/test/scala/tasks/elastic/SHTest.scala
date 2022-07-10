@@ -58,7 +58,7 @@ object SHTest extends TestHelpers {
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 5 s
-      tasks.slave-main-class = "tasks.TestSlave"
+      tasks.worker-main-class = "tasks.TestSlave"
       tasks.elastic.sh.workdir = ${tmp.getAbsolutePath}
       tasks.resubmitFailedTask = true
       akka.loglevel=INFO

@@ -37,6 +37,10 @@ case class Uri(uri: String) {
 }
 
 object Uri {
+
+  def apply(scheme: String, hostname: String,port:Int, path: String) : Uri = 
+    Uri(s"${scheme}://${hostname}:${port}$path")
+
   import com.github.plokhotnyuk.jsoniter_scala.macros._
   import com.github.plokhotnyuk.jsoniter_scala.core._
 

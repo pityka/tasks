@@ -45,4 +45,9 @@ package object circesupport extends StrictLogging {
   implicit val sharedFileEncoder =
     io.circe.generic.semiauto.deriveEncoder[tasks.fileservice.SharedFile]
 
+  implicit val serializedActorRefEncoder =
+    io.circe.generic.semiauto.deriveEncoder[tasks.util.SerializedActorRef]
+  implicit val serializedActorRefDecoder =
+    io.circe.generic.semiauto.deriveDecoder[tasks.util.SerializedActorRef]
+
 }
