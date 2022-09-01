@@ -64,7 +64,7 @@ lazy val commonSettings = Seq(
   fork := true,
   cancelable in Global := true,
   scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
-  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings")),
+  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings"))
 )
 
 lazy val circeVersion = "0.14.2"
@@ -203,7 +203,7 @@ lazy val uifrontend = project
   .settings(
     name := "tasks-ui-frontend",
     libraryDependencies ++= Seq(
-      "org.scala-js" %%% "scalajs-dom" % "1.2.0",
+      "org.scala-js" %%% "scalajs-dom" % "2.3.0",
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % jsoniterVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.raquo" %%% "laminar" % "0.13.0"
