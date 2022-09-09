@@ -64,12 +64,12 @@ lazy val commonSettings = Seq(
   fork := true,
   cancelable in Global := true,
   scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
-  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings")),
+  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings"))
 )
 
 lazy val circeVersion = "0.14.2"
 lazy val jsoniterVersion = "2.13.31"
-lazy val akkaVersion = "2.6.19"
+lazy val akkaVersion = "2.6.20"
 lazy val shapelessVersion = "2.3.8"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
