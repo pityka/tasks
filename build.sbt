@@ -64,7 +64,7 @@ lazy val commonSettings = Seq(
   fork := true,
   cancelable in Global := true,
   scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
-  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings")),
+  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings"))
 )
 
 lazy val circeVersion = "0.14.2"
@@ -113,8 +113,8 @@ lazy val spores = project
 lazy val akkaProvided = List(
   "com.typesafe.akka" %% "akka-actor" % akkaVersion % Provided,
   "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided,
-  "com.typesafe.akka" %% "akka-http" % "10.2.9" % Provided,
-  "com.typesafe.akka" %% "akka-http-xml" % "10.2.9" % Provided,
+  "com.typesafe.akka" %% "akka-http" % "10.2.10" % Provided,
+  "com.typesafe.akka" %% "akka-http-xml" % "10.2.10" % Provided,
   "com.lightbend.akka" %% "akka-stream-alpakka-s3" % "3.0.4" % Provided
 )
 lazy val core = project
