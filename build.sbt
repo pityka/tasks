@@ -70,7 +70,7 @@ lazy val commonSettings = Seq(
 lazy val circeVersion = "0.14.3"
 lazy val jsoniterVersion = "2.13.31"
 lazy val akkaVersion = "2.6.19"
-lazy val shapelessVersion = "2.3.8"
+lazy val shapelessVersion = "2.3.10"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
   .crossType(sbtcrossproject.CrossPlugin.autoImport.CrossType.Pure)
