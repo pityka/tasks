@@ -26,8 +26,8 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.8",
-  crossScalaVersions := Seq("2.12.15", "2.13.8"),
+  scalaVersion := "2.13.10",
+  crossScalaVersions := Seq("2.12.15", "2.13.10"),
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -64,7 +64,7 @@ lazy val commonSettings = Seq(
   fork := true,
   cancelable in Global := true,
   scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
-  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings")),
+  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings"))
 )
 
 lazy val circeVersion = "0.14.2"
