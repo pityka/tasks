@@ -26,8 +26,8 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.8",
-  crossScalaVersions := Seq("2.12.15", "2.13.8"),
+  scalaVersion := "2.13.10",
+  crossScalaVersions := Seq("2.12.15", "2.13.10"),
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -64,13 +64,13 @@ lazy val commonSettings = Seq(
   fork := true,
   cancelable in Global := true,
   scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
-  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings")),
+  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings"))
 )
 
-lazy val circeVersion = "0.14.2"
+lazy val circeVersion = "0.14.3"
 lazy val jsoniterVersion = "2.13.31"
 lazy val akkaVersion = "2.6.19"
-lazy val shapelessVersion = "2.3.8"
+lazy val shapelessVersion = "2.3.10"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
   .crossType(sbtcrossproject.CrossPlugin.autoImport.CrossType.Pure)
@@ -130,7 +130,7 @@ lazy val core = project
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe" % "config" % "1.4.2",
       "io.github.pityka" %% "selfpackage" % "2.0.0",
-      "org.scalatest" %% "scalatest" % "3.2.10" % "test",
+      "org.scalatest" %% "scalatest" % "3.2.14" % "test",
       "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
@@ -178,7 +178,7 @@ lazy val tracker = project
   .settings(
     name := "tasks-tracker",
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.10" % "test",
+      "org.scalatest" %% "scalatest" % "3.2.14" % "test",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
     ) ++ akkaProvided,
     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
@@ -191,7 +191,7 @@ lazy val uibackend = project
   .settings(
     name := "tasks-ui-backend",
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.10" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.14" % "test"
     ) ++ akkaProvided,
     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
   )
@@ -250,7 +250,7 @@ lazy val circe = project
       "io.circe" %% "circe-core" % circeVersion,
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,
-      "org.scalatest" %% "scalatest" % "3.2.10" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.14" % "test"
     ) ++ akkaProvided
   )
   .dependsOn(core)
@@ -266,7 +266,7 @@ lazy val ecoll = project
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % jsoniterVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test",
-      "org.scalatest" %% "scalatest" % "3.2.10" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.14" % "test"
     ) ++ akkaProvided
   )
   .dependsOn(core)
