@@ -131,7 +131,7 @@ lazy val core = project
       "com.typesafe" % "config" % "1.4.2",
       "io.github.pityka" %% "selfpackage" % "2.0.0",
       "org.scalatest" %% "scalatest" % "3.2.14" % "test",
-      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
+      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test"
