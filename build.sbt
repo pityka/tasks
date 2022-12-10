@@ -64,7 +64,7 @@ lazy val commonSettings = Seq(
   fork := true,
   cancelable in Global := true,
   scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
-  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings"))
+  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings")),
 )
 
 lazy val circeVersion = "0.14.2"
@@ -131,7 +131,7 @@ lazy val core = project
       "com.typesafe" % "config" % "1.4.2",
       "io.github.pityka" %% "selfpackage" % "2.0.0",
       "org.scalatest" %% "scalatest" % "3.2.10" % "test",
-      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5",
+      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test"
