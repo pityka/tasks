@@ -2,7 +2,7 @@ addSbtPlugin("com.github.sbt" % "sbt-native-packager" % "1.9.9")
 
 addSbtPlugin("com.thesamet" % "sbt-protoc" % "1.0.5")
 
-libraryDependencies += "com.thesamet.scalapb" %% "compilerplugin" % "0.11.12"
+libraryDependencies += "com.thesamet.scalapb" %% "compilerplugin" % "0.11.13"
 
 addSbtPlugin("org.scala-js" % "sbt-scalajs" % "1.10.0")
 
