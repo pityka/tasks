@@ -1,4 +1,4 @@
-addSbtPlugin("com.github.sbt" % "sbt-native-packager" % "1.9.9")
+addSbtPlugin("com.github.sbt" % "sbt-native-packager" % "1.9.15")
 
 addSbtPlugin("com.thesamet" % "sbt-protoc" % "1.0.5")
 
