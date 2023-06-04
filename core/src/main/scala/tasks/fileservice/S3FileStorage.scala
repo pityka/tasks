@@ -43,6 +43,8 @@ import akka.stream.alpakka.s3.headers.CannedAcl
 import akka.stream.alpakka.s3.headers.ServerSideEncryption
 import akka.stream.alpakka.s3.ObjectMetadata
 import akka.stream.alpakka.s3.scaladsl.S3
+import cats.effect.kernel.Resource
+import cats.effect.IO
 
 class S3Storage(
     bucketName: String,
@@ -84,9 +86,8 @@ class S3Storage(
     if (sse) rq.withServerSideEncryption(ServerSideEncryption.aes256()) else rq
   }
 
-  def sharedFolder(prefix: Seq[String]): Option[File] = None
+  def sharedFolder(prefix: Seq[String]): Future[Option[File]] = Future.successful(None)
 
-  def list(pattern: String): List[SharedFile] = ???
 
   def contains(
       path: ManagedFilePath,
@@ -160,13 +161,13 @@ class S3Storage(
   def importFile(
       f: File,
       path: ProposedManagedFilePath
-  ): Future[(Long, Int, File, ManagedFilePath)] =
+  ): Future[(Long, Int, ManagedFilePath)] =
     tasks.util.retryFuture(s"upload to $path")(importFile1(f, path), 4)
 
   def importFile1(
       f: File,
       path: ProposedManagedFilePath
-  ): Future[(Long, Int, File, ManagedFilePath)] = {
+  ): Future[(Long, Int, ManagedFilePath)] = {
     val managed = path.toManaged
     val key = assembleName(managed)
 
@@ -175,7 +176,6 @@ class S3Storage(
       key = key,
       s3Headers = s3Headers
     )
-
 
     FileIO.fromPath(f.toPath).runWith(sink).flatMap { _ =>
       S3
@@ -192,7 +192,7 @@ class S3Storage(
             if (size1 !== f.length)
               throw new RuntimeException("S3: Uploaded file length != on disk")
 
-            (size1, hash1, f, managed)
+            (size1, hash1, managed)
         }
     }
 
@@ -211,43 +211,45 @@ class S3Storage(
       }
   }
 
-  def exportFile(path: ManagedFilePath): Future[File] = {
-    val file = TempFile.createTempFile("")
+  def exportFile(path: ManagedFilePath): Resource[IO, File] =
+    Resource.make {
+      IO.fromFuture(IO {
+        val file = TempFile.createTempFile("")
 
-    val assembledPath = assembleName(path)
+        val assembledPath = assembleName(path)
 
-    val f1 = S3
-      .download(bucketName, assembledPath)
-      .flatMapConcat {
-        case None                  => Source.empty
-        case Some((dataSource, _)) => dataSource
-      }
-      .runWith(FileIO.toPath(file.toPath))
+        val f1 = S3
+          .download(bucketName, assembledPath)
+          .flatMapConcat {
+            case None                  => Source.empty
+            case Some((dataSource, _)) => dataSource
+          }
+          .runWith(FileIO.toPath(file.toPath))
 
-    val f2 = S3
-      .getObjectMetadata(bucketName, assembledPath)
-      .flatMapConcat {
-        case None        => Source.empty
-        case Some(value) => Source.single(value)
-      }
-      .runWith(Sink.headOption)
+        val f2 = S3
+          .getObjectMetadata(bucketName, assembledPath)
+          .flatMapConcat {
+            case None        => Source.empty
+            case Some(value) => Source.single(value)
+          }
+          .runWith(Sink.headOption)
 
-    f1.flatMap(_ => f2).map { metadata =>
-      if (metadata.isEmpty) {
-        throw new RuntimeException("S3: File does not exists")
-      }
+        f1.flatMap(_ => f2).map { metadata =>
+          if (metadata.isEmpty) {
+            throw new RuntimeException("S3: File does not exists")
+          }
 
-      val (size1, _) = getLengthAndHash(metadata.get)
-      if (size1 !== file.length)
-        throw new RuntimeException("S3: Downloaded file length != metadata")
+          val (size1, _) = getLengthAndHash(metadata.get)
+          if (size1 !== file.length)
+            throw new RuntimeException("S3: Downloaded file length != metadata")
 
-      file
-    }
+          file
+        }
+      })
+    }(file => IO(file.delete))
 
-  }
-
-  def uri(mp: ManagedFilePath): tasks.util.Uri =
-    tasks.util.Uri("s3://" + bucketName + "/" + assembleName(mp))
+  def uri(mp: ManagedFilePath): Future[tasks.util.Uri] =
+    Future.successful(tasks.util.Uri("s3://" + bucketName + "/" + assembleName(mp)))
 
   def delete(mp: ManagedFilePath, size: Long, hash: Int) =
     Future.successful(false)

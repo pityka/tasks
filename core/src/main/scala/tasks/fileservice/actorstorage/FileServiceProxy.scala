@@ -25,7 +25,9 @@
  * SOFTWARE.
  */
 
-package tasks.fileservice
+package tasks.fileservice.actorfilestorage
+
+import tasks.fileservice._
 
 import akka.actor._
 import akka.pattern.pipe
@@ -35,44 +37,18 @@ import java.io.File
 import java.nio.channels.{WritableByteChannel}
 
 import tasks.util._
-import tasks.util.config._
 import tasks.wire._
+import akka.stream.scaladsl.Sink
+import tasks.wire.filetransfermessages.EndChunk
+import tasks.wire.filetransfermessages.CannotSaveFile
+import akka.util.ByteString
+import tasks.wire.filetransfermessages.Chunk
+import akka.stream.Materializer
 
-import com.github.plokhotnyuk.jsoniter_scala.macros._
-import com.github.plokhotnyuk.jsoniter_scala.core._
-
-case class FileServiceComponent(
-    actor: ActorRef,
-    storage: Option[ManagedFileStorage],
-    remote: RemoteFileStorage
-)
-
-case class FileServicePrefix(list: Vector[String]) {
-  def append(n: String) = FileServicePrefix(list :+ n)
-  def append(ns: Seq[String]) = FileServicePrefix(list ++ ns)
-  private[fileservice] def propose(name: String) =
-    ProposedManagedFilePath(list :+ name)
-}
-object FileServicePrefix {
-  implicit val codec: JsonValueCodec[FileServicePrefix] = JsonCodecMaker.make
-
-}
-
-case class ProposedManagedFilePath(list: Vector[String]) {
-  def name = list.last
-  def toManaged = ManagedFilePath(list)
-}
-
-object ProposedManagedFilePath {
-  implicit val codec: JsonValueCodec[ProposedManagedFilePath] =
-    JsonCodecMaker.make
-}
-
-class FileService(
+class FileServiceProxy(
     storage: ManagedFileStorage,
-    threadpoolsize: Int = 8,
-    isLocal: File => Boolean = _.canRead
-)(implicit config: TasksConfig)
+    threadpoolsize: Int = 8
+)(implicit mat: Materializer)
     extends Actor
     with akka.actor.ActorLogging {
 
@@ -114,42 +90,22 @@ class FileService(
     case GetSharedFolder(prefix) => sender() ! storage.sharedFolder(prefix)
     case NewFile(file, proposedPath, ephemeral) =>
       try {
-        if (isLocal(file)) {
 
-          storage
-            .importFile(file, proposedPath)
-            .flatMap { case (length, hash, _, managedFilePath) =>
-              create(length, hash, managedFilePath)
-                .recover { case e =>
-                  log.error(
-                    e,
-                    "Error in creation of SharedFile {} {}",
-                    file,
-                    proposedPath
-                  )
-                  throw e
-                }
-            }
-            .pipeTo(sender())
+        val savePath =
+          TempFile.createFileInTempFolderIfPossibleWithName(proposedPath.name)
+        val writeableChannel =
+          new java.io.FileOutputStream(savePath).getChannel
+        val transferinActor = context.actorOf(
+          Props(new TransferIn(writeableChannel, self))
+            .withDispatcher("transferin")
+        )
+        transferinactors.update(
+          transferinActor,
+          (writeableChannel, savePath, sender(), proposedPath, ephemeral)
+        )
 
-        } else {
+        sender() ! TransferToMe(transferinActor)
 
-          val savePath =
-            TempFile.createFileInTempFolderIfPossibleWithName(proposedPath.name)
-          val writeableChannel =
-            new java.io.FileOutputStream(savePath).getChannel
-          val transferinActor = context.actorOf(
-            Props(new TransferIn(writeableChannel, self))
-              .withDispatcher("transferin")
-          )
-          transferinactors.update(
-            transferinActor,
-            (writeableChannel, savePath, sender(), proposedPath, ephemeral)
-          )
-
-          sender() ! TransferToMe(transferinActor)
-
-        }
       } catch {
         case e: Exception => {
           log.error(
@@ -199,7 +155,7 @@ class FileService(
           channel.close
           try {
             storage.importFile(file, proposedPath).flatMap {
-              case (length, hash, _, managedFilePath) =>
+              case (length, hash, managedFilePath) =>
                 create(length, hash, managedFilePath)
                   .recover { case e =>
                     log.error(
@@ -209,6 +165,18 @@ class FileService(
                       proposedPath
                     )
                     throw e
+                  }
+                  .andThen { case _ =>
+                    try { file.delete }
+                    catch {
+                      case e: Throwable =>
+                        log.error(
+                          e,
+                          "Can't delete temporary file {} {}",
+                          file,
+                          proposedPath
+                        )
+                    }
                   }
 
             } pipeTo filesender
@@ -223,13 +191,13 @@ class FileService(
       transferinactors.remove(sender())
     }
 
-    case GetPaths(managedPath, size: Long, hash: Int) =>
+    case AskForFile(managedPath, size: Long, hash: Int) =>
       try {
         storage
           .contains(managedPath, size, hash)
           .flatMap { contains =>
             if (contains)
-              storage.exportFile(managedPath).map(f => KnownPaths(List(f)))
+              Future.successful(AckFileIsPresent)
             else
               Future.successful(
                 FileNotFound(
@@ -246,16 +214,38 @@ class FileService(
           sender() ! FileNotFound(e)
         }
       }
-    case TransferFileToUser(transferinActor, sf) =>
+    case TransferFileToUser(transferinActor, sf, fromOffset) =>
       try {
-        storage.exportFile(sf).foreach { file =>
-          val readablechannel = new java.io.FileInputStream(file).getChannel
-          val chunksize = config.fileSendChunkSize
-          context.actorOf(
-            Props(new TransferOut(readablechannel, transferinActor, chunksize))
-              .withDispatcher("transferout")
+        val relay = context.actorOf(Props(new Actor {
+          var sourceActor: ActorRef = null
+          def receive: Receive = {
+            case "init" =>
+              sourceActor = sender()
+              sourceActor ! true
+            case "complete" =>
+              transferinActor ! EndChunk()
+              self ! PoisonPill
+            case e: Throwable =>
+              transferinActor ! CannotSaveFile(e.getMessage)
+              self ! PoisonPill
+            case bs: ByteString =>
+              transferinActor ! Chunk(
+                com.google.protobuf.ByteString.copyFrom(bs.toArray)
+              )
+            case tasks.wire.filetransfermessages.Ack => sourceActor ! true
+          }
+        }))
+        storage
+          .createSource(sf, fromOffset)
+          .to(
+            Sink.actorRefWithBackpressure(
+              ref = relay,
+              onInitMessage = "init",
+              onCompleteMessage = "complete",
+              onFailureMessage = e => e
+            )
           )
-        }
+          .run()
 
       } catch {
         case e: Exception => {
@@ -264,7 +254,6 @@ class FileService(
         }
       }
 
-    case GetListOfFilesInStorage(regexp) => sender() ! storage.list(regexp)
     case IsAccessible(managedPath, size, hash) =>
       storage.contains(managedPath, size, hash).pipeTo(sender())
     case IsPathAccessible(managedPath, retrieveSizeAndHash) =>

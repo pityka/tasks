@@ -275,7 +275,7 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(implicit
         log.debug("AskForWork received but currently in negotiation state.")
       }
 
-    case Ack(allocated) if state.negotiatingWithCurrentSender =>
+    case QueueAck(allocated) if state.negotiatingWithCurrentSender =>
       val sch = state.negotiation.get._2
       if (state.scheduledTasks.contains(project(sch))) {
         log.error(

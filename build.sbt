@@ -67,7 +67,7 @@ lazy val commonSettings = Seq(
   scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings"))
 )
 
-lazy val circeVersion = "0.14.3"
+lazy val circeVersion = "0.14.5"
 lazy val jsoniterVersion = "2.13.31"
 lazy val akkaVersion = "2.6.19"
 lazy val shapelessVersion = "2.3.10"
@@ -129,8 +129,9 @@ lazy val core = project
       "com.google.guava" % "guava" % "31.1-jre", // scala-steward:off
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe" % "config" % "1.4.2",
+      "org.typelevel" %% "cats-effect" % "3.4.11",
       "io.github.pityka" %% "selfpackage" % "2.0.0",
-      "org.scalatest" %% "scalatest" % "3.2.14" % "test",
+      "org.scalatest" %% "scalatest" % "3.2.16" % "test",
       "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
@@ -178,7 +179,7 @@ lazy val tracker = project
   .settings(
     name := "tasks-tracker",
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.14" % "test",
+      "org.scalatest" %% "scalatest" % "3.2.16" % "test",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
     ) ++ akkaProvided,
     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
@@ -191,7 +192,7 @@ lazy val uibackend = project
   .settings(
     name := "tasks-ui-backend",
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.14" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.16" % "test"
     ) ++ akkaProvided,
     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
   )
@@ -250,7 +251,7 @@ lazy val circe = project
       "io.circe" %% "circe-core" % circeVersion,
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,
-      "org.scalatest" %% "scalatest" % "3.2.14" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.16" % "test"
     ) ++ akkaProvided
   )
   .dependsOn(core)
@@ -266,7 +267,7 @@ lazy val ecoll = project
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % jsoniterVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test",
-      "org.scalatest" %% "scalatest" % "3.2.14" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.16" % "test"
     ) ++ akkaProvided
   )
   .dependsOn(core)

@@ -31,6 +31,9 @@ import scala.concurrent._
 import scala.concurrent.duration._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
+import cats.effect.IO
+
+import cats.effect.unsafe.implicits.global
 
 /** Definitions of subtasks for calculating Pi
   *
@@ -73,11 +76,10 @@ object PiTasks {
     case BatchInput(sizeFile: SharedFile, id: Int) =>
       implicit ctx =>
         /* SharedFile#file downloads the file to the local tmp folder */
-        val localFile: Future[java.io.File] = sizeFile.file
-
+        sizeFile.file.use{ localFile =>
+          IO{
         audit(s"Computing pi, part $id")
 
-        localFile.map { localFile =>
           // Body of the task
           val sizeInt = scala.io.Source.fromFile(localFile).mkString.toInt
           val (in, out) = (0 until sizeInt).foldLeft((0, 0)) {
@@ -86,12 +88,13 @@ object PiTasks {
               val y = scala.util.Random.nextDouble()
               val inside = math.sqrt(x * x + y * y) <= 1.0
               if (inside) (countIn + 1, countOut) else (countIn, countOut + 1)
-          }
 
           /* Return value */
-          BatchResult(in, out)
-
         }
+        BatchResult(in, out)
+        }
+
+        }.unsafeToFuture()
   }
 
   val piCalc = AsyncTask[PiInput, PiResult]("reduce", 1) {

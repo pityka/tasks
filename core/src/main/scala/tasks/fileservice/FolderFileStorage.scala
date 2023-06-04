@@ -34,6 +34,8 @@ import tasks.util.eq._
 import tasks.util.config._
 import akka.stream.scaladsl._
 import akka.util._
+import cats.effect.kernel.Resource
+import cats.effect.IO
 
 object FolderFileStorage {
 
@@ -103,7 +105,7 @@ class FolderFileStorage(val basePath: File)(implicit
       Future.successful(false)
     }
 
-  def sharedFolder(prefix: Seq[String]): Option[File] = {
+  def sharedFolder(prefix: Seq[String]): Future[Option[File]] = Future{
     val folder = new File(
       basePath.getAbsolutePath + File.separator + prefix
         .mkString(File.separator)
@@ -166,11 +168,11 @@ class FolderFileStorage(val basePath: File)(implicit
       )
     )
 
-  def exportFile(path: ManagedFilePath): Future[File] = {
+  def exportFile(path: ManagedFilePath): Resource[IO,File] = {
     val file = assemblePath(path)
-    if (file.canRead) Future.successful(file)
+    if (file.canRead) Resource.pure(file)
     else {
-      Future.failed(
+      Resource.raiseError[IO,File,Throwable](
         new java.nio.file.NoSuchFileException(
           file.getAbsolutePath + " " + System.nanoTime
         )
@@ -243,7 +245,7 @@ class FolderFileStorage(val basePath: File)(implicit
           .mapMaterializedValue(_.flatMap { _ =>
             val r = importFile(tmp, path)
             tmp.delete
-            r.map(x => (x._1, x._2, x._4))
+            r.map(x => (x._1, x._2, x._3))
           })
       )
     }
@@ -254,7 +256,7 @@ class FolderFileStorage(val basePath: File)(implicit
         // empty file, upstream terminated without emitting an element
         val tmp = TempFile.createTempFile("foldertmp")
         val r = importFile(tmp, path)
-        r.map(x => { tmp.delete; (x._1, x._2, x._4) })
+        r.map(x => { tmp.delete; (x._1, x._2, x._3) })
       })
   }
 
@@ -270,7 +272,7 @@ class FolderFileStorage(val basePath: File)(implicit
   def importFile(
       file: File,
       proposed: ProposedManagedFilePath
-  ): Future[(Long, Int, File, ManagedFilePath)] =
+  ): Future[(Long, Int, ManagedFilePath)] =
     Future.successful({
       logger.debug(s"Importing file $file under name $proposed")
       val size = file.length
@@ -284,14 +286,14 @@ class FolderFileStorage(val basePath: File)(implicit
           val elements = relativeToBase.split('/').toVector.filter(_.nonEmpty)
           ManagedFilePath(elements)
         }
-        (size, hash, file, locationAsManagedFilePath)
+        (size, hash,  locationAsManagedFilePath)
       } else if (assemblePath(managed).canRead) {
         val finalFile = assemblePath(managed)
         logger.debug(
           s"Found a file already in storage with the same name ($finalFile). Check for equality."
         )
         if (checkContentEquality(finalFile, file))
-          (size, hash, finalFile, managed)
+          (size, hash,  managed)
         else {
           logger.debug(s"Equality failed. Importing file. $file to $finalFile")
 
@@ -323,49 +325,19 @@ class FolderFileStorage(val basePath: File)(implicit
           }
 
           copyFile(file, finalFile)
-          (size, hash, finalFile, managed)
+          (size, hash,  managed)
         }
 
       } else {
         copyFile(file, assemblePath(managed))
-        (size, hash, assemblePath(managed), managed)
+        (size, hash,  managed)
       }
     })
 
-  def uri(mp: ManagedFilePath) = {
+  def uri(mp: ManagedFilePath) = Future.successful{
     // throw new RuntimeException("URI not supported")
     val path = assemblePath(mp).toURI.toString
     Uri(path)
-  }
-
-  def list(pattern: String): List[SharedFile] = {
-    import scala.jdk.CollectionConverters._
-    val stream =
-      java.nio.file.Files.newDirectoryStream(basePath.toPath, pattern)
-    try {
-      stream.asScala.toList.filter(_.toFile.isFile).map { path =>
-        val file = path.toFile
-        val l = file.length
-        val h = FolderFileStorage.getContentHash(file)
-        new SharedFile(
-          ManagedFilePath(
-            basePath.toPath
-              .relativize(path)
-              .asScala
-              .iterator
-              .map(_.toString)
-              .toVector
-          ),
-          l,
-          h
-        )
-      }
-    } catch {
-      case x: Throwable => throw x
-    } finally {
-      stream.close
-    }
-
   }
 
 }

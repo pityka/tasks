@@ -25,7 +25,9 @@
  * SOFTWARE.
  */
 
-package tasks.fileservice
+package tasks.fileservice.actorfilestorage
+
+import tasks.fileservice._
 
 import akka.actor._
 import akka.stream.scaladsl._
@@ -42,14 +44,13 @@ import tasks.wire._
 class FileUserSource(
     sf: ManagedFilePath,
     service: ActorRef,
-    isLocal: java.io.File => Boolean,
     fromOffset: Long
-) extends AbstractFileUser[Source[ByteString, _]](sf, 0, 0, service, isLocal) {
+) extends AbstractFileUser[Source[ByteString, _]](sf, 0, 0, service) {
 
   private var writeableChannel: Option[WritableByteChannel] = None
 
   override def preStart(): Unit = {
-    self ! KnownPaths(Nil)
+    self ! AckFileIsPresent
   }
 
   def transfertome(): Unit = {
@@ -61,7 +62,7 @@ class FileUserSource(
         .withDispatcher("transferin")
     )
 
-    service ! TransferFileToUser(transferinActor, sf)
+    service ! TransferFileToUser(transferinActor, sf, fromOffset)
 
     result = Some(
       Success(
@@ -79,15 +80,6 @@ class FileUserSource(
     }
   }
 
-  def finishLocalFile(f: File): Unit = {
-    log.debug("Readable")
-    result = Some(
-      Success(
-        FileIO.fromPath(f.toPath, chunkSize = 8192, startPosition = fromOffset)
-      )
-    )
-    finish()
-  }
 
   override def receive = super.receive orElse {
     case filetransfermessages.FileSaved(_) => {
@@ -102,8 +94,7 @@ class FileUser(
     size: Long,
     hash: Int,
     service: ActorRef,
-    isLocal: java.io.File => Boolean
-) extends AbstractFileUser[File](sf, size, hash, service, isLocal) {
+) extends AbstractFileUser[File](sf, size, hash, service) {
 
   private var fileUnderTransfer: Option[File] = None
   private var writeableChannel: Option[WritableByteChannel] = None
@@ -118,7 +109,7 @@ class FileUser(
         .withDispatcher("transferin")
     )
 
-    service ! TransferFileToUser(transferinActor, sf)
+    service ! TransferFileToUser(transferinActor, sf, 0L)
   }
 
   def finishLocalFile(f: File) = {
@@ -133,7 +124,6 @@ class FileUser(
   override def receive = super.receive orElse {
     case filetransfermessages.FileSaved(_) => {
       writeableChannel.get.close
-      // service ! NewPath(sf, fileUnderTransfer.get)
       finishLocalFile(fileUnderTransfer.get)
     }
   }
@@ -144,7 +134,6 @@ abstract class AbstractFileUser[R](
     size: Long,
     hash: Int,
     service: ActorRef,
-    isLocal: File => Boolean
 ) extends Actor
     with akka.actor.ActorLogging {
 
@@ -153,11 +142,10 @@ abstract class AbstractFileUser[R](
   var fileNotFound = false
 
   override def preStart() = {
-    service ! GetPaths(sf, size, hash)
+    service ! AskForFile(sf, size, hash)
   }
 
   protected def transfertome(): Unit
-  protected def finishLocalFile(file: File): Unit
 
   private def fail(e: Throwable) = {
     fileNotFound = true
@@ -186,12 +174,9 @@ abstract class AbstractFileUser[R](
       log.error("CannotSaveFile : " + sf + " Reason: " + e)
       fail(new RuntimeException(e))
     }
-    case KnownPaths(list) => {
-      log.debug("KnownPaths:" + list)
-      list.find(isLocal) match {
-        case Some(file) => finishLocalFile(file)
-        case None       => transfertome()
-      }
+    case AckFileIsPresent => {
+      log.debug(s"AckFileIsPresent $sf")
+        transfertome()
     }
 
   }

@@ -90,7 +90,7 @@ object SHResultWithSharedFilesTest extends TestHelpers {
     AsyncTask[(Input, SharedFile), Output]("resultwithsharedfilestest", 1) {
       case (_, inputsf) =>
         implicit computationEnvironment =>
-          await(inputsf.file)
+          inputsf.file.allocated.map(_._1).unsafeRunSync()(cats.effect.unsafe.implicits.global)
           val source = Source.single(ByteString("abcd"))
           val tmpfile = tasks.util.writeBinaryToFile(Array[Byte](1, 2, 3))
           val fs = List(
@@ -143,7 +143,7 @@ object SHResultWithSharedFilesTest extends TestHelpers {
     println(tmp)
     val testConfig2 =
       ConfigFactory.parseString(
-        s"""tasks.fileservice.disableOnSlave = true
+        s"""tasks.fileservice.connectToProxy = true
         akka.loglevel= OFF
         tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=0
@@ -153,7 +153,7 @@ object SHResultWithSharedFilesTest extends TestHelpers {
       tasks.failuredetector.acceptable-heartbeat-pause = 5 s
       tasks.worker-main-class = "tasks.TestSlave"
       tasks.elastic.sh.workdir = ${tmp.getAbsolutePath}
-      tasks.elastic.javaCommandLine = "-Dtasks.fileservice.disableOnSlave=true"
+      tasks.elastic.javaCommandLine = "-Dtasks.fileservice.connectToProxy=true"
       """
       )
 
@@ -164,9 +164,9 @@ object SHResultWithSharedFilesTest extends TestHelpers {
       val f2 = testTask(Input(1) -> sf)(ResourceRequest(1, 500))
       def getFiles(o: Output) = {
         val untyped = UntypedResult.make(o)
-        untyped.files.toSeq.map(_.file) ++ untyped.mutableFiles.toSeq
+        (untyped.files.toSeq.map(_.file) ++ untyped.mutableFiles.toSeq
           .flatMap(_.toSeq)
-          .map(_.file)
+          .map(_.file)).map(_.allocated.map(_._1).unsafeToFuture()(cats.effect.unsafe.implicits.global))
       }
       val future = for {
         t1 <- f1

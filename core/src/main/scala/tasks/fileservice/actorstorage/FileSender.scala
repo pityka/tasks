@@ -25,7 +25,9 @@
  * SOFTWARE.
  */
 
-package tasks.fileservice
+package tasks.fileservice.actorfilestorage
+
+import tasks.fileservice._
 
 import akka.actor._
 import akka.stream.scaladsl._
@@ -34,9 +36,9 @@ import akka.util._
 
 import java.io.File
 
-import tasks.util._
 import tasks.util.config._
 import tasks.wire._
+import cats.effect.IO
 
 class FileSender(
     file: File,
@@ -70,7 +72,7 @@ class FileSender(
       val readablechannel = new java.io.FileInputStream(file).getChannel
       val chunksize = config.fileSendChunkSize
       context.actorOf(
-        Props(new TransferOut(readablechannel, transferin, chunksize))
+        Props(new TransferOut(readablechannel, transferin, chunksize, IO.unit))
           .withDispatcher("transferout")
       )
 
@@ -127,7 +129,7 @@ class SourceSender(
       val readablechannel = java.nio.channels.Channels.newChannel(is)
       val chunksize = config.fileSendChunkSize
       context.actorOf(
-        Props(new TransferOut(readablechannel, transferin, chunksize))
+        Props(new TransferOut(readablechannel, transferin, chunksize, IO.unit))
           .withDispatcher("transferout")
       )
 
@@ -151,3 +153,5 @@ class SourceSender(
   }
 
 }
+
+

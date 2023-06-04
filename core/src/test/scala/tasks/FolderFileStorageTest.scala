@@ -39,14 +39,14 @@ object FolderFileStorageTest extends TestHelpers with Matchers {
       for {
 
         sf <- SharedFile(Source.single(ByteString("abcd")), "f1")
-        local <- sf.file
+        local <- sf.file.allocated.map(_._1).unsafeToFuture()(cats.effect.unsafe.implicits.global)
         sf2 <- {
           val newPath = new File(local.getParentFile.getParentFile, "uncle")
           tasks.util.openFileOutputStream(newPath)(_.write("boo".getBytes))
           SharedFile(newPath, "something")
 
         }
-        local2 <- sf2.file
+        local2 <- sf2.file.allocated.map(_._1).unsafeToFuture()(cats.effect.unsafe.implicits.global)
       } yield local2.canRead
   }
 

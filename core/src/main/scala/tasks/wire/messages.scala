@@ -60,7 +60,7 @@ case class MessageFromTask(result: UntypedResult, retrievedFromCache: Boolean)
 
 case object SaveDone extends StaticMessage
 
-private[tasks] case class Ack(allocated: VersionedResourceAllocated)
+private[tasks] case class QueueAck(allocated: VersionedResourceAllocated)
     extends StaticMessage
 
 private[tasks] case object GetMaximumSlots extends StaticMessage
@@ -75,8 +75,6 @@ case class Schedule(sch: ScheduleTask) extends StaticMessage
 
 // Messages related to files
 
-case class GetListOfFilesInStorage(regexp: String) extends StaticMessage
-
 case class GetSharedFolder(prefix: Vector[String]) extends StaticMessage
 
 case class NewFile(f: File, p: ProposedManagedFilePath, ephemeralFile: Boolean)
@@ -84,14 +82,14 @@ case class NewFile(f: File, p: ProposedManagedFilePath, ephemeralFile: Boolean)
 
 case class NewSource(p: ProposedManagedFilePath) extends StaticMessage
 
-case class GetPaths(p: ManagedFilePath, size: Long, hash: Int)
+case class AskForFile(p: ManagedFilePath, size: Long, hash: Int)
     extends StaticMessage
 
-case class KnownPaths(paths: List[File]) extends StaticMessage
+case object AckFileIsPresent extends StaticMessage
 
 case class TransferToMe(actor: ActorRef) extends StaticMessage
 
-case class TransferFileToUser(actor: ActorRef, sf: ManagedFilePath)
+case class TransferFileToUser(actor: ActorRef, sf: ManagedFilePath, fromOffset: Long)
     extends StaticMessage
 
 case object WaitingForSharedFile extends StaticMessage
