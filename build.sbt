@@ -218,7 +218,7 @@ lazy val uifrontend = project
 lazy val example = project
   .in(file("example"))
   .settings(commonSettings: _*)
-  .dependsOn(core, ecoll, ssh)
+  .dependsOn(core, ssh)
   .enablePlugins(JavaAppPackaging)
   .settings(
     executableScriptName := "entrypoint",
@@ -282,7 +282,6 @@ lazy val root = (project in file("."))
   .aggregate(
     spores,
     core,
-    ecoll,
     upicklesupport,
     circe,
     sharedJVM,
@@ -305,7 +304,6 @@ lazy val testables = (project in file("testables"))
   .aggregate(
     spores,
     core,
-    ecoll,
     upicklesupport,
     circe,
     sharedJVM,
