@@ -44,7 +44,6 @@ import java.io.File
 import scala.concurrent.Await
 
 import scala.concurrent.duration._
-import scala.concurrent._
 import scala.util._
 import cats.effect.unsafe.implicits.global
 import tasks.fileservice.actorfilestorage.ActorFileStorage
@@ -56,7 +55,6 @@ case class TaskSystemComponents(
     cache: CacheActor,
     nodeLocalCache: NodeLocalCache.State,
     filePrefix: FileServicePrefix,
-    executionContext: ExecutionContext,
     tasksConfig: TasksConfig,
     historyContext: HistoryContext,
     priority: Priority,
@@ -237,7 +235,6 @@ class TaskSystem private[tasks] (
             new SharedFileCache()(
               fileServiceComponent,
               system,
-              system.dispatcher,
               config
             )
           else new DisabledCache
@@ -402,11 +399,6 @@ class TaskSystem private[tasks] (
 
     } else None
 
-  private val auxFjp = tasks.util.concurrent
-    .newJavaForkJoinPoolWithNamePrefix("tasks-aux", config.auxThreads)
-  private val auxExecutionContext =
-    scala.concurrent.ExecutionContext.fromExecutorService(auxFjp)
-
   val rootHistory = NoHistory
 
   val components = TaskSystemComponents(
@@ -416,7 +408,6 @@ class TaskSystem private[tasks] (
     cache = CacheActor(cacheActor),
     nodeLocalCache = nodeLocalCache,
     filePrefix = FileServicePrefix(Vector()),
-    executionContext = auxExecutionContext,
     tasksConfig = config,
     historyContext = rootHistory,
     priority = Priority(0),
@@ -442,7 +433,6 @@ class TaskSystem private[tasks] (
               )
             ),
             refreshInterval = refreshInterval,
-            auxExecutionContext = auxExecutionContext,
             remoteStorage = remoteFileStorage,
             managedStorage = managedFileStorage
           )
@@ -534,7 +524,6 @@ class TaskSystem private[tasks] (
           "Shutting down tasksystem. Blocking until all watched actors have terminated."
         )
         latch.await
-        auxFjp.shutdown
         Await.result(AS.terminate(), 10 seconds)
       }
     } else {

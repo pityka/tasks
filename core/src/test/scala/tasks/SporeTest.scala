@@ -30,7 +30,6 @@ package tasks
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import org.scalatest.matchers.should.Matchers
-import scala.concurrent._
 import tasks.queue.Spore
 
 import tasks.util._
@@ -39,12 +38,13 @@ import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 
 import com.typesafe.config.ConfigFactory
+import cats.effect.IO
 
 object SporeTest extends TestHelpers with Matchers {
 
   val increment =
-    AsyncTask[Spore[Option[Int], String], String]("sporetest", 1) { case sp =>
-      implicit computationEnvironment => Future(sp(Some(3)))
+    Task[Spore[Option[Int], String], String]("sporetest", 1) { case sp =>
+      _=> IO(sp(Some(3)))
     }
 
   def run = {

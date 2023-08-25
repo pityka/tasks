@@ -29,10 +29,10 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import scala.concurrent.Future
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import com.typesafe.config.ConfigFactory
+import cats.effect.IO
 
 object SchemaEvolutionViaOptionsTest extends TestHelpers {
 
@@ -61,21 +61,20 @@ object SchemaEvolutionViaOptionsTest extends TestHelpers {
     implicit val codec: JsonValueCodec[Input2] = JsonCodecMaker.make
   }
 
-  val task1 = AsyncTask[Input1, Int]("schemaevolutionviaoptions", 1) {
-    _ => implicit computationEnvironment =>
+  val task1 = Task[Input1, Int]("schemaevolutionviaoptions", 1) {
+    _ => _ =>
       sideEffect += "execution of task"
-      Future(1)
+      IO(1)
   }
 
-  val task2 = AsyncTask[Input2, Int]("schemaevolutionviaoptions", 1) {
-    _ => implicit computationEnvironment =>
+  val task2 = Task[Input2, Int]("schemaevolutionviaoptions", 1) {
+    _ => _ =>
       sideEffect += "execution of task"
-      Future(1)
+      IO(1)
   }
 
   def run = {
     val run1 = withTaskSystem(testConfig2) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
 
       val future = for {
         t1 <- task1(Input1(1))(ResourceRequest(1, 500))
@@ -86,7 +85,6 @@ object SchemaEvolutionViaOptionsTest extends TestHelpers {
     }
 
     val run2 = withTaskSystem(testConfig2) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
 
       val future = for {
         t1 <- task2(Input2(1, None))(ResourceRequest(1, 500))
@@ -97,7 +95,6 @@ object SchemaEvolutionViaOptionsTest extends TestHelpers {
     }
 
     val run3 = withTaskSystem(testConfig2) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
 
       val future = for {
         t1 <- task2(Input2(1, Some(2)))(ResourceRequest(1, 500))

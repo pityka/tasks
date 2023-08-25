@@ -34,8 +34,8 @@ import akka.util.ByteString
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 
-import scala.concurrent.Future
 import tasks.queue.UntypedResult
+import cats.effect.IO
 
 object ResultWithSharedFilesTest extends TestHelpers {
 
@@ -85,7 +85,7 @@ object ResultWithSharedFilesTest extends TestHelpers {
     implicit val codec: JsonValueCodec[Output] = JsonCodecMaker.make
   }
 
-  val testTask = AsyncTask[Input, Output]("resultwithsharedfilestest", 1) {
+  val testTask = Task[Input, Output]("resultwithsharedfilestest", 1) {
     _ => implicit computationEnvironment =>
       sideEffect += "execution of task"
       val source = Source.single(ByteString("abcd"))
@@ -111,7 +111,7 @@ object ResultWithSharedFilesTest extends TestHelpers {
       )
 
       for {
-        l <- Future.sequence(fs)
+        l <- IO.parSequenceN(8)(fs)
       } yield Output(
         l(0),
         l(1),
@@ -132,7 +132,6 @@ object ResultWithSharedFilesTest extends TestHelpers {
   }
 
   def run = {
-    import scala.concurrent.ExecutionContext.Implicits.global
 
     withTaskSystem(testConfig) { implicit ts =>
       val f1 = testTask(Input(1))(ResourceRequest(1, 500))
@@ -142,20 +141,18 @@ object ResultWithSharedFilesTest extends TestHelpers {
         untyped.files.toSeq.map(
           _.file.allocated
             .map(_._1)
-            .unsafeToFuture()(cats.effect.unsafe.implicits.global)
         ) ++ untyped.mutableFiles.toSeq
           .flatMap(_.toSeq)
           .map(
             _.file.allocated
               .map(_._1)
-              .unsafeToFuture()(cats.effect.unsafe.implicits.global)
           )
       }
       val future = for {
         t1 <- f1
-        t1Files <- Future.sequence(getFiles(t1))
+        t1Files <- IO.parSequenceN(8)(getFiles(t1))
         t2 <- f2
-        t2Files <- Future.sequence(getFiles(t2))
+        t2Files <- IO.parSequenceN(8)(getFiles(t2))
       } yield (
         t1Files,
         t2Files,

@@ -36,7 +36,6 @@ import akka.actor.{
   ExtendedActorSystem
 }
 
-import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
@@ -84,7 +83,6 @@ class Launcher(
     nodeLocalCache: NodeLocalCache.State,
     slots: VersionedResourceAvailable,
     refreshInterval: FiniteDuration,
-    auxExecutionContext: ExecutionContext,
     remoteStorage: RemoteFileStorage,
     managedStorage: ManagedFileStorage
 )(implicit config: TasksConfig)
@@ -140,7 +138,6 @@ class Launcher(
         nodeLocalCache,
         allocatedResource.cpuMemoryAllocated,
         filePrefix,
-        auxExecutionContext,
         config,
         scheduleTask.priority,
         scheduleTask.labels,

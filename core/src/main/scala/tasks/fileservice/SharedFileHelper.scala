@@ -30,8 +30,6 @@ import akka.stream.scaladsl._
 import akka.stream._
 import akka.util._
 
-import scala.concurrent._
-
 import java.io.File
 
 import tasks.util._
@@ -42,13 +40,15 @@ import com.typesafe.scalalogging.StrictLogging
 import akka.NotUsed
 import cats.effect.kernel.Resource
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
+import scala.concurrent.Future
 
 private[tasks] object SharedFileHelper extends StrictLogging {
 
   def getByName(name: String, retrieveSizeAndHash: Boolean)(implicit
       service: FileServiceComponent,
       prefix: FileServicePrefix
-  ): Future[Option[SharedFile]] =
+  ): IO[Option[SharedFile]] =
     recreateFromManagedPath(prefix.propose(name).toManaged, retrieveSizeAndHash)
 
   private[tasks] def createForTesting(name: String) =
@@ -59,9 +59,7 @@ private[tasks] object SharedFileHelper extends StrictLogging {
   def create(size: Long, hash: Int, path: ManagedFilePath): SharedFile =
     new SharedFile(path, size, hash)
 
-  def create(path: RemoteFilePath, storage: RemoteFileStorage)(implicit
-      ec: ExecutionContext
-  ): Future[SharedFile] =
+  def create(path: RemoteFilePath, storage: RemoteFileStorage): IO[SharedFile] =
     storage.getSizeAndHash(path).map { case (size, hash) =>
       new SharedFile(path, size, hash)
     }
@@ -69,13 +67,12 @@ private[tasks] object SharedFileHelper extends StrictLogging {
   val isLocal = (f: File) => f.canRead
 
   private def getSourceToManagedPath(path: ManagedFilePath, fromOffset: Long)(
-      implicit
-      service: FileServiceComponent,
+      implicit service: FileServiceComponent
   ) =
     service.storage.createSource(path, fromOffset: Long)
 
   def getSourceToFile(sf: SharedFile, fromOffset: Long)(implicit
-      service: FileServiceComponent,
+      service: FileServiceComponent
   ): Source[ByteString, NotUsed] =
     sf.path match {
       case path: RemoteFilePath =>
@@ -90,14 +87,14 @@ private[tasks] object SharedFileHelper extends StrictLogging {
 
   def getPathToFile(sf: SharedFile)(implicit
       service: FileServiceComponent,
-      nlc: NodeLocalCache.State,
+      nlc: NodeLocalCache.State
   ): Resource[IO, File] =
     tasks.util.concurrent.NodeLocalCache
       .offer("fs::" + sf, getPathToFileUnCachedInResource(sf), nlc)
       .map(_.asInstanceOf[File])
 
   private def getPathToFileUnCachedInResource(sf: SharedFile)(implicit
-      service: FileServiceComponent,
+      service: FileServiceComponent
   ): Resource[IO, File] =
     sf.path match {
       case p: RemoteFilePath => service.remote.exportFile(p)
@@ -108,7 +105,7 @@ private[tasks] object SharedFileHelper extends StrictLogging {
 
   def isAccessible(sf: SharedFile, verifyContent: Boolean)(implicit
       service: FileServiceComponent
-  ): Future[Boolean] =
+  ): IO[Boolean] =
     sf.path match {
       case x: RemoteFilePath =>
         val byteSize = if (verifyContent) sf.byteSize else -1L
@@ -121,9 +118,9 @@ private[tasks] object SharedFileHelper extends StrictLogging {
 
   def getUri(
       sf: SharedFile
-  )(implicit service: FileServiceComponent): Future[Uri] =
+  )(implicit service: FileServiceComponent): IO[Uri] =
     sf.path match {
-      case RemoteFilePath(path) => Future.successful(path)
+      case RemoteFilePath(path) => IO.pure(path)
       case path: ManagedFilePath =>
         service.storage.uri(path)
 
@@ -131,81 +128,82 @@ private[tasks] object SharedFileHelper extends StrictLogging {
 
   def delete(
       sf: SharedFile
-  )(implicit service: FileServiceComponent): Future[Boolean] =
+  )(implicit service: FileServiceComponent): IO[Boolean] =
     sf.path match {
-      case RemoteFilePath(_) => Future.successful(false)
+      case RemoteFilePath(_) => IO.pure(false)
       case path: ManagedFilePath => {
-        // if (service.storage.isDefined)
         service.storage.delete(path, sf.byteSize, sf.hash)
-        // else {
-        //   implicit val timout = akka.util.Timeout(1441 minutes)
-        //   (service.actor ? Delete(path, sf.byteSize, sf.hash))
-        //     .asInstanceOf[Future[Boolean]]
-        // }
+
       }
     }
 
   def saveHistory(sf: SharedFile, historyContext: HistoryContext)(implicit
       prefix: FileServicePrefix,
-      ec: ExecutionContext,
+      // ec: ExecutionContext,
       service: FileServiceComponent,
       context: ActorRefFactory,
       config: TasksConfig,
       mat: Materializer
-  ): Future[Unit] = {
+  ): IO[Unit] = {
     historyContext match {
-      case NoHistory => Future.successful(())
+      case NoHistory => IO.unit
       case ctx: HistoryContextImpl if config.writeFileHistories =>
-        val history = History(sf, Some(ctx))
-        val serialized =
-          com.github.plokhotnyuk.jsoniter_scala.core.writeToArray(history)
+        (IO {
+          val history = History(sf, Some(ctx))
+          val serialized =
+            com.github.plokhotnyuk.jsoniter_scala.core.writeToArray(history)
 
-        implicit val hctx = NoHistory
-        createFromSource(
-          Source.single(ByteString(serialized)),
-          sf.name + ".history"
-        ).map(_ => ())
-      case _ => Future.successful(())
+          implicit val hctx = NoHistory
+          createFromSource(
+            Source.single(ByteString(serialized)),
+            sf.name + ".history"
+          ).map(_ => ())
+        }).flatten
+      case _ => IO.unit
     }
 
   }
 
   def getHistory(sf: SharedFile)(implicit
       service: FileServiceComponent,
-      ec: ExecutionContext,
       mat: Materializer
-  ): Future[History] = {
+  ): IO[History] = {
     sf.path match {
-      case _: RemoteFilePath => Future.successful(History(sf, None))
+      case _: RemoteFilePath => IO.pure(History(sf, None))
       case managed: ManagedFilePath =>
-        val historyManagedPath = ManagedFilePath(
-          managed.pathElements.dropRight(1) :+ managed.name + ".history"
-        )
-        logger.debug("Decoding history of " + sf)
+        IO {
+          val historyManagedPath = ManagedFilePath(
+            managed.pathElements.dropRight(1) :+ managed.name + ".history"
+          )
+          logger.debug("Decoding history of " + sf)
 
-        def readFile =
-          getSourceToManagedPath(historyManagedPath, fromOffset = 0L)
-            .take(1024 * 1024 * 20L)
-            .runFold(ByteString.empty)(_ ++ _)
-            .map(_.toArray)
-            .map { byteArray =>
-              if (byteArray.length >= 1024 * 1024 * 20) {
-                logger.warn("Truncating history due to file size.")
-                History(sf, None)
-              } else {
+          def readFile =
+            IO.fromFuture(
+              IO.delay(
+                getSourceToManagedPath(historyManagedPath, fromOffset = 0L)
+                  .take(1024 * 1024 * 20L)
+                  .runFold(ByteString.empty)(_ ++ _)
+              )
+            ).map(_.toArray)
+              .map { byteArray =>
+                if (byteArray.length >= 1024 * 1024 * 20) {
+                  logger.warn("Truncating history due to file size.")
+                  History(sf, None)
+                } else {
 
-                com.github.plokhotnyuk.jsoniter_scala.core
-                  .readFromArray[History](byteArray)
+                  com.github.plokhotnyuk.jsoniter_scala.core
+                    .readFromArray[History](byteArray)
 
+                }
               }
-            }
 
-        for {
-          fileIsPresent <- recreateFromManagedPath(historyManagedPath, false)
-          history <-
-            if (fileIsPresent.isDefined) readFile
-            else Future.successful(History(sf, None))
-        } yield history
+          for {
+            fileIsPresent <- recreateFromManagedPath(historyManagedPath, false)
+            history <-
+              if (fileIsPresent.isDefined) readFile
+              else IO.pure(History(sf, None))
+          } yield history
+        }.flatten
 
     }
   }
@@ -213,18 +211,17 @@ private[tasks] object SharedFileHelper extends StrictLogging {
   def recreateFromManagedPath(
       managed: ManagedFilePath,
       retrieveSizeAndHash: Boolean
-  )(implicit service: FileServiceComponent): Future[Option[SharedFile]] =
+  )(implicit service: FileServiceComponent): IO[Option[SharedFile]] =
     service.storage.contains(managed, retrieveSizeAndHash)
 
   def createFromFile(file: File, name: String, deleteFile: Boolean)(implicit
       prefix: FileServicePrefix,
-      ec: ExecutionContext,
       service: FileServiceComponent,
       context: ActorRefFactory,
       config: TasksConfig,
       historyContext: HistoryContext,
       mat: Materializer
-  ) = {
+  ): IO[SharedFile] = {
     val sharedFile = {
       val proposedPath = prefix.propose(name)
       service.storage.importFile(file, proposedPath).map { f =>
@@ -243,37 +240,39 @@ private[tasks] object SharedFileHelper extends StrictLogging {
 
   def sink(name: String)(implicit
       prefix: FileServicePrefix,
-      ec: ExecutionContext,
       service: FileServiceComponent,
       context: ActorRefFactory,
       mat: Materializer,
       config: TasksConfig,
       historyContext: HistoryContext
-  ) = {
+  ): Sink[ByteString, Future[SharedFile]] = {
     service.storage.sink(prefix.propose(name)).mapMaterializedValue {
       futureOfPath =>
-        val sf = futureOfPath.map { case (size, hash, path) =>
-          SharedFileHelper.create(size, hash, path)
-        }
-        for {
+        val sf =
+          IO.fromFuture(IO.delay(futureOfPath)).map { case (size, hash, path) =>
+            SharedFileHelper.create(size, hash, path)
+          }
+        val prg = for {
           sf <- sf
           _ <- saveHistory(sf, historyContext)
         } yield sf
+
+        prg.unsafeToFuture()
     }
   }
 
   def createFromSource(source: Source[ByteString, _], name: String)(implicit
       prefix: FileServicePrefix,
-      ec: ExecutionContext,
       service: FileServiceComponent,
       context: ActorRefFactory,
       mat: Materializer,
       config: TasksConfig,
       historyContext: HistoryContext
-  ) = {
+  ): IO[SharedFile] = {
 
+    val s = sink(name)
     val sharedFile =
-      source.runWith(sink(name))
+      IO.fromFuture(IO.delay(source.runWith(s)))
 
     for {
       sf <- sharedFile
@@ -281,38 +280,35 @@ private[tasks] object SharedFileHelper extends StrictLogging {
     } yield sf
   }
 
-  def createFromFolder(callback: File => List[File])(implicit
+  def createFromFolder(parallelism: Int)(callback: File => List[File])(implicit
       prefix: FileServicePrefix,
-      ec: ExecutionContext,
       service: FileServiceComponent,
       context: ActorRefFactory,
       config: TasksConfig,
       historyContext: HistoryContext,
       mat: Materializer
-  ) =
-    {
-      val directory = service.storage
-        .sharedFolder(prefix.list)
-        .map(
-          _.getOrElse(
-            throw new RuntimeException(
-              "Storage does not support shared folders"
-            )
+  ): IO[List[SharedFile]] = {
+    val directory = service.storage
+      .sharedFolder(prefix.list)
+      .map(
+        _.getOrElse(
+          throw new RuntimeException(
+            "Storage does not support shared folders"
           )
         )
-      directory.flatMap { directory =>
-        val files = callback(directory)
-        val directoryPath = directory.getAbsolutePath
-        Future.sequence(files.map { file =>
-          assert(file.getAbsolutePath.startsWith(directoryPath))
-          createFromFile(
-            file,
-            file.getAbsolutePath.drop(directoryPath.size).stripPrefix("/"),
-            deleteFile = false
-          )
-        })
-      }
+      )
+    directory.flatMap { directory =>
+      val files = callback(directory)
+      val directoryPath = directory.getAbsolutePath
+      IO.parSequenceN(parallelism)(files.map { file =>
+        assert(file.getAbsolutePath.startsWith(directoryPath))
+        createFromFile(
+          file,
+          file.getAbsolutePath.drop(directoryPath.size).stripPrefix("/"),
+          deleteFile = false
+        )
+      })
     }
- 
+  }
 
 }
