@@ -40,10 +40,10 @@ import java.io.File
 
 object SharedFoldersTest extends TestHelpers {
 
-  val increment = AsyncTask[Input, SharedFile]("sharedFolders", 1) {
+  val increment = Task[Input, SharedFile]("sharedFolders", 1) {
     _ => implicit computationEnvironment =>
       SharedFile
-        .fromFolder { directory =>
+        .fromFolder(1) { directory =>
           val intermediateFolder = new File(directory, "intermediate")
           intermediateFolder.mkdir
           val file = new File(intermediateFolder, "fileName")

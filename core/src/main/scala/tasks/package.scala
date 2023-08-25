@@ -26,12 +26,8 @@
  */
 
 import akka.actor.ActorSystem
-import scala.concurrent.Future
-import scala.concurrent.ExecutionContext
 
 import com.typesafe.config.{Config, ConfigFactory}
-
-import scala.concurrent._
 
 import tasks.wire._
 import tasks.queue._
@@ -41,6 +37,7 @@ import tasks.deploy._
 import tasks.shared.LogRecord
 
 import scala.language.experimental.macros
+import cats.effect.IO
 
 package object tasks {
 
@@ -109,11 +106,6 @@ package object tasks {
   ): FileServiceComponent =
     component.fs
 
-  implicit def executionContext(implicit
-      env: ComputationEnvironment
-  ): ExecutionContext =
-    env.executionContext
-
   def releaseResources(implicit comp: ComputationEnvironment) =
     comp.launcher.actor.!(Release)(comp.taskActor)
 
@@ -132,24 +124,7 @@ package object tasks {
 
   implicit def log(implicit component: ComputationEnvironment) = component.log
 
-  implicit class AwaitableFuture[T](future: Future[T]) {
-    /* Await for a future indefinitely from inside a task
-     *
-     * This is a convenience method for having less Future chaining in task code
-     * As the number of concurrently executed task is relatively low and each
-     * task receives its own threadpool with at least one thread, the implementor
-     * of the task can freely decide to block the thread executing the task.
-     *
-     * To make this safe the following method is provided which only compiles from
-     * a task body.
-     */
-    def awaitIndefinitely(implicit ce: ComputationEnvironment) = {
-      val _ = ce // suppressing unused warning
-      Await.result(future, atMost = scala.concurrent.duration.Duration.Inf)
-    }
-  }
-
-  def audit(data: String)(implicit component: ComputationEnvironment) =
+  def audit(data: String)(implicit component: ComputationEnvironment): Boolean =
     component.appendLog(LogRecord(data, java.time.Instant.now))
 
   def withTaskSystem[T](f: TaskSystemComponents => T): Option[T] =
@@ -243,8 +218,8 @@ package object tasks {
     new TaskSystem(hostConfig, system, elasticSupport)
   }
 
-  def AsyncTask[A <: AnyRef, C](taskID: String, taskVersion: Int)(
-      comp: A => ComputationEnvironment => Future[C]
+  def Task[A <: AnyRef, C](taskID: String, taskVersion: Int)(
+      comp: A => ComputationEnvironment => IO[C]
   ): TaskDefinition[A, C] =
     macro TaskDefinitionMacros
       .taskDefinitionFromTree[A, C]
@@ -284,19 +259,19 @@ package object tasks {
   )(implicit ce: ComputationEnvironment): (ComputationEnvironment => T) => T =
     ce.withFilePrefix[T](elements) _
 
-  def fromFileList[I, O](files: Seq[Seq[String]])(
+  def fromFileList[O](files: Seq[Seq[String]], parallelism: Int)(
       fromFiles: Seq[SharedFile] => O
-  )(full: => Future[O])(implicit tsc: TaskSystemComponents): Future[O] = {
-    import tsc.actorsystem.dispatcher
+  )(full: => IO[O])(implicit tsc: TaskSystemComponents): IO[O] = {
     val filesWithNonEmptyPath = files.filter(_.nonEmpty)
     val logger = akka.event.Logging(tsc.actorsystem, getClass)
     for {
-      maybeSharedFiles <- Future
-        .sequence(filesWithNonEmptyPath.map { path =>
+      maybeSharedFiles <- IO.parSequenceN(parallelism)(
+        filesWithNonEmptyPath.map { path =>
           val prefix = tsc.filePrefix.append(path.dropRight(1))
           SharedFileHelper
             .getByName(path.last, retrieveSizeAndHash = true)(tsc.fs, prefix)
-        })
+        }
+      )
 
       validSharedFiles = (maybeSharedFiles zip filesWithNonEmptyPath)
         .map {
@@ -310,7 +285,7 @@ package object tasks {
 
       result <-
         if (filesWithNonEmptyPath.size == validSharedFiles.size) {
-          Future.successful(fromFiles(validSharedFiles))
+          IO.pure(fromFiles(validSharedFiles))
         } else {
           full
         }

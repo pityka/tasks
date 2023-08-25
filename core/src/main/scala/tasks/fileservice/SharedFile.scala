@@ -69,27 +69,29 @@ case class SharedFile(
   override def toString =
     s"SharedFile($path, size=$byteSize, hash=$hash)"
 
-  def file(implicit tsc: TaskSystemComponents): Resource[IO,File] =
+  def file(implicit tsc: TaskSystemComponents): Resource[IO, File] =
     SharedFileHelper.getPathToFile(this)
 
-  def history(implicit tsc: TaskSystemComponents): Future[History] =
+  def history(implicit tsc: TaskSystemComponents): IO[History] =
     SharedFileHelper.getHistory(this)
 
-  def source(implicit tsc: TaskSystemComponents): Source[ByteString,NotUsed] =
+  def source(implicit tsc: TaskSystemComponents): Source[ByteString, NotUsed] =
     SharedFileHelper.getSourceToFile(this, 0L)
 
-  def source(fromOffset: Long)(implicit tsc: TaskSystemComponents): Source[ByteString,NotUsed] =
+  def source(fromOffset: Long)(implicit
+      tsc: TaskSystemComponents
+  ): Source[ByteString, NotUsed] =
     SharedFileHelper.getSourceToFile(this, fromOffset)
 
-  def isAccessible(implicit tsc: TaskSystemComponents): Future[Boolean] =
+  def isAccessible(implicit tsc: TaskSystemComponents): IO[Boolean] =
     SharedFileHelper.isAccessible(this, true)
 
-  def uri(implicit tsc: TaskSystemComponents): Future[Uri] =
+  def uri(implicit tsc: TaskSystemComponents): IO[Uri] =
     SharedFileHelper.getUri(this)
 
   def name: String = path.name
 
-  def delete(implicit tsc: TaskSystemComponents): Future[Boolean] =
+  def delete(implicit tsc: TaskSystemComponents): IO[Boolean] =
     SharedFileHelper.delete(this)
 }
 
@@ -97,22 +99,22 @@ object SharedFile {
 
   implicit val codec: JsonValueCodec[SharedFile] = JsonCodecMaker.make
 
-  def apply(uri: Uri)(implicit tsc: TaskSystemComponents): Future[SharedFile] =
+  def apply(uri: Uri)(implicit tsc: TaskSystemComponents): IO[SharedFile] =
     SharedFileHelper.create(RemoteFilePath(uri), tsc.fs.remote)
 
   def apply(file: File, name: String)(implicit
       tsc: TaskSystemComponents
-  ): Future[SharedFile] =
+  ): IO[SharedFile] =
     apply(file, name, false)
 
   def apply(file: File, name: String, deleteFile: Boolean)(implicit
       tsc: TaskSystemComponents
-  ): Future[SharedFile] =
+  ): IO[SharedFile] =
     SharedFileHelper.createFromFile(file, name, deleteFile)
 
   def apply(source: Source[ByteString, _], name: String)(implicit
       tsc: TaskSystemComponents
-  ): Future[SharedFile] =
+  ): IO[SharedFile] =
     SharedFileHelper.createFromSource(source, name)
 
   def sink(name: String)(implicit
@@ -120,14 +122,14 @@ object SharedFile {
   ): Sink[ByteString, Future[SharedFile]] =
     SharedFileHelper.sink(name)
 
-  def fromFolder(
+  def fromFolder(parallelism: Int)(
       callback: File => List[File]
-  )(implicit tsc: TaskSystemComponents): Future[Seq[SharedFile]] =
-    SharedFileHelper.createFromFolder(callback)
+  )(implicit tsc: TaskSystemComponents): IO[Seq[SharedFile]] =
+    SharedFileHelper.createFromFolder(parallelism)(callback)
 
   def getByName(
       name: String
-  )(implicit tsc: TaskSystemComponents): Future[Option[SharedFile]] =
+  )(implicit tsc: TaskSystemComponents): IO[Option[SharedFile]] =
     SharedFileHelper.getByName(name, retrieveSizeAndHash = true)
 
 }

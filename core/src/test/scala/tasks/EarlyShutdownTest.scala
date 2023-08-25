@@ -29,17 +29,18 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import scala.concurrent.Future
+import cats.effect.IO
 
 object EarlyShutdownTest extends TestHelpers {
 
   val sideEffect = scala.collection.mutable.ArrayBuffer[String]()
 
-  val task = AsyncTask[Input, Int]("earlyshutdowntest", 1) {
-    _ => implicit computationEnvironment =>
-      sideEffect += "execution of task"
+  val task = Task[Input, Int]("earlyshutdowntest", 1) {
+    _ =>  _ =>
+      IO{sideEffect += "execution of task"
       Thread.sleep(2000)
-      Future(1)
+      1
+  }
   }
 
   def run = {

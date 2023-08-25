@@ -29,7 +29,6 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import scala.concurrent.ExecutionContext.Implicits.global
 import cats.effect.IO
 
 object NodeLocalCacheTest extends TestHelpers {
@@ -43,7 +42,7 @@ object NodeLocalCacheTest extends TestHelpers {
     1
   }
 
-  val testTask = AsyncTask[Input, Int]("nodelocalcachetest", 1) {
+  val testTask = Task[Input, Int]("nodelocalcachetest", 1) {
     input => implicit computationEnvironment =>
       synchronized {
         sideEffect += "execution of task"
@@ -53,7 +52,6 @@ object NodeLocalCacheTest extends TestHelpers {
         .use { x =>
           IO(x)
         }
-        .unsafeToFuture()(cats.effect.unsafe.implicits.global)
   }
 
   def run = {
@@ -61,16 +59,14 @@ object NodeLocalCacheTest extends TestHelpers {
       val f1 = tasks.queue.NodeLocalCache
         .cacheSync("key0", cachedFunction(0.toString))
         .use { _ =>
-          IO.fromFuture(IO {
+          
             for {
               t1 <- testTask(Input(1))(ResourceRequest(1, 500))
               t2 <- testTask(Input(2))(ResourceRequest(1, 500))
               t3 <- testTask(Input(3))(ResourceRequest(1, 500))
 
             } yield t1 + t2 + t3
-          })
         }
-        .unsafeToFuture()(cats.effect.unsafe.implicits.global)
       val future = for {
         t1 <- f1
         t4 <- testTask(Input(4))(ResourceRequest(1, 500))

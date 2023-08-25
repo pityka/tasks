@@ -48,6 +48,7 @@ import tasks.fileservice.actorfilestorage.FileServiceProxy
 import akka.actor.Props
 import akka.util.ByteString
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 
 object Conf {
   val str = """my-pinned-dispatcher {
@@ -70,7 +71,8 @@ class FileServiceSpec
     with ImplicitSender
     with FunSpecLike
     with Matchers
-    with BeforeAndAfterAll {
+    with BeforeAndAfterAll
+    with TestHelpers {
   self: Suite =>
 
   val as = implicitly[ActorSystem]
@@ -116,12 +118,11 @@ class FileServiceSpec
       implicit val serviceimpl =
         FileServiceComponent(fs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
-      Await.result(
+      await(
         SharedFileHelper.createFromSource(
           akka.stream.scaladsl.Source(List.empty[akka.util.ByteString]),
           "proba"
-        ),
-        30 seconds
+        )
       )
 
       readBinaryFile(
@@ -148,10 +149,8 @@ class FileServiceSpec
       implicit val serviceimpl =
         FileServiceComponent(fs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
-      scala.concurrent.Await.result(
-        SharedFileHelper.createFromFile(input, "proba", false),
-        atMost = Duration.Inf
-      )
+
+      SharedFileHelper.createFromFile(input, "proba", false).unsafeRunSync()
 
       readBinaryFile(
         new java.io.File(folder, "proba").getCanonicalPath
@@ -176,10 +175,8 @@ class FileServiceSpec
       implicit val serviceimpl =
         FileServiceComponent(fs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
-      Await.ready(
-        SharedFileHelper.createFromFile(input, "proba", false),
-        Duration.Inf
-      )
+
+      SharedFileHelper.createFromFile(input, "proba", false).unsafeRunSync()
 
       readBinaryFile(
         new java.io.File(folder, "proba").getCanonicalPath
@@ -209,10 +206,8 @@ class FileServiceSpec
       implicit val serviceimpl =
         FileServiceComponent(proxiedFs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
-      Await.result(
-        SharedFileHelper.createFromFile(input, "proba", false),
-        Duration.Inf
-      )
+
+      SharedFileHelper.createFromFile(input, "proba", false).unsafeRunSync()
 
       readBinaryFile(
         new java.io.File(folder, "proba").getCanonicalPath
@@ -243,12 +238,11 @@ class FileServiceSpec
       implicit val serviceimpl =
         FileServiceComponent(fs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
-      Await.result(
+      await(
         SharedFileHelper.createFromSource(
           akka.stream.scaladsl.Source.single(akka.util.ByteString(data)),
           "proba"
-        ),
-        30 seconds
+        )
       )
 
       readBinaryFile(
@@ -285,12 +279,11 @@ class FileServiceSpec
       implicit val serviceimpl =
         FileServiceComponent(proxiedFs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
-      Await.result(
+      await(
         SharedFileHelper.createFromSource(
           akka.stream.scaladsl.Source.single(akka.util.ByteString(data)),
           "proba"
-        ),
-        30 seconds
+        )
       )
 
       readBinaryFile(
@@ -321,9 +314,8 @@ class FileServiceSpec
         )
       implicit val historyContext = tasks.fileservice.NoHistory
       val t: SharedFile =
-        Await.result(
-          SharedFileHelper.createFromFile(input, "proba", false),
-          50 seconds
+        await(
+          SharedFileHelper.createFromFile(input, "proba", false)
         )
 
       readBinaryFile(
@@ -366,9 +358,8 @@ class FileServiceSpec
         )
       implicit val historyContext = tasks.fileservice.NoHistory
       val t: SharedFile =
-        Await.result(
-          SharedFileHelper.createFromFile(input, "proba", false),
-          50 seconds
+        await(
+          SharedFileHelper.createFromFile(input, "proba", false)
         )
 
       readBinaryFile(
@@ -422,9 +413,8 @@ class FileServiceSpec
         )
       implicit val historyContext = tasks.fileservice.NoHistory
       val t: SharedFile =
-        Await.result(
-          SharedFileHelper.createFromFile(input, "proba", false),
-          50 seconds
+        await(
+          SharedFileHelper.createFromFile(input, "proba", false)
         )
 
       readBinaryFile(
@@ -473,9 +463,8 @@ class FileServiceSpec
 
       implicit val historyContext = tasks.fileservice.NoHistory
       val t: SharedFile =
-        Await.result(
-          SharedFileHelper.createFromFile(input, "proba", false),
-          50 seconds
+        await(
+          SharedFileHelper.createFromFile(input, "proba", false)
         )
 
       readBinaryFile(
@@ -521,9 +510,8 @@ class FileServiceSpec
         )
       implicit val historyContext = tasks.fileservice.NoHistory
       val t: SharedFile =
-        Await.result(
-          SharedFileHelper.createFromFile(input, "proba", false),
-          50 seconds
+        await(
+          SharedFileHelper.createFromFile(input, "proba", false)
         )
 
       readBinaryFile(
@@ -599,10 +587,7 @@ class FileServiceSpec
       )
       readBinaryFile(path.getCanonicalPath).toVector should equal(data.toVector)
 
-      Await.result(
-        SharedFileHelper.isAccessible(t, true),
-        30 seconds
-      ) should be(
+      await(SharedFileHelper.isAccessible(t, true)) should be(
         true
       )
 

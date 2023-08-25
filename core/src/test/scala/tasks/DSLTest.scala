@@ -30,16 +30,16 @@ package tasks
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import org.scalatest.matchers.should.Matchers
-import scala.concurrent._
 
 import tasks.util._
 import tasks.jsonitersupport._
 
 import com.typesafe.config.ConfigFactory
+import cats.effect.IO
 
 object DSLTest extends TestHelpers with Matchers {
 
-  val increment = AsyncTask[Input, Int]("dsltest", 1) { case Input(c) =>
+  val increment = Task[Input, Int]("dsltest", 1) { case Input(c) =>
     implicit computationEnvironment =>
       import tasks.fileservice.HistoryContextImpl
       computationEnvironment.components.historyContext
@@ -49,7 +49,7 @@ object DSLTest extends TestHelpers with Matchers {
       computationEnvironment.components.historyContext
         .asInstanceOf[HistoryContextImpl]
         .codeVersion shouldBe "undefined"
-      Future(c + 1)
+      IO(c + 1)
   }
 
   def run = {

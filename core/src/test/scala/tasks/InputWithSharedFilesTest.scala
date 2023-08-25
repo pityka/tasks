@@ -29,9 +29,9 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import scala.concurrent.Future
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
+import cats.effect.IO
 
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
@@ -40,13 +40,13 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
 
   val sideEffect = scala.collection.mutable.ArrayBuffer[String]()
 
-  val task1 = AsyncTask[Input, SharedFile]("sharedfileinput1", 1) {
+  val task1 = Task[Input, SharedFile]("sharedfileinput1", 1) {
     _ => implicit computationEnvironment =>
       sideEffect += "execution of task 1"
       SharedFile(Source.single(ByteString("abcd")), "f1")
   }
 
-  val task2 = AsyncTask[SharedFile, SharedFile]("sharedfileinput2", 1) {
+  val task2 = Task[SharedFile, SharedFile]("sharedfileinput2", 1) {
     _ => implicit computationEnvironment =>
       sideEffect += "execution of task 2"
       for {
@@ -55,7 +55,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
         _ = {
           sf2History.context.get
         }
-        r <- Future(sf2)
+        r <- IO(sf2)
       } yield r
 
   }
@@ -68,29 +68,29 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
 
   }
 
-  val task3 = AsyncTask[Input3, SharedFile]("sharedfileinput2", 1) { case _ =>
+  val task3 = Task[Input3, SharedFile]("sharedfileinput2", 1) { case _ =>
     implicit computationEnvironment =>
       sideEffect += "execution of task 3"
       for {
         sf3 <- SharedFile(Source.single(ByteString("abcd")), "f3")
-        r <- Future(sf3)
+        r <- IO(sf3)
       } yield r
   }
 
-  val task4 = AsyncTask[SharedFile, SharedFile]("sharedfileinput4", 1) {
+  val task4 = Task[SharedFile, SharedFile]("sharedfileinput4", 1) {
     _ => implicit computationEnvironment =>
       sideEffect += "execution of task 4"
       for {
         sf4 <- SharedFile(Source.single(ByteString("abcd")), "f4")
 
-        r <- Future(sf4)
+        r <- IO(sf4)
       } yield r
 
   }
 
-  val task5 = AsyncTask[Input, SharedFile]("sharedfileinput2", 2) {
+  val task5 = Task[Input, SharedFile]("sharedfileinput2", 2) {
     _ => implicit computationEnvironment =>
-      fromFileList(Seq(Seq("f2")))(filelist => filelist.head) {
+      fromFileList(Seq(Seq("f2")), 1)(filelist => filelist.head) {
 
         sideEffect += "execution of task 5"
 
@@ -106,7 +106,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
 
   }
 
-  val taskWithMutable = AsyncTask[Input, MutableResult]("mutabletask", 2) {
+  val taskWithMutable = Task[Input, MutableResult]("mutabletask", 2) {
     _ => implicit computationEnvironment =>
       sideEffect += "execution of task 6"
 
@@ -117,8 +117,6 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
 
   def run = {
     withTaskSystem(testConfig) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
-
       val future = for {
         t11 <- task1(Input(1))(ResourceRequest(1, 500))
         t21 <- task2(t11)(ResourceRequest(1, 500))

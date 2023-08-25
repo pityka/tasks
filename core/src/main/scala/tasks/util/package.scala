@@ -38,11 +38,13 @@ import java.io.{
 }
 
 import scala.sys.process._
-import scala.concurrent._
 import scala.concurrent.duration._
 import scala.util._
 import tasks.util.config._
 import com.typesafe.scalalogging.StrictLogging
+import cats.effect.IO
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext
 
 package object util extends StrictLogging {
 
@@ -308,6 +310,18 @@ package object util extends StrictLogging {
           c - 1
         )
       )
+    }
+    else f
+  def retryIO[A](tag: String)(f: => IO[A], c: Int)(implicit
+      log: akka.event.LoggingAdapter
+  ): IO[A] =
+    if (c > 0) f.handleErrorWith { case e =>
+      IO.delay(log.error(e, s"Failed $tag. Retry $c more times.")) *>
+        IO.sleep(2 seconds) *>
+        retryIO(tag)(
+          IO.delay(log.debug(s"Retrying $tag")) *> f,
+          c - 1
+        )
     }
     else f
 

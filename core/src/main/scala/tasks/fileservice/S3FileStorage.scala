@@ -86,36 +86,43 @@ class S3Storage(
     if (sse) rq.withServerSideEncryption(ServerSideEncryption.aes256()) else rq
   }
 
-  def sharedFolder(prefix: Seq[String]): Future[Option[File]] = Future.successful(None)
-
+  def sharedFolder(prefix: Seq[String]): IO[Option[File]] = IO.pure(None)
 
   def contains(
       path: ManagedFilePath,
       retrieveSizeAndHash: Boolean
-  ): Future[Option[SharedFile]] =
-    S3
-      .getObjectMetadata(bucketName, assembleName(path))
-      .map { meta =>
-        meta.map { meta =>
-          val (size1, hash1) = getLengthAndHash(meta)
-          SharedFileHelper.create(size1, hash1, path)
-        }
-      }
-      .runWith(Sink.head)
-
-  def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean] =
-    S3
-      .getObjectMetadata(bucketName, assembleName(path))
-      .map {
-        case Some(metadata) =>
-          if (size < 0) true
-          else {
-            val (size1, hash1) = getLengthAndHash(metadata)
-            size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1)
+  ): IO[Option[SharedFile]] =
+    IO.fromFuture(
+      IO.delay(
+        S3
+          .getObjectMetadata(bucketName, assembleName(path))
+          .map { meta =>
+            meta.map { meta =>
+              val (size1, hash1) = getLengthAndHash(meta)
+              SharedFileHelper.create(size1, hash1, path)
+            }
           }
-        case None => false
-      }
-      .runWith(Sink.head)
+          .runWith(Sink.head)
+      )
+    )
+
+  def contains(path: ManagedFilePath, size: Long, hash: Int): IO[Boolean] =
+    IO.fromFuture(
+      IO.delay(
+        S3
+          .getObjectMetadata(bucketName, assembleName(path))
+          .map {
+            case Some(metadata) =>
+              if (size < 0) true
+              else {
+                val (size1, hash1) = getLengthAndHash(metadata)
+                size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1)
+              }
+            case None => false
+          }
+          .runWith(Sink.head)
+      )
+    )
 
   def getLengthAndHash(metadata: ObjectMetadata): (Long, Int) =
     metadata.contentLength -> metadata.eTag.get.hashCode
@@ -161,13 +168,13 @@ class S3Storage(
   def importFile(
       f: File,
       path: ProposedManagedFilePath
-  ): Future[(Long, Int, ManagedFilePath)] =
-    tasks.util.retryFuture(s"upload to $path")(importFile1(f, path), 4)
+  ): IO[(Long, Int, ManagedFilePath)] =
+    tasks.util.retryIO(s"upload to $path")(importFile1(f, path), 4)
 
   def importFile1(
       f: File,
       path: ProposedManagedFilePath
-  ): Future[(Long, Int, ManagedFilePath)] = {
+  ): IO[(Long, Int, ManagedFilePath)] = IO {
     val managed = path.toManaged
     val key = assembleName(managed)
 
@@ -177,26 +184,36 @@ class S3Storage(
       s3Headers = s3Headers
     )
 
-    FileIO.fromPath(f.toPath).runWith(sink).flatMap { _ =>
-      S3
-        .getObjectMetadata(bucketName, key)
-        .runWith(Sink.head)
-        .map {
-          case None =>
-            throw new RuntimeException(
-              "Failed to fetch metadata of just uploaded file"
-            )
-          case Some(metadata) =>
-            val (size1, hash1) = getLengthAndHash(metadata)
+    IO.fromFuture(
+      IO.delay(
+        FileIO
+          .fromPath(f.toPath)
+          .runWith(sink)
+          .flatMap {
+            _ =>
+              S3
+                .getObjectMetadata(bucketName, key)
+                .runWith(Sink.head)
+                .map {
+                  case None =>
+                    throw new RuntimeException(
+                      "Failed to fetch metadata of just uploaded file"
+                    )
+                  case Some(metadata) =>
+                    val (size1, hash1) = getLengthAndHash(metadata)
 
-            if (size1 !== f.length)
-              throw new RuntimeException("S3: Uploaded file length != on disk")
+                    if (size1 !== f.length)
+                      throw new RuntimeException(
+                        "S3: Uploaded file length != on disk"
+                      )
 
-            (size1, hash1, managed)
-        }
-    }
+                    (size1, hash1, managed)
+                }
+          }
+      )
+    )
 
-  }
+  }.flatten
 
   def createSource(
       path: ManagedFilePath,
@@ -248,10 +265,10 @@ class S3Storage(
       })
     }(file => IO(file.delete))
 
-  def uri(mp: ManagedFilePath): Future[tasks.util.Uri] =
-    Future.successful(tasks.util.Uri("s3://" + bucketName + "/" + assembleName(mp)))
+  def uri(mp: ManagedFilePath): IO[tasks.util.Uri] =
+    IO.pure(tasks.util.Uri("s3://" + bucketName + "/" + assembleName(mp)))
 
   def delete(mp: ManagedFilePath, size: Long, hash: Int) =
-    Future.successful(false)
+    IO.pure(false)
 
 }

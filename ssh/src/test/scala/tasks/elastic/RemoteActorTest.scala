@@ -111,7 +111,6 @@ object SHRemoteActorTest extends TestHelpers {
 
     val tmp = tasks.util.TempFile.createTempFile(".temp")
     tmp.delete
-    println(tmp)
     val testConfig2 =
       ConfigFactory.parseString(
         s"""tasks.fileservice.connectToProxy = true

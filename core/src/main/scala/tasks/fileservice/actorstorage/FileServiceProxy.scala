@@ -31,7 +31,6 @@ import tasks.fileservice._
 
 import akka.actor._
 import akka.pattern.pipe
-import scala.concurrent._
 
 import java.io.File
 import java.nio.channels.{WritableByteChannel}
@@ -44,24 +43,18 @@ import tasks.wire.filetransfermessages.CannotSaveFile
 import akka.util.ByteString
 import tasks.wire.filetransfermessages.Chunk
 import akka.stream.Materializer
+import cats.effect.unsafe.implicits.global
+import cats.effect.IO
 
 class FileServiceProxy(
-    storage: ManagedFileStorage,
-    threadpoolsize: Int = 8
+    storage: ManagedFileStorage
 )(implicit mat: Materializer)
     extends Actor
     with akka.actor.ActorLogging {
 
-  val fjp = tasks.util.concurrent.newJavaForkJoinPoolWithNamePrefix(
-    "fileservice-recordtonames",
-    threadpoolsize
-  )
-  val ec = ExecutionContext.fromExecutorService(fjp)
-
   import context.dispatcher
 
   override def postStop() = {
-    fjp.shutdown
     log.info("FileService stopped.")
   }
 
@@ -80,11 +73,8 @@ class FileServiceProxy(
       length: Long,
       hash: Int,
       path: ManagedFilePath
-  ): Future[SharedFile] = {
-    Future {
-      ((SharedFileHelper.create(length, hash, path)))
-    }(ec)
-  }
+  ): SharedFile =
+    SharedFileHelper.create(length, hash, path)
 
   def receive = {
     case GetSharedFolder(prefix) => sender() ! storage.sharedFolder(prefix)
@@ -154,32 +144,26 @@ class FileServiceProxy(
         case (channel, file, filesender, proposedPath, _) =>
           channel.close
           try {
-            storage.importFile(file, proposedPath).flatMap {
-              case (length, hash, managedFilePath) =>
+            storage
+              .importFile(file, proposedPath)
+              .map { case (length, hash, managedFilePath) =>
                 create(length, hash, managedFilePath)
-                  .recover { case e =>
-                    log.error(
-                      e,
-                      "Error in creation of SharedFile {} {}",
-                      file,
-                      proposedPath
-                    )
-                    throw e
+              }
+              .guarantee {
+                IO {
+                  try { file.delete }
+                  catch {
+                    case e: Throwable =>
+                      log.error(
+                        e,
+                        "Can't delete temporary file {} {}",
+                        file,
+                        proposedPath
+                      )
                   }
-                  .andThen { case _ =>
-                    try { file.delete }
-                    catch {
-                      case e: Throwable =>
-                        log.error(
-                          e,
-                          "Can't delete temporary file {} {}",
-                          file,
-                          proposedPath
-                        )
-                    }
-                  }
-
-            } pipeTo filesender
+                }
+              }
+              .unsafeToFuture() pipeTo filesender
 
           } catch {
             case e: Exception => {
@@ -197,9 +181,9 @@ class FileServiceProxy(
           .contains(managedPath, size, hash)
           .flatMap { contains =>
             if (contains)
-              Future.successful(AckFileIsPresent)
+              IO.pure(AckFileIsPresent)
             else
-              Future.successful(
+              IO.pure(
                 FileNotFound(
                   new RuntimeException(
                     s"SharedFile not found in storage. $storage # contains($managedPath) returned false. "
@@ -207,6 +191,7 @@ class FileServiceProxy(
                 )
               )
           }
+          .unsafeToFuture()
           .pipeTo(sender())
       } catch {
         case e: Exception => {
@@ -255,11 +240,17 @@ class FileServiceProxy(
       }
 
     case IsAccessible(managedPath, size, hash) =>
-      storage.contains(managedPath, size, hash).pipeTo(sender())
+      storage
+        .contains(managedPath, size, hash)
+        .unsafeToFuture()
+        .pipeTo(sender())
     case IsPathAccessible(managedPath, retrieveSizeAndHash) =>
-      storage.contains(managedPath, retrieveSizeAndHash).pipeTo(sender())
+      storage
+        .contains(managedPath, retrieveSizeAndHash)
+        .unsafeToFuture()
+        .pipeTo(sender())
     case GetUri(managedPath) => sender() ! storage.uri(managedPath)
     case Delete(managedPath, size, hash) =>
-      storage.delete(managedPath, size, hash).pipeTo(sender())
+      storage.delete(managedPath, size, hash).unsafeToFuture().pipeTo(sender())
   }
 }

@@ -120,15 +120,13 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   val startApp = raw.getBoolean("hosts.app")
 
-  val auxThreads = raw.getInt("tasks.auxThreads")
-
   val storageURI =
     new java.net.URI(raw.getString("tasks.fileservice.storageURI"))
 
   val proxyStorage = raw.getBoolean("tasks.fileservice.proxyStorage")
 
-  val fileServiceThreadPoolSize =
-    raw.getInt("tasks.fileservice.threadPoolSize")
+  val parallelismOfCacheAccessibilityCheck =
+    raw.getInt("tasks.cache.accessibility-check-parallelism")
 
   val sshHosts = raw.getObject("tasks.elastic.ssh.hosts")
 
@@ -283,6 +281,9 @@ class TasksConfig(load: () => Config) extends StrictLogging {
   val resourceUtilizationLogFile = raw.getString("tasks.tracker.logFile")
 
   def trackDataFlow = raw.getBoolean("tasks.queue.trackDataFlow")
+
+  val parallelismOfReadingHistoryFiles =
+    raw.getInt("tasks.queue.track-data-flow-history-file-read-parallelism")
 
   val saveTaskDescriptionInCache =
     raw.getBoolean("tasks.cache.saveTaskDescription")
