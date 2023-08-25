@@ -28,20 +28,20 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import tasks.jsonitersupport._
 import org.scalatest.matchers.should.Matchers
-import scala.concurrent.Future
 import com.typesafe.config.ConfigFactory
 
 import akka.stream.scaladsl._
 import akka.util.ByteString
+import cats.effect.unsafe.implicits.global
 
 import tasks._
 
-import scala.concurrent._
 import scala.concurrent.duration._
+import cats.effect.IO
 
 object UIFrontendRun extends TestHelpersUI {
 
-  val testTask = AsyncTask[Input, SharedFile]("uifrontendtest", 1) {
+  val testTask = Task[Input, SharedFile]("uifrontendtest", 1) {
     input => implicit computationEnvironment =>
       log.info("Hello from task")
       Thread.sleep(1000)
@@ -64,17 +64,15 @@ object UIFrontendRun extends TestHelpersUI {
 
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
       val sf =
-        Await.result(
-          SharedFile(
-            akka.stream.scaladsl.Source.single(akka.util.ByteString()),
-            "boo"
-          ),
-          atMost = 50 seconds
+        SharedFile(
+          akka.stream.scaladsl.Source.single(akka.util.ByteString()),
+          "boo"
+        ).timeout(50 seconds).unsafeRunSync()
+      IO.parSequenceN(4)(
+        (1 to 100 toList).map(i =>
+          testTask(Input(i, sf))(ResourceRequest(1, 500))
         )
-      Future.sequence(
-        (1 to 100).map(i => testTask(Input(i, sf))(ResourceRequest(1, 500)))
       )
 
       Thread.sleep(Long.MaxValue)
