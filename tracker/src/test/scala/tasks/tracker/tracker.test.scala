@@ -30,18 +30,18 @@ import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
 import com.typesafe.config.ConfigFactory
-import scala.concurrent._
 import scala.concurrent.duration._
 
 import tasks._
+import cats.effect.IO
 
 object TrackerTest extends TestHelpers {
 
-  val testTask = AsyncTask[Input, Int]("nodeallocationtest", 1) {
+  val testTask = Task[Input, Int]("nodeallocationtest", 1) {
     _ => implicit computationEnvironment =>
       log.info("Hello from task")
       Thread.sleep(1000)
-      Future(1)
+      IO(1)
   }
 
   val file = tasks.util.TempFile.createTempFile(".json")
@@ -60,14 +60,14 @@ object TrackerTest extends TestHelpers {
 
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
 
       val f1 = testTask(Input(1))(ResourceRequest(1, 500))
       val future = for {
         t1 <- f1
       } yield t1
+import cats.effect.unsafe.implicits.global
 
-      Await.result(future, atMost = 30 seconds)
+      future.timeout(30 seconds).unsafeRunSync()
 
     }
   }

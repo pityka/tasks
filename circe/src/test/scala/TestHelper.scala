@@ -32,10 +32,13 @@ import io.circe.generic.semiauto._
 import circesupport._
 
 import com.typesafe.config.ConfigFactory
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 
 trait TestHelpers {
 
   def await[T](f: Future[T]) = Await.result(f, atMost = 60 seconds)
+  def await[T](f: IO[T]) = f.timeout(60 seconds).unsafeRunSync()
 
   case class Input(i: Int)
   object Input {
