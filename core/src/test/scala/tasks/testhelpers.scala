@@ -36,7 +36,7 @@ import cats.effect.unsafe.implicits.global
 trait TestHelpers {
 
   def await[T](f: Future[T]) = Await.result(f, atMost = 60 seconds)
-  def await[T](f: IO[T]) = f.timeout(60 seconds).unsafeRunSync()
+  def await[T](f: IO[T]) = f.unsafeRunTimed( 60 seconds).getOrElse(throw new RuntimeException("timeout"))
 
   case class Input(i: Int)
   object Input {

@@ -40,6 +40,7 @@ import tasks.fileservice.{
   SharedFileHelper
 }
 import cats.effect.IO
+import fs2.Chunk
 
 private[tasks] class SharedFileCache(implicit
     fileServiceComponent: FileServiceComponent,
@@ -69,9 +70,10 @@ private[tasks] class SharedFileCache(implicit
           )
           IO.pure(None)
         case Some(sf) =>
-          IO.fromFuture(IO.delay(SharedFileHelper
-            .getSourceToFile(sf, fromOffset = 0L)
-            .runFold(ByteString.empty)(_ ++ _)))
+          SharedFileHelper
+            .stream(sf, fromOffset = 0L)
+            .compile 
+            .foldChunks(Chunk.empty[Byte])(_ ++ _)
             .map { byteString =>
               val t = deserializeResult(byteString.toArray)
               Some(t)
@@ -99,8 +101,8 @@ private[tasks] class SharedFileCache(implicit
       val value = serializeResult(untypedResult)
       for {
         _ <- SharedFileHelper
-          .createFromSource(
-            Source.single(ByteString(value)),
+          .createFromStream(
+            fs2.Stream.chunk(Chunk.array(value)),
             name = "__meta__result__" + hash
           )
 

@@ -37,6 +37,8 @@ import akka.util._
 import cats.effect.kernel.Resource
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
+import fs2.Stream
+import fs2.Pipe
 
 object FolderFileStorage {
 
@@ -87,7 +89,7 @@ class FolderFileStorage(val basePath: File)(implicit
       expectedHash: Int
   ): IO[Boolean] =
     if (config.allowDeletion) {
-      IO.blocking {
+      IO.interruptible {
         val file = assemblePath(mp)
         val sizeOnDiskNow = file.length
         val sizeMatch = sizeOnDiskNow == expectedSize
@@ -122,7 +124,7 @@ class FolderFileStorage(val basePath: File)(implicit
   }
 
   def contains(path: ManagedFilePath, size: Long, hash: Int): IO[Boolean] =
-    IO.blocking {
+    IO.interruptible {
       val f = assemblePath(path)
       val canRead = f.canRead
       val sizeOnDiskNow = f.length
@@ -145,7 +147,7 @@ class FolderFileStorage(val basePath: File)(implicit
       path: ManagedFilePath,
       retrieveSizeAndHash: Boolean
   ): IO[Option[SharedFile]] =
-    IO.blocking {
+    IO.interruptible {
       val f = assemblePath(path)
       val canRead = f.canRead
       val pass = canRead
@@ -163,17 +165,20 @@ class FolderFileStorage(val basePath: File)(implicit
 
     }
 
-  def createSource(
+  def stream(
       path: ManagedFilePath,
       fromOffset: Long
-  ): Source[ByteString, _] =
-    Source.lazySource(() =>
-      FileIO.fromPath(
-        assemblePath(path).toPath,
-        chunkSize = 8192,
-        startPosition = fromOffset
-      )
-    )
+  ): Stream[IO, Byte] =
+    Stream.unit.flatMap { _ =>
+      fs2.io.file
+        .Files[IO]
+        .readRange(
+          path = fs2.io.file.Path.fromNioPath(assemblePath(path).toPath),
+          start = fromOffset,
+          end = Long.MaxValue,
+          chunkSize = 8192 * 8
+        )
+    }
 
   def exportFile(path: ManagedFilePath): Resource[IO, File] = {
     val file = assemblePath(path)
@@ -243,30 +248,21 @@ class FolderFileStorage(val basePath: File)(implicit
 
   def sink(
       path: ProposedManagedFilePath
-  ): Sink[ByteString, Future[(Long, Int, ManagedFilePath)]] = {
-    val createSink = () => {
-      val tmp = TempFile.createTempFile("foldertmp")
-      Future.successful(
-        FileIO
-          .toPath(tmp.toPath)
-          .mapMaterializedValue(_.flatMap { _ =>
-            importFile(tmp, path)
-              .guarantee(IO.blocking { tmp.delete })
-              .map(x => (x._1, x._2, x._3))
-              .unsafeToFuture()
-          })
-      )
-    }
-
-    Sink
-      .lazyFutureSink(createSink)
-      .mapMaterializedValue(_.flatten.recoverWith { case _ =>
-        // empty file, upstream terminated without emitting an element
-        val tmp = TempFile.createTempFile("foldertmp")
-        importFile(tmp, path)
-          .guarantee(IO.blocking { tmp.delete })
-          .unsafeToFuture()
-      })
+  ): Pipe[IO, Byte, (Long, Int, ManagedFilePath)] = { (in: Stream[IO, Byte]) =>
+    val tmp = TempFile.createTempFile("foldertmp")
+    Stream.eval(
+      in.through(
+        fs2.io.file
+          .Files[IO]
+          .writeAll(fs2.io.file.Path.fromNioPath(tmp.toPath()))
+      ).compile
+        .drain
+        .flatMap { _ =>
+          importFile(tmp, path)
+            .guarantee(IO.interruptible { tmp.delete })
+            .map(x => (x._1, x._2, x._3))
+        }
+    )
   }
 
   private def checkContentEquality(file1: File, file2: File) =

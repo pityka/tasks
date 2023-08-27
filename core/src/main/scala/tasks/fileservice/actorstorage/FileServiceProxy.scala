@@ -220,17 +220,28 @@ class FileServiceProxy(
             case tasks.wire.filetransfermessages.Ack => sourceActor ! true
           }
         }))
+        import fs2.interop.reactivestreams._
+
         storage
-          .createSource(sf, fromOffset)
-          .to(
-            Sink.actorRefWithBackpressure(
-              ref = relay,
-              onInitMessage = "init",
-              onCompleteMessage = "complete",
-              onFailureMessage = e => e
-            )
-          )
-          .run()
+          .stream(sf, fromOffset)
+          .toUnicastPublisher
+          .use { publisher =>
+            IO {
+              akka.stream.scaladsl.Source
+                .fromPublisher(publisher)
+                .to(
+                  Sink.actorRefWithBackpressure(
+                    ref = relay,
+                    onInitMessage = "init",
+                    onCompleteMessage = "complete",
+                    onFailureMessage = e => e
+                  )
+                )
+                .run()
+            }
+
+          }
+          .unsafeRunSync()
 
       } catch {
         case e: Exception => {

@@ -18,6 +18,7 @@ import cats.effect.IO
 import tasks.util.config.TasksConfig
 import akka.stream.Materializer
 import tasks.util.SimpleSocketAddress
+import fs2.{Stream, Pipe}
 
 object ActorFileStorage {
   def startFileServiceActor(storage: ManagedFileStorage)(implicit
@@ -66,6 +67,10 @@ class ActorFileStorage(
     )
   }
 
+    def stream(
+      path: ManagedFilePath,
+      fromOffset: Long
+  ): Stream[IO, Byte] = ???
   def createSource(
       path: ManagedFilePath,
       fromOffset: Long
@@ -151,10 +156,14 @@ class ActorFileStorage(
     )
   }
 
-  def sink(
+    def sink(
       path: ProposedManagedFilePath
-  ): Sink[ByteString, Future[(Long, Int, ManagedFilePath)]] =
-    SinkActor.make(path, fileServiceActor)(context, mat)
+  ): Pipe[IO,Byte,(Long, Int, ManagedFilePath)] = 
+    ???
+  // def sink(
+  //     path: ProposedManagedFilePath
+  // ): Sink[ByteString, Future[(Long, Int, ManagedFilePath)]] =
+  //   SinkActor.make(path, fileServiceActor)(context, mat)
 
   def exportFile(path: ManagedFilePath): Resource[IO, File] = {
     Resource.make(this.contains(path, true).flatMap {

@@ -43,14 +43,14 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
   val task1 = Task[Input, SharedFile]("sharedfileinput1", 1) {
     _ => implicit computationEnvironment =>
       sideEffect += "execution of task 1"
-      SharedFile(Source.single(ByteString("abcd")), "f1")
+      SharedFile(fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))), "f1")
   }
 
   val task2 = Task[SharedFile, SharedFile]("sharedfileinput2", 1) {
     _ => implicit computationEnvironment =>
       sideEffect += "execution of task 2"
       for {
-        sf2 <- SharedFile(Source.single(ByteString("abcd")), "f2")
+        sf2 <- SharedFile(fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))), "f2")
         sf2History <- sf2.history
         _ = {
           sf2History.context.get
@@ -72,7 +72,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
     implicit computationEnvironment =>
       sideEffect += "execution of task 3"
       for {
-        sf3 <- SharedFile(Source.single(ByteString("abcd")), "f3")
+        sf3 <- SharedFile(fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))), "f3")
         r <- IO(sf3)
       } yield r
   }
@@ -81,7 +81,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
     _ => implicit computationEnvironment =>
       sideEffect += "execution of task 4"
       for {
-        sf4 <- SharedFile(Source.single(ByteString("abcd")), "f4")
+        sf4 <- SharedFile(fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))), "f4")
 
         r <- IO(sf4)
       } yield r
@@ -94,7 +94,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
 
         sideEffect += "execution of task 5"
 
-        SharedFile(Source.single(ByteString("abcd")), "f2")
+        SharedFile(fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))), "f2")
       }
   }
 
@@ -110,7 +110,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
     _ => implicit computationEnvironment =>
       sideEffect += "execution of task 6"
 
-      SharedFile(Source.single(ByteString("abcd")), "mutable")
+      SharedFile(fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))), "mutable")
         .map(MutableResult(_))
 
   }

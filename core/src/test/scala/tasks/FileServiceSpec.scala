@@ -78,7 +78,7 @@ class FileServiceSpec
 
   val as = implicitly[ActorSystem]
   import as.dispatcher
-  implicit val sh : StreamHelper = new StreamHelper
+  implicit val sh : StreamHelper = new StreamHelper(None,None)
 
   implicit val tconfig : TasksConfig = tasks.util.config
     .parse(() =>
@@ -120,8 +120,8 @@ class FileServiceSpec
         FileServiceComponent(fs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
       await(
-        SharedFileHelper.createFromSource(
-          akka.stream.scaladsl.Source(List.empty[akka.util.ByteString]),
+        SharedFileHelper.createFromStream(
+          fs2.Stream[IO,Byte](),
           "proba"
         )
       )
@@ -240,8 +240,8 @@ class FileServiceSpec
         FileServiceComponent(fs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
       await(
-        SharedFileHelper.createFromSource(
-          akka.stream.scaladsl.Source.single(akka.util.ByteString(data)),
+        SharedFileHelper.createFromStream(
+          fs2.Stream.chunk(fs2.Chunk.array(data)),
           "proba"
         )
       )
@@ -281,8 +281,8 @@ class FileServiceSpec
         FileServiceComponent(proxiedFs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
       await(
-        SharedFileHelper.createFromSource(
-          akka.stream.scaladsl.Source.single(akka.util.ByteString(data)),
+        SharedFileHelper.createFromStream(
+          fs2.Stream.chunk(fs2.Chunk.array(data)),
           "proba"
         )
       )
@@ -434,13 +434,10 @@ class FileServiceSpec
       )
       readBinaryFile(path.getCanonicalPath).toVector should equal(data.toVector)
 
-      Await
-        .result(
+      
           SharedFileHelper
-            .getSourceToFile(t, 0L)
-            .runFold(akka.util.ByteString.empty)(_ ++ _),
-          20 seconds
-        )
+            .stream(t, 0L)
+            .compile.foldChunks(fs2.Chunk.empty[Byte])(_ ++ _).unsafeRunSync()
         .toArray
         .toVector should equal(data.toVector)
 
@@ -475,12 +472,9 @@ class FileServiceSpec
       )
 
       val content =
-        Await.result(
-          SharedFileHelper
-            .getSourceToFile(t, 0L)
-            .runFold(ByteString.empty)(_ ++ _),
-          50 seconds
-        )
+        SharedFileHelper
+            .stream(t, 0L)
+            .compile.foldChunks(fs2.Chunk.empty[Byte])(_ ++ _).unsafeRunSync()
 
       content.toVector should equal(data.toVector)
 
@@ -531,23 +525,15 @@ class FileServiceSpec
       )
       readBinaryFile(path.getCanonicalPath).toVector should equal(data.toVector)
 
-      Await
-        .result(
-          SharedFileHelper
-            .getSourceToFile(t, 0L)
-            .runFold(akka.util.ByteString.empty)(_ ++ _),
-          20 seconds
-        )
+      SharedFileHelper
+            .stream(t, 0L)
+            .compile.foldChunks(fs2.Chunk.empty[Byte])(_ ++ _).unsafeRunSync()
         .toArray
         .toVector should equal(data.toVector)
 
-      Await
-        .result(
-          SharedFileHelper
-            .getSourceToFile(t, 2L)
-            .runFold(akka.util.ByteString.empty)(_ ++ _),
-          20 seconds
-        )
+     SharedFileHelper
+            .stream(t, 2L)
+            .compile.foldChunks(fs2.Chunk.empty[Byte])(_ ++ _).unsafeRunSync()
         .toArray
         .toVector should equal(data.toVector.drop(2))
 

@@ -88,7 +88,7 @@ object ResultWithSharedFilesTest extends TestHelpers {
   val testTask = Task[Input, Output]("resultwithsharedfilestest", 1) {
     _ => implicit computationEnvironment =>
       sideEffect += "execution of task"
-      val source = Source.single(ByteString("abcd"))
+      val source = fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8")))
       val fs = List(
         SharedFile(source, "f1"),
         SharedFile(source, "f2"),
