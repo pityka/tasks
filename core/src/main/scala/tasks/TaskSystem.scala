@@ -49,6 +49,7 @@ import cats.effect.unsafe.implicits.global
 import tasks.fileservice.actorfilestorage.ActorFileStorage
 import org.http4s.ember.client.EmberClientBuilder
 import cats.effect.IO
+import org.http4s.ember.server.EmberServerBuilder
 
 case class TaskSystemComponents(
     queue: QueueActor,
@@ -399,7 +400,6 @@ class TaskSystem private[tasks] (
 
   val packageServer =
     if (hostConfig.isApp && elasticSupportFactory.isDefined) {
-      import akka.http.scaladsl.Http
 
       Try(Deployment.pack) match {
         case Success(pack) =>
@@ -410,24 +410,26 @@ class TaskSystem private[tasks] (
 
           val actorsystem = 1 //shade implicit conversion
           val _ = actorsystem // suppress unused warning
-          val bindingFuture =
-            Http()
-              .newServerAt("0.0.0.0", packageServerPort)
-              .bind(service.route)
-              .andThen {
-                case Success(binding) =>
-                  tasksystemlog.info(s"Started package server on $binding")
-                case Failure(e) =>
-                  tasksystemlog.error(e, "Failed to bind package server")
-              }
+          import com.comcast.ip4s._
 
-          import scala.concurrent.duration._
-          Some(Await.ready(bindingFuture, atMost = 60 seconds))
+          val (server, releaseServer) = EmberServerBuilder
+            .default[IO]
+            .withHost(ipv4"0.0.0.0")
+            .withPort(com.comcast.ip4s.Port.fromInt(packageServerPort).get)
+            .withHttpApp(service.route.orNotFound)
+            .build
+            .allocated
+            .unsafeRunSync()
+
+          tasksystemlog.info(s"Started package server on $server")
+
+          Some(releaseServer)
         case Failure(e) =>
           tasksystemlog.error(
             e,
             s"Packaging self failed. Main thread exited? Skip starting package server."
           )
+          None
       }
 
     } else None
@@ -560,6 +562,7 @@ class TaskSystem private[tasks] (
         Await.result(AS.terminate(), 10 seconds)
         s3Client.foreach(_._2.close)
         httpClientAndRelease.foreach(_._2.unsafeRunSync())
+        packageServer.foreach(_.unsafeRunSync())
       }
     } else {
       s3Client.foreach(_._2.close)

@@ -107,10 +107,10 @@ class RemoteFileStorage(implicit
       }
 
   def exportFile(path: RemoteFilePath): Resource[IO, File] = {
-    val localFile = path.uri.akka.scheme == "file" && new File(
-      path.uri.akka.path.toString
+    val localFile = path.uri.scheme == "file" && new File(
+      path.uri.path.toString
     ).canRead
-    if (localFile) Resource.pure(new File(path.uri.akka.path.toString))
+    if (localFile) Resource.pure(new File(path.uri.path.toString))
     else {
       Resource.make({
         val file = TempFile.createTempFile("")

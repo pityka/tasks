@@ -25,10 +25,8 @@
 
 package tasks.util
 
-import akka.http.scaladsl.model.{Uri => AUri}
 
 case class Uri(uri: String) {
-  def akka = AUri(uri)
   def jUri = new java.net.URI(uri)
   def http4s = org.http4s.Uri.fromString(uri).toOption.get
   override def toString = uri

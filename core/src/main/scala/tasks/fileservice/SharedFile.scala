@@ -55,7 +55,7 @@ case class ManagedFilePath(pathElements: Vector[String]) extends FilePath {
 
 case class RemoteFilePath(uri: Uri) extends FilePath {
   override def toString = uri.toString
-  def name = uri.akka.path.toString.split("/").filter(_.size > 0).last
+  def name = uri.path.toString.split("/").filter(_.size > 0).last
 }
 
 case class SharedFile(
