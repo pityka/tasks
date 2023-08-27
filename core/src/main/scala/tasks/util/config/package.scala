@@ -32,7 +32,7 @@ package object config {
 
   type FD = FiniteDuration
 
-  implicit def asFiniteDuration(d: java.time.Duration) =
+  implicit def asFiniteDuration(d: java.time.Duration) : FiniteDuration =
     scala.concurrent.duration.Duration.fromNanos(d.toNanos)
 
   def parse(c: () => Config) = new TasksConfig(c)

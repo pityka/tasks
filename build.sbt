@@ -26,8 +26,8 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.10",
-  crossScalaVersions := Seq("2.12.15", "2.13.10"),
+  scalaVersion := "2.13.11",
+  crossScalaVersions := Seq("2.13.11"),
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -228,7 +228,7 @@ lazy val example = project
     crossScalaVersions := Nil,
     libraryDependencies ++= Seq(
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
-    )
+    ) ++ akkaProvided 
   )
 
 lazy val upicklesupport = project

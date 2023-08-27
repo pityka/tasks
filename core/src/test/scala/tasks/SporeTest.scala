@@ -76,7 +76,7 @@ object MySpore {
     // without this the compiler blows up
     implicit val codec: JsonValueCodec[User] = JsonCodecMaker.make
 
-    implicit val encoderSpore =
+    implicit val encoderSpore: Spore[Unit,tasks.queue.Serializer[User]] =
       spore(() => implicitly[tasks.queue.Serializer[User]])
   }
   val serializerSpore = spore { (_: String) =>

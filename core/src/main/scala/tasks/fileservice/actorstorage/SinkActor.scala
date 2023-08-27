@@ -58,7 +58,7 @@ class SinkActor(
 ) extends Actor
     with akka.actor.ActorLogging {
 
-  implicit val mat = Materializer(context)
+  implicit val mat : Materializer = Materializer(context)
 
   override def preStart() = {
     service ! NewSource(proposedPath)
