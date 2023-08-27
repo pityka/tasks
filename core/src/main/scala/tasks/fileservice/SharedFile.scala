@@ -27,8 +27,8 @@
 
 package tasks.fileservice
 
-import akka.stream.scaladsl._
-import akka.util._
+// import akka.stream.scaladsl._
+// import akka.util._
 import scala.concurrent.Future
 import java.io.File
 import tasks.util.Uri
@@ -41,6 +41,8 @@ import com.github.plokhotnyuk.jsoniter_scala.core._
 import cats.effect.IO
 import cats.effect.kernel.Resource
 import akka.NotUsed
+import fs2.Stream
+import fs2.Pipe
 
 sealed trait FilePath {
   def name: String
@@ -75,13 +77,13 @@ case class SharedFile(
   def history(implicit tsc: TaskSystemComponents): IO[History] =
     SharedFileHelper.getHistory(this)
 
-  def source(implicit tsc: TaskSystemComponents): Source[ByteString, NotUsed] =
-    SharedFileHelper.getSourceToFile(this, 0L)
+  def stream(implicit tsc: TaskSystemComponents): Stream[IO, Byte] =
+    SharedFileHelper.stream(this, 0L)
 
-  def source(fromOffset: Long)(implicit
+  def stream(fromOffset: Long)(implicit
       tsc: TaskSystemComponents
-  ): Source[ByteString, NotUsed] =
-    SharedFileHelper.getSourceToFile(this, fromOffset)
+  ): Stream[IO, Byte] =
+    SharedFileHelper.stream(this, fromOffset)
 
   def isAccessible(implicit tsc: TaskSystemComponents): IO[Boolean] =
     SharedFileHelper.isAccessible(this, true)
@@ -112,14 +114,14 @@ object SharedFile {
   ): IO[SharedFile] =
     SharedFileHelper.createFromFile(file, name, deleteFile)
 
-  def apply(source: Source[ByteString, _], name: String)(implicit
+  def apply(source: Stream[IO, Byte], name: String)(implicit
       tsc: TaskSystemComponents
   ): IO[SharedFile] =
-    SharedFileHelper.createFromSource(source, name)
+    SharedFileHelper.createFromStream(source, name)
 
   def sink(name: String)(implicit
       tsc: TaskSystemComponents
-  ): Sink[ByteString, Future[SharedFile]] =
+  ): Pipe[IO, Byte, SharedFile] =
     SharedFileHelper.sink(name)
 
   def fromFolder(parallelism: Int)(

@@ -43,6 +43,7 @@ import tasks.util.config.TasksConfig
 import tasks.util.eq._
 import cats.effect.kernel.Resource
 import cats.effect.IO
+import fs2.Stream
 
 object FileStorage {
   def getContentHash(is: InputStream): Int = {
@@ -67,16 +68,16 @@ class RemoteFileStorage(implicit
 
   def uri(mp: RemoteFilePath): Uri = mp.uri
 
-  def createSource(
+  def stream(
       path: RemoteFilePath,
       fromOffset: Long
-  ): Source[ByteString, _] =
-    streamHelper.createSource(uri(path), fromOffset)
+  ): Stream[IO, Byte] =
+  streamHelper.createStream(uri(path), fromOffset)
 
   def getSizeAndHash(path: RemoteFilePath): IO[(Long, Int)] =
     path.uri.scheme match {
       case "file" =>
-        IO.blocking {
+        IO.interruptible {
           val file = new File(path.uri.path)
           val hash = openFileInputStream(file) { is =>
             FileStorage.getContentHash(is)
@@ -84,7 +85,7 @@ class RemoteFileStorage(implicit
           (file.length, hash)
         }
       case "s3" | "http" | "https" =>
-        IO.fromFuture(IO.delay(streamHelper.getContentLengthAndETag(uri(path))))
+        streamHelper.getContentLengthAndETag(uri(path))
           .map { case (size, etag) =>
             (
               size.getOrElse(
@@ -111,12 +112,15 @@ class RemoteFileStorage(implicit
     ).canRead
     if (localFile) Resource.pure(new File(path.uri.akka.path.toString))
     else {
-      Resource.make(IO.fromFuture(IO {
+      Resource.make({
         val file = TempFile.createTempFile("")
-        createSource(path, fromOffset = 0L)
-          .runWith(FileIO.toPath(file.toPath))
+        stream(path, fromOffset = 0L)
+          .through(fs2.io.file.Files[IO].writeAll(fs2.io.file.Path.fromNioPath(file.toPath)))
+          .compile
+          .drain
           .map(_ => file)
-      }))(file => IO(file.delete()))
+
+      })(file => IO(file.delete()))
     }
 
   }
@@ -127,10 +131,10 @@ trait ManagedFileStorage {
 
   def uri(mp: ManagedFilePath): IO[Uri]
 
-  def createSource(
+  def stream(
       path: ManagedFilePath,
       fromOffset: Long
-  ): Source[ByteString, _]
+  ): Stream[IO, Byte]
 
   /* If size < 0 then it must not check the size and the hash
    *  but must return true iff the file is readable
@@ -149,7 +153,7 @@ trait ManagedFileStorage {
 
   def sink(
       path: ProposedManagedFilePath
-  ): Sink[ByteString, Future[(Long, Int, ManagedFilePath)]]
+  ): fs2.Pipe[IO,Byte,(Long, Int, ManagedFilePath)] 
 
   def exportFile(path: ManagedFilePath): Resource[IO, File]
 

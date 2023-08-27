@@ -195,16 +195,21 @@ class TasksConfig(load: () => Config) extends StrictLogging {
       case x            => Some(x)
     }
 
-  val s3ServerSideEncryption = raw.getBoolean("tasks.s3.serverSideEncryption")
+  val s3RegionProfileName = if (raw.hasPath("tasks.s3.regionProfileName")) Some(raw.getString("tasks.s3.regionProfileName")) else None
+
+  val s3ServerSideEncryption = raw.getString("tasks.s3.serverSideEncryption")
 
   val s3CannedAcl = raw.getStringList("tasks.s3.cannedAcls").asScala.toList
 
   val s3GrantFullControl = raw
     .getStringList("tasks.s3.grantFullControl")
     .asScala
-    .grouped(2)
-    .map(x => x(0) -> x(1))
     .toList
+
+  val s3UploadParallelism = raw.getInt("tasks.s3.uploadParallelism")
+
+  val httpRemoteEnabled = raw.getBoolean("tasks.fileservice.remote.http")
+  val s3RemoteEnabled =raw.getBoolean("tasks.fileservice.remote.s3")
 
   def instanceTags =
     raw

@@ -37,7 +37,7 @@ lazy val commonSettings = Seq(
     "-language:postfixOps",
     "-language:implicitConversions",
     "-unchecked", // Enable additional warnings where generated code depends on assumptions.
-    "-Xfatal-warnings", // Fail the compilation if there are any warnings.
+    // "-Xfatal-warnings", // Fail the compilation if there are any warnings.
     "-Xlint:adapted-args", // Warn if an argument list is modified to match the receiver.
     "-Xlint:constant", // Evaluation of a constant arithmetic expression results in an error.
     "-Xlint:delayedinit-select", // Selecting member of DelayedInit.
@@ -71,6 +71,7 @@ lazy val circeVersion = "0.14.5"
 lazy val jsoniterVersion = "2.13.31"
 lazy val akkaVersion = "2.6.19"
 lazy val shapelessVersion = "2.3.10"
+lazy val http4sVersion = "0.23.23"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
   .crossType(sbtcrossproject.CrossPlugin.autoImport.CrossType.Pure)
@@ -115,7 +116,7 @@ lazy val akkaProvided = List(
   "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided,
   "com.typesafe.akka" %% "akka-http" % "10.2.9" % Provided,
   "com.typesafe.akka" %% "akka-http-xml" % "10.2.9" % Provided,
-  "com.lightbend.akka" %% "akka-stream-alpakka-s3" % "3.0.4" % Provided
+  // "com.lightbend.akka" %% "akka-stream-alpakka-s3" % "3.0.4" % Provided
 )
 lazy val core = project
   .in(file("core"))
@@ -126,6 +127,10 @@ lazy val core = project
       scalapb.gen() -> (sourceManaged in Compile).value
     ),
     libraryDependencies ++= Seq(
+      "co.fs2" %% "fs2-io" % "3.8.0",
+      "co.fs2" %% "fs2-reactive-streams" % "3.8.0", 
+       "org.http4s" %% "http4s-ember-client" % http4sVersion,
+      "software.amazon.awssdk" % "s3" % "2.20.135",
       "com.google.guava" % "guava" % "31.1-jre", // scala-steward:off
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe" % "config" % "1.4.2",

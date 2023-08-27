@@ -99,7 +99,7 @@ case class UntypedTaskDefinition[A, C](
 
   def apply(j: Base64Data) =
     (ce: ComputationEnvironment) =>
-      IO.blocking {
+      IO.interruptible {
         val r = rs(())
         val w = ws(())
 

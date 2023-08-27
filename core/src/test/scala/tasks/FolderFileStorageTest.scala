@@ -38,7 +38,7 @@ object FolderFileStorageTest extends TestHelpers with Matchers {
     _ => implicit computationEnvironment =>
       for {
 
-        sf <- SharedFile(Source.single(ByteString("abcd")), "f1")
+        sf <- SharedFile(fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))), "f1")
         local <- sf.file.allocated.map(_._1)
         sf2 <- {
           val newPath = new File(local.getParentFile.getParentFile, "uncle")

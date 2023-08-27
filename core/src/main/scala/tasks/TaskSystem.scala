@@ -47,6 +47,8 @@ import scala.concurrent.duration._
 import scala.util._
 import cats.effect.unsafe.implicits.global
 import tasks.fileservice.actorfilestorage.ActorFileStorage
+import org.http4s.ember.client.EmberClientBuilder
+import cats.effect.IO
 
 case class TaskSystemComponents(
     queue: QueueActor,
@@ -80,10 +82,32 @@ class TaskSystem private[tasks] (
     val elasticSupport: Option[ElasticSupport]
 )(implicit val config: TasksConfig) {
 
-  implicit val AS : ActorSystem = system
+  implicit val AS: ActorSystem = system
   import AS.dispatcher
 
-  implicit val streamHelper : StreamHelper = new StreamHelper
+  val s3Client =
+    if (config.storageURI.getScheme == "s3" || config.s3RemoteEnabled) {
+      val s3AWSSDKClient =
+        tasks.fileservice.s3.S3.makeAWSSDKClient(config.s3RegionProfileName)
+      val s3Client = {
+        new tasks.fileservice.s3.S3(
+          s3AWSSDKClient
+        )
+      }
+      Some(s3Client -> s3AWSSDKClient)
+    } else None
+
+  val httpClientAndRelease = if (config.httpRemoteEnabled) {
+    val (httpClient, releaseHttpClient) = EmberClientBuilder
+      .default[IO]
+      .build
+      .allocated
+      .unsafeRunSync()
+    Some((httpClient, releaseHttpClient))
+  } else None
+
+  implicit val streamHelper: StreamHelper =
+    new StreamHelper(s3Client.map(_._1), httpClientAndRelease.map(_._1))
 
   private val tasksystemlog = akka.event.Logging(AS.eventStream, "tasks.boot")
 
@@ -165,7 +189,16 @@ class TaskSystem private[tasks] (
         if (s3bucket.isDefined) {
           val actorsystem = 1 // shade implicit conversion
           val _ = actorsystem // suppress unused warning
-          new S3Storage(s3bucket.get._1, s3bucket.get._2)
+
+          new s3.S3Storage(
+            bucketName = s3bucket.get._1,
+            folderPrefix = s3bucket.get._2,
+            sse = config.s3ServerSideEncryption,
+            cannedAcls = config.s3CannedAcl,
+            grantFullControl = config.s3GrantFullControl,
+            uploadParallelism = config.s3UploadParallelism,
+            s3 = s3Client.get._1
+          )
         } else {
           val storageFolderPath =
             if (config.storageURI.getScheme == null)
@@ -525,8 +558,12 @@ class TaskSystem private[tasks] (
         )
         latch.await
         Await.result(AS.terminate(), 10 seconds)
+        s3Client.foreach(_._2.close)
+        httpClientAndRelease.foreach(_._2.unsafeRunSync())
       }
     } else {
+      s3Client.foreach(_._2.close)
+      httpClientAndRelease.foreach(_._2.unsafeRunSync())
       Await.result(AS.terminate(), 10 seconds)
     }
 
