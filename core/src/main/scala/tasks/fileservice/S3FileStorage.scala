@@ -45,6 +45,7 @@ import akka.stream.alpakka.s3.ObjectMetadata
 import akka.stream.alpakka.s3.scaladsl.S3
 import cats.effect.kernel.Resource
 import cats.effect.IO
+import akka.event.LoggingAdapter
 
 class S3Storage(
     bucketName: String,
@@ -58,7 +59,7 @@ class S3Storage(
 
   override def toString = s"S3Storage(bucket=$bucketName, prefix=$folderPrefix)"
 
-  implicit val log = akka.event.Logging(as.eventStream, getClass)
+  implicit val log : LoggingAdapter  = akka.event.Logging(as.eventStream, getClass)
 
   val s3Headers = {
     val sse = config.s3ServerSideEncryption

@@ -33,6 +33,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import tasks.util.Uri
 import akka.http.scaladsl.Http
 import akka.stream.alpakka.s3.scaladsl.S3
+import akka.event.LoggingAdapter
 
 class StreamHelper(implicit
     as: ActorSystem,
@@ -40,7 +41,7 @@ class StreamHelper(implicit
     ec: ExecutionContext
 ) {
 
-  implicit val log = akka.event.Logging(as.eventStream, getClass)
+  implicit val log : LoggingAdapter = akka.event.Logging(as.eventStream, getClass)
 
   val queue = (rq: HttpRequest) => {
     log.debug("Queueing: " + rq)

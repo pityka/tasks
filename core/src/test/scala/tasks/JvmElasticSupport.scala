@@ -115,7 +115,7 @@ object JvmElasticSupport {
   }
 
   object JvmGrid extends ElasticSupportFromConfig {
-    implicit val fqcn = ElasticSupportFqcn("tasks.JvmElasticSupport.JvmGrid")
+    implicit val fqcn : ElasticSupportFqcn= ElasticSupportFqcn("tasks.JvmElasticSupport.JvmGrid")
     def apply(implicit config: TasksConfig) = SimpleElasticSupport(
       fqcn = fqcn,
       hostConfig = None,

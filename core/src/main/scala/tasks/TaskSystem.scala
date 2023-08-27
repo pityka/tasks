@@ -80,10 +80,10 @@ class TaskSystem private[tasks] (
     val elasticSupport: Option[ElasticSupport]
 )(implicit val config: TasksConfig) {
 
-  implicit val AS = system
+  implicit val AS : ActorSystem = system
   import AS.dispatcher
 
-  implicit val streamHelper = new StreamHelper
+  implicit val streamHelper : StreamHelper = new StreamHelper
 
   private val tasksystemlog = akka.event.Logging(AS.eventStream, "tasks.boot")
 

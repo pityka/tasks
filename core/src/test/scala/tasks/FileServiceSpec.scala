@@ -49,6 +49,7 @@ import akka.actor.Props
 import akka.util.ByteString
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
+import tasks.util.config.TasksConfig
 
 object Conf {
   val str = """my-pinned-dispatcher {
@@ -77,9 +78,9 @@ class FileServiceSpec
 
   val as = implicitly[ActorSystem]
   import as.dispatcher
-  implicit val sh = new StreamHelper
+  implicit val sh : StreamHelper = new StreamHelper
 
-  implicit val tconfig = tasks.util.config
+  implicit val tconfig : TasksConfig = tasks.util.config
     .parse(() =>
       ConfigFactory.load().withFallback(ConfigFactory.load("akka.conf"))
     )
@@ -92,7 +93,7 @@ class FileServiceSpec
 
   }
 
-  implicit val prefix = FileServicePrefix(Vector())
+  implicit val prefix : FileServicePrefix = FileServicePrefix(Vector())
 
   describe("fileservice new file folderstorage ") {
     it("add new empty file from source") {
