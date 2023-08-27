@@ -113,9 +113,9 @@ lazy val spores = project
   )
 lazy val akkaProvided = List(
   "com.typesafe.akka" %% "akka-actor" % akkaVersion % Provided,
-  "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided,
-  "com.typesafe.akka" %% "akka-http" % "10.2.9" % Provided,
-  "com.typesafe.akka" %% "akka-http-xml" % "10.2.9" % Provided,
+  "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided
+  // "com.typesafe.akka" %% "akka-http" % "10.2.9" % Provided,
+  // "com.typesafe.akka" %% "akka-http-xml" % "10.2.9" % Provided,
   // "com.lightbend.akka" %% "akka-stream-alpakka-s3" % "3.0.4" % Provided
 )
 lazy val core = project
@@ -128,8 +128,9 @@ lazy val core = project
     ),
     libraryDependencies ++= Seq(
       "co.fs2" %% "fs2-io" % "3.8.0",
-      "co.fs2" %% "fs2-reactive-streams" % "3.8.0", 
-       "org.http4s" %% "http4s-ember-client" % http4sVersion,
+      "co.fs2" %% "fs2-reactive-streams" % "3.8.0",
+      "org.http4s" %% "http4s-ember-client" % http4sVersion,
+      "org.http4s" %% "http4s-ember-server" % http4sVersion,
       "software.amazon.awssdk" % "s3" % "2.20.135",
       "com.google.guava" % "guava" % "31.1-jre", // scala-steward:off
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
@@ -233,7 +234,7 @@ lazy val example = project
     crossScalaVersions := Nil,
     libraryDependencies ++= Seq(
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
-    ) ++ akkaProvided 
+    ) ++ akkaProvided
   )
 
 lazy val upicklesupport = project
