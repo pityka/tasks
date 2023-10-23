@@ -29,8 +29,6 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import akka.stream.scaladsl.Source
-import akka.util.ByteString
 import cats.effect.IO
 
 import com.github.plokhotnyuk.jsoniter_scala.macros._

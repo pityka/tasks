@@ -50,7 +50,7 @@ class S3Storage(
     cannedAcls: Seq[String],
     grantFullControl: Seq[String],
     uploadParallelism: Int,
-    s3: tasks.fileservice.s3.S3,
+    s3: tasks.fileservice.s3.S3
 )(implicit
     as: ActorSystem,
     config: TasksConfig
@@ -134,24 +134,6 @@ class S3Storage(
 
         }
     )
-  }
-
-  def importFile(
-      f: File,
-      path: ProposedManagedFilePath
-  ): IO[(Long, Int, ManagedFilePath)] =
-    tasks.util.retryIO(s"upload to $path")(importFile1(f, path), 4)
-
-  def importFile1(
-      f: File,
-      path: ProposedManagedFilePath
-  ): IO[(Long, Int, ManagedFilePath)] = IO.unit.flatMap { _ =>
-    fs2.io.file
-      .Files[IO]
-      .readAll(fs2.io.file.Path.fromNioPath(f.toPath))
-      .through(sink(path))
-      .compile
-      .lastOrError
   }
 
   def stream(

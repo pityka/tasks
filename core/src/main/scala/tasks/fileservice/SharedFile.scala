@@ -27,9 +27,6 @@
 
 package tasks.fileservice
 
-// import akka.stream.scaladsl._
-// import akka.util._
-import scala.concurrent.Future
 import java.io.File
 import tasks.util.Uri
 import tasks.TaskSystemComponents
@@ -40,7 +37,6 @@ import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import cats.effect.IO
 import cats.effect.kernel.Resource
-import akka.NotUsed
 import fs2.Stream
 import fs2.Pipe
 
@@ -134,14 +130,6 @@ object SharedFile {
   )(implicit tsc: TaskSystemComponents): IO[Option[SharedFile]] =
     SharedFileHelper.getByName(name, retrieveSizeAndHash = true)
 
-}
-
-object ManagedFilePath {
-  // implicit val codec: JsonValueCodec[ManagedFilePath] = JsonCodecMaker.make
-}
-
-object RemoteFilePath {
-  // implicit val codec: JsonValueCodec[RemoteFilePath] = JsonCodecMaker.make
 }
 
 object FilePath {

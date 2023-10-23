@@ -46,10 +46,10 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util._
 import cats.effect.unsafe.implicits.global
-import tasks.fileservice.actorfilestorage.ActorFileStorage
 import org.http4s.ember.client.EmberClientBuilder
 import cats.effect.IO
 import org.http4s.ember.server.EmberServerBuilder
+import tasks.fileservice.proxy.ProxyFileStorage
 
 case class TaskSystemComponents(
     queue: QueueActor,
@@ -84,7 +84,6 @@ class TaskSystem private[tasks] (
 )(implicit val config: TasksConfig) {
 
   implicit val AS: ActorSystem = system
-  import AS.dispatcher
 
   val s3Client =
     if (config.storageURI.getScheme == "s3" || config.s3RemoteEnabled) {
@@ -130,7 +129,8 @@ class TaskSystem private[tasks] (
 
   tasksystemlog.info("Master node address is: " + hostConfig.master.toString)
 
-  private lazy val masterAddress = hostConfig.master
+  private lazy val masterAddress: tasks.util.SimpleSocketAddress =
+    hostConfig.master
 
   val reaperActor = elasticSupport.flatMap(_.reaperFactory.map(_.apply)) match {
     case None =>
@@ -168,13 +168,59 @@ class TaskSystem private[tasks] (
 
   val remoteFileStorage = new RemoteFileStorage
 
-  val managedFileStorage: ManagedFileStorage = {
-    val fileStore =
-      if (config.storageURI.toString == "" && !hostConfig.isQueue) {
-        ActorFileStorage.connectToRemote(masterAddress)
-      } else if (!hostConfig.isQueue && config.connectToProxyFileServiceOnMain)
-        ActorFileStorage.connectToRemote(masterAddress)
-      else {
+  val proxyStoragePort = masterAddress.port + 2
+
+  def makeHttpProxyStorageClient(): (ManagedFileStorage, IO[Unit]) = {
+    tasksystemlog.info(
+      s"Trying to use main application's http proxy storage on address ${masterAddress.hostName} and port ${proxyStoragePort}"
+    )
+    import org.http4s.Uri
+    ProxyFileStorage
+      .makeClient(
+        uri = org.http4s.Uri(
+          scheme = Some(Uri.Scheme.http),
+          authority = Some(
+            Uri.Authority(
+              host = Uri.Host.unsafeFromString(masterAddress.hostName),
+              port = Some(proxyStoragePort)
+            )
+          )
+        ),
+        as = AS
+      )
+      .allocated
+      .unsafeRunSync()
+
+  }
+
+  def startProxyFileStorageHttpServer(storage: ManagedFileStorage): IO[Unit] = {
+    tasksystemlog.info("Starting http server for proxy file storage")
+    import com.comcast.ip4s._
+    val service = ProxyFileStorage.service(storage)
+
+    val (server, releaseServer) = EmberServerBuilder
+      .default[IO]
+      .withHost(ipv4"0.0.0.0")
+      .withPort(com.comcast.ip4s.Port.fromInt(proxyStoragePort).get)
+      .withHttpApp(service.orNotFound)
+      .build
+      .allocated
+      .unsafeRunSync()
+    tasksystemlog.info(s"Started proxy storage server on ${server.baseUri}")
+
+    releaseServer
+  }
+
+  val (
+    managedFileStorage: ManagedFileStorage,
+    releaseManagedFileStore: IO[Unit]
+  ) = {
+    val (fileStore, release1) =
+      if (
+        (config.storageURI.toString == "" || config.connectToProxyFileServiceOnMain) && !hostConfig.isQueue
+      ) {
+        makeHttpProxyStorageClient()
+      } else {
         val s3bucket =
           if (
             config.storageURI.getScheme != null && config.storageURI.getScheme == "s3"
@@ -191,14 +237,17 @@ class TaskSystem private[tasks] (
           val actorsystem = 1 // shade implicit conversion
           val _ = actorsystem // suppress unused warning
 
-          new s3.S3Storage(
-            bucketName = s3bucket.get._1,
-            folderPrefix = s3bucket.get._2,
-            sse = config.s3ServerSideEncryption,
-            cannedAcls = config.s3CannedAcl,
-            grantFullControl = config.s3GrantFullControl,
-            uploadParallelism = config.s3UploadParallelism,
-            s3 = s3Client.get._1
+          (
+            new s3.S3Storage(
+              bucketName = s3bucket.get._1,
+              folderPrefix = s3bucket.get._2,
+              sse = config.s3ServerSideEncryption,
+              cannedAcls = config.s3CannedAcl,
+              grantFullControl = config.s3GrantFullControl,
+              uploadParallelism = config.s3UploadParallelism,
+              s3 = s3Client.get._1
+            ),
+            IO.unit
           )
         } else {
           val storageFolderPath =
@@ -223,28 +272,40 @@ class TaskSystem private[tasks] (
             if (hostConfig.isQueue) {
 
               tasksystemlog.warning(
-                s"Folder $storageFolder does not exists. Try to create it. "
+                s"Folder $storageFolder does not exists and this is a master node. Try to create the folder $storageFolder for file storage. "
               )
               storageFolder.mkdirs
-              new FolderFileStorage(storageFolder)
+              (new FolderFileStorage(storageFolder), IO.unit)
             } else {
               tasksystemlog.warning(
                 s"Folder $storageFolder does not exists. This is not a master node. Reverting to proxy via main node."
               )
-              ActorFileStorage.connectToRemote(masterAddress)
+              makeHttpProxyStorageClient()
             }
           } else {
-            new FolderFileStorage(storageFolder)
+            (new FolderFileStorage(storageFolder), IO.unit)
           }
         }
       }
 
     fileStore match {
-      case fs: ActorFileStorage => fs
       case fs: ManagedFileStorage if config.proxyStorage =>
-        ActorFileStorage.startFileServiceActor(fs)
-        fs
-      case fs: ManagedFileStorage => fs
+        val release = startProxyFileStorageHttpServer(fs)
+        val releaseBoth = release
+          .handleError { throwable =>
+            tasksystemlog.error(
+              "Error in stopping http file storage",
+              throwable
+            )
+          }
+          .flatMap(_ =>
+            release1.handleError { throwable =>
+              tasksystemlog
+                .error("Error in stopping http file storage client", throwable)
+            }
+          )
+        (fs, releaseBoth)
+      case fs: ManagedFileStorage => (fs, release1)
     }
 
   }
@@ -305,16 +366,16 @@ class TaskSystem private[tasks] (
       trackerBootstrap.map(_.start.eventListener)
     else None
 
-  trackerEventListener.foreach(ev => reaperActor ! WatchMe(ev.watchable))
-
-  val queueActor =
+  val (queueActor, uiRelease) =
     try {
       if (hostConfig.isQueue) {
 
-        val uiComponent = uiBootstrap.map(_.startQueueUI)
+        val uiComponent =
+          uiBootstrap.map(_.startQueueUI.allocated.unsafeRunSync())
+        val uiRelease = uiComponent.map(_._2).getOrElse(IO.unit)
 
         val eventListeners =
-          uiComponent.map(_.tasksQueueEventListener).toList ++
+          uiComponent.map(_._1.tasksQueueEventListener).toList ++
             trackerEventListener.toList
 
         val localActor =
@@ -324,7 +385,7 @@ class TaskSystem private[tasks] (
             "queue"
           )
         reaperActor ! WatchMe(localActor)
-        localActor
+        (localActor, uiRelease)
       } else {
         val actorPath =
           s"akka://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/queue"
@@ -333,7 +394,7 @@ class TaskSystem private[tasks] (
           atMost = 600 seconds
         )
 
-        remoteActor
+        (remoteActor, IO.unit)
       }
     } catch {
       case e: Throwable => {
@@ -348,12 +409,14 @@ class TaskSystem private[tasks] (
 
   val packageServerHostname = hostConfig.myAddress.getHostName
 
-  val elasticSupportFactory =
+  val (elasticSupportFactory, nodeUIRelease) =
     if (hostConfig.isApp || hostConfig.isWorker) {
 
       val uiComponent = if (hostConfig.isApp) {
-        Some(uiBootstrap.map(_.startAppUI))
+        Some(uiBootstrap.map(_.startAppUI.allocated.unsafeRunSync()))
       } else None
+
+      val uiRelease = uiComponent.flatMap(_.map(_._2)).getOrElse(IO.unit)
 
       val codeAddress =
         if (hostConfig.isApp)
@@ -368,22 +431,25 @@ class TaskSystem private[tasks] (
           )
         else None
 
-      elasticSupport.map(es =>
-        es(
-          masterAddress = hostConfig.master,
-          queueActor = QueueActor(queueActor),
-          resource = ResourceAvailable(
-            cpu = hostConfig.availableCPU,
-            memory = hostConfig.availableMemory,
-            scratch = hostConfig.availableScratch,
-            gpu = hostConfig.availableGPU
-          ),
-          codeAddress = codeAddress,
-          eventListener =
-            uiComponent.flatMap(_.map(_.nodeRegistryEventListener))
-        )
+      (
+        elasticSupport.map(es =>
+          es(
+            masterAddress = hostConfig.master,
+            queueActor = QueueActor(queueActor),
+            resource = ResourceAvailable(
+              cpu = hostConfig.availableCPU,
+              memory = hostConfig.availableMemory,
+              scratch = hostConfig.availableScratch,
+              gpu = hostConfig.availableGPU
+            ),
+            codeAddress = codeAddress,
+            eventListener =
+              uiComponent.flatMap(_.map(_._1.nodeRegistryEventListener))
+          )
+        ),
+        uiRelease
       )
-    } else None
+    } else (None, IO.unit)
 
   val localNodeRegistry: Option[ActorRef] =
     if (hostConfig.isApp && elasticSupportFactory.isDefined) {
@@ -563,6 +629,9 @@ class TaskSystem private[tasks] (
         s3Client.foreach(_._2.close)
         httpClientAndRelease.foreach(_._2.unsafeRunSync())
         packageServer.foreach(_.unsafeRunSync())
+        releaseManagedFileStore.unsafeRunSync()
+        uiRelease.unsafeRunSync()
+        nodeUIRelease.unsafeRunSync()
       }
     } else {
       s3Client.foreach(_._2.close)

@@ -43,13 +43,12 @@ import org.scalatest.matchers.should.Matchers
 import tasks.queue._
 import tasks.fileservice._
 import tasks.util._
-import tasks.fileservice.actorfilestorage.ActorFileStorage
-import tasks.fileservice.actorfilestorage.FileServiceProxy
-import akka.actor.Props
-import akka.util.ByteString
+import tasks.fileservice.proxy.ProxyFileStorage
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import tasks.util.config.TasksConfig
+import org.http4s.ember.server.EmberServerBuilder
+import com.comcast.ip4s._
 
 object Conf {
   val str = """my-pinned-dispatcher {
@@ -78,9 +77,9 @@ class FileServiceSpec
 
   val as = implicitly[ActorSystem]
   import as.dispatcher
-  implicit val sh : StreamHelper = new StreamHelper(None,None)
+  implicit val sh: StreamHelper = new StreamHelper(None, None)
 
-  implicit val tconfig : TasksConfig = tasks.util.config
+  implicit val tconfig: TasksConfig = tasks.util.config
     .parse(() =>
       ConfigFactory.load().withFallback(ConfigFactory.load("akka.conf"))
     )
@@ -93,7 +92,7 @@ class FileServiceSpec
 
   }
 
-  implicit val prefix : FileServicePrefix = FileServicePrefix(Vector())
+  implicit val prefix: FileServicePrefix = FileServicePrefix(Vector())
 
   describe("fileservice new file folderstorage ") {
     it("add new empty file from source") {
@@ -121,7 +120,7 @@ class FileServiceSpec
       implicit val historyContext = tasks.fileservice.NoHistory
       await(
         SharedFileHelper.createFromStream(
-          fs2.Stream[IO,Byte](),
+          fs2.Stream[IO, Byte](),
           "proba"
         )
       )
@@ -199,22 +198,35 @@ class FileServiceSpec
 
       val fs = new FolderFileStorage(folder)
 
-      val proxiedFs = new ActorFileStorage(
-        system.actorOf(
-          Props(new FileServiceProxy(fs))
-        )
+      val proxiedFs = ProxyFileStorage.service(
+        fs
       )
-      implicit val serviceimpl =
-        FileServiceComponent(proxiedFs, remoteStore)
-      implicit val historyContext = tasks.fileservice.NoHistory
+      EmberServerBuilder
+        .default[IO]
+        .withHost(ipv4"0.0.0.0")
+        .withHttpApp(proxiedFs.orNotFound)
+        .build
+        .use { server =>
+          ProxyFileStorage.makeClient(server.baseUri, as).use { proxiedFs =>
+            IO {
+              implicit val serviceimpl =
+                FileServiceComponent(proxiedFs, remoteStore)
+              implicit val historyContext = tasks.fileservice.NoHistory
 
-      SharedFileHelper.createFromFile(input, "proba", false).unsafeRunSync()
+              SharedFileHelper
+                .createFromFile(input, "proba", false)
+                .unsafeRunSync()
 
-      readBinaryFile(
-        new java.io.File(folder, "proba").getCanonicalPath
-      ).toVector should equal(
-        data.toVector
-      )
+              readBinaryFile(
+                new java.io.File(folder, "proba").getCanonicalPath
+              ).toVector should equal(
+                data.toVector
+              )
+            }
+
+          }
+        }
+        .unsafeRunSync()
     }
     it("add new file - from source") {
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
@@ -271,14 +283,14 @@ class FileServiceSpec
       folder2.mkdir
 
       val fs = new FolderFileStorage(folder)
-      val proxiedFs = new ActorFileStorage(
-        system.actorOf(
-          Props(new FileServiceProxy(fs))
-        )
-      )
+      // val proxiedFs = new ActorFileStorage(
+      //   system.actorOf(
+      //     Props(new FileServiceProxy(fs))
+      //   )
+      // )
 
       implicit val serviceimpl =
-        FileServiceComponent(proxiedFs, remoteStore)
+        FileServiceComponent(fs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
       await(
         SharedFileHelper.createFromStream(
@@ -400,14 +412,14 @@ class FileServiceSpec
         new File(new java.io.File(getClass.getResource("/").getPath), "test2f")
       folder2.mkdir
       val fs = new FolderFileStorage(folder)
-      val proxiedFs = new ActorFileStorage(
-        system.actorOf(
-          Props(new FileServiceProxy(fs))
-        )
-      )
+      // val proxiedFs = new ActorFileStorage(
+      //   system.actorOf(
+      //     Props(new FileServiceProxy(fs))
+      //   )
+      // )
 
       implicit val serviceimpl =
-        FileServiceComponent(proxiedFs, remoteStore)
+        FileServiceComponent(fs, remoteStore)
       implicit val nlc =
         NodeLocalCache.start.unsafeRunSync()(
           cats.effect.unsafe.implicits.global
@@ -434,10 +446,11 @@ class FileServiceSpec
       )
       readBinaryFile(path.getCanonicalPath).toVector should equal(data.toVector)
 
-      
-          SharedFileHelper
-            .stream(t, 0L)
-            .compile.foldChunks(fs2.Chunk.empty[Byte])(_ ++ _).unsafeRunSync()
+      SharedFileHelper
+        .stream(t, 0L)
+        .compile
+        .foldChunks(fs2.Chunk.empty[Byte])(_ ++ _)
+        .unsafeRunSync()
         .toArray
         .toVector should equal(data.toVector)
 
@@ -473,8 +486,10 @@ class FileServiceSpec
 
       val content =
         SharedFileHelper
-            .stream(t, 0L)
-            .compile.foldChunks(fs2.Chunk.empty[Byte])(_ ++ _).unsafeRunSync()
+          .stream(t, 0L)
+          .compile
+          .foldChunks(fs2.Chunk.empty[Byte])(_ ++ _)
+          .unsafeRunSync()
 
       content.toVector should equal(data.toVector)
 
@@ -491,14 +506,14 @@ class FileServiceSpec
         new File(new java.io.File(getClass.getResource("/").getPath), "test2f")
       folder2.mkdir
       val fs = new FolderFileStorage(folder)
-      val proxiedFs = new ActorFileStorage(
-        system.actorOf(
-          Props(new FileServiceProxy(fs))
-        )
-      )
+      // val proxiedFs = new ActorFileStorage(
+      //   system.actorOf(
+      //     Props(new FileServiceProxy(fs))
+      //   )
+      // )
 
       implicit val serviceimpl =
-        FileServiceComponent(proxiedFs, remoteStore)
+        FileServiceComponent(fs, remoteStore)
       implicit val nlc =
         NodeLocalCache.start.unsafeRunSync()(
           cats.effect.unsafe.implicits.global
@@ -526,14 +541,18 @@ class FileServiceSpec
       readBinaryFile(path.getCanonicalPath).toVector should equal(data.toVector)
 
       SharedFileHelper
-            .stream(t, 0L)
-            .compile.foldChunks(fs2.Chunk.empty[Byte])(_ ++ _).unsafeRunSync()
+        .stream(t, 0L)
+        .compile
+        .foldChunks(fs2.Chunk.empty[Byte])(_ ++ _)
+        .unsafeRunSync()
         .toArray
         .toVector should equal(data.toVector)
 
-     SharedFileHelper
-            .stream(t, 2L)
-            .compile.foldChunks(fs2.Chunk.empty[Byte])(_ ++ _).unsafeRunSync()
+      SharedFileHelper
+        .stream(t, 2L)
+        .compile
+        .foldChunks(fs2.Chunk.empty[Byte])(_ ++ _)
+        .unsafeRunSync()
         .toArray
         .toVector should equal(data.toVector.drop(2))
 
@@ -595,14 +614,14 @@ class FileServiceSpec
       val input = new java.io.File(folder, "proba")
       writeBinaryToFile(input.getCanonicalPath, data)
       val fs = new FolderFileStorage(folder)
-      val proxiedFs = new ActorFileStorage(
-        system.actorOf(
-          Props(new FileServiceProxy(fs))
-        )
-      )
+      // val proxiedFs = new ActorFileStorage(
+      //   system.actorOf(
+      //     Props(new FileServiceProxy(fs))
+      //   )
+      // )
 
       implicit val serviceimpl =
-        FileServiceComponent(proxiedFs, remoteStore)
+        FileServiceComponent(fs, remoteStore)
       implicit val nlc =
         NodeLocalCache.start.unsafeRunSync()(
           cats.effect.unsafe.implicits.global

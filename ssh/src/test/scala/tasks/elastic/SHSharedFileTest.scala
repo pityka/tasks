@@ -29,8 +29,6 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import akka.stream.scaladsl.Source
-import akka.util.ByteString
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 
@@ -91,7 +89,7 @@ object SHResultWithSharedFilesTest extends TestHelpers {
       case (_, inputsf) =>
         implicit computationEnvironment =>
           inputsf.file.allocated.map(_._1).unsafeRunSync()(cats.effect.unsafe.implicits.global)
-          val source = Source.single(ByteString("abcd"))
+          val source = fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes()))
           val tmpfile = tasks.util.writeBinaryToFile(Array[Byte](1, 2, 3))
           val fs = List(
             SharedFile(tmpfile, "f1"),
@@ -145,6 +143,7 @@ object SHResultWithSharedFilesTest extends TestHelpers {
         s"""tasks.fileservice.connectToProxy = true
         akka.loglevel= OFF
         tasks.fileservice.storageURI=${tmp.getAbsolutePath}
+        tasks.fileservice.proxyStorage=true
       hosts.numCPU=0
       tasks.elastic.engine = "tasks.elastic.sh.SHElasticSupport"
       tasks.elastic.queueCheckInterval = 3 seconds  
