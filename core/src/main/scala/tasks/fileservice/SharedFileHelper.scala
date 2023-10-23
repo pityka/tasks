@@ -26,9 +26,6 @@
 package tasks.fileservice
 
 import akka.actor._
-// import akka.stream.scaladsl._
-// import akka.stream._
-import akka.util._
 
 import java.io.File
 
@@ -37,11 +34,8 @@ import tasks.util.config._
 import tasks.queue._
 
 import com.typesafe.scalalogging.StrictLogging
-// import akka.NotUsed
 import cats.effect.kernel.Resource
 import cats.effect.IO
-import cats.effect.unsafe.implicits.global
-import scala.concurrent.Future
 import fs2.Stream
 import akka.stream.Materializer
 import fs2.Chunk
@@ -155,8 +149,11 @@ private[tasks] object SharedFileHelper extends StrictLogging {
 
           implicit val hctx = NoHistory
 
-          createFromStream(Stream.chunk(Chunk.array(serialized)), sf.name+".history").map(_ => ())
-          
+          createFromStream(
+            Stream.chunk(Chunk.array(serialized)),
+            sf.name + ".history"
+          ).map(_ => ())
+
         }).flatten
       case _ => IO.unit
     }
@@ -164,8 +161,7 @@ private[tasks] object SharedFileHelper extends StrictLogging {
   }
 
   def getHistory(sf: SharedFile)(implicit
-      service: FileServiceComponent,
-      mat: Materializer
+      service: FileServiceComponent
   ): IO[History] = {
     sf.path match {
       case _: RemoteFilePath => IO.pure(History(sf, None))

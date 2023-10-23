@@ -27,16 +27,12 @@
 
 package tasks.fileservice
 
-import scala.concurrent.{Future, ExecutionContext}
 import java.io.File
 import tasks.util._
 import tasks.util.eq._
 import tasks.util.config._
-import akka.stream.scaladsl._
-import akka.util._
 import cats.effect.kernel.Resource
 import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import fs2.Stream
 import fs2.Pipe
 
@@ -51,10 +47,12 @@ object FolderFileStorage {
 }
 
 class FolderFileStorage(val basePath: File)(implicit
-    ec: ExecutionContext,
     config: TasksConfig,
     as: akka.actor.ActorSystem
 ) extends ManagedFileStorage {
+
+  implicit val log: akka.event.LoggingAdapter =
+    akka.event.Logging(as.eventStream, getClass)
 
   if (basePath.exists && !basePath.isDirectory)
     throw new IllegalArgumentException(s"$basePath exists and not a folder")
@@ -274,7 +272,7 @@ class FolderFileStorage(val basePath: File)(implicit
       ) == FolderFileStorage
         .getContentHash(file2)
 
-  def importFile(
+  override def importFile(
       file: File,
       proposed: ProposedManagedFilePath
   ): IO[(Long, Int, ManagedFilePath)] =

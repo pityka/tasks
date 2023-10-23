@@ -26,8 +26,8 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.11",
-  crossScalaVersions := Seq("2.13.11"),
+  scalaVersion := "2.13.12",
+  crossScalaVersions := Seq("2.13.12"),
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -37,7 +37,7 @@ lazy val commonSettings = Seq(
     "-language:postfixOps",
     "-language:implicitConversions",
     "-unchecked", // Enable additional warnings where generated code depends on assumptions.
-    // "-Xfatal-warnings", // Fail the compilation if there are any warnings.
+    "-Xfatal-warnings", // Fail the compilation if there are any warnings.
     "-Xlint:adapted-args", // Warn if an argument list is modified to match the receiver.
     "-Xlint:constant", // Evaluation of a constant arithmetic expression results in an error.
     "-Xlint:delayedinit-select", // Selecting member of DelayedInit.
@@ -114,9 +114,6 @@ lazy val spores = project
 lazy val akkaProvided = List(
   "com.typesafe.akka" %% "akka-actor" % akkaVersion % Provided,
   "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided
-  // "com.typesafe.akka" %% "akka-http" % "10.2.9" % Provided,
-  // "com.typesafe.akka" %% "akka-http-xml" % "10.2.9" % Provided,
-  // "com.lightbend.akka" %% "akka-stream-alpakka-s3" % "3.0.4" % Provided
 )
 lazy val core = project
   .in(file("core"))
@@ -180,47 +177,47 @@ lazy val kubernetes = project
   )
   .dependsOn(core % "compile->compile;test->test")
 
-lazy val tracker = project
-  .in(file("tracker"))
-  .settings(commonSettings: _*)
-  .settings(
-    name := "tasks-tracker",
-    libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.16" % "test",
-      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
-    ) ++ akkaProvided,
-    resources in Compile += (fastOptJS in Compile in uifrontend).value.data
-  )
-  .dependsOn(core % "compile->compile;test->test")
+// lazy val tracker = project
+//   .in(file("tracker"))
+//   .settings(commonSettings: _*)
+//   .settings(
+//     name := "tasks-tracker",
+//     libraryDependencies ++= Seq(
+//       "org.scalatest" %% "scalatest" % "3.2.10" % "test",
+//       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
+//     ) ++ akkaProvided,
+//     // resources in Compile += (fastOptJS in Compile in uifrontend).value.data
+//   )
+//   .dependsOn(core % "compile->compile;test->test")
 
-lazy val uibackend = project
-  .in(file("uibackend"))
-  .settings(commonSettings: _*)
-  .settings(
-    name := "tasks-ui-backend",
-    libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.16" % "test"
-    ) ++ akkaProvided,
-    resources in Compile += (fastOptJS in Compile in uifrontend).value.data
-  )
-  .dependsOn(core % "compile->compile;test->test")
+// lazy val uibackend = project
+//   .in(file("uibackend"))
+//   .settings(commonSettings: _*)
+//   .settings(
+//     name := "tasks-ui-backend",
+//     libraryDependencies ++= Seq(
+//       "org.scalatest" %% "scalatest" % "3.2.10" % "test"
+//     ) ++ akkaProvided,
+//     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
+//   )
+//   .dependsOn(core % "compile->compile;test->test")
 
-lazy val uifrontend = project
-  .in(file("uifrontend"))
-  .settings(commonSettings: _*)
-  .settings(
-    name := "tasks-ui-frontend",
-    libraryDependencies ++= Seq(
-      "org.scala-js" %%% "scalajs-dom" % "1.2.0",
-      "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % jsoniterVersion,
-      "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
-      "com.raquo" %%% "laminar" % "0.13.0"
-    ),
-    mimaPreviousArtifacts := Set.empty,
-    fork := false
-  )
-  .dependsOn(sharedJS)
-  .enablePlugins(ScalaJSPlugin)
+// lazy val uifrontend = project
+//   .in(file("uifrontend"))
+//   .settings(commonSettings: _*)
+//   .settings(
+//     name := "tasks-ui-frontend",
+//     libraryDependencies ++= Seq(
+//       "org.scala-js" %%% "scalajs-dom" % "1.2.0",
+//       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % jsoniterVersion,
+//       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
+//       "com.raquo" %%% "laminar" % "0.13.0"
+//     ),
+//     mimaPreviousArtifacts := Set.empty,
+//     fork := false
+//   )
+//   .dependsOn(sharedJS)
+//   .enablePlugins(ScalaJSPlugin)
 
 lazy val example = project
   .in(file("example"))
@@ -295,10 +292,10 @@ lazy val root = (project in file("."))
     sharedJS,
     ec2,
     ssh,
-    uibackend,
-    uifrontend,
+    // uibackend,
+    // uifrontend,
     kubernetes,
-    tracker,
+    // tracker,
     example
   )
 

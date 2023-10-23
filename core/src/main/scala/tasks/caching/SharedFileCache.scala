@@ -28,8 +28,6 @@
 package tasks.caching
 
 import akka.actor.ActorSystem
-import akka.stream.scaladsl.Source
-import akka.util.ByteString
 
 import tasks.queue._
 import tasks._
@@ -72,7 +70,7 @@ private[tasks] class SharedFileCache(implicit
         case Some(sf) =>
           SharedFileHelper
             .stream(sf, fromOffset = 0L)
-            .compile 
+            .compile
             .foldChunks(Chunk.empty[Byte])(_ ++ _)
             .map { byteString =>
               val t = deserializeResult(byteString.toArray)

@@ -29,8 +29,6 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 import java.io.File
 import tasks.jsonitersupport._
-import akka.stream.scaladsl.Source
-import akka.util.ByteString
 
 object FolderFileStorageTest extends TestHelpers with Matchers {
 

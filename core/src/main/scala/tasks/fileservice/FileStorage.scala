@@ -28,13 +28,8 @@
 package tasks.fileservice
 
 import akka.actor._
-import akka.stream.scaladsl._
-import akka.stream._
-import akka.util._
 
 import com.google.common.hash._
-
-import scala.concurrent._
 
 import java.io.{File, InputStream}
 
@@ -44,6 +39,7 @@ import tasks.util.eq._
 import cats.effect.kernel.Resource
 import cats.effect.IO
 import fs2.Stream
+import akka.event.LoggingAdapter
 
 object FileStorage {
   def getContentHash(is: InputStream): Int = {
@@ -57,8 +53,6 @@ object FileStorage {
 }
 
 class RemoteFileStorage(implicit
-    mat: Materializer,
-    ec: ExecutionContext,
     streamHelper: StreamHelper,
     as: ActorSystem,
     config: TasksConfig
@@ -72,7 +66,7 @@ class RemoteFileStorage(implicit
       path: RemoteFilePath,
       fromOffset: Long
   ): Stream[IO, Byte] =
-  streamHelper.createStream(uri(path), fromOffset)
+    streamHelper.createStream(uri(path), fromOffset)
 
   def getSizeAndHash(path: RemoteFilePath): IO[(Long, Int)] =
     path.uri.scheme match {
@@ -85,7 +79,8 @@ class RemoteFileStorage(implicit
           (file.length, hash)
         }
       case "s3" | "http" | "https" =>
-        streamHelper.getContentLengthAndETag(uri(path))
+        streamHelper
+          .getContentLengthAndETag(uri(path))
           .map { case (size, etag) =>
             (
               size.getOrElse(
@@ -115,7 +110,11 @@ class RemoteFileStorage(implicit
       Resource.make({
         val file = TempFile.createTempFile("")
         stream(path, fromOffset = 0L)
-          .through(fs2.io.file.Files[IO].writeAll(fs2.io.file.Path.fromNioPath(file.toPath)))
+          .through(
+            fs2.io.file
+              .Files[IO]
+              .writeAll(fs2.io.file.Path.fromNioPath(file.toPath))
+          )
           .compile
           .drain
           .map(_ => file)
@@ -128,6 +127,8 @@ class RemoteFileStorage(implicit
 }
 
 trait ManagedFileStorage {
+
+  def log: LoggingAdapter
 
   def uri(mp: ManagedFilePath): IO[Uri]
 
@@ -149,11 +150,24 @@ trait ManagedFileStorage {
   def importFile(
       f: File,
       path: ProposedManagedFilePath
-  ): IO[(Long, Int, ManagedFilePath)]
+  ): IO[(Long, Int, ManagedFilePath)] =
+    tasks.util.retryIO(s"upload to $path")(importFile1(f, path), 4)(log)
+
+  private def importFile1(
+      f: File,
+      path: ProposedManagedFilePath
+  ): IO[(Long, Int, ManagedFilePath)] = IO.unit.flatMap { _ =>
+    fs2.io.file
+      .Files[IO]
+      .readAll(fs2.io.file.Path.fromNioPath(f.toPath))
+      .through(sink(path))
+      .compile
+      .lastOrError
+  }
 
   def sink(
       path: ProposedManagedFilePath
-  ): fs2.Pipe[IO,Byte,(Long, Int, ManagedFilePath)] 
+  ): fs2.Pipe[IO, Byte, (Long, Int, ManagedFilePath)]
 
   def exportFile(path: ManagedFilePath): Resource[IO, File]
 
