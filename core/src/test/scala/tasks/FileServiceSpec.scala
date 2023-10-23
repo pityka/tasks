@@ -76,7 +76,6 @@ class FileServiceSpec
   self: Suite =>
 
   val as = implicitly[ActorSystem]
-  import as.dispatcher
   implicit val sh: StreamHelper = new StreamHelper(None, None)
 
   implicit val tconfig: TasksConfig = tasks.util.config
