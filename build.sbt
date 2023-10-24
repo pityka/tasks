@@ -124,8 +124,8 @@ lazy val core = project
       scalapb.gen() -> (sourceManaged in Compile).value
     ),
     libraryDependencies ++= Seq(
-      "co.fs2" %% "fs2-io" % "3.8.0",
-      "co.fs2" %% "fs2-reactive-streams" % "3.8.0",
+      "co.fs2" %% "fs2-io" % "3.9.2",
+      "co.fs2" %% "fs2-reactive-streams" % "3.9.2",
       "org.http4s" %% "http4s-ember-client" % http4sVersion,
       "org.http4s" %% "http4s-ember-server" % http4sVersion,
       "org.http4s" %% "http4s-dsl" % http4sVersion,
