@@ -474,7 +474,7 @@ class TaskSystem private[tasks] (
 
           val service = new PackageServer(pack)
 
-          val actorsystem = 1 //shade implicit conversion
+          val actorsystem = 1 // shade implicit conversion
           val _ = actorsystem // suppress unused warning
           import com.comcast.ip4s._
 

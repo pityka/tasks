@@ -61,21 +61,18 @@ object SchemaEvolutionViaOptionsTest extends TestHelpers {
     implicit val codec: JsonValueCodec[Input2] = JsonCodecMaker.make
   }
 
-  val task1 = Task[Input1, Int]("schemaevolutionviaoptions", 1) {
-    _ => _ =>
-      sideEffect += "execution of task"
-      IO(1)
+  val task1 = Task[Input1, Int]("schemaevolutionviaoptions", 1) { _ => _ =>
+    sideEffect += "execution of task"
+    IO(1)
   }
 
-  val task2 = Task[Input2, Int]("schemaevolutionviaoptions", 1) {
-    _ => _ =>
-      sideEffect += "execution of task"
-      IO(1)
+  val task2 = Task[Input2, Int]("schemaevolutionviaoptions", 1) { _ => _ =>
+    sideEffect += "execution of task"
+    IO(1)
   }
 
   def run = {
     val run1 = withTaskSystem(testConfig2) { implicit ts =>
-
       val future = for {
         t1 <- task1(Input1(1))(ResourceRequest(1, 500))
       } yield t1
@@ -85,7 +82,6 @@ object SchemaEvolutionViaOptionsTest extends TestHelpers {
     }
 
     val run2 = withTaskSystem(testConfig2) { implicit ts =>
-
       val future = for {
         t1 <- task2(Input2(1, None))(ResourceRequest(1, 500))
       } yield t1
@@ -95,7 +91,6 @@ object SchemaEvolutionViaOptionsTest extends TestHelpers {
     }
 
     val run3 = withTaskSystem(testConfig2) { implicit ts =>
-
       val future = for {
         t1 <- task2(Input2(1, Some(2)))(ResourceRequest(1, 500))
       } yield t1

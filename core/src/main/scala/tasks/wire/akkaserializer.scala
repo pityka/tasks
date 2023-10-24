@@ -8,7 +8,7 @@ import com.github.plokhotnyuk.jsoniter_scala.core._
 
 class StaticMessageSerializer(system: ExtendedActorSystem) extends Serializer {
 
-  implicit val as : ExtendedActorSystem = system
+  implicit val as: ExtendedActorSystem = system
 
   val log =
     akka.event.Logging(system.eventStream, "tasks.wire.StaticMessageSerializer")
@@ -38,8 +38,9 @@ class StaticMessageSerializer(system: ExtendedActorSystem) extends Serializer {
 
 class ScheduleTaskSerializer(system: ExtendedActorSystem) extends Serializer {
 
-  implicit val as  : ExtendedActorSystem = system
-  implicit val schCodec : JsonValueCodec[ScheduleTask]= ScheduleTask.codec(system)
+  implicit val as: ExtendedActorSystem = system
+  implicit val schCodec: JsonValueCodec[ScheduleTask] =
+    ScheduleTask.codec(system)
 
   val log =
     akka.event.Logging(system.eventStream, "tasks.wire.ScheduleTaskSerializer")
@@ -70,7 +71,7 @@ class ScheduleTaskSerializer(system: ExtendedActorSystem) extends Serializer {
 }
 class SharedFileSerializer(system: ExtendedActorSystem) extends Serializer {
 
-  implicit val as : ExtendedActorSystem= system
+  implicit val as: ExtendedActorSystem = system
 
   val log =
     akka.event.Logging(system.eventStream, "tasks.wire.SharedFileSerializer")

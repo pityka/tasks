@@ -70,9 +70,11 @@ object NodeAllocationTest extends TestHelpers {
       } yield t1 + t2 + t3
 
       f1.flatTap { case _ =>
-        IO{synchronized {
-          tasks.JvmElasticSupport.taskSystems.head._2.foreach(_.shutdown())
-        }}
+        IO {
+          synchronized {
+            tasks.JvmElasticSupport.taskSystems.head._2.foreach(_.shutdown())
+          }
+        }
       }
 
       await(future)

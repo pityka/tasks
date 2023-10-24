@@ -69,7 +69,7 @@ class ProxyTask[Input, Output](
 
     val persisted: Option[Input] = input match {
       case x: HasPersistent[_] => Some(x.persistent.asInstanceOf[Input])
-      case _                       => None
+      case _                   => None
     }
 
     val hash: HashedTaskDescription =
