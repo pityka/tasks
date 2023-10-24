@@ -28,7 +28,6 @@ package tasks.queue
 import tasks.TaskSystemComponents
 import cats.effect.kernel.Resource
 import cats.effect.IO
-import scala.concurrent.Future
 
 object NodeLocalCache {
   type State = tasks.util.concurrent.NodeLocalCache.StateR[Any]
@@ -37,50 +36,52 @@ object NodeLocalCache {
 
   def resource[A](key: String, resource: Resource[IO, A])(implicit
       tsc: TaskSystemComponents
-  ): Resource[IO,A] =
+  ): Resource[IO, A] =
     tasks.util.concurrent.NodeLocalCache
       .offer(key, resource, tsc.nodeLocalCache)
-      .asInstanceOf[Resource[IO,A]]
+      .asInstanceOf[Resource[IO, A]]
 
   def cacheSyncWithRelease[A](key: String, orElse: => A)(
       release: A => IO[Unit]
-  )(implicit tsc: TaskSystemComponents): Resource[IO,A] =
+  )(implicit tsc: TaskSystemComponents): Resource[IO, A] =
     tasks.util.concurrent.NodeLocalCache
       .offer(key, Resource.make(IO(orElse))(release), tsc.nodeLocalCache)
-      .asInstanceOf[Resource[IO,A]]
+      .asInstanceOf[Resource[IO, A]]
 
-  def cacheAsyncWithRelease[A](key: String, orElse: => Future[A])(
+  def cacheAsyncWithRelease[A](key: String, orElse: => IO[A])(
       release: A => IO[Unit]
-  )(implicit tsc: TaskSystemComponents): Resource[IO,A] =
+  )(implicit tsc: TaskSystemComponents): Resource[IO, A] =
     tasks.util.concurrent.NodeLocalCache
       .offer(
         key,
-        Resource.make(IO.fromFuture(IO(orElse)))(release),
+        Resource.make(orElse)(release),
         tsc.nodeLocalCache
-      ).asInstanceOf[Resource[IO,A]]
+      )
+      .asInstanceOf[Resource[IO, A]]
 
   def cacheSync[A](key: String, orElse: => A)(implicit
       tsc: TaskSystemComponents
   ) =
     tasks.util.concurrent.NodeLocalCache
       .offer(key, Resource.make(IO(orElse))(_ => IO.unit), tsc.nodeLocalCache)
-      .asInstanceOf[Resource[IO,A]]
+      .asInstanceOf[Resource[IO, A]]
 
-  def cacheAsync[A](key: String, orElse: => Future[A])(implicit
+  def cacheAsync[A](key: String, orElse: => IO[A])(implicit
       tsc: TaskSystemComponents
-  ): Resource[IO,A] =
+  ): Resource[IO, A] =
     tasks.util.concurrent.NodeLocalCache
       .offer(
         key,
-        Resource.make(IO.fromFuture(IO(orElse)))(_ => IO.unit),
+        Resource.make(orElse)(_ => IO.unit),
         tsc.nodeLocalCache
-      ).asInstanceOf[Resource[IO,A]]
+      )
+      .asInstanceOf[Resource[IO, A]]
 
   def cacheIO[A](key: String, orElse: => IO[A])(implicit
       tsc: TaskSystemComponents
-  ): Resource[IO,A] =
+  ): Resource[IO, A] =
     tasks.util.concurrent.NodeLocalCache
       .offer(key, Resource.make(orElse)(_ => IO.unit), tsc.nodeLocalCache)
-      .asInstanceOf[Resource[IO,A]]
+      .asInstanceOf[Resource[IO, A]]
 
 }

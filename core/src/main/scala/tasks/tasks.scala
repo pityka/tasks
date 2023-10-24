@@ -30,6 +30,7 @@ package tasks
 import tasks.queue._
 import tasks.shared.{Priority, Labels}
 import scala.concurrent._
+import cats.effect.IO
 
 trait HasSharedFiles extends Product {
   private[tasks] def immutableFiles: Seq[SharedFile]
@@ -44,7 +45,7 @@ object HasSharedFiles {
       a: Any
   )(f: HasSharedFiles => Seq[SharedFile]): Seq[SharedFile] = a match {
     case t: HasSharedFiles => f(t)
-    case t: Iterable[_] => t.flatMap(r => recurse(r)(f)).toSeq
+    case t: Iterable[_]    => t.flatMap(r => recurse(r)(f)).toSeq
     case t: Product => t.productIterator.flatMap(r => recurse(r)(f)).toSeq
     case _          => Nil
   }
@@ -93,16 +94,16 @@ trait HasPersistent[+A] { self: A =>
 case class UntypedTaskDefinition[A, C](
     rs: Spore[Unit, Deserializer[A]],
     ws: Spore[Unit, Serializer[C]],
-    fs: Spore[A, ComputationEnvironment => Future[C]]
+    fs: Spore[A, ComputationEnvironment => IO[C]]
 ) {
 
   def apply(j: Base64Data) =
-    (ce: ComputationEnvironment) => {
-      val r = rs(())
-      val w = ws(())
+    (ce: ComputationEnvironment) =>
+      IO.interruptible {
+        val r = rs(())
+        val w = ws(())
 
-      val deserializedInputData =
-        r(Base64DataHelpers.toBytes(j)) match {
+        val deserialized = r(Base64DataHelpers.toBytes(j)) match {
           case Right(value) => value
           case Left(error) =>
             val logMessage =
@@ -110,21 +111,23 @@ case class UntypedTaskDefinition[A, C](
             ce.log.error(logMessage)
             throw new RuntimeException(logMessage)
         }
-      fs(deserializedInputData)(ce).flatMap { result =>
-        tasks.queue
-          .extractDataDependencies(deserializedInputData)(ce)
-          .map { meta =>
-            (UntypedResult.make(result)(w), meta)
-          }(ce.executionContext)
-      }(ce.executionContext)
-    }
+        (w, deserialized)
+      }.flatMap { case (w, deserializedInputData) =>
+        fs(deserializedInputData)(ce).flatMap { result =>
+          tasks.queue
+            .extractDataDependencies(deserializedInputData)(ce)
+            .map { meta =>
+              (UntypedResult.make(result)(w), meta)
+            }
+        }
+      }
 
 }
 
 case class TaskDefinition[A: Serializer, B: Deserializer](
     rs: Spore[Unit, Deserializer[A]],
     ws: Spore[Unit, Serializer[B]],
-    fs: Spore[A, ComputationEnvironment => Future[B]],
+    fs: Spore[A, ComputationEnvironment => IO[B]],
     taskId: TaskId
 ) {
 
@@ -136,7 +139,7 @@ case class TaskDefinition[A: Serializer, B: Deserializer](
       priorityBase: Priority = Priority(0),
       labels: Labels = Labels.empty,
       noCache: Boolean = false
-  )(implicit components: TaskSystemComponents): Future[B] = {
+  )(implicit components: TaskSystemComponents): IO[B] = {
     implicit val queue = components.queue
     implicit val cache = components.cache
     implicit val context = components.actorsystem
@@ -172,7 +175,7 @@ case class TaskDefinition[A: Serializer, B: Deserializer](
       ).withDispatcher("proxytask-dispatcher")
     )
 
-    promise.future
+    IO.fromFuture(IO.delay(promise.future))
 
   }
 

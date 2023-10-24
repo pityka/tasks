@@ -78,7 +78,7 @@ object Spore {
     CodecMakerConfig.withAllowRecursiveTypes(true)
   )
 
-  implicit def codec[A, B] = new JsonValueCodec[Spore[A, B]] {
+  implicit def codec[A, B] : JsonValueCodec[Spore[A,B]] = new JsonValueCodec[Spore[A, B]] {
     val nullValue: Spore[A, B] = null.asInstanceOf[Spore[A, B]]
 
     def encodeValue(x: Spore[A, B], out: JsonWriter): _root_.scala.Unit = {

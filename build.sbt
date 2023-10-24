@@ -26,8 +26,8 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.10",
-  crossScalaVersions := Seq("2.12.15", "2.13.10"),
+  scalaVersion := "2.13.12",
+  crossScalaVersions := Seq("2.13.12"),
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -71,6 +71,7 @@ lazy val circeVersion = "0.14.5"
 lazy val jsoniterVersion = "2.13.31"
 lazy val akkaVersion = "2.6.19"
 lazy val shapelessVersion = "2.3.10"
+lazy val http4sVersion = "0.23.23"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
   .crossType(sbtcrossproject.CrossPlugin.autoImport.CrossType.Pure)
@@ -112,10 +113,7 @@ lazy val spores = project
   )
 lazy val akkaProvided = List(
   "com.typesafe.akka" %% "akka-actor" % akkaVersion % Provided,
-  "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided,
-  "com.typesafe.akka" %% "akka-http" % "10.2.9" % Provided,
-  "com.typesafe.akka" %% "akka-http-xml" % "10.2.9" % Provided,
-  "com.lightbend.akka" %% "akka-stream-alpakka-s3" % "3.0.4" % Provided
+  "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided
 )
 lazy val core = project
   .in(file("core"))
@@ -126,6 +124,12 @@ lazy val core = project
       scalapb.gen() -> (sourceManaged in Compile).value
     ),
     libraryDependencies ++= Seq(
+      "co.fs2" %% "fs2-io" % "3.8.0",
+      "co.fs2" %% "fs2-reactive-streams" % "3.8.0",
+      "org.http4s" %% "http4s-ember-client" % http4sVersion,
+      "org.http4s" %% "http4s-ember-server" % http4sVersion,
+      "org.http4s" %% "http4s-dsl" % http4sVersion,
+      "software.amazon.awssdk" % "s3" % "2.20.135",
       "com.google.guava" % "guava" % "31.1-jre", // scala-steward:off
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe" % "config" % "1.4.2",
@@ -173,52 +177,52 @@ lazy val kubernetes = project
   )
   .dependsOn(core % "compile->compile;test->test")
 
-lazy val tracker = project
-  .in(file("tracker"))
-  .settings(commonSettings: _*)
-  .settings(
-    name := "tasks-tracker",
-    libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.16" % "test",
-      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
-    ) ++ akkaProvided,
-    resources in Compile += (fastOptJS in Compile in uifrontend).value.data
-  )
-  .dependsOn(core % "compile->compile;test->test")
+// lazy val tracker = project
+//   .in(file("tracker"))
+//   .settings(commonSettings: _*)
+//   .settings(
+//     name := "tasks-tracker",
+//     libraryDependencies ++= Seq(
+//       "org.scalatest" %% "scalatest" % "3.2.10" % "test",
+//       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
+//     ) ++ akkaProvided,
+//     // resources in Compile += (fastOptJS in Compile in uifrontend).value.data
+//   )
+//   .dependsOn(core % "compile->compile;test->test")
 
-lazy val uibackend = project
-  .in(file("uibackend"))
-  .settings(commonSettings: _*)
-  .settings(
-    name := "tasks-ui-backend",
-    libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.16" % "test"
-    ) ++ akkaProvided,
-    resources in Compile += (fastOptJS in Compile in uifrontend).value.data
-  )
-  .dependsOn(core % "compile->compile;test->test")
+// lazy val uibackend = project
+//   .in(file("uibackend"))
+//   .settings(commonSettings: _*)
+//   .settings(
+//     name := "tasks-ui-backend",
+//     libraryDependencies ++= Seq(
+//       "org.scalatest" %% "scalatest" % "3.2.10" % "test"
+//     ) ++ akkaProvided,
+//     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
+//   )
+//   .dependsOn(core % "compile->compile;test->test")
 
-lazy val uifrontend = project
-  .in(file("uifrontend"))
-  .settings(commonSettings: _*)
-  .settings(
-    name := "tasks-ui-frontend",
-    libraryDependencies ++= Seq(
-      "org.scala-js" %%% "scalajs-dom" % "1.2.0",
-      "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % jsoniterVersion,
-      "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
-      "com.raquo" %%% "laminar" % "0.13.0"
-    ),
-    mimaPreviousArtifacts := Set.empty,
-    fork := false
-  )
-  .dependsOn(sharedJS)
-  .enablePlugins(ScalaJSPlugin)
+// lazy val uifrontend = project
+//   .in(file("uifrontend"))
+//   .settings(commonSettings: _*)
+//   .settings(
+//     name := "tasks-ui-frontend",
+//     libraryDependencies ++= Seq(
+//       "org.scala-js" %%% "scalajs-dom" % "1.2.0",
+//       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % jsoniterVersion,
+//       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
+//       "com.raquo" %%% "laminar" % "0.13.0"
+//     ),
+//     mimaPreviousArtifacts := Set.empty,
+//     fork := false
+//   )
+//   .dependsOn(sharedJS)
+//   .enablePlugins(ScalaJSPlugin)
 
 lazy val example = project
   .in(file("example"))
   .settings(commonSettings: _*)
-  .dependsOn(core, ecoll, ssh)
+  .dependsOn(core, ssh)
   .enablePlugins(JavaAppPackaging)
   .settings(
     executableScriptName := "entrypoint",
@@ -228,7 +232,7 @@ lazy val example = project
     crossScalaVersions := Nil,
     libraryDependencies ++= Seq(
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
-    )
+    ) ++ akkaProvided
   )
 
 lazy val upicklesupport = project
@@ -282,17 +286,16 @@ lazy val root = (project in file("."))
   .aggregate(
     spores,
     core,
-    ecoll,
     upicklesupport,
     circe,
     sharedJVM,
     sharedJS,
     ec2,
     ssh,
-    uibackend,
-    uifrontend,
+    // uibackend,
+    // uifrontend,
     kubernetes,
-    tracker,
+    // tracker,
     example
   )
 
@@ -305,7 +308,6 @@ lazy val testables = (project in file("testables"))
   .aggregate(
     spores,
     core,
-    ecoll,
     upicklesupport,
     circe,
     sharedJVM,

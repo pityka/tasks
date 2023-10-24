@@ -23,6 +23,7 @@
  */
 
 package tasks.tracker
+import cats.effect.unsafe.implicits.global
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
@@ -30,18 +31,18 @@ import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
 import com.typesafe.config.ConfigFactory
-import scala.concurrent._
 import scala.concurrent.duration._
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
 import tasks._
+import cats.effect.IO
 object QueryLogTest extends TestHelpers {
 
-  val task1 = AsyncTask[Input, Int]("task1", 1) {
+  val task1 = Task[Input, Int]("task1", 1) {
     input => implicit computationEnvironment =>
       releaseResources
       for {
-        files <- Future.traverse(0 to input.i) { i =>
+        files <- IO.parTraverseN(4)(0 to input.i toList) { i =>
           SharedFile(Source.single(ByteString("abcd")), i.toString)
         }
         _ <- scatter(InputSF(files.toList))(ResourceRequest(1, 500))
@@ -51,13 +52,13 @@ object QueryLogTest extends TestHelpers {
       }
   }
 
-  val gather = AsyncTask[InputSF, Int]("gather", 1) {
+  val gather = Task[InputSF, Int]("gather", 1) {
     _ => implicit computationEnvironment =>
       log.info("gather")
       Thread.sleep(1000)
-      Future(1)
+      IO(1)
   }
-  val work = AsyncTask[SharedFile, SharedFile]("work", 1) {
+  val work = Task[SharedFile, SharedFile]("work", 1) {
     input => implicit computationEnvironment =>
       log.info("work " + input.name)
       audit("work " + input.name)
@@ -65,12 +66,12 @@ object QueryLogTest extends TestHelpers {
       SharedFile(Source.single(ByteString("abcd")), input.name + ".worked")
   }
 
-  val scatter = AsyncTask[InputSF, Int]("scatter", 1) {
+  val scatter = Task[InputSF, Int]("scatter", 1) {
     input => implicit computationEnvironment =>
       releaseResources
       log.info("scatter")
       for {
-        scatteredFiles <- Future.traverse(input.files1) { i =>
+        scatteredFiles <- IO.parTraverseN(4)(input.files1) { i =>
           work(i)(ResourceRequest(1, 500))
         }
         gathered <- gather(InputSF(scatteredFiles))(ResourceRequest(1, 500))
@@ -97,13 +98,13 @@ object QueryLogTest extends TestHelpers {
 
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
 
       val future = for {
         t1 <- task1(Input(1))(ResourceRequest(1, 500))
       } yield t1
 
-      Await.result(future, atMost = 30 seconds)
+      future.timeout(30 seconds).unsafeRunSync()
+
 
     }
   }

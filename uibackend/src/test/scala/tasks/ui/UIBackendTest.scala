@@ -30,19 +30,20 @@ import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
 import com.typesafe.config.ConfigFactory
-import scala.concurrent._
 import scala.concurrent.duration._
 import com.github.plokhotnyuk.jsoniter_scala.core._
+import cats.effect.unsafe.implicits.global
 
 import tasks._
+import cats.effect.IO
 
 object UIBackendTest extends TestHelpersUI {
 
-  val testTask = AsyncTask[Input, Int]("nodeallocationtest", 1) {
+  val testTask = Task[Input, Int]("nodeallocationtest", 1) {
     _ => implicit computationEnvironment =>
       log.info("Hello from task")
       Thread.sleep(1000)
-      Future(1)
+      IO(1)
   }
 
   val testConfig2 = {
@@ -60,16 +61,12 @@ object UIBackendTest extends TestHelpersUI {
 
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
 
       val sf =
-        Await.result(
           SharedFile(
             akka.stream.scaladsl.Source.single(akka.util.ByteString()),
             "boo"
-          ),
-          atMost = 50 seconds
-        )
+          ).timeout(50 seconds).unsafeRunSync()
 
       val f1 = testTask(Input(1, sf))(ResourceRequest(1, 500))
       val f2 = testTask(Input(2, sf))(ResourceRequest(1, 500))
@@ -86,7 +83,7 @@ object UIBackendTest extends TestHelpersUI {
         }
       )
 
-      Await.result(future, atMost = 30 seconds)
+      future.timeout(30 seconds).unsafeRunSync()
 
     }
   }

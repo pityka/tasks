@@ -33,14 +33,15 @@ import tasks.fileservice._
 import tasks.shared._
 import tasks._
 import tasks.wire._
-import scala.concurrent.{Promise, Future}
+import scala.concurrent.Promise
+import cats.effect.IO
 
 /* Local proxy of the remotely executed task */
 class ProxyTask[Input, Output](
     taskId: TaskId,
     inputDeserializer: Spore[Unit, Deserializer[Input]],
     outputSerializer: Spore[Unit, Serializer[Output]],
-    function: Spore[Input, ComputationEnvironment => Future[Output]],
+    function: Spore[Input, ComputationEnvironment => IO[Output]],
     input: Input,
     writer: Serializer[Input],
     reader: Deserializer[Output],

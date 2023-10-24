@@ -31,10 +31,12 @@ import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 
 import com.typesafe.config.ConfigFactory
-
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 trait TestHelpers {
 
   def await[T](f: Future[T]) = Await.result(f, atMost = 60 seconds)
+  def await[T](f: IO[T]) = f.unsafeRunTimed( 60 seconds).getOrElse(throw new RuntimeException("timeout"))
 
   case class Input(i: Int)
   object Input {

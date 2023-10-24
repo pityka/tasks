@@ -24,120 +24,114 @@
 
 package tasks.ui
 
-import akka.actor._
-import akka.stream.scaladsl._
-import akka.stream._
 import tasks.elastic.NodeRegistry
 import tasks.util.config.TasksConfig
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.ws.TextMessage
-import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.server.Route
 import com.github.plokhotnyuk.jsoniter_scala.core._
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
+import scala.concurrent.duration._
+import org.http4s.websocket.WebSocketFrame
 
-class AppUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
-    extends AppUI {
+class AppUIBackendImpl(implicit config: TasksConfig) extends AppUI {
 
-  import actorSystem.dispatcher
+  
+  private val ref =
+    cats.effect.kernel.Ref[IO].of(UIAppState.empty).unsafeRunSync()
 
-  val log = akka.event.Logging(actorSystem.eventStream, getClass)
+  def update(a: NodeRegistry.Event) = ref
+    .getAndUpdate(old => UIAppStateProjector.project(old, a))
+    .unsafeRunAndForget()
 
-  private val stateFlow =
-    Flow[NodeRegistry.Event]
-      .scan(UIAppState.empty)(UIAppStateProjector.project(_, _))
-
-  private val multiplex = actorSystem.actorOf(Props[Multiplex]())
-
-  private val (eventListener, eventSource) =
-    ActorSource.make[NodeRegistry.Event]
-
-  eventSource
-    .via(stateFlow)
-    .runWith(
-      Sink.actorRef(
-        multiplex,
-        onCompleteMessage = None,
-        onFailureMessage = (_ => ())
-      )
+  def makeOutgoingStream = fs2.Stream
+    .awakeEvery[IO](1.second)
+    .evalMap(_ =>
+      ref.get.map { state =>
+        WebSocketFrame.Text(writeToString(state))
+      }
     )
 
-  private val stateToTextMessage =
-    Flow[UIAppState].map { state =>
-      val json: String =
-        writeToString(state)
-      TextMessage(json)
-    }
+  // Flow[NodeRegistry.Event]
+  //   .scan(UIAppState.empty)(UIAppStateProjector.project(_, _))
 
-  private val route =
-    get {
-      path("states") {
-        val source = Source
-          .actorRef[UIAppState](
-            completionMatcher = { case akka.actor.Status.Success =>
-              CompletionStrategy.draining
-            }: PartialFunction[Any, CompletionStrategy],
-            failureMatcher = { case akka.actor.Status.Failure(e) =>
-              e
-            }: PartialFunction[Any, Throwable],
-            bufferSize = 100,
-            overflowStrategy = OverflowStrategy.dropTail
-          )
-          .mapMaterializedValue { actorRef =>
-            multiplex ! actorRef
-            actorRef
-          }
-          .viaMat(stateToTextMessage)(Keep.left)
-          .watchTermination() { (actorRef, terminationFuture) =>
-            terminationFuture.foreach { case akka.Done =>
-              multiplex ! Multiplex.Unsubscribe(actorRef)
-            }
-          }
-        handleWebSocketMessages(Flow.fromSinkAndSource(Sink.ignore, source))
-      } ~
-        pathSingleSlash {
-          Route.seal(getFromResource("public/index_app.html"))
+  // eventSource
+  //   .via(stateFlow)
+  //   .runWith(
+  //     Sink.actorRef(
+  //       multiplex,
+  //       onCompleteMessage = None,
+  //       onFailureMessage = (_ => ())
+  //     )
+  //   )
 
-        } ~
-        path("tasks-ui-frontend-fastopt.js") {
-          Route.seal(getFromResource("tasks-ui-frontend-fastopt.js"))
+  // private val route =
+  //   get {
+  //     path("states") {
+  //       val source = Source
+  //         .actorRef[UIAppState](
+  //           completionMatcher = { case akka.actor.Status.Success =>
+  //             CompletionStrategy.draining
+  //           }: PartialFunction[Any, CompletionStrategy],
+  //           failureMatcher = { case akka.actor.Status.Failure(e) =>
+  //             e
+  //           }: PartialFunction[Any, Throwable],
+  //           bufferSize = 100,
+  //           overflowStrategy = OverflowStrategy.dropTail
+  //         )
+  //         .mapMaterializedValue { actorRef =>
+  //           multiplex ! actorRef
+  //           actorRef
+  //         }
+  //         .viaMat(stateToTextMessage)(Keep.left)
+  //         .watchTermination() { (actorRef, terminationFuture) =>
+  //           terminationFuture.foreach { case akka.Done =>
+  //             multiplex ! Multiplex.Unsubscribe(actorRef)
+  //           }
+  //         }
+  //       handleWebSocketMessages(Flow.fromSinkAndSource(Sink.ignore, source))
+  //     } ~
+  //       pathSingleSlash {
+  //         Route.seal(getFromResource("public/index_app.html"))
 
-        } ~
-        path("tasks-ui-frontend-fullopt.js") {
-          Route.seal(getFromResource("tasks-ui-frontend-fullopt.js"))
-        } ~
-        path("jquery@3.3.1.min.js") {
-          Route.seal(getFromResource("public/jquery.min.js"))
-        } ~
-        path("semantic-ui@2.3.3.min.js") {
-          Route.seal(getFromResource("public/semantic.min.js"))
-        } ~
-        path("semantic-ui@2.3.3.min.css") {
-          Route.seal(getFromResource("public/semantic.min.css"))
-        }
+  //       } ~
+  //       path("tasks-ui-frontend-fastopt.js") {
+  //         Route.seal(getFromResource("tasks-ui-frontend-fastopt.js"))
 
-    }
+  //       } ~
+  //       path("tasks-ui-frontend-fullopt.js") {
+  //         Route.seal(getFromResource("tasks-ui-frontend-fullopt.js"))
+  //       } ~
+  //       path("jquery@3.3.1.min.js") {
+  //         Route.seal(getFromResource("public/jquery.min.js"))
+  //       } ~
+  //       path("semantic-ui@2.3.3.min.js") {
+  //         Route.seal(getFromResource("public/semantic.min.js"))
+  //       } ~
+  //       path("semantic-ui@2.3.3.min.css") {
+  //         Route.seal(getFromResource("public/semantic.min.css"))
+  //       }
 
-  private val bindingFuture =
-    Http()
-      .newServerAt(config.appUIServerHost, config.appUIServerPort)
-      .bind(route)
+  //   }
 
-  bindingFuture.andThen { case scala.util.Success(serverBinding) =>
-    log.info(
-      s"Started UI app backend http server at ${serverBinding.localAddress}"
-    )
-  }
+  // private val bindingFuture =
+  //   Http()
+  //     .newServerAt(config.appUIServerHost, config.appUIServerPort)
+  //     .bind(route)
+
+  // bindingFuture.andThen { case scala.util.Success(serverBinding) =>
+  //   log.info(
+  //     s"Started UI app backend http server at ${serverBinding.localAddress}"
+  //   )
+  // }
 
   def nodeRegistryEventListener: EventListener[NodeRegistry.Event] =
     new EventListener[NodeRegistry.Event] {
-      def watchable = eventListener
-      def close() = eventListener ! PoisonPill
+      def close() = () //eventListener ! PoisonPill
       def receive(event: NodeRegistry.Event): Unit = {
-        eventListener ! event
+        update(event)
       }
     }
 
-  def unbind = {
-    bindingFuture.flatMap(_.unbind())
-  }
+  // def unbind = {
+  //   bindingFuture.flatMap(_.unbind())
+  // }
 }

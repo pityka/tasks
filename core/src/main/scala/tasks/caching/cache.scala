@@ -27,21 +27,20 @@
 
 package tasks.caching
 
-import scala.concurrent._
-
 import tasks.queue._
 
 import tasks.fileservice.FileServicePrefix
+import cats.effect.IO
 
 abstract class Cache {
 
   def get(x: HashedTaskDescription)(implicit
       p: FileServicePrefix
-  ): Future[Option[UntypedResult]]
+  ): IO[Option[UntypedResult]]
 
   def set(x: HashedTaskDescription, r: UntypedResult)(implicit
       p: FileServicePrefix
-  ): Future[Unit]
+  ): IO[Unit]
 
   def shutDown(): Unit
 
@@ -50,12 +49,12 @@ abstract class Cache {
 class DisabledCache extends Cache {
 
   def get(x: HashedTaskDescription)(implicit p: FileServicePrefix) =
-    Future.successful(None)
+    IO.pure(None)
 
   def set(x: HashedTaskDescription, r: UntypedResult)(implicit
       p: FileServicePrefix
   ) =
-    Future.successful(())
+    IO.pure(())
 
   def shutDown() = {}
 

@@ -29,31 +29,27 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 import java.io.File
 import tasks.jsonitersupport._
-import akka.stream.scaladsl.Source
-import akka.util.ByteString
 
 object FolderFileStorageTest extends TestHelpers with Matchers {
 
-  val task1 = AsyncTask[Input, Boolean]("sharedfileinput1", 1) {
+  val task1 = Task[Input, Boolean]("sharedfileinput1", 1) {
     _ => implicit computationEnvironment =>
       for {
 
-        sf <- SharedFile(Source.single(ByteString("abcd")), "f1")
-        local <- sf.file.allocated.map(_._1).unsafeToFuture()(cats.effect.unsafe.implicits.global)
+        sf <- SharedFile(fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))), "f1")
+        local <- sf.file.allocated.map(_._1)
         sf2 <- {
           val newPath = new File(local.getParentFile.getParentFile, "uncle")
           tasks.util.openFileOutputStream(newPath)(_.write("boo".getBytes))
           SharedFile(newPath, "something")
 
         }
-        local2 <- sf2.file.allocated.map(_._1).unsafeToFuture()(cats.effect.unsafe.implicits.global)
+        local2 <- sf2.file.allocated.map(_._1)
       } yield local2.canRead
   }
 
   def run = {
     withTaskSystem(testConfig) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
-
       val future = for {
         t11 <- task1(Input(1))(ResourceRequest(1, 500))
       } yield t11

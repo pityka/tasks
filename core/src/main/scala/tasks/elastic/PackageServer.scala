@@ -26,11 +26,15 @@
 package tasks.elastic
 
 import java.io.File
-import akka.http.scaladsl.server.Directives._
+import org.http4s._
+import cats.effect.IO
 
 class PackageServer(pack: File) {
 
-  val route = get {
-    getFromFile(pack)
+  val route = HttpRoutes.of[IO] {
+    case request if request.method == Method.GET =>
+      StaticFile
+        .fromPath[IO](fs2.io.file.Path.fromNioPath(pack.toPath()))
+        .getOrRaise(new RuntimeException(s"$pack not found"))
   }
 }
