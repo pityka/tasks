@@ -129,7 +129,7 @@ lazy val core = project
       "org.http4s" %% "http4s-ember-client" % http4sVersion,
       "org.http4s" %% "http4s-ember-server" % http4sVersion,
       "org.http4s" %% "http4s-dsl" % http4sVersion,
-      "software.amazon.awssdk" % "s3" % "2.20.135",
+      "software.amazon.awssdk" % "s3" % "2.20.162",
       "com.google.guava" % "guava" % "31.1-jre", // scala-steward:off
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe" % "config" % "1.4.2",
