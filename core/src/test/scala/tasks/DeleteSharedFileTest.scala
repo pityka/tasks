@@ -35,8 +35,6 @@ object DeleteSharedFileTest extends TestHelpers {
   def run = {
 
     withTaskSystem(testConfig) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
-
       val file = TempFile.createTempFile("")
       val os = new java.io.FileOutputStream(file)
       os.write(Array[Byte](51, 52, 53))
@@ -44,7 +42,8 @@ object DeleteSharedFileTest extends TestHelpers {
 
       val future = for {
         sf <- SharedFile(file, "boo", deleteFile = true)
-        local <- sf.file
+        local <- sf.file.allocated
+          .map(_._1)
         _ <- sf.delete
       } yield local
 

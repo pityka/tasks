@@ -67,7 +67,7 @@ class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
             (prefix ::: (transformed.get :: suffix.tail))
               .filterNot(_.isEmpty)
           else {
-            logger.warn(
+            logger.debug(
               "More resources running than available??"
             )
             available

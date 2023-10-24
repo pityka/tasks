@@ -1,10 +1,7 @@
 package tasks.wire
 
-import java.io.File
-
 import akka.actor._
 
-import tasks.util._
 import tasks.shared._
 import tasks.fileservice._
 import tasks.queue._
@@ -60,7 +57,7 @@ case class MessageFromTask(result: UntypedResult, retrievedFromCache: Boolean)
 
 case object SaveDone extends StaticMessage
 
-private[tasks] case class Ack(allocated: VersionedResourceAllocated)
+private[tasks] case class QueueAck(allocated: VersionedResourceAllocated)
     extends StaticMessage
 
 private[tasks] case object GetMaximumSlots extends StaticMessage
@@ -72,59 +69,6 @@ case object YouShouldSetIt extends StaticMessage
 case object Release extends StaticMessage
 
 case class Schedule(sch: ScheduleTask) extends StaticMessage
-
-// Messages related to files
-
-case class GetListOfFilesInStorage(regexp: String) extends StaticMessage
-
-case class GetSharedFolder(prefix: Vector[String]) extends StaticMessage
-
-case class NewFile(f: File, p: ProposedManagedFilePath, ephemeralFile: Boolean)
-    extends StaticMessage
-
-case class NewSource(p: ProposedManagedFilePath) extends StaticMessage
-
-case class GetPaths(p: ManagedFilePath, size: Long, hash: Int)
-    extends StaticMessage
-
-case class KnownPaths(paths: List[File]) extends StaticMessage
-
-case class TransferToMe(actor: ActorRef) extends StaticMessage
-
-case class TransferFileToUser(actor: ActorRef, sf: ManagedFilePath)
-    extends StaticMessage
-
-case object WaitingForSharedFile extends StaticMessage
-
-case object WaitingForPath extends StaticMessage
-
-case class FileNotFound(e: Throwable) extends StaticMessage
-
-case class Uploaded(
-    length: Long,
-    hash: Int,
-    file: Option[File],
-    p: ManagedFilePath
-) extends StaticMessage
-
-case class CouldNotUpload(p: ProposedManagedFilePath) extends StaticMessage
-
-case class IsInStorageAnswer(value: Boolean) extends StaticMessage
-
-case class ErrorWhileAccessingStore(e: Throwable) extends StaticMessage
-
-case class NewRemote(uri: Uri) extends StaticMessage
-
-case class IsAccessible(sf: ManagedFilePath, size: Long, hash: Int)
-    extends StaticMessage
-
-case class IsPathAccessible(sf: ManagedFilePath, retrieveSizeAndHash: Boolean)
-    extends StaticMessage
-
-case class GetUri(sf: ManagedFilePath) extends StaticMessage
-
-case class Delete(sf: ManagedFilePath, size: Long, hash: Int)
-    extends StaticMessage
 
 // Messages related to elastic
 

@@ -29,7 +29,7 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import scala.concurrent.Future
+import cats.effect.IO
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 object InputWithHasPersistentTest extends TestHelpers {
@@ -48,15 +48,14 @@ object InputWithHasPersistentTest extends TestHelpers {
 
   }
 
-  val task = AsyncTask[InputWithHasPersistent, Int]("haspersistenttest", 1) {
-    _ => implicit computationEnvironment =>
+  val task = Task[InputWithHasPersistent, Int]("haspersistenttest", 1) {
+    _ => _ =>
       sideEffect += "execution of task"
-      Future(1)
+      IO(1)
   }
 
   def run = {
     withTaskSystem(testConfig) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
 
       val future = for {
         t1 <- task(InputWithHasPersistent(Some(1), Some(1)))(

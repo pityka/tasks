@@ -3,8 +3,7 @@ package tasks.elastic.ec2
 import tasks.deploy._
 import tasks.util.config.TasksConfig
 import tasks.util.EC2Operations
-
-import java.net.InetSocketAddress
+import tasks.util.SimpleSocketAddress
 
 trait EC2HostConfiguration extends HostConfigurationFromConfig {
 
@@ -13,7 +12,7 @@ trait EC2HostConfiguration extends HostConfigurationFromConfig {
   private lazy val myhostname =
     EC2Operations.readMetadata("local-hostname").head
 
-  override lazy val myAddress = new InetSocketAddress(myhostname, myPort)
+  override lazy val myAddress = SimpleSocketAddress(myhostname, myPort)
 
   private lazy val instancetype = EC2Operations.currentInstanceType
 

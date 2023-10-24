@@ -38,26 +38,26 @@ import tasks.elastic._
 import tasks.shared._
 
 import akka.actor._
-import akka.pattern.ask
 
 import java.io.File
 
 import scala.concurrent.Await
 
 import scala.concurrent.duration._
-import scala.concurrent._
 import scala.util._
-
-import com.bluelabs.s3stream.S3ClientQueued
+import cats.effect.unsafe.implicits.global
+import org.http4s.ember.client.EmberClientBuilder
+import cats.effect.IO
+import org.http4s.ember.server.EmberServerBuilder
+import tasks.fileservice.proxy.ProxyFileStorage
 
 case class TaskSystemComponents(
     queue: QueueActor,
     fs: FileServiceComponent,
     actorsystem: ActorSystem,
     cache: CacheActor,
-    nodeLocalCache: NodeLocalCacheActor,
+    nodeLocalCache: NodeLocalCache.State,
     filePrefix: FileServicePrefix,
-    executionContext: ExecutionContext,
     tasksConfig: TasksConfig,
     historyContext: HistoryContext,
     priority: Priority,
@@ -83,12 +83,31 @@ class TaskSystem private[tasks] (
     val elasticSupport: Option[ElasticSupport]
 )(implicit val config: TasksConfig) {
 
-  implicit val AS = system
-  import AS.dispatcher
-  implicit val s3Stream = scala.util
-    .Try(new S3ClientQueued(config.s3Region))
-    .toOption
-  implicit val streamHelper = new StreamHelper(s3Stream)
+  implicit val AS: ActorSystem = system
+
+  val s3Client =
+    if (config.storageURI.getScheme == "s3" || config.s3RemoteEnabled) {
+      val s3AWSSDKClient =
+        tasks.fileservice.s3.S3.makeAWSSDKClient(config.s3RegionProfileName)
+      val s3Client = {
+        new tasks.fileservice.s3.S3(
+          s3AWSSDKClient
+        )
+      }
+      Some(s3Client -> s3AWSSDKClient)
+    } else None
+
+  val httpClientAndRelease = if (config.httpRemoteEnabled) {
+    val (httpClient, releaseHttpClient) = EmberClientBuilder
+      .default[IO]
+      .build
+      .allocated
+      .unsafeRunSync()
+    Some((httpClient, releaseHttpClient))
+  } else None
+
+  implicit val streamHelper: StreamHelper =
+    new StreamHelper(s3Client.map(_._1), httpClientAndRelease.map(_._1))
 
   private val tasksystemlog = akka.event.Logging(AS.eventStream, "tasks.boot")
 
@@ -110,7 +129,8 @@ class TaskSystem private[tasks] (
 
   tasksystemlog.info("Master node address is: " + hostConfig.master.toString)
 
-  private lazy val masterAddress = hostConfig.master
+  private lazy val masterAddress: tasks.util.SimpleSocketAddress =
+    hostConfig.master
 
   val reaperActor = elasticSupport.flatMap(_.reaperFactory.map(_.apply)) match {
     case None =>
@@ -133,8 +153,8 @@ class TaskSystem private[tasks] (
         case Success(nr) => Some(nr)
         case Failure(e) =>
           tasksystemlog.error(
-            "Failed to contact remote node registry. Shut down job.",
-            e
+            e,
+            "Failed to contact remote node registry. Shut down job."
           )
           try {
             elasticSupport.get.selfShutdownNow()
@@ -148,106 +168,158 @@ class TaskSystem private[tasks] (
 
   val remoteFileStorage = new RemoteFileStorage
 
-  val managedFileStorage: Option[ManagedFileStorage] =
-    if (config.storageURI.toString == "") None
-    else if (!hostConfig.isQueue && config.forceNoManagedFileStorage) None
-    else {
-      val s3bucket =
-        if (
-          config.storageURI.getScheme != null && config.storageURI.getScheme == "s3"
-        ) {
-          Some(
-            (config.storageURI.getAuthority, config.storageURI.getPath.drop(1))
+  val proxyStoragePort = masterAddress.port + 2
+
+  def makeHttpProxyStorageClient(): (ManagedFileStorage, IO[Unit]) = {
+    tasksystemlog.info(
+      s"Trying to use main application's http proxy storage on address ${masterAddress.hostName} and port ${proxyStoragePort}"
+    )
+    import org.http4s.Uri
+    ProxyFileStorage
+      .makeClient(
+        uri = org.http4s.Uri(
+          scheme = Some(Uri.Scheme.http),
+          authority = Some(
+            Uri.Authority(
+              host = Uri.Host.unsafeFromString(masterAddress.hostName),
+              port = Some(proxyStoragePort)
+            )
           )
-        } else None
+        ),
+        as = AS
+      )
+      .allocated
+      .unsafeRunSync()
 
-      if (s3bucket.isDefined) {
-        val actorsystem = 1 // shade implicit conversion
-        val _ = actorsystem // suppress unused warning
-        Some(new S3Storage(s3bucket.get._1, s3bucket.get._2, s3Stream.get))
+  }
+
+  def startProxyFileStorageHttpServer(storage: ManagedFileStorage): IO[Unit] = {
+    tasksystemlog.info("Starting http server for proxy file storage")
+    import com.comcast.ip4s._
+    val service = ProxyFileStorage.service(storage)
+
+    val (server, releaseServer) = EmberServerBuilder
+      .default[IO]
+      .withHost(ipv4"0.0.0.0")
+      .withPort(com.comcast.ip4s.Port.fromInt(proxyStoragePort).get)
+      .withHttpApp(service.orNotFound)
+      .build
+      .allocated
+      .unsafeRunSync()
+    tasksystemlog.info(s"Started proxy storage server on ${server.baseUri}")
+
+    releaseServer
+  }
+
+  val (
+    managedFileStorage: ManagedFileStorage,
+    releaseManagedFileStore: IO[Unit]
+  ) = {
+    val (fileStore, release1) =
+      if (
+        (config.storageURI.toString == "" || config.connectToProxyFileServiceOnMain) && !hostConfig.isQueue
+      ) {
+        makeHttpProxyStorageClient()
       } else {
-        val storageFolderPath =
-          if (config.storageURI.getScheme == null)
-            config.storageURI.getPath
-          else if (config.storageURI.getScheme == "file")
-            config.storageURI.getPath
-          else {
-            tasksystemlog.error(
-              s"${config.storageURI} unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative"
+        val s3bucket =
+          if (
+            config.storageURI.getScheme != null && config.storageURI.getScheme == "s3"
+          ) {
+            Some(
+              (
+                config.storageURI.getAuthority,
+                config.storageURI.getPath.drop(1)
+              )
             )
-            throw new RuntimeException(
-              s"${config.storageURI} unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative"
-            )
-          }
-        val storageFolder = new File(storageFolderPath).getCanonicalFile
-        if (storageFolder.isFile) {
-          tasksystemlog.error(s"$storageFolder is a file. Abort.")
-          throw new RuntimeException(s"$storageFolder is a file. Abort.")
-        }
-        if (!storageFolder.isDirectory) {
-          if (hostConfig.isQueue) {
+          } else None
 
-            tasksystemlog.warning(
-              s"Folder $storageFolder does not exists. Try to create it. "
-            )
-            storageFolder.mkdirs
-            Some(new FolderFileStorage(storageFolder))
-          } else {
-            tasksystemlog.warning(
-              s"Folder $storageFolder does not exists. This is not a master node. Reverting to no managed storage."
-            )
-            None
-          }
+        if (s3bucket.isDefined) {
+          val actorsystem = 1 // shade implicit conversion
+          val _ = actorsystem // suppress unused warning
+
+          (
+            new s3.S3Storage(
+              bucketName = s3bucket.get._1,
+              folderPrefix = s3bucket.get._2,
+              sse = config.s3ServerSideEncryption,
+              cannedAcls = config.s3CannedAcl,
+              grantFullControl = config.s3GrantFullControl,
+              uploadParallelism = config.s3UploadParallelism,
+              s3 = s3Client.get._1
+            ),
+            IO.unit
+          )
         } else {
-          Some(new FolderFileStorage(storageFolder))
+          val storageFolderPath =
+            if (config.storageURI.getScheme == null)
+              config.storageURI.getPath
+            else if (config.storageURI.getScheme == "file")
+              config.storageURI.getPath
+            else {
+              tasksystemlog.error(
+                s"${config.storageURI} unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative"
+              )
+              throw new RuntimeException(
+                s"${config.storageURI} unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative"
+              )
+            }
+          val storageFolder = new File(storageFolderPath).getCanonicalFile
+          if (storageFolder.isFile) {
+            tasksystemlog.error(s"$storageFolder is a file. Abort.")
+            throw new RuntimeException(s"$storageFolder is a file. Abort.")
+          }
+          if (!storageFolder.isDirectory) {
+            if (hostConfig.isQueue) {
+
+              tasksystemlog.warning(
+                s"Folder $storageFolder does not exists and this is a master node. Try to create the folder $storageFolder for file storage. "
+              )
+              storageFolder.mkdirs
+              (new FolderFileStorage(storageFolder), IO.unit)
+            } else {
+              tasksystemlog.warning(
+                s"Folder $storageFolder does not exists. This is not a master node. Reverting to proxy via main node."
+              )
+              makeHttpProxyStorageClient()
+            }
+          } else {
+            (new FolderFileStorage(storageFolder), IO.unit)
+          }
         }
       }
+
+    fileStore match {
+      case fs: ManagedFileStorage if config.proxyStorage =>
+        val release = startProxyFileStorageHttpServer(fs)
+        val releaseBoth = release
+          .handleError { throwable =>
+            tasksystemlog.error(
+              "Error in stopping http file storage",
+              throwable
+            )
+          }
+          .flatMap(_ =>
+            release1.handleError { throwable =>
+              tasksystemlog
+                .error("Error in stopping http file storage client", throwable)
+            }
+          )
+        (fs, releaseBoth)
+      case fs: ManagedFileStorage => (fs, release1)
     }
+
+  }
 
   tasksystemlog.info("File store: " + managedFileStorage)
 
-  val fileActor =
-    try {
-      if (hostConfig.isQueue) {
-
-        val threadpoolsize = config.fileServiceThreadPoolSize
-
-        val localFileServiceActor = system.actorOf(
-          Props(new FileService(managedFileStorage.get, threadpoolsize))
-            .withDispatcher("fileservice-pinned"),
-          "fileservice"
-        )
-        reaperActor ! WatchMe(localFileServiceActor)
-        localFileServiceActor
-      } else {
-        val actorPath =
-          s"akka://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/fileservice"
-        val remoteFileServieActor = Await.result(
-          system.actorSelection(actorPath).resolveOne(600 seconds),
-          atMost = 600 seconds
-        )
-
-        remoteFileServieActor
-      }
-    } catch {
-      case e: Throwable => {
-        initFailed()
-        throw e
-      }
-    }
-
-  tasksystemlog.info("File service actor: " + fileActor)
-
   val fileServiceComponent =
-    FileServiceComponent(fileActor, managedFileStorage, remoteFileStorage)
+    FileServiceComponent(
+      // fileActor,
+      managedFileStorage,
+      remoteFileStorage
+    )
 
-  val nodeLocalCache = {
-    val nodeLocalCacheActor = NodeLocalCache.start
-
-    reaperActor ! WatchMe(nodeLocalCacheActor.actor)
-
-    nodeLocalCacheActor
-  }
+  val nodeLocalCache = NodeLocalCache.start.timeout(60 seconds).unsafeRunSync()
 
   val cacheActor =
     try {
@@ -258,7 +330,6 @@ class TaskSystem private[tasks] (
             new SharedFileCache()(
               fileServiceComponent,
               system,
-              system.dispatcher,
               config
             )
           else new DisabledCache
@@ -295,16 +366,16 @@ class TaskSystem private[tasks] (
       trackerBootstrap.map(_.start.eventListener)
     else None
 
-  trackerEventListener.foreach(ev => reaperActor ! WatchMe(ev.watchable))
-
-  val queueActor =
+  val (queueActor, uiRelease) =
     try {
       if (hostConfig.isQueue) {
 
-        val uiComponent = uiBootstrap.map(_.startQueueUI)
+        val uiComponent =
+          uiBootstrap.map(_.startQueueUI.allocated.unsafeRunSync())
+        val uiRelease = uiComponent.map(_._2).getOrElse(IO.unit)
 
         val eventListeners =
-          uiComponent.map(_.tasksQueueEventListener).toList ++
+          uiComponent.map(_._1.tasksQueueEventListener).toList ++
             trackerEventListener.toList
 
         val localActor =
@@ -314,7 +385,7 @@ class TaskSystem private[tasks] (
             "queue"
           )
         reaperActor ! WatchMe(localActor)
-        localActor
+        (localActor, uiRelease)
       } else {
         val actorPath =
           s"akka://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/queue"
@@ -323,7 +394,7 @@ class TaskSystem private[tasks] (
           atMost = 600 seconds
         )
 
-        remoteActor
+        (remoteActor, IO.unit)
       }
     } catch {
       case e: Throwable => {
@@ -338,18 +409,20 @@ class TaskSystem private[tasks] (
 
   val packageServerHostname = hostConfig.myAddress.getHostName
 
-  val elasticSupportFactory =
+  val (elasticSupportFactory, nodeUIRelease) =
     if (hostConfig.isApp || hostConfig.isWorker) {
 
       val uiComponent = if (hostConfig.isApp) {
-        Some(uiBootstrap.map(_.startAppUI))
+        Some(uiBootstrap.map(_.startAppUI.allocated.unsafeRunSync()))
       } else None
+
+      val uiRelease = uiComponent.flatMap(_.map(_._2)).getOrElse(IO.unit)
 
       val codeAddress =
         if (hostConfig.isApp)
           Some(
             elastic.CodeAddress(
-              new java.net.InetSocketAddress(
+              SimpleSocketAddress(
                 packageServerHostname,
                 packageServerPort
               ),
@@ -358,22 +431,25 @@ class TaskSystem private[tasks] (
           )
         else None
 
-      elasticSupport.map(es =>
-        es(
-          masterAddress = hostConfig.master,
-          queueActor = QueueActor(queueActor),
-          resource = ResourceAvailable(
-            cpu = hostConfig.availableCPU,
-            memory = hostConfig.availableMemory,
-            scratch = hostConfig.availableScratch,
-            gpu = hostConfig.availableGPU
-          ),
-          codeAddress = codeAddress,
-          eventListener =
-            uiComponent.flatMap(_.map(_.nodeRegistryEventListener))
-        )
+      (
+        elasticSupport.map(es =>
+          es(
+            masterAddress = hostConfig.master,
+            queueActor = QueueActor(queueActor),
+            resource = ResourceAvailable(
+              cpu = hostConfig.availableCPU,
+              memory = hostConfig.availableMemory,
+              scratch = hostConfig.availableScratch,
+              gpu = hostConfig.availableGPU
+            ),
+            codeAddress = codeAddress,
+            eventListener =
+              uiComponent.flatMap(_.map(_._1.nodeRegistryEventListener))
+          )
+        ),
+        uiRelease
       )
-    } else None
+    } else (None, IO.unit)
 
   val localNodeRegistry: Option[ActorRef] =
     if (hostConfig.isApp && elasticSupportFactory.isDefined) {
@@ -390,7 +466,6 @@ class TaskSystem private[tasks] (
 
   val packageServer =
     if (hostConfig.isApp && elasticSupportFactory.isDefined) {
-      import akka.http.scaladsl.Http
 
       Try(Deployment.pack) match {
         case Success(pack) =>
@@ -401,32 +476,29 @@ class TaskSystem private[tasks] (
 
           val actorsystem = 1 //shade implicit conversion
           val _ = actorsystem // suppress unused warning
-          val bindingFuture =
-            Http()
-              .newServerAt("0.0.0.0", packageServerPort)
-              .bind(service.route)
-              .andThen {
-                case Success(binding) =>
-                  tasksystemlog.info(s"Started package server on $binding")
-                case Failure(e) =>
-                  tasksystemlog.error(e, "Failed to bind package server")
-              }
+          import com.comcast.ip4s._
 
-          import scala.concurrent.duration._
-          Some(Await.ready(bindingFuture, atMost = 60 seconds))
+          val (server, releaseServer) = EmberServerBuilder
+            .default[IO]
+            .withHost(ipv4"0.0.0.0")
+            .withPort(com.comcast.ip4s.Port.fromInt(packageServerPort).get)
+            .withHttpApp(service.route.orNotFound)
+            .build
+            .allocated
+            .unsafeRunSync()
+
+          tasksystemlog.info(s"Started package server on $server")
+
+          Some(releaseServer)
         case Failure(e) =>
           tasksystemlog.error(
             e,
             s"Packaging self failed. Main thread exited? Skip starting package server."
           )
+          None
       }
 
     } else None
-
-  private val auxFjp = tasks.util.concurrent
-    .newJavaForkJoinPoolWithNamePrefix("tasks-aux", config.auxThreads)
-  private val auxExecutionContext =
-    scala.concurrent.ExecutionContext.fromExecutorService(auxFjp)
 
   val rootHistory = NoHistory
 
@@ -437,7 +509,6 @@ class TaskSystem private[tasks] (
     cache = CacheActor(cacheActor),
     nodeLocalCache = nodeLocalCache,
     filePrefix = FileServicePrefix(Vector()),
-    executionContext = auxExecutionContext,
     tasksConfig = config,
     historyContext = rootHistory,
     priority = Priority(0),
@@ -452,7 +523,7 @@ class TaskSystem private[tasks] (
         Props(
           new Launcher(
             queueActor,
-            nodeLocalCache.actor,
+            nodeLocalCache,
             VersionedResourceAvailable(
               config.codeVersion,
               ResourceAvailable(
@@ -463,7 +534,6 @@ class TaskSystem private[tasks] (
               )
             ),
             refreshInterval = refreshInterval,
-            auxExecutionContext = auxExecutionContext,
             remoteStorage = remoteFileStorage,
             managedStorage = managedFileStorage
           )
@@ -537,7 +607,6 @@ class TaskSystem private[tasks] (
     if (hostConfig.isApp || hostConfig.isQueue) {
       if (!shuttingDown) {
         shuttingDown = true
-        implicit val timeout = akka.util.Timeout(10 seconds)
 
         val latch = new java.util.concurrent.CountDownLatch(1)
         reaperActor ! Latch(latch)
@@ -545,28 +614,28 @@ class TaskSystem private[tasks] (
         trackerEventListener.foreach(_.close())
 
         if (hostConfig.isQueue) {
-          val cacheReaper = system.actorOf(Props(new CallbackReaper({
-            fileActor ! PoisonPill
-            nodeLocalCache.actor ! PoisonPill
-          })))
-          (cacheReaper ? WatchMe(cacheActor, answer = true)).foreach { _ =>
-            cacheActor ! PoisonPillToCacheActor
-          }
-          queueActor ! PoisonPill
-        } else {
 
-          nodeLocalCache.actor ! PoisonPill
+          cacheActor ! PoisonPillToCacheActor
+          queueActor ! PoisonPill
         }
+
         localNodeRegistry.foreach(_ ! PoisonPill)
 
         tasksystemlog.info(
-          "Shutting down tasksystem. Blocking until all actors have terminated."
+          "Shutting down tasksystem. Blocking until all watched actors have terminated."
         )
         latch.await
-        auxFjp.shutdown
         Await.result(AS.terminate(), 10 seconds)
+        s3Client.foreach(_._2.close)
+        httpClientAndRelease.foreach(_._2.unsafeRunSync())
+        packageServer.foreach(_.unsafeRunSync())
+        releaseManagedFileStore.unsafeRunSync()
+        uiRelease.unsafeRunSync()
+        nodeUIRelease.unsafeRunSync()
       }
     } else {
+      s3Client.foreach(_._2.close)
+      httpClientAndRelease.foreach(_._2.unsafeRunSync())
       Await.result(AS.terminate(), 10 seconds)
     }
 

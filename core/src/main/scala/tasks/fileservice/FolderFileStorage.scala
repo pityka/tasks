@@ -27,13 +27,14 @@
 
 package tasks.fileservice
 
-import scala.concurrent.{Future, ExecutionContext}
 import java.io.File
 import tasks.util._
 import tasks.util.eq._
 import tasks.util.config._
-import akka.stream.scaladsl._
-import akka.util._
+import cats.effect.kernel.Resource
+import cats.effect.IO
+import fs2.Stream
+import fs2.Pipe
 
 object FolderFileStorage {
 
@@ -46,10 +47,12 @@ object FolderFileStorage {
 }
 
 class FolderFileStorage(val basePath: File)(implicit
-    ec: ExecutionContext,
     config: TasksConfig,
     as: akka.actor.ActorSystem
 ) extends ManagedFileStorage {
+
+  implicit val log: akka.event.LoggingAdapter =
+    akka.event.Logging(as.eventStream, getClass)
 
   if (basePath.exists && !basePath.isDirectory)
     throw new IllegalArgumentException(s"$basePath exists and not a folder")
@@ -78,32 +81,38 @@ class FolderFileStorage(val basePath: File)(implicit
 
   }
 
-  def delete(mp: ManagedFilePath, expectedSize: Long, expectedHash: Int) =
+  def delete(
+      mp: ManagedFilePath,
+      expectedSize: Long,
+      expectedHash: Int
+  ): IO[Boolean] =
     if (config.allowDeletion) {
-      val file = assemblePath(mp)
-      val sizeOnDiskNow = file.length
-      val sizeMatch = sizeOnDiskNow == expectedSize
-      val canRead = file.canRead
-      def contentMatch =
-        canRead && FolderFileStorage.getContentHash(file) === expectedHash
-      val canDelete =
-        canRead && (expectedSize < 0 || (sizeMatch && contentMatch))
-      if (canDelete) {
-        file.delete
-        logger.warning(s"File deleted $file $mp")
-      } else {
-        logger.warning(
-          s"Not deleting file because its size or hash is different than expectation. $file $mp $sizeMatch $contentMatch"
-        )
-        Future.successful(false)
+      IO.interruptible {
+        val file = assemblePath(mp)
+        val sizeOnDiskNow = file.length
+        val sizeMatch = sizeOnDiskNow == expectedSize
+        val canRead = file.canRead
+        def contentMatch =
+          canRead && FolderFileStorage.getContentHash(file) === expectedHash
+        val canDelete =
+          canRead && (expectedSize < 0 || (sizeMatch && contentMatch))
+        if (canDelete) {
+          val deleted = file.delete
+          logger.warning(s"File deleted $file $mp : $deleted")
+          deleted
+        } else {
+          logger.warning(
+            s"Not deleting file because its size or hash is different than expectation. $file $mp $sizeMatch $contentMatch"
+          )
+          false
+        }
       }
-      Future.successful(true)
     } else {
       logger.warning(s"File deletion disabled. Would have deleted $mp")
-      Future.successful(false)
+      IO.pure(false)
     }
 
-  def sharedFolder(prefix: Seq[String]): Option[File] = {
+  def sharedFolder(prefix: Seq[String]): IO[Option[File]] = IO {
     val folder = new File(
       basePath.getAbsolutePath + File.separator + prefix
         .mkString(File.separator)
@@ -112,8 +121,8 @@ class FolderFileStorage(val basePath: File)(implicit
     Some(folder)
   }
 
-  def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean] =
-    Future.successful {
+  def contains(path: ManagedFilePath, size: Long, hash: Int): IO[Boolean] =
+    IO.interruptible {
       val f = assemblePath(path)
       val canRead = f.canRead
       val sizeOnDiskNow = f.length
@@ -135,8 +144,8 @@ class FolderFileStorage(val basePath: File)(implicit
   def contains(
       path: ManagedFilePath,
       retrieveSizeAndHash: Boolean
-  ): Future[Option[SharedFile]] =
-    Future.successful {
+  ): IO[Option[SharedFile]] =
+    IO.interruptible {
       val f = assemblePath(path)
       val canRead = f.canRead
       val pass = canRead
@@ -154,23 +163,26 @@ class FolderFileStorage(val basePath: File)(implicit
 
     }
 
-  def createSource(
+  def stream(
       path: ManagedFilePath,
       fromOffset: Long
-  ): Source[ByteString, _] =
-    Source.lazySource(() =>
-      FileIO.fromPath(
-        assemblePath(path).toPath,
-        chunkSize = 8192,
-        startPosition = fromOffset
-      )
-    )
+  ): Stream[IO, Byte] =
+    Stream.unit.flatMap { _ =>
+      fs2.io.file
+        .Files[IO]
+        .readRange(
+          path = fs2.io.file.Path.fromNioPath(assemblePath(path).toPath),
+          start = fromOffset,
+          end = Long.MaxValue,
+          chunkSize = 8192 * 8
+        )
+    }
 
-  def exportFile(path: ManagedFilePath): Future[File] = {
+  def exportFile(path: ManagedFilePath): Resource[IO, File] = {
     val file = assemblePath(path)
-    if (file.canRead) Future.successful(file)
+    if (file.canRead) Resource.pure(file)
     else {
-      Future.failed(
+      Resource.raiseError[IO, File, Throwable](
         new java.nio.file.NoSuchFileException(
           file.getAbsolutePath + " " + System.nanoTime
         )
@@ -234,28 +246,21 @@ class FolderFileStorage(val basePath: File)(implicit
 
   def sink(
       path: ProposedManagedFilePath
-  ): Sink[ByteString, Future[(Long, Int, ManagedFilePath)]] = {
-    val createSink = () => {
-      val tmp = TempFile.createTempFile("foldertmp")
-      Future.successful(
-        FileIO
-          .toPath(tmp.toPath)
-          .mapMaterializedValue(_.flatMap { _ =>
-            val r = importFile(tmp, path)
-            tmp.delete
-            r.map(x => (x._1, x._2, x._4))
-          })
-      )
-    }
-
-    Sink
-      .lazyFutureSink(createSink)
-      .mapMaterializedValue(_.flatten.recoverWith { case _ =>
-        // empty file, upstream terminated without emitting an element
-        val tmp = TempFile.createTempFile("foldertmp")
-        val r = importFile(tmp, path)
-        r.map(x => { tmp.delete; (x._1, x._2, x._4) })
-      })
+  ): Pipe[IO, Byte, (Long, Int, ManagedFilePath)] = { (in: Stream[IO, Byte]) =>
+    val tmp = TempFile.createTempFile("foldertmp")
+    Stream.eval(
+      in.through(
+        fs2.io.file
+          .Files[IO]
+          .writeAll(fs2.io.file.Path.fromNioPath(tmp.toPath()))
+      ).compile
+        .drain
+        .flatMap { _ =>
+          importFile(tmp, path)
+            .guarantee(IO.interruptible { tmp.delete })
+            .map(x => (x._1, x._2, x._3))
+        }
+    )
   }
 
   private def checkContentEquality(file1: File, file2: File) =
@@ -267,11 +272,11 @@ class FolderFileStorage(val basePath: File)(implicit
       ) == FolderFileStorage
         .getContentHash(file2)
 
-  def importFile(
+  override def importFile(
       file: File,
       proposed: ProposedManagedFilePath
-  ): Future[(Long, Int, File, ManagedFilePath)] =
-    Future.successful({
+  ): IO[(Long, Int, ManagedFilePath)] =
+    IO.blocking({
       logger.debug(s"Importing file $file under name $proposed")
       val size = file.length
       val hash = FolderFileStorage.getContentHash(file)
@@ -284,14 +289,14 @@ class FolderFileStorage(val basePath: File)(implicit
           val elements = relativeToBase.split('/').toVector.filter(_.nonEmpty)
           ManagedFilePath(elements)
         }
-        (size, hash, file, locationAsManagedFilePath)
+        (size, hash, locationAsManagedFilePath)
       } else if (assemblePath(managed).canRead) {
         val finalFile = assemblePath(managed)
         logger.debug(
           s"Found a file already in storage with the same name ($finalFile). Check for equality."
         )
         if (checkContentEquality(finalFile, file))
-          (size, hash, finalFile, managed)
+          (size, hash, managed)
         else {
           logger.debug(s"Equality failed. Importing file. $file to $finalFile")
 
@@ -323,49 +328,19 @@ class FolderFileStorage(val basePath: File)(implicit
           }
 
           copyFile(file, finalFile)
-          (size, hash, finalFile, managed)
+          (size, hash, managed)
         }
 
       } else {
         copyFile(file, assemblePath(managed))
-        (size, hash, assemblePath(managed), managed)
+        (size, hash, managed)
       }
     })
 
-  def uri(mp: ManagedFilePath) = {
+  def uri(mp: ManagedFilePath) = IO.pure {
     // throw new RuntimeException("URI not supported")
     val path = assemblePath(mp).toURI.toString
     Uri(path)
-  }
-
-  def list(pattern: String): List[SharedFile] = {
-    import scala.jdk.CollectionConverters._
-    val stream =
-      java.nio.file.Files.newDirectoryStream(basePath.toPath, pattern)
-    try {
-      stream.asScala.toList.filter(_.toFile.isFile).map { path =>
-        val file = path.toFile
-        val l = file.length
-        val h = FolderFileStorage.getContentHash(file)
-        new SharedFile(
-          ManagedFilePath(
-            basePath.toPath
-              .relativize(path)
-              .asScala
-              .iterator
-              .map(_.toString)
-              .toVector
-          ),
-          l,
-          h
-        )
-      }
-    } catch {
-      case x: Throwable => throw x
-    } finally {
-      stream.close
-    }
-
   }
 
 }

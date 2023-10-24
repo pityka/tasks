@@ -8,12 +8,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
-      - uses: olafurpg/setup-scala@v10
+      - uses: actions/setup-java@v2
+        with:
+          distribution: temurin
+          java-version: 17
       - uses: olafurpg/setup-gpg@v3
       - name: Publish
         run: |
           git ls-remote --get-url origin
-          sbt +testables/test ci-release
+          sbt +testables/test versionCheck ci-release
         env:
           PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
           PGP_SECRET: ${{ secrets.PGP_SECRET }}

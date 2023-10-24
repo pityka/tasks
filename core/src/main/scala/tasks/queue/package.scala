@@ -24,8 +24,7 @@
  */
 
 package tasks
-
-import scala.concurrent.Future
+import cats.effect.IO
 
 package object queue {
 
@@ -33,14 +32,16 @@ package object queue {
       deserializedInputData: T
   )(implicit
       ce: ComputationEnvironment
-  ): Future[DependenciesAndRuntimeMetadata] = {
+  ): IO[DependenciesAndRuntimeMetadata] = {
     val logs = ce.currentLogRecords
     if (ce.components.tasksConfig.trackDataFlow) {
       val files = HasSharedFiles.allFiles(deserializedInputData)
       for {
-        histories <- Future.traverse(files.toSeq)(_.history)
+        histories <- IO.parTraverseN(
+          ce.components.tasksConfig.parallelismOfReadingHistoryFiles
+        )(files.toSeq)(_.history)
       } yield DependenciesAndRuntimeMetadata(histories, logs)
-    } else Future.successful(DependenciesAndRuntimeMetadata(Nil, logs))
+    } else IO.pure(DependenciesAndRuntimeMetadata(Nil, logs))
   }
 
 }

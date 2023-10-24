@@ -6,6 +6,7 @@ import io.circe.{Encoder, Decoder, Printer}
 import tasks.fileservice.{FilePath, RemoteFilePath, ManagedFilePath}
 import tasks.util.Uri
 import com.google.common.hash.Hashing
+import tasks.util.SerializedActorRef
 
 package object circesupport extends StrictLogging {
   private val printer = Printer.noSpaces.copy(dropNullValues = true)
@@ -39,10 +40,15 @@ package object circesupport extends StrictLogging {
   implicit val encoder3: Encoder[ManagedFilePath] =
     deriveEncoder[ManagedFilePath]
 
-  implicit val sharedFileDecoder =
+  implicit val sharedFileDecoder : Decoder[SharedFile] =
     deriveDecoder[tasks.fileservice.SharedFile]
 
-  implicit val sharedFileEncoder =
+  implicit val sharedFileEncoder : Encoder[SharedFile] =
     io.circe.generic.semiauto.deriveEncoder[tasks.fileservice.SharedFile]
+
+  implicit val serializedActorRefEncoder : Encoder[SerializedActorRef] =
+    io.circe.generic.semiauto.deriveEncoder[tasks.util.SerializedActorRef]
+  implicit val serializedActorRefDecoder : Decoder[SerializedActorRef]=
+    io.circe.generic.semiauto.deriveDecoder[tasks.util.SerializedActorRef]
 
 }

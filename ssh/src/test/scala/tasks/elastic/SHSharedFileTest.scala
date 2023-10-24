@@ -29,15 +29,13 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import akka.stream.scaladsl.Source
-import akka.util.ByteString
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 
-import scala.concurrent.Future
 import tasks.queue.UntypedResult
 import tasks._
 import com.typesafe.config.ConfigFactory
+import cats.effect.IO
 
 object SHResultWithSharedFilesTest extends TestHelpers {
 
@@ -87,11 +85,11 @@ object SHResultWithSharedFilesTest extends TestHelpers {
   }
 
   val testTask =
-    AsyncTask[(Input, SharedFile), Output]("resultwithsharedfilestest", 1) {
+    Task[(Input, SharedFile), Output]("resultwithsharedfilestest", 1) {
       case (_, inputsf) =>
         implicit computationEnvironment =>
-          await(inputsf.file)
-          val source = Source.single(ByteString("abcd"))
+          inputsf.file.allocated.map(_._1).unsafeRunSync()(cats.effect.unsafe.implicits.global)
+          val source = fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes()))
           val tmpfile = tasks.util.writeBinaryToFile(Array[Byte](1, 2, 3))
           val fs = List(
             SharedFile(tmpfile, "f1"),
@@ -115,7 +113,7 @@ object SHResultWithSharedFilesTest extends TestHelpers {
           )
 
           for {
-            l <- Future.sequence(fs)
+            l <- IO.parSequenceN(4)(fs)
           } yield Output(
             l(0),
             l(1),
@@ -136,24 +134,24 @@ object SHResultWithSharedFilesTest extends TestHelpers {
     }
 
   def run = {
-    import scala.concurrent.ExecutionContext.Implicits.global
 
     val tmp = tasks.util.TempFile.createTempFile(".temp")
     tmp.delete
     println(tmp)
     val testConfig2 =
       ConfigFactory.parseString(
-        s"""tasks.fileservice.disableOnSlave = true
+        s"""tasks.fileservice.connectToProxy = true
         akka.loglevel= OFF
         tasks.fileservice.storageURI=${tmp.getAbsolutePath}
+        tasks.fileservice.proxyStorage=true
       hosts.numCPU=0
       tasks.elastic.engine = "tasks.elastic.sh.SHElasticSupport"
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 5 s
-      tasks.slave-main-class = "tasks.TestSlave"
+      tasks.worker-main-class = "tasks.TestSlave"
       tasks.elastic.sh.workdir = ${tmp.getAbsolutePath}
-      tasks.elastic.javaCommandLine = "-Dtasks.fileservice.disableOnSlave=true"
+      tasks.elastic.javaCommandLine = "-Dtasks.fileservice.connectToProxy=true"
       """
       )
 
@@ -164,15 +162,15 @@ object SHResultWithSharedFilesTest extends TestHelpers {
       val f2 = testTask(Input(1) -> sf)(ResourceRequest(1, 500))
       def getFiles(o: Output) = {
         val untyped = UntypedResult.make(o)
-        untyped.files.toSeq.map(_.file) ++ untyped.mutableFiles.toSeq
+        (untyped.files.toSeq.map(_.file) ++ untyped.mutableFiles.toSeq
           .flatMap(_.toSeq)
-          .map(_.file)
+          .map(_.file)).map(_.allocated.map(_._1))
       }
       val future = for {
         t1 <- f1
-        t1Files <- Future.sequence(getFiles(t1))
+        t1Files <- IO.parSequenceN(4)(getFiles(t1))
         t2 <- f2
-        t2Files <- Future.sequence(getFiles(t2))
+        t2Files <- IO.parSequenceN(4)(getFiles(t2))
       } yield (
         t1Files,
         t2Files,

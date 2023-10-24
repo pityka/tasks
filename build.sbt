@@ -1,5 +1,12 @@
 import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 
+ThisBuild / versionScheme := Some("early-semver")
+
+ThisBuild / versionPolicyIntention := Compatibility.None
+ThisBuild / versionPolicyIgnoredInternalDependencyVersions := Some(
+  "^\\d+\\.\\d+\\.\\d+\\+\\d+".r
+)
+
 inThisBuild(
   List(
     organization := "io.github.pityka",
@@ -19,8 +26,8 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.6",
-  crossScalaVersions := Seq("2.12.15", "2.13.6"),
+  scalaVersion := "2.13.12",
+  crossScalaVersions := Seq("2.13.12"),
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -57,15 +64,14 @@ lazy val commonSettings = Seq(
   fork := true,
   cancelable in Global := true,
   scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
-  mimaPreviousArtifacts := Set(
-    organization.value %% moduleName.value % "1.0.0-M1"
-  )
+  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings"))
 )
 
-lazy val circeVersion = "0.13.0"
-lazy val jsoniterVersion = "2.9.0"
-lazy val akkaVersion = "2.6.16"
-lazy val shapelessVersion = "2.3.7"
+lazy val circeVersion = "0.14.5"
+lazy val jsoniterVersion = "2.13.31"
+lazy val akkaVersion = "2.6.19"
+lazy val shapelessVersion = "2.3.10"
+lazy val http4sVersion = "0.23.23"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
   .crossType(sbtcrossproject.CrossPlugin.autoImport.CrossType.Pure)
@@ -105,30 +111,36 @@ lazy val spores = project
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
     )
   )
+lazy val akkaProvided = List(
+  "com.typesafe.akka" %% "akka-actor" % akkaVersion % Provided,
+  "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided
+)
 lazy val core = project
   .in(file("core"))
   .settings(commonSettings: _*)
   .settings(
     name := "tasks-core",
-    resolvers += Resolver.bintrayRepo("beyondthelines", "maven"),
     PB.targets in Compile := Seq(
       scalapb.gen() -> (sourceManaged in Compile).value
     ),
     libraryDependencies ++= Seq(
-      "com.google.guava" % "guava" % "30.1.1-jre", // scala-steward:off
-      "com.typesafe.akka" %% "akka-actor" % akkaVersion,
-      "com.typesafe.akka" %% "akka-remote" % akkaVersion,
+      "co.fs2" %% "fs2-io" % "3.8.0",
+      "co.fs2" %% "fs2-reactive-streams" % "3.8.0",
+      "org.http4s" %% "http4s-ember-client" % http4sVersion,
+      "org.http4s" %% "http4s-ember-server" % http4sVersion,
+      "org.http4s" %% "http4s-dsl" % http4sVersion,
+      "software.amazon.awssdk" % "s3" % "2.20.135",
+      "com.google.guava" % "guava" % "31.1-jre", // scala-steward:off
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
-      "com.typesafe.akka" %% "akka-http-core" % "10.1.11",
-      "com.typesafe" % "config" % "1.4.1",
-      "io.github.pityka" %% "selfpackage" % "1.2.5",
-      "io.github.pityka" %% "s3-stream-fork" % "0.0.8",
-      "org.scalatest" %% "scalatest" % "3.2.10" % "test",
-      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
+      "com.typesafe" % "config" % "1.4.2",
+      "org.typelevel" %% "cats-effect" % "3.4.11",
+      "io.github.pityka" %% "selfpackage" % "2.0.0",
+      "org.scalatest" %% "scalatest" % "3.2.16" % "test",
+      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test"
-    )
+    ) ++ akkaProvided
   )
   .dependsOn(sharedJVM, spores)
 
@@ -138,8 +150,8 @@ lazy val ec2 = project
   .settings(
     name := "tasks-ec2",
     libraryDependencies ++= Seq(
-      "com.amazonaws" % "aws-java-sdk-ec2" % "1.11.24" // scala-steward:off
-    )
+      "com.amazonaws" % "aws-java-sdk-ec2" % "1.12.244" // scala-steward:off
+    ) ++ akkaProvided
   )
   .dependsOn(core)
 
@@ -150,7 +162,7 @@ lazy val ssh = project
     name := "tasks-ssh",
     libraryDependencies ++= Seq(
       "ch.ethz.ganymed" % "ganymed-ssh2" % "262"
-    )
+    ) ++ akkaProvided
   )
   .dependsOn(core % "compile->compile;test->test")
 
@@ -160,66 +172,67 @@ lazy val kubernetes = project
   .settings(
     name := "tasks-kubernetes",
     libraryDependencies ++= Seq(
-      "io.fabric8" % "kubernetes-client" % "4.13.2" // scala-steward:off
-    )
+      "io.fabric8" % "kubernetes-client" % "6.0.0-RC1" // scala-steward:off
+    ) ++ akkaProvided
   )
   .dependsOn(core % "compile->compile;test->test")
 
-lazy val tracker = project
-  .in(file("tracker"))
-  .settings(commonSettings: _*)
-  .settings(
-    name := "tasks-tracker",
-    libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.10" % "test",
-      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
-    ),
-    resources in Compile += (fastOptJS in Compile in uifrontend).value.data
-  )
-  .dependsOn(core % "compile->compile;test->test")
+// lazy val tracker = project
+//   .in(file("tracker"))
+//   .settings(commonSettings: _*)
+//   .settings(
+//     name := "tasks-tracker",
+//     libraryDependencies ++= Seq(
+//       "org.scalatest" %% "scalatest" % "3.2.10" % "test",
+//       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
+//     ) ++ akkaProvided,
+//     // resources in Compile += (fastOptJS in Compile in uifrontend).value.data
+//   )
+//   .dependsOn(core % "compile->compile;test->test")
 
-lazy val uibackend = project
-  .in(file("uibackend"))
-  .settings(commonSettings: _*)
-  .settings(
-    name := "tasks-ui-backend",
-    libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.10" % "test"
-    ),
-    resources in Compile += (fastOptJS in Compile in uifrontend).value.data
-  )
-  .dependsOn(core % "compile->compile;test->test")
+// lazy val uibackend = project
+//   .in(file("uibackend"))
+//   .settings(commonSettings: _*)
+//   .settings(
+//     name := "tasks-ui-backend",
+//     libraryDependencies ++= Seq(
+//       "org.scalatest" %% "scalatest" % "3.2.10" % "test"
+//     ) ++ akkaProvided,
+//     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
+//   )
+//   .dependsOn(core % "compile->compile;test->test")
 
-lazy val uifrontend = project
-  .in(file("uifrontend"))
-  .settings(commonSettings: _*)
-  .settings(
-    name := "tasks-ui-frontend",
-    libraryDependencies ++= Seq(
-      "org.scala-js" %%% "scalajs-dom" % "1.2.0",
-      "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % jsoniterVersion,
-      "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
-      "com.raquo" %%% "laminar" % "0.13.0"
-    ),
-    mimaPreviousArtifacts := Set.empty,
-    fork := false
-  )
-  .dependsOn(sharedJS)
-  .enablePlugins(ScalaJSPlugin)
+// lazy val uifrontend = project
+//   .in(file("uifrontend"))
+//   .settings(commonSettings: _*)
+//   .settings(
+//     name := "tasks-ui-frontend",
+//     libraryDependencies ++= Seq(
+//       "org.scala-js" %%% "scalajs-dom" % "1.2.0",
+//       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % jsoniterVersion,
+//       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
+//       "com.raquo" %%% "laminar" % "0.13.0"
+//     ),
+//     mimaPreviousArtifacts := Set.empty,
+//     fork := false
+//   )
+//   .dependsOn(sharedJS)
+//   .enablePlugins(ScalaJSPlugin)
 
 lazy val example = project
   .in(file("example"))
   .settings(commonSettings: _*)
-  .dependsOn(core, ecoll, ssh)
+  .dependsOn(core, ssh)
   .enablePlugins(JavaAppPackaging)
   .settings(
     executableScriptName := "entrypoint",
     topLevelDirectory := None,
     publishArtifact := false,
+    publish / skip := true,
     crossScalaVersions := Nil,
     libraryDependencies ++= Seq(
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
-    )
+    ) ++ akkaProvided
   )
 
 lazy val upicklesupport = project
@@ -227,7 +240,9 @@ lazy val upicklesupport = project
   .settings(commonSettings: _*)
   .settings(
     name := "tasks-upickle",
-    libraryDependencies += "com.lihaoyi" %% "upickle" % "1.4.1"
+    libraryDependencies ++= Seq(
+      "com.lihaoyi" %% "upickle" % "1.4.4"
+    ) ++ akkaProvided
   )
   .dependsOn(core)
 
@@ -240,8 +255,8 @@ lazy val circe = project
       "io.circe" %% "circe-core" % circeVersion,
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,
-      "org.scalatest" %% "scalatest" % "3.2.10" % "test"
-    )
+      "org.scalatest" %% "scalatest" % "3.2.16" % "test"
+    ) ++ akkaProvided
   )
   .dependsOn(core)
 
@@ -256,8 +271,8 @@ lazy val ecoll = project
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % jsoniterVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test",
-      "org.scalatest" %% "scalatest" % "3.2.10" % "test"
-    )
+      "org.scalatest" %% "scalatest" % "3.2.16" % "test"
+    ) ++ akkaProvided
   )
   .dependsOn(core)
 
@@ -265,34 +280,34 @@ lazy val root = (project in file("."))
   .settings(commonSettings: _*)
   .settings(
     publishArtifact := false,
+    publish / skip := true,
     crossScalaVersions := Nil
   )
   .aggregate(
     spores,
     core,
-    ecoll,
     upicklesupport,
     circe,
     sharedJVM,
     sharedJS,
     ec2,
     ssh,
-    uibackend,
-    uifrontend,
+    // uibackend,
+    // uifrontend,
     kubernetes,
-    tracker,
+    // tracker,
     example
   )
 
 lazy val testables = (project in file("testables"))
   .settings(commonSettings: _*)
   .settings(
-    publishArtifact := false
+    publishArtifact := false,
+    publish / skip := true
   )
   .aggregate(
     spores,
     core,
-    ecoll,
     upicklesupport,
     circe,
     sharedJVM,

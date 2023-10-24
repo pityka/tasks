@@ -27,14 +27,14 @@ package tasks
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should._
 import org.scalatest._
-import tasks.util.concurrent.await
-import scala.concurrent._
 import com.typesafe.config.ConfigFactory
 
 import tasks.jsonitersupport._
 
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 
 object RercursiveTasksTest {
 
@@ -59,12 +59,12 @@ object RercursiveTasksTest {
   }
 
   val fibtask: TaskDefinition[FibInput, FibOut] =
-    AsyncTask[FibInput, FibOut]("fib", 1) {
+    Task[FibInput, FibOut]("fib", 1) {
 
       case FibInput(Some(n), Some(tag)) => { implicit ce =>
         n match {
-          case 0 => Future.successful(FibOut(0))
-          case 1 => Future.successful(FibOut(1))
+          case 0 => IO.pure(FibOut(0))
+          case 1 => IO.pure(FibOut(1))
           case n => {
             val f1 = fibtask(FibInput(Some(n - 1), Some(false :: tag)))(
               ResourceRequest(1, 1)
@@ -75,7 +75,7 @@ object RercursiveTasksTest {
             releaseResources
             for {
               r1 <- f1
-              r2 = f2.awaitIndefinitely
+              r2 = f2.unsafeRunSync()
             } yield FibOut(r1.n + r2.n)
           }
 
@@ -91,9 +91,10 @@ object RercursiveTasksTest {
 class RecursiveTaskTestSuite
     extends FunSuite
     with Matchers
-    with BeforeAndAfterAll {
+    with BeforeAndAfterAll
+    with TestHelpers {
 
-  val testConfig = {
+  override val testConfig = {
     val tmp = tasks.util.TempFile.createTempFile(".temp")
     tmp.delete
     ConfigFactory.parseString(

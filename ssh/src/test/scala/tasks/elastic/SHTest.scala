@@ -25,12 +25,13 @@
 package tasks
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
+import cats.effect.unsafe.implicits.global
 
 import org.scalatest.matchers.should.Matchers
 
-import scala.concurrent.Future
 import tasks.jsonitersupport._
 import com.typesafe.config.ConfigFactory
+import cats.effect.IO
 
 object TestSlave extends App {
   withTaskSystem { _ =>
@@ -40,12 +41,12 @@ object TestSlave extends App {
 
 object SHTest extends TestHelpers {
 
-  val testTask = AsyncTask[Input, Int]("shtest", 1) {
+  val testTask = Task[Input, Int]("shtest", 1) {
     _ => implicit computationEnvironment =>
       log.info("Hello from task")
       if (tasks.elastic.sh.SHGetNodeName.getNodeName.toInt % 2 == 0)
         System.exit(1)
-      Future(1)
+      IO(1)
   }
 
   val testConfig2 = {
@@ -58,7 +59,7 @@ object SHTest extends TestHelpers {
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 5 s
-      tasks.slave-main-class = "tasks.TestSlave"
+      tasks.worker-main-class = "tasks.TestSlave"
       tasks.elastic.sh.workdir = ${tmp.getAbsolutePath}
       tasks.resubmitFailedTask = true
       akka.loglevel=INFO
@@ -69,8 +70,6 @@ object SHTest extends TestHelpers {
 
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
-
       val f1 = testTask(Input(1))(ResourceRequest(1, 500))
 
       val f2 = f1.flatMap(_ => testTask(Input(2))(ResourceRequest(1, 500)))
@@ -81,8 +80,7 @@ object SHTest extends TestHelpers {
         t3 <- f3
       } yield t1 + t2 + t3
 
-      import scala.concurrent.duration._
-      scala.concurrent.Await.result(future, atMost = 400000 seconds)
+      future.unsafeRunSync()
 
     }
   }

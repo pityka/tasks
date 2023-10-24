@@ -29,8 +29,6 @@ package tasks.queue
 
 import akka.actor.{Actor, PoisonPill, ActorRef}
 
-import scala.concurrent.Future
-import scala.concurrent.ExecutionContext
 import scala.util._
 
 import tasks.fileservice._
@@ -43,6 +41,7 @@ import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 
 import java.time.Instant
+import cats.effect.IO
 
 case class UntypedResult(
     files: Set[SharedFile],
@@ -128,7 +127,6 @@ case class ComputationEnvironment(
     implicit val components: TaskSystemComponents,
     implicit val log: akka.event.LoggingAdapter,
     implicit val launcher: LauncherActor,
-    implicit val executionContext: ExecutionContext,
     val taskActor: ActorRef,
     taskHash: HashedTaskDescription
 ) {
@@ -154,8 +152,6 @@ case class ComputationEnvironment(
 
   implicit def filePrefix: FileServicePrefix = components.filePrefix
 
-  implicit def nodeLocalCache: NodeLocalCacheActor = components.nodeLocalCache
-
   implicit def queue: QueueActor = components.queue
 
   implicit def cache: CacheActor = components.cache
@@ -173,10 +169,9 @@ private class Task(
     queueActor: ActorRef,
     fileServiceComponent: FileServiceComponent,
     cacheActor: ActorRef,
-    nodeLocalCache: ActorRef,
+    nodeLocalCache: NodeLocalCache.State,
     resourceAllocated: ResourceAllocated,
     fileServicePrefix: FileServicePrefix,
-    auxExecutionContext: ExecutionContext,
     tasksConfig: TasksConfig,
     priority: Priority,
     labels: Labels,
@@ -193,14 +188,8 @@ private class Task(
   }
 
   override def postStop(): Unit = {
-    fjp.shutdown
     log.debug(s"Task stopped. $taskId")
   }
-
-  val fjp = tasks.util.concurrent
-    .newJavaForkJoinPoolWithNamePrefix("tasks-ec", resourceAllocated.cpu)
-  val executionContextOfTask =
-    scala.concurrent.ExecutionContext.fromExecutorService(fjp)
 
   private def handleError(exception: Throwable): Unit = {
     exception.printStackTrace()
@@ -210,12 +199,12 @@ private class Task(
   }
 
   private def handleCompletion(
-      future: Future[(UntypedResult, DependenciesAndRuntimeMetadata)],
+      program: IO[(UntypedResult, DependenciesAndRuntimeMetadata)],
       startTimeStamp: Instant,
       noCache: Boolean
   ) =
-    future.onComplete {
-      case Success((result, dependencies)) =>
+    program.attempt.map {
+      case Right((result, dependencies)) =>
         log.debug("Task success. ")
         val endTimeStamp = Instant.now
         launcherActor ! InternalMessageFromTask(
@@ -234,12 +223,12 @@ private class Task(
         )
         self ! PoisonPill
 
-      case Failure(error) => handleError(error)
-    }(executionContextOfTask)
+      case Left(error) => handleError(error)
+    }
 
-  private def executeTaskAsynchronously(
+  private def executeTaskProgram(
       input: Base64Data
-  ): Future[(UntypedResult, DependenciesAndRuntimeMetadata)] =
+  ): IO[(UntypedResult, DependenciesAndRuntimeMetadata)] =
     try {
       val history = HistoryContextImpl(
         task = History.TaskVersion(taskId.id, taskId.version),
@@ -253,9 +242,8 @@ private class Task(
           fileServiceComponent,
           context.system,
           CacheActor(cacheActor),
-          NodeLocalCacheActor(nodeLocalCache),
+          nodeLocalCache,
           fileServicePrefix,
-          auxExecutionContext,
           tasksConfig,
           history,
           priority,
@@ -267,7 +255,6 @@ private class Task(
           "usertasks." + fileServicePrefix.list.mkString(".")
         ),
         LauncherActor(launcherActor),
-        executionContextOfTask,
         self,
         taskHash
       )
@@ -276,30 +263,34 @@ private class Task(
         s"Starting task with computation environment $ce and with input data $input."
       )
 
-      Future {
+      IO.unit.flatMap { _ =>
         val untyped =
           UntypedTaskDefinition[AnyRef, AnyRef](
             inputDeserializer.as[Unit, Deserializer[AnyRef]],
             outputSerializer.as[Unit, Serializer[AnyRef]],
-            function.as[AnyRef, ComputationEnvironment => Future[AnyRef]]
+            function.as[AnyRef, ComputationEnvironment => IO[AnyRef]]
           )
         untyped.apply(input)(ce)
-      }(executionContextOfTask)
-        .flatMap(identity)(executionContextOfTask)
+      }
     } catch {
       case exception: Exception =>
-        Future.failed(exception)
+        IO.raiseError(exception)
       case assertionError: AssertionError =>
-        Future.failed(assertionError)
+        IO.raiseError(assertionError)
     }
 
   def receive = {
     case InputData(b64InputData, noCache) =>
+      import cats.effect.unsafe.implicits.global
       handleCompletion(
-        executeTaskAsynchronously(b64InputData),
+        executeTaskProgram(b64InputData),
         startTimeStamp = java.time.Instant.now,
         noCache = noCache
-      )
+      ).unsafeRunAsync {
+        case Left(ex) =>
+          log.error(ex, "Unhandled unexpected exception.")
+        case Right(_) =>
+      }
 
     case other => log.error("received unknown message" + other)
   }

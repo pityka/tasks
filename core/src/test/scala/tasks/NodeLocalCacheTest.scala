@@ -29,7 +29,7 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import scala.concurrent.ExecutionContext.Implicits.global
+import cats.effect.IO
 
 object NodeLocalCacheTest extends TestHelpers {
 
@@ -42,29 +42,35 @@ object NodeLocalCacheTest extends TestHelpers {
     1
   }
 
-  val testTask = AsyncTask[Input, Int]("nodelocalcachetest", 1) {
+  val testTask = Task[Input, Int]("nodelocalcachetest", 1) {
     input => implicit computationEnvironment =>
       synchronized {
         sideEffect += "execution of task"
       }
       tasks.queue.NodeLocalCache
-        .getItem("key" + input.i % 2) {
-          cachedFunction((input.i % 2).toString)
+        .cacheSync("key" + input.i % 2, cachedFunction((input.i % 2).toString))
+        .use { x =>
+          IO(x)
         }
   }
 
   def run = {
     withTaskSystem(testConfig) { implicit ts =>
-      val f1 = testTask(Input(1))(ResourceRequest(1, 500))
-      val f2 = testTask(Input(2))(ResourceRequest(1, 500))
-      val f3 = testTask(Input(3))(ResourceRequest(1, 500))
+      val f1 = tasks.queue.NodeLocalCache
+        .cacheSync("key0", cachedFunction(0.toString))
+        .use { _ =>
+          
+            for {
+              t1 <- testTask(Input(1))(ResourceRequest(1, 500))
+              t2 <- testTask(Input(2))(ResourceRequest(1, 500))
+              t3 <- testTask(Input(3))(ResourceRequest(1, 500))
+
+            } yield t1 + t2 + t3
+        }
       val future = for {
         t1 <- f1
-        t2 <- f2
-        t3 <- f3
-        _ = tasks.queue.NodeLocalCache.drop("key0")
         t4 <- testTask(Input(4))(ResourceRequest(1, 500))
-      } yield t1 + t2 + t3 + t4
+      } yield t1 + t4
 
       await(future)
 
@@ -82,7 +88,7 @@ class NodeLocalCacheTestSuite extends FunSuite with Matchers {
     NodeLocalCacheTest.sideEffect.count(_ == "execution of task") shouldBe 4
     NodeLocalCacheTest.sideEffect.count(
       _ == "execution of nodelocalcache factory 1"
-    ) shouldBe 1
+    ) shouldBe 2
     NodeLocalCacheTest.sideEffect.count(
       _ == "execution of nodelocalcache factory 0"
     ) shouldBe 2

@@ -30,9 +30,9 @@ package tasks
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import org.scalatest.matchers.should.Matchers
-import scala.concurrent._
 
 import tasks.util._
+import cats.effect.IO
 import tasks.jsonitersupport._
 
 import com.typesafe.config.ConfigFactory
@@ -41,10 +41,12 @@ object ExecOnceTest extends TestHelpers with Matchers {
 
   val sideEffect = scala.collection.mutable.ArrayBuffer[String]()
 
-  val increment = AsyncTask[Input, Int]("execonce", 1) { case Input(c) =>
-    implicit computationEnvironment =>
-      sideEffect += "executed"
-      Future(c + 1)
+  val increment = Task[Input, Int]("execonce", 1) { case Input(c) =>
+    _ =>
+      IO {
+        sideEffect += "executed"
+        c + 1
+      }
   }
 
   def run = {
@@ -57,8 +59,7 @@ object ExecOnceTest extends TestHelpers with Matchers {
         )
       )
     ) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
-      await(Future.traverse(1 to 10000) { input =>
+      await(IO.parTraverseN(100)((1 to 10000).toList) { input =>
         increment(Input(0))(
           ResourceRequest(1, 500),
           labels = tasks.shared.Labels(List(input.toString -> input.toString))

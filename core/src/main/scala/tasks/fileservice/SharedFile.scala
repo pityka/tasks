@@ -27,9 +27,6 @@
 
 package tasks.fileservice
 
-import akka.stream.scaladsl._
-import akka.util._
-import scala.concurrent.Future
 import java.io.File
 import tasks.util.Uri
 import tasks.TaskSystemComponents
@@ -38,6 +35,10 @@ import tasks.HasSharedFiles
 
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
+import cats.effect.IO
+import cats.effect.kernel.Resource
+import fs2.Stream
+import fs2.Pipe
 
 sealed trait FilePath {
   def name: String
@@ -50,7 +51,7 @@ case class ManagedFilePath(pathElements: Vector[String]) extends FilePath {
 
 case class RemoteFilePath(uri: Uri) extends FilePath {
   override def toString = uri.toString
-  def name = uri.akka.path.toString.split("/").filter(_.size > 0).last
+  def name = uri.path.toString.split("/").filter(_.size > 0).last
 }
 
 case class SharedFile(
@@ -66,27 +67,29 @@ case class SharedFile(
   override def toString =
     s"SharedFile($path, size=$byteSize, hash=$hash)"
 
-  def file(implicit tsc: TaskSystemComponents) =
+  def file(implicit tsc: TaskSystemComponents): Resource[IO, File] =
     SharedFileHelper.getPathToFile(this)
 
-  def history(implicit tsc: TaskSystemComponents): Future[History] =
+  def history(implicit tsc: TaskSystemComponents): IO[History] =
     SharedFileHelper.getHistory(this)
 
-  def source(implicit tsc: TaskSystemComponents) =
-    SharedFileHelper.getSourceToFile(this, 0L)
+  def stream(implicit tsc: TaskSystemComponents): Stream[IO, Byte] =
+    SharedFileHelper.stream(this, 0L)
 
-  def source(fromOffset: Long)(implicit tsc: TaskSystemComponents) =
-    SharedFileHelper.getSourceToFile(this, fromOffset)
+  def stream(fromOffset: Long)(implicit
+      tsc: TaskSystemComponents
+  ): Stream[IO, Byte] =
+    SharedFileHelper.stream(this, fromOffset)
 
-  def isAccessible(implicit tsc: TaskSystemComponents) =
+  def isAccessible(implicit tsc: TaskSystemComponents): IO[Boolean] =
     SharedFileHelper.isAccessible(this, true)
 
-  def uri(implicit tsc: TaskSystemComponents): Future[Uri] =
+  def uri(implicit tsc: TaskSystemComponents): IO[Uri] =
     SharedFileHelper.getUri(this)
 
-  def name = path.name
+  def name: String = path.name
 
-  def delete(implicit tsc: TaskSystemComponents): Future[Boolean] =
+  def delete(implicit tsc: TaskSystemComponents): IO[Boolean] =
     SharedFileHelper.delete(this)
 }
 
@@ -94,47 +97,39 @@ object SharedFile {
 
   implicit val codec: JsonValueCodec[SharedFile] = JsonCodecMaker.make
 
-  def apply(uri: Uri)(implicit tsc: TaskSystemComponents): Future[SharedFile] =
+  def apply(uri: Uri)(implicit tsc: TaskSystemComponents): IO[SharedFile] =
     SharedFileHelper.create(RemoteFilePath(uri), tsc.fs.remote)
 
   def apply(file: File, name: String)(implicit
       tsc: TaskSystemComponents
-  ): Future[SharedFile] =
+  ): IO[SharedFile] =
     apply(file, name, false)
 
   def apply(file: File, name: String, deleteFile: Boolean)(implicit
       tsc: TaskSystemComponents
-  ): Future[SharedFile] =
+  ): IO[SharedFile] =
     SharedFileHelper.createFromFile(file, name, deleteFile)
 
-  def apply(source: Source[ByteString, _], name: String)(implicit
+  def apply(source: Stream[IO, Byte], name: String)(implicit
       tsc: TaskSystemComponents
-  ): Future[SharedFile] =
-    SharedFileHelper.createFromSource(source, name)
+  ): IO[SharedFile] =
+    SharedFileHelper.createFromStream(source, name)
 
   def sink(name: String)(implicit
       tsc: TaskSystemComponents
-  ): Option[Sink[ByteString, Future[SharedFile]]] =
+  ): Pipe[IO, Byte, SharedFile] =
     SharedFileHelper.sink(name)
 
-  def fromFolder(
+  def fromFolder(parallelism: Int)(
       callback: File => List[File]
-  )(implicit tsc: TaskSystemComponents): Future[Seq[SharedFile]] =
-    SharedFileHelper.createFromFolder(callback)
+  )(implicit tsc: TaskSystemComponents): IO[Seq[SharedFile]] =
+    SharedFileHelper.createFromFolder(parallelism)(callback)
 
   def getByName(
       name: String
-  )(implicit tsc: TaskSystemComponents): Future[Option[SharedFile]] =
+  )(implicit tsc: TaskSystemComponents): IO[Option[SharedFile]] =
     SharedFileHelper.getByName(name, retrieveSizeAndHash = true)
 
-}
-
-object ManagedFilePath {
-  // implicit val codec: JsonValueCodec[ManagedFilePath] = JsonCodecMaker.make
-}
-
-object RemoteFilePath {
-  // implicit val codec: JsonValueCodec[RemoteFilePath] = JsonCodecMaker.make
 }
 
 object FilePath {

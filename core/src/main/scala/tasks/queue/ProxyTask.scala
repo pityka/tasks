@@ -33,20 +33,20 @@ import tasks.fileservice._
 import tasks.shared._
 import tasks._
 import tasks.wire._
-import scala.concurrent.{Promise, Future}
+import scala.concurrent.Promise
+import cats.effect.IO
 
 /* Local proxy of the remotely executed task */
 class ProxyTask[Input, Output](
     taskId: TaskId,
     inputDeserializer: Spore[Unit, Deserializer[Input]],
     outputSerializer: Spore[Unit, Serializer[Output]],
-    function: Spore[Input, ComputationEnvironment => Future[Output]],
+    function: Spore[Input, ComputationEnvironment => IO[Output]],
     input: Input,
     writer: Serializer[Input],
     reader: Deserializer[Output],
     resourceConsumed: VersionedResourceRequest,
     queueActor: ActorRef,
-    fileServiceComponent: FileServiceComponent,
     fileServicePrefix: FileServicePrefix,
     cacheActor: ActorRef,
     priority: Priority,
@@ -68,7 +68,7 @@ class ProxyTask[Input, Output](
   private def startTask(cache: Boolean): Unit = {
 
     val persisted: Option[Input] = input match {
-      case x: HasPersistent[Input] => Some(x.persistent)
+      case x: HasPersistent[_] => Some(x.persistent.asInstanceOf[Input])
       case _                       => None
     }
 
@@ -85,7 +85,6 @@ class ProxyTask[Input, Output](
       function.as[AnyRef, AnyRef],
       resourceConsumed,
       queueActor,
-      fileServiceComponent.actor,
       fileServicePrefix,
       cacheActor,
       cache,

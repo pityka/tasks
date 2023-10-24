@@ -3,6 +3,8 @@
  *
  * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
  * Group Fellay
+ * Modified work, Copyright (c) 2016 Istvan Bartha
+
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the "Software"),
@@ -23,35 +25,11 @@
  * SOFTWARE.
  */
 
-package tasks.util
+package tasks.fileservice
 
-import java.util.concurrent.{ForkJoinPool, ForkJoinWorkerThread}
-import scala.concurrent.duration._
-import scala.concurrent._
 
-package object concurrent {
 
-  def await[T](f: Future[T]) = Await.result(f, atMost = Duration.Inf)
-
-  def newJavaForkJoinPoolWithNamePrefix(prefix: String, parallelism: Int) = {
-
-    val factory = new ForkJoinPool.ForkJoinWorkerThreadFactory {
-      def newThread(pool: ForkJoinPool): ForkJoinWorkerThread = {
-        val t = new CustomNamedJoinWorkerThread(pool)
-        t.setName(prefix + "-" + t.getName)
-        t
-      }
-    }
-
-    new ForkJoinPool(
-      parallelism,
-      factory,
-      null.asInstanceOf[java.lang.Thread.UncaughtExceptionHandler],
-      true
-    )
-  }
-
-  private class CustomNamedJoinWorkerThread(_pool: ForkJoinPool)
-      extends ForkJoinWorkerThread(_pool)
-
-}
+case class FileServiceComponent(
+    storage: ManagedFileStorage,
+    remote: RemoteFileStorage
+)

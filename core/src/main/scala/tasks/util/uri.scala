@@ -25,11 +25,10 @@
 
 package tasks.util
 
-import akka.http.scaladsl.model.{Uri => AUri}
 
 case class Uri(uri: String) {
-  def akka = AUri(uri)
   def jUri = new java.net.URI(uri)
+  def http4s = org.http4s.Uri.fromString(uri).toOption.get
   override def toString = uri
   def scheme = if (jUri.getScheme == null) "file" else jUri.getScheme
   def authority = jUri.getAuthority
@@ -37,6 +36,10 @@ case class Uri(uri: String) {
 }
 
 object Uri {
+
+  def apply(scheme: String, hostname: String,port:Int, path: String) : Uri = 
+    Uri(s"${scheme}://${hostname}:${port}$path")
+
   import com.github.plokhotnyuk.jsoniter_scala.macros._
   import com.github.plokhotnyuk.jsoniter_scala.core._
 

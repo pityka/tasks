@@ -25,7 +25,6 @@
 
 package tasks.elastic.sh
 
-import java.net.InetSocketAddress
 import scala.util._
 import scala.sys.process._
 
@@ -44,8 +43,10 @@ object SHShutdown extends ShutdownNode {
 
 }
 
-class SHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
-    implicit
+class SHCreateNode(
+    masterAddress: SimpleSocketAddress,
+    codeAddress: CodeAddress
+)(implicit
     config: TasksConfig,
     elasticSupport: ElasticSupportFqcn
 ) extends CreateNode {
@@ -57,13 +58,14 @@ class SHCreateNode(masterAddress: InetSocketAddress, codeAddress: CodeAddress)(
       memory = requestSize.memory,
       cpu = requestSize.cpu._2,
       scratch = requestSize.scratch,
+      gpus = 0 until requestSize.gpu toList,
       elasticSupport = elasticSupport,
       masterAddress = masterAddress,
-      download = new java.net.URL(
-        "http",
-        codeAddress.address.getHostName,
-        codeAddress.address.getPort,
-        "/"
+      download = Uri(
+        scheme = "http",
+        hostname = codeAddress.address.getHostName,
+        port = codeAddress.address.getPort,
+        path = "/"
       ),
       slaveHostname = None,
       background = true
@@ -103,7 +105,7 @@ class SHCreateNodeFactory(implicit
     config: TasksConfig,
     fqcn: ElasticSupportFqcn
 ) extends CreateNodeFactory {
-  def apply(master: InetSocketAddress, codeAddress: CodeAddress) =
+  def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
     new SHCreateNode(master, codeAddress)
 }
 
@@ -119,7 +121,7 @@ object SHGetNodeName extends GetNodeName {
 }
 
 object SHElasticSupport extends ElasticSupportFromConfig {
-  implicit val fqcn = ElasticSupportFqcn("tasks.elastic.sh.SHElasticSupport")
+  implicit val fqcn : ElasticSupportFqcn = ElasticSupportFqcn("tasks.elastic.sh.SHElasticSupport")
   def apply(implicit config: TasksConfig) = SimpleElasticSupport(
     fqcn = fqcn,
     hostConfig = None,

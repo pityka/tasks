@@ -29,7 +29,6 @@ package tasks.caching
 
 import akka.actor.{Actor, PoisonPill, ActorLogging, Stash}
 import akka.pattern.pipe
-import scala.concurrent.Future
 
 import scala.util._
 
@@ -37,6 +36,8 @@ import tasks.util.config._
 import tasks.fileservice._
 import tasks.wire._
 import tasks.queue.TaskId
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 
 class TaskResultCacheActor(
     val cacheMap: Cache,
@@ -88,10 +89,11 @@ class TaskResultCacheActor(
       cacheMap
         .set(description, result)(prefix)
         .map(_ => SetDone)
-        .recover { case e =>
+        .handleError { case e =>
           log.error(e, "Error while saving into cache")
           SetDone
         }
+        .unsafeToFuture()
         .pipeTo(self)
       sender() ! true
 
@@ -108,7 +110,7 @@ class TaskResultCacheActor(
       def lookup =
         cacheMap
           .get(scheduleTask.description)(queryFileServicePrefix)
-          .recover { case e =>
+          .handleError { case e =>
             log.error(e, "Error while looking up in cache")
             None
           }
@@ -118,7 +120,7 @@ class TaskResultCacheActor(
         answer <- cacheLookup match {
           case None =>
             log.debug(s"Checking: $taskId. Not found in cache.")
-            Future.successful(
+            IO.pure(
               AnswerFromCache(
                 Left("TaskNotFoundInCache"),
                 originalSender,
@@ -127,7 +129,7 @@ class TaskResultCacheActor(
             )
           case _ if !config.verifySharedFileInCache =>
             log.debug(s"Checking: $taskId. Got something (not verified).")
-            Future.successful(
+            IO.pure(
               AnswerFromCache(Right(cacheLookup), originalSender, scheduleTask)
             )
           case Some(cacheLookup) =>
@@ -137,12 +139,14 @@ class TaskResultCacheActor(
             val files = cacheLookup.files.toSeq.map(sf => (sf, true))
             val mutableFiles =
               cacheLookup.mutableFiles.toSeq.flatten.map(sf => (sf, false))
-            Future
-              .traverse(files ++ mutableFiles) { case (sf, checkContent) =>
+            IO
+              .parTraverseN(config.parallelismOfCacheAccessibilityCheck)(
+                files ++ mutableFiles
+              ) { case (sf, checkContent) =>
                 SharedFileHelper.isAccessible(sf, checkContent)
               }
               .map(seq => (seq, seq.forall(identity)))
-              .recover { case e =>
+              .handleError { case e =>
                 log.warning(
                   s"Checking: $taskId. Got something ($cacheLookup), but failed to verify after cache with error: $e."
                 )
@@ -172,11 +176,11 @@ class TaskResultCacheActor(
               }
         }
       } yield answer
-      answer.recover { case e: Exception =>
+      answer.handleError { case e: Exception =>
         log.error(e, "Cache check failed")
         throw e
       }
-      answer.pipeTo(savedSender)
+      answer.unsafeToFuture().pipeTo(savedSender)
 
   }
 

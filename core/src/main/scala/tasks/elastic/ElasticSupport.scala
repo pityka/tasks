@@ -25,13 +25,13 @@
 
 package tasks.elastic
 
-import java.net.InetSocketAddress
 
 import tasks.shared._
 import tasks.util.config._
 import tasks.deploy._
 import tasks.queue.QueueActor
 import tasks.ui.EventListener
+import tasks.util.SimpleSocketAddress
 
 trait ElasticSupport {
 
@@ -50,7 +50,7 @@ trait ElasticSupport {
   }
 
   def apply(
-      masterAddress: InetSocketAddress,
+      masterAddress: SimpleSocketAddress,
       queueActor: QueueActor,
       resource: ResourceAvailable,
       codeAddress: Option[CodeAddress],
@@ -78,7 +78,7 @@ case class SimpleElasticSupport(
     shutdown.shutdownRunningNode(RunningJobId(getNodeName.getNodeName))
 
   def apply(
-      masterAddress: InetSocketAddress,
+      masterAddress: SimpleSocketAddress,
       queueActor: QueueActor,
       resource: ResourceAvailable,
       codeAddress: Option[CodeAddress],

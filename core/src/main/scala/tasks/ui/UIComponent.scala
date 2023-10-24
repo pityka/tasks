@@ -27,20 +27,19 @@ import tasks.queue.TaskQueue
 import tasks.elastic.NodeRegistry
 import tasks.util.reflectivelyInstantiateObject
 import tasks.util.config.TasksConfig
-import akka.actor.{ActorSystem, ActorRef}
+import cats.effect.kernel.Resource
+import cats.effect.IO
 
 trait EventListener[-E] {
   def receive(event: E): Unit
   def close(): Unit
-  def watchable: ActorRef
 }
 
 trait UIComponentBootstrap {
   def startQueueUI(implicit
-      actorSystem: ActorSystem,
       config: TasksConfig
-  ): QueueUI
-  def startAppUI(implicit actorSystem: ActorSystem, config: TasksConfig): AppUI
+  ): Resource[IO,QueueUI]
+  def startAppUI(implicit config: TasksConfig): Resource[IO,AppUI]
 }
 
 trait QueueUI {

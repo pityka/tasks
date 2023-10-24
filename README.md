@@ -13,11 +13,25 @@ It also provides a framework to execute those computations on remote machines. F
 
 See the `example` project and the tests.
 
+## Akka dependency
+Akka is marked as a 'provided' dependency. This is to make sure that the application does not mix Akka modules of different version. 
+
+The following Akka modules are needed:
+  
+- `"com.typesafe.akka" %% "akka-actor"`  compatible with 2.6.19
+- `"com.typesafe.akka" %% "akka-remote"` compatible with 2.6.19
+- `"com.typesafe.akka" %% "akka-stream"` compatible with 2.6.19
+- `"com.typesafe.akka" %% "akka-http"` compatible with 10.2.9
+- `"com.lightbend.akka" %% "akka-stream-alpakka-s3" % "3.0.4"` (or compatible veresion)  if S3 is used
+- `"com.typesafe.akka" %% "akka-http-xml"` compatible with 10.2.9 if S3 is used and alpakka is on the classpath
+
+
+
 # Licence
 
 Author: Istvan Bartha
 
-This repository is a fork of https://github.com/pityka/mybiotools/tree/master/Tasks , for which the copyright holder is `ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland, Group Fellay` and was released under the MIT license. (That repository holds my post-doc works in the laboratory of Professor Jacques Fellay.)
+This repository is a fork of https://github.com/pityka/mybiotools/tree/master/Tasks , for which the copyright holder is `ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland, Group Fellay` and was released under the MIT license. 
 
 Copyright of subsequent modifications belong to Istvan Bartha.
 

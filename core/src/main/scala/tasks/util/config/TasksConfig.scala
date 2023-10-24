@@ -27,9 +27,11 @@
 
 package tasks.util.config
 
+import tasks.util.SimpleSocketAddress
 import com.typesafe.config.Config
 import scala.jdk.CollectionConverters._
 import com.typesafe.scalalogging.StrictLogging
+import tasks.shared.ResourceAvailable
 
 class TasksConfig(load: () => Config) extends StrictLogging {
 
@@ -94,7 +96,12 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   val hostNumCPU = raw.getInt("hosts.numCPU")
 
-  val hostGPU = raw.getIntList("hosts.gpus").asScala.toList.map(_.toInt)
+  val hostGPU = raw.getIntList("hosts.gpus").asScala.toList.map(_.toInt) ++ raw
+    .getString("hosts.gpusAsCommaString")
+    .split(",")
+    .toList
+    .filter(_.nonEmpty)
+    .map(_.toInt)
 
   val hostRAM = raw.getInt("hosts.RAM")
 
@@ -108,18 +115,18 @@ class TasksConfig(load: () => Config) extends StrictLogging {
     if (raw.hasPath("hosts.master")) {
       val h = raw.getString("hosts.master").split(":")(0)
       val p = raw.getString("hosts.master").split(":")(1).toInt
-      Some(new java.net.InetSocketAddress(h, p))
+      Some(SimpleSocketAddress(h, p))
     } else None
 
   val startApp = raw.getBoolean("hosts.app")
 
-  val auxThreads = raw.getInt("tasks.auxThreads")
-
   val storageURI =
     new java.net.URI(raw.getString("tasks.fileservice.storageURI"))
 
-  val fileServiceThreadPoolSize =
-    raw.getInt("tasks.fileservice.threadPoolSize")
+  val proxyStorage = raw.getBoolean("tasks.fileservice.proxyStorage")
+
+  val parallelismOfCacheAccessibilityCheck =
+    raw.getInt("tasks.cache.accessibility-check-parallelism")
 
   val sshHosts = raw.getObject("tasks.elastic.ssh.hosts")
 
@@ -148,15 +155,23 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   def logQueueStatus = raw.getBoolean("tasks.elastic.logQueueStatus")
 
-  val endpoint: String = raw.getString("tasks.elastic.aws.endpoint")
+  val awsRegion: String = raw.getString("tasks.elastic.aws.region")
 
   def spotPrice: Double = raw.getDouble("tasks.elastic.aws.spotPrice")
 
   def amiID: String = raw.getString("tasks.elastic.aws.ami")
 
-  def slaveInstanceType = raw.getString("tasks.elastic.aws.instanceType")
-
   def securityGroup: String = raw.getString("tasks.elastic.aws.securityGroup")
+
+  def ec2InstanceTypes =
+    raw.getConfigList("tasks.elastic.aws.instances").asScala.toList.map {
+      conf =>
+        val name = conf.getString("name")
+        val cpu = conf.getInt("cpu")
+        val ram = conf.getInt("ram")
+        val gpu = conf.getInt("gpu")
+        name -> ResourceAvailable(cpu, ram, Int.MaxValue, 0 until gpu toList)
+    }
 
   def securityGroups: List[String] =
     raw.getStringList("tasks.elastic.aws.securityGroups").asScala.toList
@@ -180,18 +195,21 @@ class TasksConfig(load: () => Config) extends StrictLogging {
       case x            => Some(x)
     }
 
-  val s3Region = raw.getString("tasks.s3.region")
+  val s3RegionProfileName = if (raw.hasPath("tasks.s3.regionProfileName")) Some(raw.getString("tasks.s3.regionProfileName")) else None
 
-  val s3ServerSideEncryption = raw.getBoolean("tasks.s3.serverSideEncryption")
+  val s3ServerSideEncryption = raw.getString("tasks.s3.serverSideEncryption")
 
   val s3CannedAcl = raw.getStringList("tasks.s3.cannedAcls").asScala.toList
 
   val s3GrantFullControl = raw
     .getStringList("tasks.s3.grantFullControl")
     .asScala
-    .grouped(2)
-    .map(x => x(0) -> x(1))
     .toList
+
+  val s3UploadParallelism = raw.getInt("tasks.s3.uploadParallelism")
+
+  val httpRemoteEnabled = raw.getBoolean("tasks.fileservice.remote.http")
+  val s3RemoteEnabled =raw.getBoolean("tasks.fileservice.remote.s3")
 
   def instanceTags =
     raw
@@ -219,12 +237,34 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   def kubernetesImageName = raw.getString("tasks.kubernetes.image")
 
+  def kubernetesHostNameOrIPEnvVar =
+    raw.getString("tasks.kubernetes.hostnameOrIPEnvVar")
+  def kubernetesCpuLimitEnvVar =
+    raw.getString("tasks.kubernetes.cpuLimitEnvVar")
+  def kubernetesRamLimitEnvVar =
+    raw.getString("tasks.kubernetes.ramLimitEnvVar")
+  def kubernetesScratchLimitEnvVar =
+    raw.getString("tasks.kubernetes.scratchLimitEnvVar")
+
+  def kubernetesCpuExtra = raw.getInt("tasks.kubernetes.extralimits.cpu")
+  def kubernetesCpuMin = raw.getInt("tasks.kubernetes.minimumlimits.cpu")
+  def kubernetesRamExtra = raw.getInt("tasks.kubernetes.extralimits.ram")
+  def kubernetesRamMin = raw.getInt("tasks.kubernetes.minimumlimits.ram")
+
+  def kubernetesGpuTaintToleration = {
+    val l = raw.getStringList("tasks.kubernetes.gpuTaintToleration").asScala
+    l.grouped(5).toList.filter(_.size == 5).map { l =>
+      // effect,key,operator,seconds,value
+      (l(0), l(1), l(2), l(3), l(4))
+    }
+  }
+
   def kubernetesNamespace = raw.getString("tasks.kubernetes.namespace")
 
   def kubernetesImagePullPolicy =
     raw.getString("tasks.kubernetes.image-pull-policy")
 
-  val slaveMainClass = raw.getString("tasks.slave-main-class")
+  val workerMainClass = raw.getString("tasks.worker-main-class")
 
   val createFilePrefixForTaskId =
     raw.getBoolean("tasks.createFilePrefixForTaskId")
@@ -247,6 +287,9 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   def trackDataFlow = raw.getBoolean("tasks.queue.trackDataFlow")
 
+  val parallelismOfReadingHistoryFiles =
+    raw.getInt("tasks.queue.track-data-flow-history-file-read-parallelism")
+
   val saveTaskDescriptionInCache =
     raw.getBoolean("tasks.cache.saveTaskDescription")
 
@@ -255,7 +298,7 @@ class TasksConfig(load: () => Config) extends StrictLogging {
 
   val shWorkDir = raw.getString("tasks.elastic.sh.workdir")
 
-  val forceNoManagedFileStorage =
-    raw.getBoolean("tasks.fileservice.disableOnSlave")
+  val connectToProxyFileServiceOnMain =
+    raw.getBoolean("tasks.fileservice.connectToProxy")
 
 }

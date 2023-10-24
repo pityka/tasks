@@ -3,6 +3,8 @@
  *
  * Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland,
  * Group Fellay
+ * Modified work, Copyright (c) 2016 Istvan Bartha
+
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the "Software"),
@@ -23,18 +25,31 @@
  * SOFTWARE.
  */
 
-package tasks.elastic
+package tasks.fileservice
 
-import java.io.File
-import org.http4s._
-import cats.effect.IO
 
-class PackageServer(pack: File) {
 
-  val route = HttpRoutes.of[IO] {
-    case request if request.method == Method.GET =>
-      StaticFile
-        .fromPath[IO](fs2.io.file.Path.fromNioPath(pack.toPath()))
-        .getOrRaise(new RuntimeException(s"$pack not found"))
-  }
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
+
+
+case class FileServicePrefix(list: Vector[String]) {
+  def append(n: String) = FileServicePrefix(list :+ n)
+  def append(ns: Seq[String]) = FileServicePrefix(list ++ ns)
+  private[fileservice] def propose(name: String) =
+    ProposedManagedFilePath(list :+ name)
+}
+object FileServicePrefix {
+  implicit val codec: JsonValueCodec[FileServicePrefix] = JsonCodecMaker.make
+
+}
+
+case class ProposedManagedFilePath(list: Vector[String]) {
+  def name = list.last
+  def toManaged = ManagedFilePath(list)
+}
+
+object ProposedManagedFilePath {
+  implicit val codec: JsonValueCodec[ProposedManagedFilePath] =
+    JsonCodecMaker.make
 }
