@@ -206,7 +206,7 @@ class FileServiceSpec
         .withHttpApp(proxiedFs.orNotFound)
         .build
         .use { server =>
-          ProxyFileStorage.makeClient(server.baseUri, as).use { proxiedFs =>
+          ProxyFileStorage.makeClient(server.baseUri).use { proxiedFs =>
             IO {
               implicit val serviceimpl =
                 FileServiceComponent(proxiedFs, remoteStore)

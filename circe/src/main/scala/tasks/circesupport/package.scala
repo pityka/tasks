@@ -1,6 +1,5 @@
 package tasks
 import tasks.queue._
-import com.typesafe.scalalogging.StrictLogging
 import io.circe.generic.semiauto._
 import io.circe.{Encoder, Decoder, Printer}
 import tasks.fileservice.{FilePath, RemoteFilePath, ManagedFilePath}
@@ -8,7 +7,7 @@ import tasks.util.Uri
 import com.google.common.hash.Hashing
 import tasks.util.SerializedActorRef
 
-package object circesupport extends StrictLogging {
+package object circesupport  {
   private val printer = Printer.noSpaces.copy(dropNullValues = true)
 
   implicit def serializer[A](implicit enc: Encoder[A]): Serializer[A] =

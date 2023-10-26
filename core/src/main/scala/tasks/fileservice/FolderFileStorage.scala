@@ -48,11 +48,8 @@ object FolderFileStorage {
 
 class FolderFileStorage(val basePath: File)(implicit
     config: TasksConfig,
-    as: akka.actor.ActorSystem
 ) extends ManagedFileStorage {
 
-  implicit val log: akka.event.LoggingAdapter =
-    akka.event.Logging(as.eventStream, getClass)
 
   if (basePath.exists && !basePath.isDirectory)
     throw new IllegalArgumentException(s"$basePath exists and not a folder")
@@ -60,8 +57,6 @@ class FolderFileStorage(val basePath: File)(implicit
 
   if (!basePath.isDirectory)
     throw new RuntimeException(s"Could not create $basePath")
-
-  val logger = akka.event.Logging(as, getClass)
 
   override def toString =
     s"FolderFileStorage(basePath=$basePath)"
@@ -98,17 +93,17 @@ class FolderFileStorage(val basePath: File)(implicit
           canRead && (expectedSize < 0 || (sizeMatch && contentMatch))
         if (canDelete) {
           val deleted = file.delete
-          logger.warning(s"File deleted $file $mp : $deleted")
+          scribe.warn(s"File deleted $file $mp : $deleted")
           deleted
         } else {
-          logger.warning(
+          scribe.warn(
             s"Not deleting file because its size or hash is different than expectation. $file $mp $sizeMatch $contentMatch"
           )
           false
         }
       }
     } else {
-      logger.warning(s"File deletion disabled. Would have deleted $mp")
+      scribe.warn(s"File deletion disabled. Would have deleted $mp")
       IO.pure(false)
     }
 
@@ -133,7 +128,7 @@ class FolderFileStorage(val basePath: File)(implicit
       val pass = canRead && (size < 0 || (sizeMatch && contentMatch))
 
       if (!pass) {
-        logger.debug(
+        scribe.debug(
           s"$this does not contain $path due to: canRead:$canRead, sizeMatch:$sizeMatch   (sizeOnDisk:$sizeOnDiskNow vs expected:$size), contentMatch:$contentMatch. FileOnDisk: $f "
         )
       }
@@ -151,7 +146,7 @@ class FolderFileStorage(val basePath: File)(implicit
       val pass = canRead
 
       if (!pass) {
-        logger.debug(s"$this does not contain $path due to: canRead:$canRead")
+        scribe.debug(s"$this does not contain $path due to: canRead:$canRead")
         None
       } else {
         if (retrieveSizeAndHash) {
@@ -198,7 +193,7 @@ class FolderFileStorage(val basePath: File)(implicit
       com.google.common.io.Files.copy(source, tmp)
     } catch {
       case e: java.io.IOException =>
-        logger.error(e, s"Exception while copying $source to $tmp")
+        scribe.error(e, s"Exception while copying $source to $tmp")
         throw e
     }
 
@@ -208,12 +203,12 @@ class FolderFileStorage(val basePath: File)(implicit
       val success = tmp.renameTo(destination)
       if (success) success
       else if (i > 0) {
-        logger.warning(
+        scribe.warn(
           s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}. Try $i more times."
         )
         tryRename(i - 1)
       } else {
-        logger.error(
+        scribe.error(
           s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}"
         )
         false
@@ -277,7 +272,7 @@ class FolderFileStorage(val basePath: File)(implicit
       proposed: ProposedManagedFilePath
   ): IO[(Long, Int, ManagedFilePath)] =
     IO.blocking({
-      logger.debug(s"Importing file $file under name $proposed")
+      scribe.debug(s"Importing file $file under name $proposed")
       val size = file.length
       val hash = FolderFileStorage.getContentHash(file)
       val managed = proposed.toManaged
@@ -292,13 +287,13 @@ class FolderFileStorage(val basePath: File)(implicit
         (size, hash, locationAsManagedFilePath)
       } else if (assemblePath(managed).canRead) {
         val finalFile = assemblePath(managed)
-        logger.debug(
+        scribe.debug(
           s"Found a file already in storage with the same name ($finalFile). Check for equality."
         )
         if (checkContentEquality(finalFile, file))
           (size, hash, managed)
         else {
-          logger.debug(s"Equality failed. Importing file. $file to $finalFile")
+          scribe.debug(s"Equality failed. Importing file. $file to $finalFile")
 
           if (!config.allowOverwrite) {
             def candidates(i: Int, past: List[File]): List[File] = {
@@ -312,7 +307,7 @@ class FolderFileStorage(val basePath: File)(implicit
 
             val oldFiles = candidates(0, Nil)
 
-            logger.debug(s"Moving $oldFiles away.")
+            scribe.debug(s"Moving $oldFiles away.")
 
             oldFiles
               .map(f => (parseVersion(f) + 1, f))

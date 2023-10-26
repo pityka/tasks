@@ -108,7 +108,7 @@ case class UntypedTaskDefinition[A, C](
           case Left(error) =>
             val logMessage =
               s"Could not deserialize input. Error: $error. Raw data (as utf8): ${new String(Base64DataHelpers.toBytes(j))}"
-            ce.log.error(logMessage)
+            scribe.error(logMessage)
             throw new RuntimeException(logMessage)
         }
         (w, deserialized)

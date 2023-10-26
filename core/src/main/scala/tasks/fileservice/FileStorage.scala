@@ -39,7 +39,6 @@ import tasks.util.eq._
 import cats.effect.kernel.Resource
 import cats.effect.IO
 import fs2.Stream
-import akka.event.LoggingAdapter
 
 object FileStorage {
   def getContentHash(is: InputStream): Int = {
@@ -128,7 +127,6 @@ class RemoteFileStorage(implicit
 
 trait ManagedFileStorage {
 
-  def log: LoggingAdapter
 
   def uri(mp: ManagedFilePath): IO[Uri]
 
@@ -151,7 +149,7 @@ trait ManagedFileStorage {
       f: File,
       path: ProposedManagedFilePath
   ): IO[(Long, Int, ManagedFilePath)] =
-    tasks.util.retryIO(s"upload to $path")(importFile1(f, path), 4)(log)
+    tasks.util.retryIO(s"upload to $path")(importFile1(f, path), 4)(scribe.Logger[ManagedFileStorage])
 
   private def importFile1(
       f: File,

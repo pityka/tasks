@@ -10,7 +10,6 @@ import tasks.fileservice.ProposedManagedFilePath
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import org.http4s.client.Client
 import org.http4s.ember.client.EmberClientBuilder
-import akka.actor.ActorSystem
 
 object ProxyFileStorage {
   implicit private def jsonDec[T](implicit
@@ -111,24 +110,20 @@ object ProxyFileStorage {
 
   def makeClient(
       uri: org.http4s.Uri,
-      as: ActorSystem
   ): Resource[IO, ManagedFileStorage] = {
     EmberClientBuilder
       .default[IO]
       .build
       .map { client =>
-        new ProxyFileStorageClient(uri, client, as)
+        new ProxyFileStorageClient(uri, client)
       }
   }
 
   final private class ProxyFileStorageClient private[ProxyFileStorage] (
       address: org.http4s.Uri,
       httpClient: Client[IO],
-      as: ActorSystem
   ) extends ManagedFileStorage {
 
-    implicit val log: akka.event.LoggingAdapter =
-      akka.event.Logging(as.eventStream, getClass)
 
     def uri(mp: ManagedFilePath): IO[tasks.util.Uri] =
       httpClient.expect[tasks.util.Uri](
