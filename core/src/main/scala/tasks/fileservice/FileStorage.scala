@@ -27,8 +27,6 @@
 
 package tasks.fileservice
 
-import akka.actor._
-
 import com.google.common.hash._
 
 import java.io.{File, InputStream}
@@ -53,11 +51,9 @@ object FileStorage {
 
 class RemoteFileStorage(implicit
     streamHelper: StreamHelper,
-    as: ActorSystem,
     config: TasksConfig
 ) {
 
-  val log = akka.event.Logging(as.eventStream, "remote-storage")
 
   def uri(mp: RemoteFilePath): Uri = mp.uri
 
@@ -96,7 +92,7 @@ class RemoteFileStorage(implicit
         size < 0 || (size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1))
       }
       .handleError { case e =>
-        log.debug("Exception while looking up remote file. {}", e)
+        scribe.debug("Exception while looking up remote file. {}", e)
         false
       }
 

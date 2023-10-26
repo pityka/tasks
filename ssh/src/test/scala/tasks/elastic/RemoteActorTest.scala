@@ -36,7 +36,6 @@ import tasks._
 import com.typesafe.config.ConfigFactory
 import tasks.util.SerializedActorRef
 import scala.concurrent.duration._
-import akka.event.Logging
 import akka.pattern.ask
 import cats.effect.IO
 

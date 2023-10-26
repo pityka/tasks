@@ -109,25 +109,24 @@ class TaskSystem private[tasks] (
   implicit val streamHelper: StreamHelper =
     new StreamHelper(s3Client.map(_._1), httpClientAndRelease.map(_._1))
 
-  private val tasksystemlog = akka.event.Logging(AS.eventStream, "tasks.boot")
 
-  tasksystemlog.info("Listening on: " + hostConfig.myAddress.toString)
-  tasksystemlog.info("CPU: " + hostConfig.availableCPU.toString)
-  tasksystemlog.info("RAM: " + hostConfig.availableMemory.toString)
-  tasksystemlog.info("SCRATCH: " + hostConfig.availableScratch.toString)
-  tasksystemlog.info("GPU: " + hostConfig.availableGPU.mkString("[", ", ", "]"))
-  tasksystemlog.info("Roles: " + hostConfig.myRoles.mkString(", "))
-  tasksystemlog.info("Elastic: " + elasticSupport)
+  scribe.info("Listening on: " + hostConfig.myAddress.toString)
+  scribe.info("CPU: " + hostConfig.availableCPU.toString)
+  scribe.info("RAM: " + hostConfig.availableMemory.toString)
+  scribe.info("SCRATCH: " + hostConfig.availableScratch.toString)
+  scribe.info("GPU: " + hostConfig.availableGPU.mkString("[", ", ", "]"))
+  scribe.info("Roles: " + hostConfig.myRoles.mkString(", "))
+  scribe.info("Elastic: " + elasticSupport)
 
   if (hostConfig.availableCPU > Runtime.getRuntime().availableProcessors()) {
-    tasksystemlog.warning(
+    scribe.warn(
       "Number of CPUs in the machine is " + Runtime
         .getRuntime()
         .availableProcessors + ". numCPU should not be greater than this."
     )
   }
 
-  tasksystemlog.info("Master node address is: " + hostConfig.master.toString)
+  scribe.info("Master node address is: " + hostConfig.master.toString)
 
   private lazy val masterAddress: tasks.util.SimpleSocketAddress =
     hostConfig.master
@@ -148,18 +147,18 @@ class TaskSystem private[tasks] (
           atMost = 60 seconds
         )
       )
-      tasksystemlog.info("Remote node registry: " + noderegistry)
+      scribe.info("Remote node registry: " + noderegistry)
       noderegistry match {
         case Success(nr) => Some(nr)
         case Failure(e) =>
-          tasksystemlog.error(
+          scribe.error(
             e,
             "Failed to contact remote node registry. Shut down job."
           )
           try {
             elasticSupport.get.selfShutdownNow()
           } finally {
-            tasksystemlog.info("Stop jvm")
+            scribe.info("Stop jvm")
             System.exit(1)
           }
           None
@@ -171,7 +170,7 @@ class TaskSystem private[tasks] (
   val proxyStoragePort = masterAddress.port + 2
 
   def makeHttpProxyStorageClient(): (ManagedFileStorage, IO[Unit]) = {
-    tasksystemlog.info(
+    scribe.info(
       s"Trying to use main application's http proxy storage on address ${masterAddress.hostName} and port ${proxyStoragePort}"
     )
     import org.http4s.Uri
@@ -193,7 +192,7 @@ class TaskSystem private[tasks] (
   }
 
   def startProxyFileStorageHttpServer(storage: ManagedFileStorage): IO[Unit] = {
-    tasksystemlog.info("Starting http server for proxy file storage")
+    scribe.info("Starting http server for proxy file storage")
     import com.comcast.ip4s._
     val service = ProxyFileStorage.service(storage)
 
@@ -205,7 +204,7 @@ class TaskSystem private[tasks] (
       .build
       .allocated
       .unsafeRunSync()
-    tasksystemlog.info(s"Started proxy storage server on ${server.baseUri}")
+    scribe.info(s"Started proxy storage server on ${server.baseUri}")
 
     releaseServer
   }
@@ -255,7 +254,7 @@ class TaskSystem private[tasks] (
             else if (config.storageURI.getScheme == "file")
               config.storageURI.getPath
             else {
-              tasksystemlog.error(
+              scribe.error(
                 s"${config.storageURI} unknown protocol, use s3://bucket/key or file:/// (with absolute path), or just a plain path string (absolute or relative"
               )
               throw new RuntimeException(
@@ -264,19 +263,19 @@ class TaskSystem private[tasks] (
             }
           val storageFolder = new File(storageFolderPath).getCanonicalFile
           if (storageFolder.isFile) {
-            tasksystemlog.error(s"$storageFolder is a file. Abort.")
+            scribe.error(s"$storageFolder is a file. Abort.")
             throw new RuntimeException(s"$storageFolder is a file. Abort.")
           }
           if (!storageFolder.isDirectory) {
             if (hostConfig.isQueue) {
 
-              tasksystemlog.warning(
+              scribe.warn(
                 s"Folder $storageFolder does not exists and this is a master node. Try to create the folder $storageFolder for file storage. "
               )
               storageFolder.mkdirs
               (new FolderFileStorage(storageFolder), IO.unit)
             } else {
-              tasksystemlog.warning(
+              scribe.warn(
                 s"Folder $storageFolder does not exists. This is not a master node. Reverting to proxy via main node."
               )
               makeHttpProxyStorageClient()
@@ -292,14 +291,14 @@ class TaskSystem private[tasks] (
         val release = startProxyFileStorageHttpServer(fs)
         val releaseBoth = release
           .handleError { throwable =>
-            tasksystemlog.error(
+            scribe.error(
               "Error in stopping http file storage",
               throwable
             )
           }
           .flatMap(_ =>
             release1.handleError { throwable =>
-              tasksystemlog
+              scribe
                 .error("Error in stopping http file storage client", throwable)
             }
           )
@@ -309,7 +308,7 @@ class TaskSystem private[tasks] (
 
   }
 
-  tasksystemlog.info("File store: " + managedFileStorage)
+  scribe.info("File store: " + managedFileStorage)
 
   val fileServiceComponent =
     FileServiceComponent(
@@ -402,7 +401,7 @@ class TaskSystem private[tasks] (
       }
     }
 
-  tasksystemlog.info("Queue: " + queueActor)
+  scribe.info("Queue: " + queueActor)
 
   val packageServerPort = hostConfig.myAddress.getPort + 1
 
@@ -468,7 +467,7 @@ class TaskSystem private[tasks] (
 
       Try(Deployment.pack) match {
         case Success(pack) =>
-          tasksystemlog
+          scribe
             .info("Written executable package to: {}", pack.getAbsolutePath)
 
           val service = new PackageServer(pack)
@@ -486,11 +485,11 @@ class TaskSystem private[tasks] (
             .allocated
             .unsafeRunSync()
 
-          tasksystemlog.info(s"Started package server on $server")
+          scribe.info(s"Started package server on $server")
 
           Some(releaseServer)
         case Failure(e) =>
-          tasksystemlog.error(
+          scribe.error(
             e,
             s"Packaging self failed. Main thread exited? Skip starting package server."
           )
@@ -545,10 +544,10 @@ class TaskSystem private[tasks] (
   if (
     !hostConfig.isApp && hostConfig.isWorker && elasticSupportFactory.isDefined && launcherActor.isDefined
   ) {
-    tasksystemlog.info("Getting node name..")
+    scribe.info("Getting node name..")
     val nodeName = getNodeName
 
-    tasksystemlog.info(
+    scribe.info(
       "This is a worker node. ElasticNodeAllocation is enabled. Notifying remote node registry about this node. Node name: " + nodeName + ". Launcher actor address is: " + launcherActor.get
     )
 
@@ -561,7 +560,7 @@ class TaskSystem private[tasks] (
         }.isSuccess
 
     if (!tempFolderWriteable) {
-      tasksystemlog.error(
+      scribe.error(
         s"Temp folder is not writeable (${System.getProperty("java.io.tmpdir")}). Failing slave init."
       )
       initFailed()
@@ -587,12 +586,12 @@ class TaskSystem private[tasks] (
     }
 
   } else {
-    tasksystemlog.info("This is not a slave node.")
+    scribe.info("This is not a slave node.")
   }
 
   private def initFailed(): Unit = {
     if (!hostConfig.isApp && hostConfig.isWorker) {
-      tasksystemlog.error(
+      scribe.error(
         "Initialization failed. This is a slave node, notifying remote node registry."
       )
       remoteNodeRegistry.foreach(_ ! InitFailed(PendingJobId(getNodeName)))
@@ -620,7 +619,7 @@ class TaskSystem private[tasks] (
 
         localNodeRegistry.foreach(_ ! PoisonPill)
 
-        tasksystemlog.info(
+        scribe.info(
           "Shutting down tasksystem. Blocking until all watched actors have terminated."
         )
         latch.await
@@ -642,11 +641,11 @@ class TaskSystem private[tasks] (
 
   val shutdownHook = if (config.addShutdownHook) {
     Some(scala.sys.addShutdownHook {
-      tasksystemlog.warning(
+      scribe.warn(
         "JVM is shutting down - will call tasksystem shutdown."
       )
       shutdownImpl()
-      tasksystemlog.warning(
+      scribe.warn(
         "JVM is shutting down - called tasksystem shutdown."
       )
     })
