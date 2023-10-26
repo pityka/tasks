@@ -262,7 +262,6 @@ package object tasks {
       fromFiles: Seq[SharedFile] => O
   )(full: => IO[O])(implicit tsc: TaskSystemComponents): IO[O] = {
     val filesWithNonEmptyPath = files.filter(_.nonEmpty)
-    val logger = akka.event.Logging(tsc.actorsystem, getClass)
     for {
       maybeSharedFiles <- IO.parSequenceN(parallelism)(
         filesWithNonEmptyPath.map { path =>
@@ -275,7 +274,7 @@ package object tasks {
       validSharedFiles = (maybeSharedFiles zip filesWithNonEmptyPath)
         .map {
           case (None, path) =>
-            logger.debug(s"Can't find ${path.mkString("/")}")
+            scribe.debug(s"Can't find ${path.mkString("/")}")
             None
           case (valid, _) => valid
         }
