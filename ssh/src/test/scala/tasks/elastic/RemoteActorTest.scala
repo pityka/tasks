@@ -81,7 +81,7 @@ object SHRemoteActorTest extends TestHelpers {
     Task[NumInput, Seq[String]]("remoteactortest_outertask", 1) {
       case NumInput(num) =>
         implicit ce =>
-          ce.log.info("run outer")
+          scribe.info("run outer")
           implicit val as = ce.actorSystem
           val ac1 = as.actorOf(Props(new Actor1(num)), "1")
 
@@ -98,10 +98,10 @@ object SHRemoteActorTest extends TestHelpers {
     Task[ActorInput, String]("remoteactortest_innertask", 1) {
       case ActorInput(n, actor) =>
         implicit ce =>
-          ce.log.info("run inner " + n)
+          scribe.info("run inner " + n)
           implicit val as = ce.actorSystem
           IO.fromFuture(IO.delay(actor.resolve(60 seconds))).flatMap { ac =>
-            ce.log.info("sending my number " + n)
+            scribe.info("sending my number " + n)
             IO.fromFuture(IO.delay(ac.ask(n)(akka.util.Timeout(120 seconds)).mapTo[String]))
           }
     }

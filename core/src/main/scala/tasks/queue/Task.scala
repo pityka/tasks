@@ -125,7 +125,6 @@ object UntypedResult {
 case class ComputationEnvironment(
     val resourceAllocated: ResourceAllocated,
     implicit val components: TaskSystemComponents,
-    implicit val log: akka.event.LoggingAdapter,
     implicit val launcher: LauncherActor,
     val taskActor: ActorRef,
     taskHash: HashedTaskDescription
@@ -249,10 +248,6 @@ private class Task(
           priority,
           labels,
           lineage
-        ),
-        akka.event.Logging(
-          context.system.eventStream,
-          "usertasks." + fileServicePrefix.list.mkString(".")
         ),
         LauncherActor(launcherActor),
         self,

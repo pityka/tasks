@@ -34,11 +34,8 @@ import tasks.util.eq._
 
 import java.io.File
 
-import akka.actor._
-
 import cats.effect.kernel.Resource
 import cats.effect.IO
-import akka.event.LoggingAdapter
 import fs2.{Stream, Pipe}
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse
 import tasks.fileservice._
@@ -52,14 +49,11 @@ class S3Storage(
     uploadParallelism: Int,
     s3: tasks.fileservice.s3.S3
 )(implicit
-    as: ActorSystem,
     config: TasksConfig
 ) extends ManagedFileStorage {
 
   override def toString = s"S3Storage(bucket=$bucketName, prefix=$folderPrefix)"
 
-  implicit val log: LoggingAdapter =
-    akka.event.Logging(as.eventStream, getClass)
 
   def sharedFolder(prefix: Seq[String]): IO[Option[File]] = IO.pure(None)
 

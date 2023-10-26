@@ -185,8 +185,7 @@ class TaskSystem private[tasks] (
               port = Some(proxyStoragePort)
             )
           )
-        ),
-        as = AS
+        )
       )
       .allocated
       .unsafeRunSync()

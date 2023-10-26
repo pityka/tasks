@@ -33,14 +33,13 @@ import tasks.util._
 import tasks.util.config._
 import tasks.queue._
 
-import com.typesafe.scalalogging.StrictLogging
 import cats.effect.kernel.Resource
 import cats.effect.IO
 import fs2.Stream
 import akka.stream.Materializer
 import fs2.Chunk
 
-private[tasks] object SharedFileHelper extends StrictLogging {
+private[tasks] object SharedFileHelper  {
 
   def getByName(name: String, retrieveSizeAndHash: Boolean)(implicit
       service: FileServiceComponent,
@@ -133,7 +132,6 @@ private[tasks] object SharedFileHelper extends StrictLogging {
 
   def saveHistory(sf: SharedFile, historyContext: HistoryContext)(implicit
       prefix: FileServicePrefix,
-      // ec: ExecutionContext,
       service: FileServiceComponent,
       context: ActorRefFactory,
       config: TasksConfig,
@@ -170,7 +168,7 @@ private[tasks] object SharedFileHelper extends StrictLogging {
           val historyManagedPath = ManagedFilePath(
             managed.pathElements.dropRight(1) :+ managed.name + ".history"
           )
-          logger.debug("Decoding history of " + sf)
+          scribe.debug("Decoding history of " + sf)
 
           def readFile =
             getStreamToManagedPath(historyManagedPath, fromOffset = 0L)
@@ -180,7 +178,7 @@ private[tasks] object SharedFileHelper extends StrictLogging {
               .map(_.toArray)
               .map { byteArray =>
                 if (byteArray.length >= 1024 * 1024 * 20) {
-                  logger.warn("Truncating history due to file size.")
+                  scribe.warn("Truncating history due to file size.")
                   History(sf, None)
                 } else {
 

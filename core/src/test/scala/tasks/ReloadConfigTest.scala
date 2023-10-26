@@ -36,7 +36,7 @@ object ReloadConfigTest extends TestHelpers with Matchers {
 
   val testTask = Task[Input, Int]("nodeallocationtest", 1) {
     input => implicit computationEnvironment =>
-      log.info("Hello from task")
+      scribe.info("Hello from task")
       if (input.i > 1) {
         computationEnvironment.components.tasksConfig.kubernetesImageName shouldBe "Input(1)"
       }

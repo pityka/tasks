@@ -72,6 +72,8 @@ lazy val jsoniterVersion = "2.13.31"
 lazy val akkaVersion = "2.6.19"
 lazy val shapelessVersion = "2.3.10"
 lazy val http4sVersion = "0.23.23"
+lazy val scribeVersion = "3.12.2"
+lazy val fs2Version = "3.8.0"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
   .crossType(sbtcrossproject.CrossPlugin.autoImport.CrossType.Pure)
@@ -113,6 +115,7 @@ lazy val spores = project
   )
 lazy val akkaProvided = List(
   "com.typesafe.akka" %% "akka-actor" % akkaVersion % Provided,
+  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion % Provided,
   "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided
 )
 lazy val core = project
@@ -124,8 +127,8 @@ lazy val core = project
       scalapb.gen() -> (sourceManaged in Compile).value
     ),
     libraryDependencies ++= Seq(
-      "co.fs2" %% "fs2-io" % "3.8.0",
-      "co.fs2" %% "fs2-reactive-streams" % "3.8.0",
+      "co.fs2" %% "fs2-io" % fs2Version,
+      "co.fs2" %% "fs2-reactive-streams" % fs2Version,
       "org.http4s" %% "http4s-ember-client" % http4sVersion,
       "org.http4s" %% "http4s-ember-server" % http4sVersion,
       "org.http4s" %% "http4s-dsl" % http4sVersion,
@@ -136,7 +139,8 @@ lazy val core = project
       "org.typelevel" %% "cats-effect" % "3.4.11",
       "io.github.pityka" %% "selfpackage" % "2.0.0",
       "org.scalatest" %% "scalatest" % "3.2.16" % "test",
-      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
+      "com.outr" %% "scribe" % scribeVersion,
+      "com.outr" %% "scribe-slf4j" % "3.12.2",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test"

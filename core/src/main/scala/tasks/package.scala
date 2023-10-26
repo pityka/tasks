@@ -39,7 +39,6 @@ import tasks.shared.LogRecord
 import scala.language.experimental.macros
 import cats.effect.IO
 import tasks.shared.ResourceAllocated
-import akka.event.LoggingAdapter
 
 package object tasks {
 
@@ -123,8 +122,6 @@ package object tasks {
 
   implicit def resourceAllocated(implicit component: ComputationEnvironment) : ResourceAllocated =
     component.resourceAllocated
-
-  implicit def log(implicit component: ComputationEnvironment) : LoggingAdapter = component.log
 
   def audit(data: String)(implicit component: ComputationEnvironment): Boolean =
     component.appendLog(LogRecord(data, java.time.Instant.now))

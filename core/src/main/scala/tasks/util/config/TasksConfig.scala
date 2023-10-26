@@ -30,10 +30,9 @@ package tasks.util.config
 import tasks.util.SimpleSocketAddress
 import com.typesafe.config.Config
 import scala.jdk.CollectionConverters._
-import com.typesafe.scalalogging.StrictLogging
 import tasks.shared.ResourceAvailable
 
-class TasksConfig(load: () => Config) extends StrictLogging {
+class TasksConfig(load: () => Config)  {
 
   private val lastLoadedAt =
     new java.util.concurrent.atomic.AtomicLong(System.nanoTime)
@@ -45,7 +44,7 @@ class TasksConfig(load: () => Config) extends StrictLogging {
   def raw: Config = {
     val currentTime = System.nanoTime
     if (currentTime - lastLoadedAt.get > maxConfigLoadInterval) {
-      logger.debug("Reload config.")
+      scribe.debug("Reload config.")
       val current = load()
       lastLoaded = current
       lastLoadedAt.set(currentTime)
