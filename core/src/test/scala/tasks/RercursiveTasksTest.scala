@@ -35,6 +35,7 @@ import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
+import tasks.releaseResourcesEarly
 
 object RercursiveTasksTest {
 
@@ -72,8 +73,8 @@ object RercursiveTasksTest {
             val f2 = fibtask(FibInput(Some(n - 2), Some(true :: tag)))(
               ResourceRequest(1, 1)
             )
-            releaseResources
             for {
+              _  <- releaseResourcesEarly
               r1 <- f1
               r2 = f2.unsafeRunSync()
             } yield FibOut(r1.n + r2.n)
@@ -108,7 +109,8 @@ hosts.numCPU=4
     )
   }
 
-  implicit val system: TaskSystem = defaultTaskSystem(Some(testConfig))
+  val pair = defaultTaskSystem(Some(testConfig))._1.allocated.unsafeRunSync()
+  implicit val system : TaskSystemComponents = pair._1
   import RercursiveTasksTest._
 
   test("recursive fibonacci") {
@@ -119,7 +121,7 @@ hosts.numCPU=4
 
   override def afterAll() = {
     Thread.sleep(1500)
-    system.shutdown()
+    pair._2.unsafeRunSync()
 
   }
 }

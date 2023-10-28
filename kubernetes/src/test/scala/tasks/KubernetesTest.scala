@@ -43,7 +43,7 @@ object KubernetesTest extends TestHelpers {
 
   val testTask = Task[Input, Int]("kubernetestest", 1) {
     _ => implicit computationEnvironment =>
-      log.info("Hello from task")
+      scribe.info("Hello from task")
       IO(1)
   }
 

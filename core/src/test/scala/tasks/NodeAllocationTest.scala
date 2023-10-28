@@ -71,7 +71,11 @@ object NodeAllocationTest extends TestHelpers {
 
       f1.flatTap { case _ =>
         IO{synchronized {
-          tasks.JvmElasticSupport.taskSystems.head._2.foreach(_.shutdown())
+          tasks.JvmElasticSupport.taskSystems.head._2.foreach{ case (_, release) =>
+          import cats.effect.unsafe.implicits.global
+
+          release.unsafeRunSync()
+        }
         }}
       }
 

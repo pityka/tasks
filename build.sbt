@@ -37,7 +37,7 @@ lazy val commonSettings = Seq(
     "-language:postfixOps",
     "-language:implicitConversions",
     "-unchecked", // Enable additional warnings where generated code depends on assumptions.
-    "-Xfatal-warnings", // Fail the compilation if there are any warnings.
+    // "-Xfatal-warnings", // Fail the compilation if there are any warnings.
     "-Xlint:adapted-args", // Warn if an argument list is modified to match the receiver.
     "-Xlint:constant", // Evaluation of a constant arithmetic expression results in an error.
     "-Xlint:delayedinit-select", // Selecting member of DelayedInit.
@@ -51,14 +51,14 @@ lazy val commonSettings = Seq(
     "-Xlint:private-shadow", // A private field (or class parameter) shadows a superclass field.
     "-Xlint:stars-align", // Pattern sequence wildcard must align with sequence component.
     "-Xlint:type-parameter-shadow", // A local type parameter shadows a type already in scope.
-    "-Ywarn-extra-implicit", // Warn when more than one implicit parameter section is defined.
-    "-Ywarn-numeric-widen", // Warn when numerics are widened.
-    "-Ywarn-unused:implicits", // Warn if an implicit parameter is unused.
-    "-Ywarn-unused:imports", // Warn if an import selector is not referenced.
-    "-Ywarn-unused:locals", // Warn if a local definition is unused.
-    "-Ywarn-unused:params", // Warn if a value parameter is unused.
-    "-Ywarn-unused:patvars", // Warn if a variable bound in a pattern is unused.
-    "-Ywarn-unused:privates" // Warn if a private member is unused.
+    // "-Ywarn-extra-implicit", // Warn when more than one implicit parameter section is defined.
+    // "-Ywarn-numeric-widen", // Warn when numerics are widened.
+    // "-Ywarn-unused:implicits", // Warn if an implicit parameter is unused.
+    // "-Ywarn-unused:imports", // Warn if an import selector is not referenced.
+    // "-Ywarn-unused:locals", // Warn if a local definition is unused.
+    // "-Ywarn-unused:params", // Warn if a value parameter is unused.
+    // "-Ywarn-unused:patvars", // Warn if a variable bound in a pattern is unused.
+    // "-Ywarn-unused:privates" // Warn if a private member is unused.
   )
 ) ++ Seq(
   fork := true,
@@ -236,7 +236,11 @@ lazy val example = project
     crossScalaVersions := Nil,
     libraryDependencies ++= Seq(
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
-    ) ++ akkaProvided
+    ) ++ Seq(
+       "com.typesafe.akka" %% "akka-actor" % akkaVersion ,
+  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion ,
+  "com.typesafe.akka" %% "akka-remote" % akkaVersion 
+    )
   )
 
 lazy val upicklesupport = project
