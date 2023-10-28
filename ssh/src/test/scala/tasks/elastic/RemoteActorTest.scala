@@ -45,17 +45,16 @@ object SHRemoteActorTest extends TestHelpers {
     val ar = Array.ofDim[Boolean](n)
     0 until n foreach (i => ar(i) = false)
     val refs = Array.ofDim[ActorRef](n)
-    val log = Logging(context.system, this)
 
     def receive = { case x: Int =>
-      log.info("received: " + x)
+      scribe.info("received: " + x)
       ar(x) = true
       refs(x) = sender()
       if (ar.forall(identity)) {
-        log.info("Unblock")
+        scribe.info("Unblock")
         refs.foreach(_ ! "unblock")
       } else {
-        log.info(
+        scribe.info(
           s"Waiting for ${ar.toList.zipWithIndex.filter(b => !b._1).map(_._2)}"
         )
       }

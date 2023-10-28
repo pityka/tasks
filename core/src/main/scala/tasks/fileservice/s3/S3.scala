@@ -58,7 +58,7 @@ object S3 {
   *
   * @param s3
   */
-class S3(s3: S3AsyncClient) {
+class S3(val s3: S3AsyncClient) {
   private type PartId = Long
   private type PartLength = Long
   private type UploadId = String

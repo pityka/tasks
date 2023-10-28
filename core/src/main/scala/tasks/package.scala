@@ -39,6 +39,7 @@ import tasks.shared.LogRecord
 import scala.language.experimental.macros
 import cats.effect.IO
 import tasks.shared.ResourceAllocated
+import cats.effect.kernel.Resource
 
 package object tasks {
 
@@ -90,9 +91,6 @@ package object tasks {
       tasks.shared.ResourceRequest(cpu, memory, scratch, 0)
     )
 
-  implicit def tsc(implicit ts: TaskSystem): TaskSystemComponents =
-    ts.components
-
   implicit def tasksConfig(implicit
       component: TaskSystemComponents
   ): TasksConfig =
@@ -107,8 +105,8 @@ package object tasks {
   ): FileServiceComponent =
     component.fs
 
-  def releaseResources(implicit comp: ComputationEnvironment) =
-    comp.launcher.actor.!(Release)(comp.taskActor)
+  def releaseResourcesEarly(implicit comp: ComputationEnvironment) =
+    IO.delay(comp.launcher.actor.!(Release)(comp.taskActor))
 
   implicit def ts(implicit
       component: ComputationEnvironment
@@ -120,7 +118,9 @@ package object tasks {
   ): LauncherActor =
     component.launcher
 
-  implicit def resourceAllocated(implicit component: ComputationEnvironment) : ResourceAllocated =
+  implicit def resourceAllocated(implicit
+      component: ComputationEnvironment
+  ): ResourceAllocated =
     component.resourceAllocated
 
   def audit(data: String)(implicit component: ComputationEnvironment): Boolean =
@@ -138,24 +138,32 @@ package object tasks {
   def withTaskSystem[T](
       c: Option[Config]
   )(f: TaskSystemComponents => T): Option[T] = {
-    val ts = defaultTaskSystem(c)
-    if (ts.hostConfig.myRoles.contains(App)) {
+    import cats.effect.unsafe.implicits.global
+
+    val (resource, hostConfig) = defaultTaskSystem(c)
+    val (tsc, shutdown) = resource.allocated.unsafeRunSync()
+    if (hostConfig.myRoles.contains(App)) {
       try {
-        Some(f(ts.components))
+        Some(f(tsc))
       } finally {
-        ts.shutdown()
+        shutdown.unsafeRunSync()
       }
     } else None
 
   }
 
-  def defaultTaskSystem: TaskSystem =
+  def defaultTaskSystem
+      : (Resource[IO, TaskSystemComponents], HostConfiguration) =
     defaultTaskSystem(None)
 
-  def defaultTaskSystem(string: String): TaskSystem =
+  def defaultTaskSystem(
+      string: String
+  ): (Resource[IO, TaskSystemComponents], HostConfiguration) =
     defaultTaskSystem(Some(ConfigFactory.parseString(string)))
 
-  def defaultTaskSystem(extraConf: Option[Config]): TaskSystem = {
+  def defaultTaskSystem(
+      extraConf: Option[Config]
+  ): (Resource[IO, TaskSystemComponents], HostConfiguration) = {
 
     val configuration = () => {
       ConfigFactory.invalidateCaches
@@ -180,41 +188,7 @@ package object tasks {
       .flatMap(_.hostConfig)
       .getOrElse(MasterSlaveGridEngineChosenFromConfig)
 
-    val finalAkkaConfiguration = {
-
-      val actorProvider = hostConfig match {
-        case _: LocalConfiguration => "akka.actor.LocalActorRefProvider"
-        case _                     => "akka.remote.RemoteActorRefProvider"
-      }
-
-      val akkaProgrammaticalConfiguration = ConfigFactory.parseString(s"""
-        task-worker-dispatcher.fork-join-executor.parallelism-max = ${hostConfig.availableCPU}
-        task-worker-dispatcher.fork-join-executor.parallelism-min = ${hostConfig.availableCPU}
-        
-        akka {
-          actor {
-            provider = "${actorProvider}"
-          }
-          remote {
-            artery {
-              canonical.hostname = "${hostConfig.myAddress.getHostName}"
-              canonical.port = ${hostConfig.myAddress.getPort.toString}
-            }
-            
-         }
-        }
-          """)
-
-      ConfigFactory.defaultOverrides
-        .withFallback(akkaProgrammaticalConfiguration)
-        .withFallback(ConfigFactory.parseResources("akka.conf"))
-        .withFallback(configuration())
-
-    }
-
-    val system = ActorSystem(tconfig.actorSystemName, finalAkkaConfiguration)
-
-    new TaskSystem(hostConfig, system, elasticSupport)
+    TaskSystemComponents.make(hostConfig, elasticSupport, tconfig) -> hostConfig
   }
 
   def Task[A <: AnyRef, C](taskID: String, taskVersion: Int)(
