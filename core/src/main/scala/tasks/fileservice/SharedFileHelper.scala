@@ -39,7 +39,7 @@ import fs2.Stream
 import akka.stream.Materializer
 import fs2.Chunk
 
-private[tasks] object SharedFileHelper  {
+private[tasks] object SharedFileHelper {
 
   def getByName(name: String, retrieveSizeAndHash: Boolean)(implicit
       service: FileServiceComponent,
@@ -133,9 +133,7 @@ private[tasks] object SharedFileHelper  {
   def saveHistory(sf: SharedFile, historyContext: HistoryContext)(implicit
       prefix: FileServicePrefix,
       service: FileServiceComponent,
-      context: ActorRefFactory,
-      config: TasksConfig,
-      mat: Materializer
+      config: TasksConfig
   ): IO[Unit] = {
     historyContext match {
       case NoHistory => IO.unit
@@ -208,10 +206,8 @@ private[tasks] object SharedFileHelper  {
   def createFromFile(file: File, name: String, deleteFile: Boolean)(implicit
       prefix: FileServicePrefix,
       service: FileServiceComponent,
-      context: ActorRefFactory,
       config: TasksConfig,
-      historyContext: HistoryContext,
-      mat: Materializer
+      historyContext: HistoryContext
   ): IO[SharedFile] = {
     val sharedFile = {
       val proposedPath = prefix.propose(name)
@@ -232,8 +228,6 @@ private[tasks] object SharedFileHelper  {
   def sink(name: String)(implicit
       prefix: FileServicePrefix,
       service: FileServiceComponent,
-      context: ActorRefFactory,
-      mat: Materializer,
       config: TasksConfig,
       historyContext: HistoryContext
   ): fs2.Pipe[IO, Byte, SharedFile] = { (in: Stream[IO, Byte]) =>
@@ -248,8 +242,6 @@ private[tasks] object SharedFileHelper  {
   def createFromStream(stream: Stream[IO, Byte], name: String)(implicit
       prefix: FileServicePrefix,
       service: FileServiceComponent,
-      context: ActorRefFactory,
-      mat: Materializer,
       config: TasksConfig,
       historyContext: HistoryContext
   ): IO[SharedFile] = {

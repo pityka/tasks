@@ -43,6 +43,7 @@ import com.github.plokhotnyuk.jsoniter_scala.core._
 import java.time.Instant
 import cats.effect.IO
 import tasks.TaskSystemComponents
+import tasks.caching.TaskResultCache
 
 case class UntypedResult(
     files: Set[SharedFile],
@@ -154,7 +155,7 @@ case class ComputationEnvironment(
 
   implicit def queue: QueueActor = components.queue
 
-  implicit def cache: CacheActor = components.cache
+  implicit def cache: TaskResultCache = components.cache
 
   def toTaskSystemComponents =
     components
@@ -168,7 +169,7 @@ private class Task(
     launcherActor: ActorRef,
     queueActor: ActorRef,
     fileServiceComponent: FileServiceComponent,
-    cacheActor: ActorRef,
+    cache: TaskResultCache,
     nodeLocalCache: NodeLocalCache.State,
     resourceAllocated: ResourceAllocated,
     fileServicePrefix: FileServicePrefix,
@@ -241,7 +242,7 @@ private class Task(
           QueueActor(queueActor),
           fileServiceComponent,
           context.system,
-          CacheActor(cacheActor),
+          cache,
           nodeLocalCache,
           fileServicePrefix,
           tasksConfig,

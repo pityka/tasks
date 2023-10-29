@@ -42,7 +42,6 @@ import fs2.Chunk
 
 private[tasks] class SharedFileCache(implicit
     fileServiceComponent: FileServiceComponent,
-    AS: ActorSystem,
     config: TasksConfig
 ) extends Cache
     with TaskSerializer {
