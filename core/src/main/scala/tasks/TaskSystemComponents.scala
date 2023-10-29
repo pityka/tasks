@@ -60,14 +60,14 @@ case class TaskSystemComponents private (
     private[tasks] val queue: QueueActor,
     private[tasks] val fs: FileServiceComponent,
     private[tasks] val actorsystem: ActorSystem,
-    private[tasks] val cache: CacheActor,
+    private[tasks] val cache: TaskResultCache,
     private[tasks] val nodeLocalCache: NodeLocalCache.State,
     private[tasks] val filePrefix: FileServicePrefix,
     private[tasks] val tasksConfig: TasksConfig,
     private[tasks] val historyContext: HistoryContext,
     private[tasks] val priority: Priority,
     private[tasks] val labels: Labels,
-    private[tasks] val lineage: TaskLineage,
+    private[tasks] val lineage: TaskLineage
 ) {
 
   def withChildPrefix(name: String) =
@@ -291,15 +291,28 @@ object TaskSystemComponents {
 
     }
 
-    val fileServiceComponent = managedFileStorage.flatMap(managedFileStorage =>
-      remoteFileStorage.map { remoteFileStorage =>
-        scribe.info("File store: " + managedFileStorage) //wrap this
-        FileServiceComponent(
-          managedFileStorage,
-          remoteFileStorage
-        )
-      }
-    )
+    val fileServiceComponent = managedFileStorage
+      .flatMap(managedFileStorage =>
+        remoteFileStorage.map { remoteFileStorage =>
+          scribe.info("File store: " + managedFileStorage) //wrap this
+          FileServiceComponent(
+            managedFileStorage,
+            remoteFileStorage
+          )
+        }
+      )
+
+    def cacheActor(fs: FileServiceComponent) = Resource.eval(IO {
+      val cache: Cache =
+        if (config.cacheEnabled)
+          new SharedFileCache()(
+            fs,
+            config
+          )
+        else new DisabledCache
+
+      new TaskResultCache(cache, fs, config)
+    })
 
     val nodeLocalCache = Resource.eval(NodeLocalCache.start.timeout(60 seconds))
 
@@ -309,21 +322,23 @@ object TaskSystemComponents {
           "Initialization failed. This is a slave node, notifying remote node registry."
         )
         remoteNodeRegistry.foreach(
-          _ ! InitFailed(PendingJobId(elasticSupport.get.getNodeName.getNodeName))
+          _ ! InitFailed(
+            PendingJobId(elasticSupport.get.getNodeName.getNodeName)
+          )
         )
       }
     }
 
     case class ActorSet1(
         queueActor: ActorRef,
-        cacheActor: ActorRef,
         reaperActor: ActorRef,
         remoteNodeRegistry: Option[ActorRef]
     )
 
     def makeActors(
         fileServiceComponent: FileServiceComponent,
-        system: ActorSystem
+        system: ActorSystem,
+        cache: TaskResultCache
     ) = {
 
       Resource.make {
@@ -374,53 +389,13 @@ object TaskSystemComponents {
               }
             } else None
 
-          val cacheActor =
-            try {
-              if (hostConfig.isQueue) {
-
-                val cache: Cache =
-                  if (config.cacheEnabled)
-                    new SharedFileCache()(
-                      fileServiceComponent,
-                      system,
-                      config
-                    )
-                  else new DisabledCache
-
-                val localCacheActor = system.actorOf(
-                  Props(
-                    new TaskResultCacheActor(cache, fileServiceComponent)(
-                      config
-                    )
-                  )
-                    .withDispatcher("cache-pinned"),
-                  "cache"
-                )
-                reaperActor ! WatchMe(localCacheActor)
-                localCacheActor
-              } else {
-                val actorPath =
-                  s"akka://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/cache"
-                Await.result(
-                  system.actorSelection(actorPath).resolveOne(600 seconds),
-                  atMost = 600 seconds
-                )
-
-              }
-            } catch {
-              case e: Throwable => {
-                initFailed(remoteNodeRegistry)
-                throw e
-              }
-            }
-
           val queueActor =
             try {
               if (hostConfig.isQueue) {
 
                 val localActor =
                   system.actorOf(
-                    Props(new TaskQueue(Nil)(config))
+                    Props(new TaskQueue(Nil, cache)(config))
                       .withDispatcher("taskqueue"),
                     "queue"
                   )
@@ -444,13 +419,12 @@ object TaskSystemComponents {
             }
 
           scribe.info("Queue: " + queueActor)
-          ActorSet1(queueActor, cacheActor, reaperActor, remoteNodeRegistry)
+          ActorSet1(queueActor, reaperActor, remoteNodeRegistry)
         }
       }(actorSet =>
         IO {
           awaitReaper(actorSet.reaperActor)
           if (hostConfig.isQueue) {
-            actorSet.cacheActor ! PoisonPillToCacheActor
             actorSet.queueActor ! PoisonPill
           }
         }
@@ -503,7 +477,7 @@ object TaskSystemComponents {
           Try(Deployment.pack(config)) match {
             case Success(pack) =>
               scribe
-                .info("Written executable package to: {}", pack.getAbsolutePath)
+                .info("Written executable package to: ", pack.getAbsolutePath)
 
               val service = new PackageServer(pack)
 
@@ -561,6 +535,7 @@ object TaskSystemComponents {
         queueActor: ActorRef,
         nodeLocalCache: NodeLocalCache.State,
         fs: FileServiceComponent,
+        cache: TaskResultCache,
         system: ActorSystem
     ) =
       Resource.eval(IO {
@@ -582,7 +557,8 @@ object TaskSystemComponents {
                 ),
                 refreshInterval = refreshInterval,
                 remoteStorage = fs.remote,
-                managedStorage = fs.storage
+                managedStorage = fs.storage,
+                cache = cache
               )(config)
             ).withDispatcher("launcher"),
             "launcher"
@@ -594,21 +570,21 @@ object TaskSystemComponents {
     def components(
         queueActor: ActorRef,
         fileServiceComponent: FileServiceComponent,
-        cacheActor: ActorRef,
+        cache: TaskResultCache,
         nodeLocalCache: NodeLocalCache.State,
         system: ActorSystem
     ) = TaskSystemComponents(
       queue = QueueActor(queueActor),
       fs = fileServiceComponent,
       actorsystem = system,
-      cache = CacheActor(cacheActor),
+      cache = cache,
       nodeLocalCache = nodeLocalCache,
       filePrefix = FileServicePrefix(Vector()),
       tasksConfig = config,
       historyContext = rootHistory,
       priority = Priority(0),
       labels = Labels.empty,
-      lineage = TaskLineage.root,
+      lineage = TaskLineage.root
     )
 
     def notifyRegistry(
@@ -721,7 +697,12 @@ object TaskSystemComponents {
       as <- makeAS
       fileServiceComponent <- fileServiceComponent
       nodeLocalCache <- nodeLocalCache
-      actorSet <- makeActors(fileServiceComponent, as)
+      cache <- cacheActor(fileServiceComponent)
+      actorSet <- makeActors(
+        fileServiceComponent = fileServiceComponent,
+        system = as,
+        cache = cache
+      )
 
       elasticSupportFactory <- elasticSupportFactory(
         actorSet.queueActor
@@ -735,10 +716,11 @@ object TaskSystemComponents {
         as
       )
       launcherActor <- launcherActor(
-        actorSet.queueActor,
-        nodeLocalCache,
-        fileServiceComponent,
-        as
+        queueActor = actorSet.queueActor,
+        nodeLocalCache = nodeLocalCache,
+        fs = fileServiceComponent,
+        system = as,
+        cache = cache
       )
       _ <- notifyRegistry(
         elasticSupportFactory,
@@ -750,7 +732,7 @@ object TaskSystemComponents {
     } yield components(
       actorSet.queueActor,
       fileServiceComponent,
-      actorSet.cacheActor,
+      cache,
       nodeLocalCache,
       as
     )

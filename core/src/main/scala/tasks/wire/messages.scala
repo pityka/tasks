@@ -93,8 +93,6 @@ private[tasks] case class RemoveNode(node: Node) extends StaticMessage
 
 // Messages related to cache
 
-case class CacheActor(actor: ActorRef) extends StaticMessage
-
 private[tasks] case class SaveResult(
     sch: HashedTaskDescription,
     r: UntypedResult,
@@ -103,8 +101,6 @@ private[tasks] case class SaveResult(
 
 private[tasks] case class CheckResult(sch: ScheduleTask, sender: Proxy)
     extends StaticMessage
-
-private[tasks] case object PoisonPillToCacheActor extends StaticMessage
 
 private[tasks] case object NeedInput extends StaticMessage
 

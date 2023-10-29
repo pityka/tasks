@@ -38,6 +38,7 @@ import tasks.util.config._
 import tasks.wire._
 import tasks._
 import tasks.ui.EventListener
+import tasks.caching.TaskResultCache
 
 object TaskQueue {
   sealed trait Event
@@ -64,11 +65,13 @@ object TaskQueue {
   case class TaskFailed(sch: ScheduleTask) extends Event
   case class TaskLauncherStoppedFor(sch: ScheduleTask) extends Event
   case class LauncherCrashed(crashedLauncher: LauncherActor) extends Event
-  case class CacheQueried(sch: ScheduleTask) extends Event
   case class CacheHit(sch: ScheduleTask, result: UntypedResult) extends Event
 }
 
-class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(implicit
+class TaskQueue(
+    eventListener: Seq[EventListener[TaskQueue.Event]],
+    cache: TaskResultCache
+)(implicit
     config: TasksConfig
 ) extends Actor
     with ActorLogging {
@@ -150,7 +153,6 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(implicit
           copy(knownLaunchers = knownLaunchers - launcher)
         case CacheHit(sch, _) =>
           copy(scheduledTasks = scheduledTasks - project(sch))
-        case _: CacheQueried => this
 
       }
     }
@@ -192,8 +194,10 @@ class TaskQueue(eventListener: Seq[EventListener[TaskQueue.Event]])(implicit
         )
       } else {
         if (sch.tryCache) {
-          sch.cacheActor ! CheckResult(sch, proxy)
-          context.become(running(state.update(CacheQueried(sch))))
+          import cats.effect.unsafe.implicits.global
+          import context.dispatcher
+          import akka.pattern.pipe
+          cache.checkResult(sch, proxy).unsafeToFuture().pipeTo(self)
         } else {
           log.debug(
             "ScheduleTask should not be checked in the cache. Enqueue. "

@@ -32,6 +32,7 @@ import akka.actor.ActorSystem
 import tasks.queue._
 import tasks.fileservice._
 import tasks.wire._
+import tasks.caching.TaskResultCache
 
 private[tasks] object Implicits {
 
@@ -53,10 +54,6 @@ private[tasks] object Implicits {
   implicit def queueActor(implicit
       component: TaskSystemComponents
   ): QueueActor = component.queue
-
-  implicit def cacheActor(implicit
-      component: TaskSystemComponents
-  ): CacheActor = component.cache
 
   implicit def historyContext(implicit
       component: TaskSystemComponents
