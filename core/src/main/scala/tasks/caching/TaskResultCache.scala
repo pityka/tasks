@@ -30,6 +30,13 @@ import tasks.queue._
 import tasks.wire._
 import tasks.util.config.TasksConfig
 import cats.effect.IO
+
+private[tasks] case class AnswerFromCache(
+    message: Either[String, Option[UntypedResult]],
+    sender: Proxy,
+    sch: ScheduleTask
+)
+
 class TaskResultCache(
     cacheMap: Cache,
     fileService: FileServiceComponent,

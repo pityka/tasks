@@ -207,7 +207,7 @@ class TaskQueue(
 
       }
 
-    case AnswerFromCache(message, proxy, sch) =>
+    case tasks.caching.AnswerFromCache(message, proxy, sch) =>
       log.debug("Cache answered.")
       message match {
         case Right(Some(result)) => {

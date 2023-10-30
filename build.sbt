@@ -123,9 +123,7 @@ lazy val core = project
   .settings(commonSettings: _*)
   .settings(
     name := "tasks-core",
-    PB.targets in Compile := Seq(
-      scalapb.gen() -> (sourceManaged in Compile).value
-    ),
+    
     libraryDependencies ++= Seq(
       "co.fs2" %% "fs2-io" % fs2Version,
       "co.fs2" %% "fs2-reactive-streams" % fs2Version,
