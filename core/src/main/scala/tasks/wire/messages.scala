@@ -39,16 +39,6 @@ private[tasks] case class AskForWork(resources: VersionedResourceAvailable)
 
 case object HowLoadedAreYou extends StaticMessage
 
-private[tasks] case class InternalMessageFromTask(
-    actor: ActorRef,
-    result: UntypedResultWithMetadata
-) extends StaticMessage
-
-private[tasks] case class InternalMessageTaskFailed(
-    actor: ActorRef,
-    cause: Throwable
-) extends StaticMessage
-
 private[tasks] case class FailureMessageFromProxyToProxy(cause: Throwable)
     extends StaticMessage
 
@@ -61,8 +51,6 @@ private[tasks] case class QueueAck(allocated: VersionedResourceAllocated)
 private[tasks] case object GetMaximumSlots extends StaticMessage
 
 private[tasks] case object GetAvailableSlots extends StaticMessage
-
-case object Release extends StaticMessage
 
 case class Schedule(sch: ScheduleTask) extends StaticMessage
 

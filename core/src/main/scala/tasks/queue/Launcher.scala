@@ -48,6 +48,7 @@ import tasks.wire._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import tasks.caching.TaskResultCache
+import akka.util.Timeout
 
 object Base64DataHelpers {
   def toBytes(b64: Base64Data): Array[Byte] = base64(b64.value)
@@ -78,6 +79,20 @@ object ScheduleTask {
 
 }
 
+object Launcher {
+  private[tasks] case class InternalMessageFromTask(
+      actor: Task,
+      result: UntypedResultWithMetadata
+  )
+
+  private[tasks] case class InternalMessageTaskFailed(
+      actor: Task,
+      cause: Throwable
+  )
+
+  private[tasks] case class Release(task: Task)
+}
+
 class Launcher(
     queueActor: ActorRef,
     nodeLocalCache: NodeLocalCache.State,
@@ -102,12 +117,12 @@ class Launcher(
   private var denyWorkBeforeShutdown = false
 
   private var runningTasks
-      : List[(ActorRef, ScheduleTask, VersionedResourceAllocated, Long)] =
+      : List[(Task, ScheduleTask, VersionedResourceAllocated, Long)] =
     Nil
 
-  private var resourceDeallocatedAt: Map[ActorRef, Long] = Map()
+  private var resourceDeallocatedAt: Map[Task, Long] = Map()
 
-  private var freed = Set[ActorRef]()
+  private var freed = Set[Task]()
 
   private def launch(scheduleTask: ScheduleTask) = {
 
@@ -123,35 +138,49 @@ class Launcher(
         )
       else scheduleTask.fileServicePrefix
 
-    val taskActor = context.actorOf(
-      Props(
-        classOf[Task],
-        scheduleTask.inputDeserializer,
-        scheduleTask.outputSerializer,
-        scheduleTask.function,
-        self,
-        scheduleTask.queueActor,
-        FileServiceComponent(
-          managedStorage,
-          remoteStorage
-        ),
-        cache,
-        nodeLocalCache,
-        allocatedResource.cpuMemoryAllocated,
-        filePrefix,
-        config,
-        scheduleTask.priority,
-        scheduleTask.labels,
-        scheduleTask.description.taskId,
-        scheduleTask.lineage.inherit(scheduleTask.description),
-        scheduleTask.description,
-        scheduleTask.proxy
-      ).withDispatcher("task-worker-dispatcher")
-    )
-    log.debug("Actor constructed")
+    import scala.reflect.runtime.{universe => ru}
+
+    val task: Task =
+      ru.runtimeMirror(getClass().getClassLoader())
+        .reflectClass(ru.typeOf[Task].typeSymbol.asClass)
+        .reflectConstructor(
+          ru.typeOf[Task].decl(ru.termNames.CONSTRUCTOR).asMethod
+        )(
+          scheduleTask.inputDeserializer,
+          scheduleTask.outputSerializer,
+          scheduleTask.function,
+          self,
+          scheduleTask.queueActor,
+          FileServiceComponent(
+            managedStorage,
+            remoteStorage
+          ),
+          cache,
+          nodeLocalCache,
+          allocatedResource.cpuMemoryAllocated,
+          filePrefix,
+          config,
+          scheduleTask.priority,
+          scheduleTask.labels,
+          scheduleTask.description.taskId,
+          scheduleTask.lineage.inherit(scheduleTask.description),
+          scheduleTask.description,
+          scheduleTask.proxy,
+          context.system
+        )
+        .asInstanceOf[Task]
+    import akka.pattern.ask
+    import context.dispatcher
+    (scheduleTask.proxy
+      .?(NeedInput)(Timeout(2147483.seconds)))
+      .mapTo[InputData]
+      .foreach { input =>
+        task.start(input)
+        log.debug("Task started")
+      }
 
     runningTasks = (
-      taskActor,
+      task,
       scheduleTask,
       allocatedResource,
       System.nanoTime
@@ -194,14 +223,13 @@ class Launcher(
 
     logScheduler.cancel()
 
-    runningTasks.foreach(_._1 ! PoisonPill)
     log.info(
       s"TaskLauncher stopped, sent PoisonPill to ${runningTasks.size} running tasks."
     )
   }
 
   private def taskFinished(
-      taskActor: ActorRef,
+      taskActor: Task,
       receivedResult: UntypedResultWithMetadata
   ): Unit = {
     val elem = runningTasks
@@ -258,7 +286,7 @@ class Launcher(
     }
   }
 
-  private def taskFailed(taskActor: ActorRef, cause: Throwable): Unit = {
+  private def taskFailed(taskActor: Task, cause: Throwable): Unit = {
 
     val elem = runningTasks
       .find(_._1 == taskActor)
@@ -293,11 +321,11 @@ class Launcher(
         askForWork()
       }
 
-    case InternalMessageFromTask(actor, result) =>
+    case Launcher.InternalMessageFromTask(actor, result) =>
       taskFinished(actor, result)
       askForWork()
 
-    case InternalMessageTaskFailed(actor, cause) =>
+    case Launcher.InternalMessageTaskFailed(actor, cause) =>
       taskFailed(actor, cause)
       askForWork()
 
@@ -320,8 +348,7 @@ class Launcher(
         sender() ! Working
       }
 
-    case Release =>
-      val taskActor = sender()
+    case Launcher.Release(taskActor) =>
       val allocated = runningTasks.find(_._1 == taskActor).map(_._3)
       if (allocated.isEmpty) log.error("Can't find actor ")
       else {

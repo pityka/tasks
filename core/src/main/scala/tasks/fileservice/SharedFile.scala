@@ -91,6 +91,11 @@ case class SharedFile(
 
   def delete(implicit tsc: TaskSystemComponents): IO[Boolean] =
     SharedFileHelper.delete(this)
+
+  def utf8(implicit tsc: TaskSystemComponents): IO[String] =
+    stream(0L).through(fs2.text.utf8.decode).compile.lastOrError
+  def bytes(implicit tsc: TaskSystemComponents): IO[scodec.bits.ByteVector] =
+    stream.compile.to(scodec.bits.ByteVector)
 }
 
 object SharedFile {
@@ -114,6 +119,11 @@ object SharedFile {
       tsc: TaskSystemComponents
   ): IO[SharedFile] =
     SharedFileHelper.createFromStream(source, name)
+    
+  def apply(bytes: Array[Byte], name: String)(implicit
+      tsc: TaskSystemComponents
+  ): IO[SharedFile] =
+    this.apply(fs2.Stream.chunk(fs2.Chunk.array(bytes)), name)
 
   def sink(name: String)(implicit
       tsc: TaskSystemComponents
