@@ -106,7 +106,7 @@ package object tasks {
     component.fs
 
   def releaseResourcesEarly(implicit comp: ComputationEnvironment) =
-    IO.delay(comp.launcher.actor.!(Release)(comp.taskActor))
+    IO.delay(comp.launcher.actor ! Launcher.Release(comp.taskActor))
 
   implicit def ts(implicit
       component: ComputationEnvironment

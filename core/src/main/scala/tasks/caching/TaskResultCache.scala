@@ -37,7 +37,7 @@ private[tasks] case class AnswerFromCache(
     sch: ScheduleTask
 )
 
-class TaskResultCache(
+private[tasks] class TaskResultCache(
     cacheMap: Cache,
     fileService: FileServiceComponent,
     config: TasksConfig
