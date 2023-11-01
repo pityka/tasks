@@ -36,7 +36,6 @@ import tasks.queue._
 import cats.effect.kernel.Resource
 import cats.effect.IO
 import fs2.Stream
-import akka.stream.Materializer
 import fs2.Chunk
 
 private[tasks] object SharedFileHelper {
@@ -261,7 +260,6 @@ private[tasks] object SharedFileHelper {
       context: ActorRefFactory,
       config: TasksConfig,
       historyContext: HistoryContext,
-      mat: Materializer
   ): IO[List[SharedFile]] = {
     val directory = service.storage
       .sharedFolder(prefix.list)

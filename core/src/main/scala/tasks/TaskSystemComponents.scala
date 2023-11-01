@@ -660,13 +660,29 @@ object TaskSystemComponents {
           case _                     => "akka.remote.RemoteActorRefProvider"
         }
 
+        val serializers = hostConfig match {
+          case _: LocalConfiguration => ""
+          case _                     => """
+    serializers {
+      static = "tasks.wire.StaticMessageSerializer"
+      sch = "tasks.wire.ScheduleTaskSerializer"
+      sf = "tasks.wire.SharedFileSerializer"
+    }
+
+  serialization-bindings {
+      "tasks.wire.StaticMessage" = static
+      "tasks.queue.ScheduleTask" = sch
+      "tasks.fileservice.SharedFile" = sf
+    }
+          """
+        }
+
         val akkaProgrammaticalConfiguration = ConfigFactory.parseString(s"""
-        task-worker-dispatcher.fork-join-executor.parallelism-max = ${hostConfig.availableCPU}
-        task-worker-dispatcher.fork-join-executor.parallelism-min = ${hostConfig.availableCPU}
         
         akka {
           actor {
             provider = "${actorProvider}"
+            $serializers
           }
           remote {
             artery {
@@ -675,6 +691,10 @@ object TaskSystemComponents {
             }
             
          }
+
+         
+
+
         }
           """)
 
