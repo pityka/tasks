@@ -61,12 +61,11 @@ object UIBackendTest extends TestHelpersUI {
 
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
-
       val sf =
-          SharedFile(
-            akka.stream.scaladsl.Source.single(akka.util.ByteString()),
-            "boo"
-          ).timeout(50 seconds).unsafeRunSync()
+        SharedFile(
+          akka.stream.scaladsl.Source.single(akka.util.ByteString()),
+          "boo"
+        ).timeout(50 seconds).unsafeRunSync()
 
       val f1 = testTask(Input(1, sf))(ResourceRequest(1, 500))
       val f2 = testTask(Input(2, sf))(ResourceRequest(1, 500))

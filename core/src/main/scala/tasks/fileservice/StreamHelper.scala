@@ -39,7 +39,6 @@ class StreamHelper(
     httpClient: Option[Client[IO]]
 ) {
 
-
   def s3Loc(uri: Uri) = {
     val bucket = uri.authority.toString
     val key = uri.path.toString.drop(1)

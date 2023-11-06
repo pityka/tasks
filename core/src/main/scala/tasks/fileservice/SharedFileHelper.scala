@@ -259,7 +259,7 @@ private[tasks] object SharedFileHelper {
       service: FileServiceComponent,
       context: ActorRefFactory,
       config: TasksConfig,
-      historyContext: HistoryContext,
+      historyContext: HistoryContext
   ): IO[List[SharedFile]] = {
     val directory = service.storage
       .sharedFolder(prefix.list)
