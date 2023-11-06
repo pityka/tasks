@@ -35,10 +35,9 @@ import cats.effect.IO
 
 object NodeAllocationMaxNodesTest extends TestHelpers {
 
-  val testTask = Task[Input, Int]("nodeallocationtest", 1) {
-    _ => _ =>
-      scribe.info("Hello from task")
-      IO(1)
+  val testTask = Task[Input, Int]("nodeallocationtest", 1) { _ => _ =>
+    scribe.info("Hello from task")
+    IO(1)
   }
 
   val testConfig2 = {
@@ -58,7 +57,6 @@ object NodeAllocationMaxNodesTest extends TestHelpers {
 
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
-
       val f1 = testTask(Input(1))(ResourceRequest(1, 500))
       val f2 = testTask(Input(2))(ResourceRequest(1, 500))
       val f3 = testTask(Input(3))(ResourceRequest(1, 500))

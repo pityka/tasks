@@ -32,7 +32,7 @@ import com.typesafe.config.Config
 import scala.jdk.CollectionConverters._
 import tasks.shared.ResourceAvailable
 
-class TasksConfig(load: () => Config)  {
+class TasksConfig(load: () => Config) {
 
   private val lastLoadedAt =
     new java.util.concurrent.atomic.AtomicLong(System.nanoTime)
@@ -194,7 +194,10 @@ class TasksConfig(load: () => Config)  {
       case x            => Some(x)
     }
 
-  val s3RegionProfileName = if (raw.hasPath("tasks.s3.regionProfileName")) Some(raw.getString("tasks.s3.regionProfileName")) else None
+  val s3RegionProfileName =
+    if (raw.hasPath("tasks.s3.regionProfileName"))
+      Some(raw.getString("tasks.s3.regionProfileName"))
+    else None
 
   val s3ServerSideEncryption = raw.getString("tasks.s3.serverSideEncryption")
 
@@ -208,7 +211,7 @@ class TasksConfig(load: () => Config)  {
   val s3UploadParallelism = raw.getInt("tasks.s3.uploadParallelism")
 
   val httpRemoteEnabled = raw.getBoolean("tasks.fileservice.remote.http")
-  val s3RemoteEnabled =raw.getBoolean("tasks.fileservice.remote.s3")
+  val s3RemoteEnabled = raw.getBoolean("tasks.fileservice.remote.s3")
 
   def instanceTags =
     raw

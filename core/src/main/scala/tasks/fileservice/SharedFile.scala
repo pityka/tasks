@@ -119,7 +119,7 @@ object SharedFile {
       tsc: TaskSystemComponents
   ): IO[SharedFile] =
     SharedFileHelper.createFromStream(source, name)
-    
+
   def apply(bytes: Array[Byte], name: String)(implicit
       tsc: TaskSystemComponents
   ): IO[SharedFile] =

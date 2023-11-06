@@ -59,13 +59,12 @@ object NodeLocalCacheTest extends TestHelpers {
       val f1 = tasks.queue.NodeLocalCache
         .cacheSync("key0", cachedFunction(0.toString))
         .use { _ =>
-          
-            for {
-              t1 <- testTask(Input(1))(ResourceRequest(1, 500))
-              t2 <- testTask(Input(2))(ResourceRequest(1, 500))
-              t3 <- testTask(Input(3))(ResourceRequest(1, 500))
+          for {
+            t1 <- testTask(Input(1))(ResourceRequest(1, 500))
+            t2 <- testTask(Input(2))(ResourceRequest(1, 500))
+            t3 <- testTask(Input(3))(ResourceRequest(1, 500))
 
-            } yield t1 + t2 + t3
+          } yield t1 + t2 + t3
         }
       val future = for {
         t1 <- f1

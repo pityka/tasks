@@ -39,8 +39,7 @@ import tasks.util.Uri
 import tasks.util.SimpleSocketAddress
 import io.fabric8.kubernetes.api.model.TolerationBuilder
 
-class K8SShutdown(k8s: KubernetesClient)
-    extends ShutdownNode {
+class K8SShutdown(k8s: KubernetesClient) extends ShutdownNode {
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
     scribe.info(s"Shut down $nodeName")
     val spl = nodeName.value.split("/")
@@ -249,7 +248,7 @@ object K8SGetNodeName extends GetNodeName {
 }
 
 object K8SElasticSupport extends ElasticSupportFromConfig {
-  implicit val fqcn : ElasticSupportFqcn = ElasticSupportFqcn(
+  implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
     "tasks.elastic.kubernetes.K8SElasticSupport"
   )
   def apply(implicit config: TasksConfig) = {

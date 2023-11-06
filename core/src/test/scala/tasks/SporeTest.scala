@@ -44,7 +44,7 @@ object SporeTest extends TestHelpers with Matchers {
 
   val increment =
     Task[Spore[Option[Int], String], String]("sporetest", 1) { case sp =>
-      _=> IO(sp(Some(3)))
+      _ => IO(sp(Some(3)))
     }
 
   def run = {
@@ -76,7 +76,7 @@ object MySpore {
     // without this the compiler blows up
     implicit val codec: JsonValueCodec[User] = JsonCodecMaker.make
 
-    implicit val encoderSpore: Spore[Unit,tasks.queue.Serializer[User]] =
+    implicit val encoderSpore: Spore[Unit, tasks.queue.Serializer[User]] =
       spore(() => implicitly[tasks.queue.Serializer[User]])
   }
   val serializerSpore = spore { (_: String) =>

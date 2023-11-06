@@ -41,12 +41,11 @@ object TestSlave extends App {
 
 object SHTest extends TestHelpers {
 
-  val testTask = Task[Input, Int]("shtest", 1) {
-    _ => _ =>
-      scribe.info("Hello from task")
-      if (tasks.elastic.sh.SHGetNodeName.getNodeName.toInt % 2 == 0)
-        System.exit(1)
-      IO(1)
+  val testTask = Task[Input, Int]("shtest", 1) { _ => _ =>
+    scribe.info("Hello from task")
+    if (tasks.elastic.sh.SHGetNodeName.getNodeName.toInt % 2 == 0)
+      System.exit(1)
+    IO(1)
   }
 
   val testConfig2 = {

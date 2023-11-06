@@ -54,7 +54,6 @@ class RemoteFileStorage(implicit
     config: TasksConfig
 ) {
 
-
   def uri(mp: RemoteFilePath): Uri = mp.uri
 
   def stream(
@@ -123,7 +122,6 @@ class RemoteFileStorage(implicit
 
 trait ManagedFileStorage {
 
-
   def uri(mp: ManagedFilePath): IO[Uri]
 
   def stream(
@@ -145,7 +143,9 @@ trait ManagedFileStorage {
       f: File,
       path: ProposedManagedFilePath
   ): IO[(Long, Int, ManagedFilePath)] =
-    tasks.util.retryIO(s"upload to $path")(importFile1(f, path), 4)(scribe.Logger[ManagedFileStorage])
+    tasks.util.retryIO(s"upload to $path")(importFile1(f, path), 4)(
+      scribe.Logger[ManagedFileStorage]
+    )
 
   private def importFile1(
       f: File,

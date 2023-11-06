@@ -50,7 +50,7 @@ lazy val commonSettings = Seq(
     "-Xlint:poly-implicit-overload", // Parameterized overloaded implicit methods are not visible as view bounds.
     "-Xlint:private-shadow", // A private field (or class parameter) shadows a superclass field.
     "-Xlint:stars-align", // Pattern sequence wildcard must align with sequence component.
-    "-Xlint:type-parameter-shadow", // A local type parameter shadows a type already in scope.
+    "-Xlint:type-parameter-shadow" // A local type parameter shadows a type already in scope.
     // "-Ywarn-extra-implicit", // Warn when more than one implicit parameter section is defined.
     // "-Ywarn-numeric-widen", // Warn when numerics are widened.
     // "-Ywarn-unused:implicits", // Warn if an implicit parameter is unused.
@@ -123,7 +123,6 @@ lazy val core = project
   .settings(commonSettings: _*)
   .settings(
     name := "tasks-core",
-    
     libraryDependencies ++= Seq(
       "co.fs2" %% "fs2-io" % fs2Version,
       "co.fs2" %% "fs2-reactive-streams" % fs2Version,
@@ -235,9 +234,9 @@ lazy val example = project
     libraryDependencies ++= Seq(
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
     ) ++ Seq(
-       "com.typesafe.akka" %% "akka-actor" % akkaVersion ,
-  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion ,
-  "com.typesafe.akka" %% "akka-remote" % akkaVersion 
+      "com.typesafe.akka" %% "akka-actor" % akkaVersion,
+      "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
+      "com.typesafe.akka" %% "akka-remote" % akkaVersion
     )
   )
 

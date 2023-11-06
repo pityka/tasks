@@ -45,7 +45,7 @@ import cats.effect.IO
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
 
-package object util  {
+package object util {
 
   def base64(b: Array[Byte]): String =
     java.util.Base64.getEncoder.encodeToString(b)

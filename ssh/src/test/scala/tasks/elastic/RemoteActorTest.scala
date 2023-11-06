@@ -100,7 +100,9 @@ object SHRemoteActorTest extends TestHelpers {
           implicit val as = ce.actorSystem
           IO.fromFuture(IO.delay(actor.resolve(60 seconds))).flatMap { ac =>
             scribe.info("sending my number " + n)
-            IO.fromFuture(IO.delay(ac.ask(n)(akka.util.Timeout(120 seconds)).mapTo[String]))
+            IO.fromFuture(
+              IO.delay(ac.ask(n)(akka.util.Timeout(120 seconds)).mapTo[String])
+            )
           }
     }
 
