@@ -41,12 +41,11 @@ import scala.sys.process._
 import scala.concurrent.duration._
 import scala.util._
 import tasks.util.config._
-import com.typesafe.scalalogging.StrictLogging
 import cats.effect.IO
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
 
-package object util extends StrictLogging {
+package object util  {
 
   def base64(b: Array[Byte]): String =
     java.util.Base64.getEncoder.encodeToString(b)
@@ -298,7 +297,7 @@ package object util extends StrictLogging {
   def retryFuture[A](tag: String)(f: => Future[A], c: Int)(implicit
       as: akka.actor.ActorSystem,
       ec: ExecutionContext,
-      log: akka.event.LoggingAdapter
+      log: scribe.Logger
   ): Future[A] =
     if (c > 0) f.recoverWith { case e =>
       log.error(e, s"Failed $tag. Retry $c more times.")
@@ -313,7 +312,7 @@ package object util extends StrictLogging {
     }
     else f
   def retryIO[A](tag: String)(f: => IO[A], c: Int)(implicit
-      log: akka.event.LoggingAdapter
+      log: scribe.Logger
   ): IO[A] =
     if (c > 0) f.handleErrorWith { case e =>
       IO.delay(log.error(e, s"Failed $tag. Retry $c more times.")) *>

@@ -24,9 +24,7 @@
 
 package tasks.fileservice
 
-import akka.actor._
 import tasks.util.Uri
-import akka.event.LoggingAdapter
 import cats.effect.IO
 import org.http4s.client.Client
 import org.http4s.Request
@@ -39,12 +37,8 @@ import fs2.Chunk
 class StreamHelper(
     s3Client: Option[tasks.fileservice.s3.S3],
     httpClient: Option[Client[IO]]
-)(implicit
-    as: ActorSystem
 ) {
 
-  implicit val log: LoggingAdapter =
-    akka.event.Logging(as.eventStream, getClass)
 
   def s3Loc(uri: Uri) = {
     val bucket = uri.authority.toString
@@ -138,7 +132,7 @@ class StreamHelper(
         serverRespondsWithCorrectPartialContent(contentLength).map {
           case true => d
           case false =>
-            log.debug(
+            scribe.debug(
               s"$uri returned `Accept-Ranges` but did not respond with 206 on probing request."
             )
             (Some(contentLength), false)
@@ -170,7 +164,7 @@ class StreamHelper(
                   data
                 },
               retries
-            )
+            )(scribe.Logger[StreamHelper])
           }
         }
     }
@@ -190,10 +184,10 @@ class StreamHelper(
       .eval(
         getHeader.map {
           case (Some(contentLength), true) =>
-            log.debug(s"Fetching $uri by parts.")
+            scribe.debug(s"Fetching $uri by parts.")
             byPartsWithRetry(contentLength).unchunks
           case _ =>
-            log.debug(s"Fetching $uri by one request.")
+            scribe.debug(s"Fetching $uri by one request.")
             bySingleRequest
         }
       )

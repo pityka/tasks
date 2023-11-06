@@ -32,11 +32,13 @@ import tasks.util.config._
 import tasks.util.SimpleSocketAddress
 
 import scala.concurrent.Future
+import cats.effect.IO
 
 object JvmElasticSupport {
 
   val taskSystems =
-    scala.collection.mutable.ArrayBuffer[(String, Future[TaskSystem])]()
+    scala.collection.mutable
+      .ArrayBuffer[(String, Future[(TaskSystemComponents, IO[Unit])])]()
 
   val nodesShutdown = scala.collection.mutable.ArrayBuffer[String]()
 
@@ -47,14 +49,22 @@ object JvmElasticSupport {
       nodesShutdown += nodeName.value
       taskSystems
         .filter(_._1 == nodeName.value)
-        .foreach(_._2.foreach(_.shutdown()))
+        .foreach(_._2.foreach { case (_, release) =>
+          import cats.effect.unsafe.implicits.global
+
+          release.unsafeRunSync()
+        })
     }
 
     def shutdownPendingNode(nodeName: PendingJobId): Unit = synchronized {
       nodesShutdown += nodeName.value
       taskSystems
         .filter(_._1 == nodeName.value)
-        .foreach(_._2.foreach(_.shutdown()))
+        .foreach(_._2.foreach { case (_, release) =>
+          import cats.effect.unsafe.implicits.global
+
+          release.unsafeRunSync()
+        })
     }
 
   }
@@ -70,6 +80,8 @@ object JvmElasticSupport {
         java.util.UUID.randomUUID.toString.replace("-", "")
 
       val ts = Future {
+        import cats.effect.unsafe.implicits.global
+
         defaultTaskSystem(s"""
     akka.loglevel=OFF
     hosts.master = "${masterAddress.getHostName}:${masterAddress.getPort}"
@@ -79,7 +91,7 @@ object JvmElasticSupport {
     tasks.akka.actorsystem.name = $jobid   
     tasks.addShutdownHook = false 
     tasks.fileservice.storageURI="${config.storageURI.toString}"
-    """)
+    """)._1.allocated.unsafeRunSync()
       }(scala.concurrent.ExecutionContext.Implicits.global)
       import scala.concurrent.ExecutionContext.Implicits.global
       ts.map(_ => ()).recover { case e =>
@@ -115,7 +127,9 @@ object JvmElasticSupport {
   }
 
   object JvmGrid extends ElasticSupportFromConfig {
-    implicit val fqcn : ElasticSupportFqcn= ElasticSupportFqcn("tasks.JvmElasticSupport.JvmGrid")
+    implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
+      "tasks.JvmElasticSupport.JvmGrid"
+    )
     def apply(implicit config: TasksConfig) = SimpleElasticSupport(
       fqcn = fqcn,
       hostConfig = None,

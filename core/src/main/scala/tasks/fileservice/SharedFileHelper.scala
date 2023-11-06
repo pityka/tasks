@@ -33,14 +33,12 @@ import tasks.util._
 import tasks.util.config._
 import tasks.queue._
 
-import com.typesafe.scalalogging.StrictLogging
 import cats.effect.kernel.Resource
 import cats.effect.IO
 import fs2.Stream
-import akka.stream.Materializer
 import fs2.Chunk
 
-private[tasks] object SharedFileHelper extends StrictLogging {
+private[tasks] object SharedFileHelper {
 
   def getByName(name: String, retrieveSizeAndHash: Boolean)(implicit
       service: FileServiceComponent,
@@ -133,11 +131,8 @@ private[tasks] object SharedFileHelper extends StrictLogging {
 
   def saveHistory(sf: SharedFile, historyContext: HistoryContext)(implicit
       prefix: FileServicePrefix,
-      // ec: ExecutionContext,
       service: FileServiceComponent,
-      context: ActorRefFactory,
-      config: TasksConfig,
-      mat: Materializer
+      config: TasksConfig
   ): IO[Unit] = {
     historyContext match {
       case NoHistory => IO.unit
@@ -170,7 +165,7 @@ private[tasks] object SharedFileHelper extends StrictLogging {
           val historyManagedPath = ManagedFilePath(
             managed.pathElements.dropRight(1) :+ managed.name + ".history"
           )
-          logger.debug("Decoding history of " + sf)
+          scribe.debug("Decoding history of " + sf)
 
           def readFile =
             getStreamToManagedPath(historyManagedPath, fromOffset = 0L)
@@ -180,7 +175,7 @@ private[tasks] object SharedFileHelper extends StrictLogging {
               .map(_.toArray)
               .map { byteArray =>
                 if (byteArray.length >= 1024 * 1024 * 20) {
-                  logger.warn("Truncating history due to file size.")
+                  scribe.warn("Truncating history due to file size.")
                   History(sf, None)
                 } else {
 
@@ -210,10 +205,8 @@ private[tasks] object SharedFileHelper extends StrictLogging {
   def createFromFile(file: File, name: String, deleteFile: Boolean)(implicit
       prefix: FileServicePrefix,
       service: FileServiceComponent,
-      context: ActorRefFactory,
       config: TasksConfig,
-      historyContext: HistoryContext,
-      mat: Materializer
+      historyContext: HistoryContext
   ): IO[SharedFile] = {
     val sharedFile = {
       val proposedPath = prefix.propose(name)
@@ -234,8 +227,6 @@ private[tasks] object SharedFileHelper extends StrictLogging {
   def sink(name: String)(implicit
       prefix: FileServicePrefix,
       service: FileServiceComponent,
-      context: ActorRefFactory,
-      mat: Materializer,
       config: TasksConfig,
       historyContext: HistoryContext
   ): fs2.Pipe[IO, Byte, SharedFile] = { (in: Stream[IO, Byte]) =>
@@ -250,8 +241,6 @@ private[tasks] object SharedFileHelper extends StrictLogging {
   def createFromStream(stream: Stream[IO, Byte], name: String)(implicit
       prefix: FileServicePrefix,
       service: FileServiceComponent,
-      context: ActorRefFactory,
-      mat: Materializer,
       config: TasksConfig,
       historyContext: HistoryContext
   ): IO[SharedFile] = {
@@ -271,7 +260,6 @@ private[tasks] object SharedFileHelper extends StrictLogging {
       context: ActorRefFactory,
       config: TasksConfig,
       historyContext: HistoryContext,
-      mat: Materializer
   ): IO[List[SharedFile]] = {
     val directory = service.storage
       .sharedFolder(prefix.list)

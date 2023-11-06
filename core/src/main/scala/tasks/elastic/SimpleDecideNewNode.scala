@@ -30,12 +30,10 @@ import tasks.shared._
 import tasks.util._
 import tasks.util.eq._
 import tasks.util.config._
-import com.typesafe.scalalogging.StrictLogging
 
 class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
     config: TasksConfig
-) extends DecideNewNode
-    with StrictLogging {
+) extends DecideNewNode {
 
   def needNewNode(
       q: QueueStat,
@@ -67,7 +65,7 @@ class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
             (prefix ::: (transformed.get :: suffix.tail))
               .filterNot(_.isEmpty)
           else {
-            logger.debug(
+            scribe.debug(
               "More resources running than available??"
             )
             available
@@ -95,7 +93,7 @@ class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
         .map(x => x._1 -> x._2.size)
       val fulfilled =
         allocatedRequests.groupBy(x => x).map(x => x._1 -> x._2.size)
-      logger.info(
+      scribe.info(
         s"Queued resource requests: $need. Requests allocable with current running or pending nodes: $fulfilled. Current nodes: $availableResources"
       )
       (addMaps(need, fulfilled)(_ - _)).filter(x => x._2 > 0)
