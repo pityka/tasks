@@ -40,8 +40,6 @@ class QueueUIBackendImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
 
   import actorSystem.dispatcher
 
-  val log = akka.event.Logging(actorSystem.eventStream, getClass)
-
   private val stateFlow =
     Flow[TaskQueue.Event]
       .scan(UIQueueState.empty)(UIQueueStateProjector.project(_, _))

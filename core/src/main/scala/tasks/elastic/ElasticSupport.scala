@@ -48,6 +48,7 @@ trait ElasticSupport {
     def createSelfShutdown: SelfShutdown
     def getNodeName: String
   }
+  def getNodeName: GetNodeName
 
   def apply(
       masterAddress: SimpleSocketAddress,

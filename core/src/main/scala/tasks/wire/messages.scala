@@ -39,23 +39,11 @@ private[tasks] case class AskForWork(resources: VersionedResourceAvailable)
 
 case object HowLoadedAreYou extends StaticMessage
 
-private[tasks] case class InternalMessageFromTask(
-    actor: ActorRef,
-    result: UntypedResultWithMetadata
-) extends StaticMessage
-
-private[tasks] case class InternalMessageTaskFailed(
-    actor: ActorRef,
-    cause: Throwable
-) extends StaticMessage
-
 private[tasks] case class FailureMessageFromProxyToProxy(cause: Throwable)
     extends StaticMessage
 
 case class MessageFromTask(result: UntypedResult, retrievedFromCache: Boolean)
     extends StaticMessage
-
-case object SaveDone extends StaticMessage
 
 private[tasks] case class QueueAck(allocated: VersionedResourceAllocated)
     extends StaticMessage
@@ -63,10 +51,6 @@ private[tasks] case class QueueAck(allocated: VersionedResourceAllocated)
 private[tasks] case object GetMaximumSlots extends StaticMessage
 
 private[tasks] case object GetAvailableSlots extends StaticMessage
-
-case object YouShouldSetIt extends StaticMessage
-
-case object Release extends StaticMessage
 
 case class Schedule(sch: ScheduleTask) extends StaticMessage
 
@@ -91,31 +75,12 @@ private[tasks] case class InitFailed(nodename: PendingJobId)
 
 private[tasks] case class RemoveNode(node: Node) extends StaticMessage
 
-// Messages related to cache
-
-case class CacheActor(actor: ActorRef) extends StaticMessage
-
-private[tasks] case class SaveResult(
-    sch: HashedTaskDescription,
-    r: UntypedResult,
-    prefix: FileServicePrefix
-) extends StaticMessage
-
-private[tasks] case class CheckResult(sch: ScheduleTask, sender: Proxy)
-    extends StaticMessage
-
-private[tasks] case object PoisonPillToCacheActor extends StaticMessage
+//
 
 private[tasks] case object NeedInput extends StaticMessage
 
 private[tasks] case class InputData(b64: Base64Data, noCache: Boolean)
     extends StaticMessage
-
-private[tasks] case class AnswerFromCache(
-    message: Either[String, Option[UntypedResult]],
-    sender: Proxy,
-    sch: ScheduleTask
-) extends StaticMessage
 
 // Messages related to HeartBeat
 

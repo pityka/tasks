@@ -146,6 +146,7 @@ object Fib {
             val f2 = fibtask(FibInput(n - 2))(ResourceRequest(1, 1, 1))
 
             val f3: IO[Int] = for {
+              _ <- releaseResourcesEarly
               r1 <- f1
               r2 <- f2
               r3 <- reduce(FibReduce(r1, r2))(ResourceRequest(1, 1, 1))
@@ -153,7 +154,7 @@ object Fib {
             } yield r3
 
 
-            f3.guarantee(IO{releaseResources})
+            f3
 
           }
 

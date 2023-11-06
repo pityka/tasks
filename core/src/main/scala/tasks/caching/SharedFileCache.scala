@@ -42,12 +42,9 @@ import fs2.Chunk
 
 private[tasks] class SharedFileCache(implicit
     fileServiceComponent: FileServiceComponent,
-    AS: ActorSystem,
     config: TasksConfig
 ) extends Cache
     with TaskSerializer {
-
-  private val logger = akka.event.Logging(AS, getClass)
 
   override def toString = "SharedFileCache"
 
@@ -63,7 +60,7 @@ private[tasks] class SharedFileCache(implicit
       .getByName(fileName, retrieveSizeAndHash = false)
       .flatMap {
         case None =>
-          logger.debug(
+          scribe.debug(
             s"Not found $prefix $fileName for $hashedTaskDescription"
           )
           IO.pure(None)
@@ -77,7 +74,7 @@ private[tasks] class SharedFileCache(implicit
               Some(t)
             }
             .handleError { case e =>
-              logger.error(
+              scribe.error(
                 e,
                 s"Failed to locate cached result file: $fileName"
               )

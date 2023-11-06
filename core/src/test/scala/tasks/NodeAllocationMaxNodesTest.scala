@@ -36,8 +36,8 @@ import cats.effect.IO
 object NodeAllocationMaxNodesTest extends TestHelpers {
 
   val testTask = Task[Input, Int]("nodeallocationtest", 1) {
-    _ => implicit computationEnvironment =>
-      log.info("Hello from task")
+    _ => _ =>
+      scribe.info("Hello from task")
       IO(1)
   }
 

@@ -55,7 +55,6 @@ object ResourceUtilizationRecord {
 class TrackerImpl(implicit actorSystem: ActorSystem, config: TasksConfig)
     extends Tracker {
 
-  val log = akka.event.Logging(actorSystem.eventStream, getClass)
   log.info("Instantiating resource tracking")
 
   private val stateFlow =

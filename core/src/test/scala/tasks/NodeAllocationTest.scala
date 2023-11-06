@@ -35,8 +35,8 @@ import cats.effect.IO
 object NodeAllocationTest extends TestHelpers {
 
   val testTask = Task[Input, Int]("nodeallocationtest", 1) {
-    _ => implicit computationEnvironment =>
-      log.info("Hello from task")
+    _ => _ =>
+      scribe.info("Hello from task")
       IO(1)
   }
 
@@ -71,7 +71,11 @@ object NodeAllocationTest extends TestHelpers {
 
       f1.flatTap { case _ =>
         IO{synchronized {
-          tasks.JvmElasticSupport.taskSystems.head._2.foreach(_.shutdown())
+          tasks.JvmElasticSupport.taskSystems.head._2.foreach{ case (_, release) =>
+          import cats.effect.unsafe.implicits.global
+
+          release.unsafeRunSync()
+        }
         }}
       }
 
