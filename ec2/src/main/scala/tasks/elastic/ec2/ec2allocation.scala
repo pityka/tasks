@@ -253,7 +253,7 @@ object EC2ReaperFactory extends ReaperFactory {
 
 object EC2ElasticSupport extends ElasticSupportFromConfig {
 
-  implicit val fqcn = ElasticSupportFqcn("tasks.elastic.ec2.EC2ElasticSupport")
+  implicit val fqcn : ElasticSupportFqcn = ElasticSupportFqcn("tasks.elastic.ec2.EC2ElasticSupport")
 
   def apply(implicit config: TasksConfig) = {
     implicit val ec2 =

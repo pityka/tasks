@@ -27,10 +27,7 @@
 
 package tasks.caching
 
-import scala.concurrent._
 import akka.actor.ActorSystem
-import akka.stream.scaladsl.Source
-import akka.util.ByteString
 
 import tasks.queue._
 import tasks._
@@ -40,16 +37,14 @@ import tasks.fileservice.{
   FileServicePrefix,
   SharedFileHelper
 }
+import cats.effect.IO
+import fs2.Chunk
 
 private[tasks] class SharedFileCache(implicit
     fileServiceComponent: FileServiceComponent,
-    AS: ActorSystem,
-    EC: ExecutionContext,
     config: TasksConfig
 ) extends Cache
     with TaskSerializer {
-
-  private val logger = akka.event.Logging(AS, getClass)
 
   override def toString = "SharedFileCache"
 
@@ -57,7 +52,7 @@ private[tasks] class SharedFileCache(implicit
 
   def get(
       hashedTaskDescription: HashedTaskDescription
-  )(implicit prefix: FileServicePrefix): Future[Option[UntypedResult]] = {
+  )(implicit prefix: FileServicePrefix): IO[Option[UntypedResult]] = {
 
     val hash = hashedTaskDescription.hash
     val fileName = "__meta__result__" + hash
@@ -65,20 +60,21 @@ private[tasks] class SharedFileCache(implicit
       .getByName(fileName, retrieveSizeAndHash = false)
       .flatMap {
         case None =>
-          logger.debug(
+          scribe.debug(
             s"Not found $prefix $fileName for $hashedTaskDescription"
           )
-          Future.successful(None)
+          IO.pure(None)
         case Some(sf) =>
           SharedFileHelper
-            .getSourceToFile(sf, fromOffset = 0L)
-            .runFold(ByteString.empty)(_ ++ _)
+            .stream(sf, fromOffset = 0L)
+            .compile
+            .foldChunks(Chunk.empty[Byte])(_ ++ _)
             .map { byteString =>
               val t = deserializeResult(byteString.toArray)
               Some(t)
             }
-            .recover { case e =>
-              logger.error(
+            .handleError { case e =>
+              scribe.error(
                 e,
                 s"Failed to locate cached result file: $fileName"
               )
@@ -100,8 +96,8 @@ private[tasks] class SharedFileCache(implicit
       val value = serializeResult(untypedResult)
       for {
         _ <- SharedFileHelper
-          .createFromSource(
-            Source.single(ByteString(value)),
+          .createFromStream(
+            fs2.Stream.chunk(Chunk.array(value)),
             name = "__meta__result__" + hash
           )
 

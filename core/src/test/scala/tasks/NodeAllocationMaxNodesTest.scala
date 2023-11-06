@@ -31,15 +31,14 @@ import org.scalatest.matchers.should.Matchers
 import tasks.jsonitersupport._
 import com.typesafe.config.ConfigFactory
 import scala.util._
-import scala.concurrent._
-import scala.concurrent.duration._
+import cats.effect.IO
 
 object NodeAllocationMaxNodesTest extends TestHelpers {
 
-  val testTask = AsyncTask[Input, Int]("nodeallocationtest", 1) {
-    _ => implicit computationEnvironment =>
-      log.info("Hello from task")
-      Future(1)
+  val testTask = Task[Input, Int]("nodeallocationtest", 1) {
+    _ => _ =>
+      scribe.info("Hello from task")
+      IO(1)
   }
 
   val testConfig2 = {
@@ -59,7 +58,6 @@ object NodeAllocationMaxNodesTest extends TestHelpers {
 
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
 
       val f1 = testTask(Input(1))(ResourceRequest(1, 500))
       val f2 = testTask(Input(2))(ResourceRequest(1, 500))
@@ -70,7 +68,7 @@ object NodeAllocationMaxNodesTest extends TestHelpers {
         t3 <- f3
       } yield t1 + t2 + t3
 
-      Try(Await.result(future, atMost = 30 seconds)).toOption
+      Try(await(future)).toOption
 
     }
   }

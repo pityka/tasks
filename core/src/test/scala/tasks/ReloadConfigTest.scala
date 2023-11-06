@@ -28,21 +28,21 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import org.scalatest.matchers.should.Matchers
 
-import scala.concurrent.Future
 import tasks.jsonitersupport._
 import com.typesafe.config.ConfigFactory
+import cats.effect.IO
 
 object ReloadConfigTest extends TestHelpers with Matchers {
 
-  val testTask = AsyncTask[Input, Int]("nodeallocationtest", 1) {
+  val testTask = Task[Input, Int]("nodeallocationtest", 1) {
     input => implicit computationEnvironment =>
-      log.info("Hello from task")
+      scribe.info("Hello from task")
       if (input.i > 1) {
         computationEnvironment.components.tasksConfig.kubernetesImageName shouldBe "Input(1)"
       }
       System.getProperties.setProperty("tasks.kubernetes.image", input.toString)
       Thread.sleep(2100)
-      Future(1)
+      IO(1)
   }
 
   val testConfig2 = {
@@ -61,7 +61,6 @@ object ReloadConfigTest extends TestHelpers with Matchers {
 
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
 
       val f1 = testTask(Input(1))(ResourceRequest(1, 500))
 

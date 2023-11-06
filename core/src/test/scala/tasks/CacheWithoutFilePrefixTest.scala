@@ -29,17 +29,18 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import scala.concurrent.Future
 import com.typesafe.config.ConfigFactory
+import cats.effect.IO
 
 object CacheWithoutFilePrefixTest extends TestHelpers {
 
   val sideEffect = scala.collection.mutable.ArrayBuffer[String]()
 
-  val task = AsyncTask[Input, Int]("cachewithoutfileprefix", 1) {
-    _ => implicit computationEnvironment =>
+  val task = Task[Input, Int]("cachewithoutfileprefix", 1) { _ => _ =>
+    IO {
       sideEffect += "execution of task"
-      Future(1)
+      1
+    }
   }
 
   def run = {
@@ -57,8 +58,6 @@ object CacheWithoutFilePrefixTest extends TestHelpers {
     }
 
     withTaskSystem(testConfig2) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
-
       val future = for {
         t1 <- task(Input(1))(ResourceRequest(1, 500))
         t2 <- task(Input(1))(ResourceRequest(1, 500))

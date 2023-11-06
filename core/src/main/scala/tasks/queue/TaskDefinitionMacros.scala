@@ -24,7 +24,7 @@
 
 package tasks.queue
 
-import scala.concurrent.Future
+import cats.effect.IO
 
 object TaskDefinitionMacros {
   import scala.reflect.macros.blackbox.Context
@@ -35,7 +35,7 @@ object TaskDefinitionMacros {
       taskID: cxt.Expr[String],
       taskVersion: cxt.Expr[Int]
   )(
-      comp: cxt.Expr[A => ComputationEnvironment => Future[C]]
+      comp: cxt.Expr[A => ComputationEnvironment => IO[C]]
   ) = {
     import cxt.universe._
     val a = weakTypeOf[A]

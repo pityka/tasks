@@ -31,7 +31,6 @@ import tasks.elastic._
 import tasks.shared._
 import tasks.util.config._
 import io.fabric8.kubernetes.client.KubernetesClient
-import com.typesafe.scalalogging.StrictLogging
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClientBuilder
 import io.fabric8.kubernetes.api.model.Quantity
@@ -41,10 +40,9 @@ import tasks.util.SimpleSocketAddress
 import io.fabric8.kubernetes.api.model.TolerationBuilder
 
 class K8SShutdown(k8s: KubernetesClient)
-    extends ShutdownNode
-    with StrictLogging {
+    extends ShutdownNode {
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
-    logger.info(s"Shut down $nodeName")
+    scribe.info(s"Shut down $nodeName")
     val spl = nodeName.value.split("/")
     val ns = spl(0)
     val podName = spl(1)
@@ -52,7 +50,7 @@ class K8SShutdown(k8s: KubernetesClient)
   }
 
   def shutdownPendingNode(nodeName: PendingJobId): Unit = {
-    logger.info(s"Shut down $nodeName")
+    scribe.info(s"Shut down $nodeName")
     val spl = nodeName.value.split("/")
     val ns = spl(0)
     val podName = spl(1)
@@ -70,8 +68,7 @@ class K8SCreateNode(
     codeAddress: CodeAddress,
     k8s: KubernetesClient
 )(implicit config: TasksConfig, elasticSupport: ElasticSupportFqcn)
-    extends CreateNode
-    with StrictLogging {
+    extends CreateNode {
 
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest
@@ -119,7 +116,7 @@ class K8SCreateNode(
           case "Equal" =>
             builder0.withValue(value)
           case _ =>
-            logger.info(s"Unknown operator $operator")
+            scribe.info(s"Unknown operator $operator")
             builder0
         }
 
@@ -252,7 +249,7 @@ object K8SGetNodeName extends GetNodeName {
 }
 
 object K8SElasticSupport extends ElasticSupportFromConfig {
-  implicit val fqcn = ElasticSupportFqcn(
+  implicit val fqcn : ElasticSupportFqcn = ElasticSupportFqcn(
     "tasks.elastic.kubernetes.K8SElasticSupport"
   )
   def apply(implicit config: TasksConfig) = {

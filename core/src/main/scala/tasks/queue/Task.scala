@@ -29,8 +29,6 @@ package tasks.queue
 
 import akka.actor.{Actor, PoisonPill, ActorRef}
 
-import scala.concurrent.Future
-import scala.concurrent.ExecutionContext
 import scala.util._
 
 import tasks.fileservice._
@@ -43,32 +41,39 @@ import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 
 import java.time.Instant
+import cats.effect.IO
+import tasks.TaskSystemComponents
+import tasks.caching.TaskResultCache
+import akka.actor.ActorSystem
 
-case class UntypedResult(
+private[tasks] case class UntypedResult(
     files: Set[SharedFile],
     data: Base64Data,
     mutableFiles: Option[Set[SharedFile]]
 )
 
-case class DependenciesAndRuntimeMetadata(
+private[tasks] case class DependenciesAndRuntimeMetadata(
     dependencies: Seq[History],
     logs: Seq[LogRecord]
 )
 
-object DependenciesAndRuntimeMetadata {
+private[tasks] object DependenciesAndRuntimeMetadata {
   implicit val codec: JsonValueCodec[DependenciesAndRuntimeMetadata] =
     JsonCodecMaker.make
 
 }
 
-case class TaskInvocationId(id: TaskId, description: HashedTaskDescription) {
+private[tasks] case class TaskInvocationId(
+    id: TaskId,
+    description: HashedTaskDescription
+) {
   override def toString = id.id + "_" + description.hash
 }
-object TaskInvocationId {
+private[tasks] object TaskInvocationId {
   implicit val codec: JsonValueCodec[TaskInvocationId] = JsonCodecMaker.make
 }
 
-case class TaskLineage(lineage: Seq[TaskInvocationId]) {
+private[tasks] case class TaskLineage(lineage: Seq[TaskInvocationId]) {
   def leaf = lineage.last
   def inherit(td: HashedTaskDescription) =
     TaskLineage(
@@ -76,12 +81,12 @@ case class TaskLineage(lineage: Seq[TaskInvocationId]) {
     )
 }
 
-object TaskLineage {
+private[tasks] object TaskLineage {
   def root = TaskLineage(Seq.empty)
   implicit val codec: JsonValueCodec[TaskLineage] = JsonCodecMaker.make
 }
 
-case class ResultMetadata(
+private[tasks] case class ResultMetadata(
     dependencies: Seq[History],
     started: Instant,
     ended: Instant,
@@ -89,22 +94,22 @@ case class ResultMetadata(
     lineage: TaskLineage
 )
 
-object ResultMetadata {
+private[tasks] object ResultMetadata {
   implicit val codec: JsonValueCodec[ResultMetadata] = JsonCodecMaker.make
 }
 
-case class UntypedResultWithMetadata(
+private[tasks] case class UntypedResultWithMetadata(
     untypedResult: UntypedResult,
     metadata: ResultMetadata,
     noCache: Boolean
 )
 
-object UntypedResultWithMetadata {
+private[tasks] object UntypedResultWithMetadata {
   implicit val codec: JsonValueCodec[UntypedResultWithMetadata] =
     JsonCodecMaker.make
 }
 
-object UntypedResult {
+private[tasks] object UntypedResult {
 
   private def immutableFiles(r: Any): Set[SharedFile] =
     HasSharedFiles.recurse(r)(_.immutableFiles).toSet
@@ -126,10 +131,8 @@ object UntypedResult {
 case class ComputationEnvironment(
     val resourceAllocated: ResourceAllocated,
     implicit val components: TaskSystemComponents,
-    implicit val log: akka.event.LoggingAdapter,
     implicit val launcher: LauncherActor,
-    implicit val executionContext: ExecutionContext,
-    val taskActor: ActorRef,
+    val taskActor: Task,
     taskHash: HashedTaskDescription
 ) {
 
@@ -156,68 +159,51 @@ case class ComputationEnvironment(
 
   implicit def queue: QueueActor = components.queue
 
-  implicit def cache: CacheActor = components.cache
+  implicit def cache: TaskResultCache = components.cache
 
   def toTaskSystemComponents =
     components
 
 }
 
-private class Task(
+private[tasks] class Task(
     inputDeserializer: Spore[AnyRef, AnyRef],
     outputSerializer: Spore[AnyRef, AnyRef],
     function: Spore[AnyRef, AnyRef],
     launcherActor: ActorRef,
     queueActor: ActorRef,
     fileServiceComponent: FileServiceComponent,
-    cacheActor: ActorRef,
+    cache: TaskResultCache,
     nodeLocalCache: NodeLocalCache.State,
     resourceAllocated: ResourceAllocated,
     fileServicePrefix: FileServicePrefix,
-    auxExecutionContext: ExecutionContext,
     tasksConfig: TasksConfig,
     priority: Priority,
     labels: Labels,
     taskId: TaskId,
     lineage: TaskLineage,
     taskHash: HashedTaskDescription,
-    proxy: ActorRef
-) extends Actor
-    with akka.actor.ActorLogging {
-
-  override def preStart(): Unit = {
-    log.debug("Prestart of Task class")
-    proxy ! NeedInput
-  }
-
-  override def postStop(): Unit = {
-    fjp.shutdown
-    log.debug(s"Task stopped. $taskId")
-  }
-
-  val fjp = tasks.util.concurrent
-    .newJavaForkJoinPoolWithNamePrefix("tasks-ec", resourceAllocated.cpu)
-  val executionContextOfTask =
-    scala.concurrent.ExecutionContext.fromExecutorService(fjp)
+    proxy: ActorRef,
+    system: ActorSystem
+) {
 
   private def handleError(exception: Throwable): Unit = {
     exception.printStackTrace()
-    log.error(exception, "Task failed.")
-    launcherActor ! InternalMessageTaskFailed(self, exception)
-    self ! PoisonPill
+    scribe.error(exception, "Task failed.")
+    launcherActor ! Launcher.InternalMessageTaskFailed(this, exception)
   }
 
   private def handleCompletion(
-      future: Future[(UntypedResult, DependenciesAndRuntimeMetadata)],
+      program: IO[(UntypedResult, DependenciesAndRuntimeMetadata)],
       startTimeStamp: Instant,
       noCache: Boolean
   ) =
-    future.onComplete {
-      case Success((result, dependencies)) =>
-        log.debug("Task success. ")
+    program.attempt.map {
+      case Right((result, dependencies)) =>
+        scribe.debug("Task success. ")
         val endTimeStamp = Instant.now
-        launcherActor ! InternalMessageFromTask(
-          self,
+        launcherActor ! Launcher.InternalMessageFromTask(
+          this,
           UntypedResultWithMetadata(
             result,
             ResultMetadata(
@@ -230,14 +216,13 @@ private class Task(
             noCache = noCache
           )
         )
-        self ! PoisonPill
 
-      case Failure(error) => handleError(error)
-    }(executionContextOfTask)
+      case Left(error) => handleError(error)
+    }
 
-  private def executeTaskAsynchronously(
+  private def executeTaskProgram(
       input: Base64Data
-  ): Future[(UntypedResult, DependenciesAndRuntimeMetadata)] =
+  ): IO[(UntypedResult, DependenciesAndRuntimeMetadata)] =
     try {
       val history = HistoryContextImpl(
         task = History.TaskVersion(taskId.id, taskId.version),
@@ -245,60 +230,57 @@ private class Task(
         traceId = Some(lineage.leaf.toString)
       )
       val ce = ComputationEnvironment(
-        resourceAllocated,
-        TaskSystemComponents(
-          QueueActor(queueActor),
-          fileServiceComponent,
-          context.system,
-          CacheActor(cacheActor),
-          nodeLocalCache,
-          fileServicePrefix,
-          auxExecutionContext,
-          tasksConfig,
-          history,
-          priority,
-          labels,
-          lineage
+        resourceAllocated = resourceAllocated,
+        components = TaskSystemComponents(
+          queue = QueueActor(queueActor),
+          fs = fileServiceComponent,
+          actorsystem = system,
+          cache = cache,
+          nodeLocalCache = nodeLocalCache,
+          filePrefix = fileServicePrefix,
+          tasksConfig = tasksConfig,
+          historyContext = history,
+          priority = priority,
+          labels = labels,
+          lineage = lineage
         ),
-        akka.event.Logging(
-          context.system.eventStream,
-          "usertasks." + fileServicePrefix.list.mkString(".")
-        ),
-        LauncherActor(launcherActor),
-        executionContextOfTask,
-        self,
-        taskHash
+        launcher = LauncherActor(launcherActor),
+        taskActor = this,
+        taskHash = taskHash
       )
 
-      log.debug(
+      scribe.debug(
         s"Starting task with computation environment $ce and with input data $input."
       )
 
-      Future {
+      IO.unit.flatMap { _ =>
         val untyped =
           UntypedTaskDefinition[AnyRef, AnyRef](
             inputDeserializer.as[Unit, Deserializer[AnyRef]],
             outputSerializer.as[Unit, Serializer[AnyRef]],
-            function.as[AnyRef, ComputationEnvironment => Future[AnyRef]]
+            function.as[AnyRef, ComputationEnvironment => IO[AnyRef]]
           )
         untyped.apply(input)(ce)
-      }(executionContextOfTask)
-        .flatMap(identity)(executionContextOfTask)
+      }
     } catch {
       case exception: Exception =>
-        Future.failed(exception)
+        IO.raiseError(exception)
       case assertionError: AssertionError =>
-        Future.failed(assertionError)
+        IO.raiseError(assertionError)
     }
 
-  def receive = {
-    case InputData(b64InputData, noCache) =>
-      handleCompletion(
-        executeTaskAsynchronously(b64InputData),
-        startTimeStamp = java.time.Instant.now,
-        noCache = noCache
-      )
+  def start(input: InputData): Unit = {
+    val InputData(b64InputData, noCache) = input
+    import cats.effect.unsafe.implicits.global
+    handleCompletion(
+      executeTaskProgram(b64InputData),
+      startTimeStamp = java.time.Instant.now,
+      noCache = noCache
+    ).unsafeRunAsync {
+      case Left(ex) =>
+        scribe.error(ex, "Unhandled unexpected exception.")
+      case Right(_) =>
+    }
 
-    case other => log.error("received unknown message" + other)
   }
 }

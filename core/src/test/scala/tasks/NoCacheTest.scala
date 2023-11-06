@@ -30,23 +30,22 @@ package tasks
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import org.scalatest.matchers.should.Matchers
-import scala.concurrent._
 
 import tasks.util._
 import tasks.jsonitersupport._
-
+import cats.effect.IO
 import com.typesafe.config.ConfigFactory
 
 object NoCacheTest extends TestHelpers with Matchers {
 
   val sideEffect = scala.collection.mutable.ArrayBuffer[String]()
 
-  val increment = AsyncTask[Input, Int]("execonce", 1) { case Input(c) =>
-    implicit computationEnvironment =>
+  val increment = Task[Input, Int]("execonce", 1) { case Input(c) =>
+    _ =>
       synchronized {
         sideEffect += "executed"
       }
-      Future(c + 1)
+      IO(c + 1)
   }
 
   def run = {

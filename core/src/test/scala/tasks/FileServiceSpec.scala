@@ -43,11 +43,12 @@ import org.scalatest.matchers.should.Matchers
 import tasks.queue._
 import tasks.fileservice._
 import tasks.util._
-import tasks.fileservice.actorfilestorage.ActorFileStorage
-import tasks.fileservice.actorfilestorage.FileServiceProxy
-import akka.actor.Props
-import akka.util.ByteString
+import tasks.fileservice.proxy.ProxyFileStorage
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
+import tasks.util.config.TasksConfig
+import org.http4s.ember.server.EmberServerBuilder
+import com.comcast.ip4s._
 
 object Conf {
   val str = """my-pinned-dispatcher {
@@ -70,14 +71,14 @@ class FileServiceSpec
     with ImplicitSender
     with FunSpecLike
     with Matchers
-    with BeforeAndAfterAll {
+    with BeforeAndAfterAll
+    with TestHelpers {
   self: Suite =>
 
   val as = implicitly[ActorSystem]
-  import as.dispatcher
-  implicit val sh = new StreamHelper
+  implicit val sh: StreamHelper = new StreamHelper(None, None)
 
-  implicit val tconfig = tasks.util.config
+  implicit val tconfig: TasksConfig = tasks.util.config
     .parse(() =>
       ConfigFactory.load().withFallback(ConfigFactory.load("akka.conf"))
     )
@@ -90,7 +91,7 @@ class FileServiceSpec
 
   }
 
-  implicit val prefix = FileServicePrefix(Vector())
+  implicit val prefix: FileServicePrefix = FileServicePrefix(Vector())
 
   describe("fileservice new file folderstorage ") {
     it("add new empty file from source") {
@@ -116,12 +117,11 @@ class FileServiceSpec
       implicit val serviceimpl =
         FileServiceComponent(fs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
-      Await.result(
-        SharedFileHelper.createFromSource(
-          akka.stream.scaladsl.Source(List.empty[akka.util.ByteString]),
+      await(
+        SharedFileHelper.createFromStream(
+          fs2.Stream[IO, Byte](),
           "proba"
-        ),
-        30 seconds
+        )
       )
 
       readBinaryFile(
@@ -148,10 +148,8 @@ class FileServiceSpec
       implicit val serviceimpl =
         FileServiceComponent(fs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
-      scala.concurrent.Await.result(
-        SharedFileHelper.createFromFile(input, "proba", false),
-        atMost = Duration.Inf
-      )
+
+      SharedFileHelper.createFromFile(input, "proba", false).unsafeRunSync()
 
       readBinaryFile(
         new java.io.File(folder, "proba").getCanonicalPath
@@ -176,10 +174,8 @@ class FileServiceSpec
       implicit val serviceimpl =
         FileServiceComponent(fs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
-      Await.ready(
-        SharedFileHelper.createFromFile(input, "proba", false),
-        Duration.Inf
-      )
+
+      SharedFileHelper.createFromFile(input, "proba", false).unsafeRunSync()
 
       readBinaryFile(
         new java.io.File(folder, "proba").getCanonicalPath
@@ -201,24 +197,35 @@ class FileServiceSpec
 
       val fs = new FolderFileStorage(folder)
 
-      val proxiedFs = new ActorFileStorage(
-        system.actorOf(
-          Props(new FileServiceProxy(fs))
-        )
+      val proxiedFs = ProxyFileStorage.service(
+        fs
       )
-      implicit val serviceimpl =
-        FileServiceComponent(proxiedFs, remoteStore)
-      implicit val historyContext = tasks.fileservice.NoHistory
-      Await.result(
-        SharedFileHelper.createFromFile(input, "proba", false),
-        Duration.Inf
-      )
+      EmberServerBuilder
+        .default[IO]
+        .withHost(ipv4"0.0.0.0")
+        .withHttpApp(proxiedFs.orNotFound)
+        .build
+        .use { server =>
+          ProxyFileStorage.makeClient(server.baseUri).use { proxiedFs =>
+            IO {
+              implicit val serviceimpl =
+                FileServiceComponent(proxiedFs, remoteStore)
+              implicit val historyContext = tasks.fileservice.NoHistory
 
-      readBinaryFile(
-        new java.io.File(folder, "proba").getCanonicalPath
-      ).toVector should equal(
-        data.toVector
-      )
+              SharedFileHelper
+                .createFromFile(input, "proba", false)
+                .unsafeRunSync()
+
+              readBinaryFile(
+                new java.io.File(folder, "proba").getCanonicalPath
+              ).toVector should equal(
+                data.toVector
+              )
+            }
+
+          }
+        }
+        .unsafeRunSync()
     }
     it("add new file - from source") {
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
@@ -243,12 +250,11 @@ class FileServiceSpec
       implicit val serviceimpl =
         FileServiceComponent(fs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
-      Await.result(
-        SharedFileHelper.createFromSource(
-          akka.stream.scaladsl.Source.single(akka.util.ByteString(data)),
+      await(
+        SharedFileHelper.createFromStream(
+          fs2.Stream.chunk(fs2.Chunk.array(data)),
           "proba"
-        ),
-        30 seconds
+        )
       )
 
       readBinaryFile(
@@ -276,21 +282,20 @@ class FileServiceSpec
       folder2.mkdir
 
       val fs = new FolderFileStorage(folder)
-      val proxiedFs = new ActorFileStorage(
-        system.actorOf(
-          Props(new FileServiceProxy(fs))
-        )
-      )
+      // val proxiedFs = new ActorFileStorage(
+      //   system.actorOf(
+      //     Props(new FileServiceProxy(fs))
+      //   )
+      // )
 
       implicit val serviceimpl =
-        FileServiceComponent(proxiedFs, remoteStore)
+        FileServiceComponent(fs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
-      Await.result(
-        SharedFileHelper.createFromSource(
-          akka.stream.scaladsl.Source.single(akka.util.ByteString(data)),
+      await(
+        SharedFileHelper.createFromStream(
+          fs2.Stream.chunk(fs2.Chunk.array(data)),
           "proba"
-        ),
-        30 seconds
+        )
       )
 
       readBinaryFile(
@@ -321,9 +326,8 @@ class FileServiceSpec
         )
       implicit val historyContext = tasks.fileservice.NoHistory
       val t: SharedFile =
-        Await.result(
-          SharedFileHelper.createFromFile(input, "proba", false),
-          50 seconds
+        await(
+          SharedFileHelper.createFromFile(input, "proba", false)
         )
 
       readBinaryFile(
@@ -366,9 +370,8 @@ class FileServiceSpec
         )
       implicit val historyContext = tasks.fileservice.NoHistory
       val t: SharedFile =
-        Await.result(
-          SharedFileHelper.createFromFile(input, "proba", false),
-          50 seconds
+        await(
+          SharedFileHelper.createFromFile(input, "proba", false)
         )
 
       readBinaryFile(
@@ -408,23 +411,22 @@ class FileServiceSpec
         new File(new java.io.File(getClass.getResource("/").getPath), "test2f")
       folder2.mkdir
       val fs = new FolderFileStorage(folder)
-      val proxiedFs = new ActorFileStorage(
-        system.actorOf(
-          Props(new FileServiceProxy(fs))
-        )
-      )
+      // val proxiedFs = new ActorFileStorage(
+      //   system.actorOf(
+      //     Props(new FileServiceProxy(fs))
+      //   )
+      // )
 
       implicit val serviceimpl =
-        FileServiceComponent(proxiedFs, remoteStore)
+        FileServiceComponent(fs, remoteStore)
       implicit val nlc =
         NodeLocalCache.start.unsafeRunSync()(
           cats.effect.unsafe.implicits.global
         )
       implicit val historyContext = tasks.fileservice.NoHistory
       val t: SharedFile =
-        Await.result(
-          SharedFileHelper.createFromFile(input, "proba", false),
-          50 seconds
+        await(
+          SharedFileHelper.createFromFile(input, "proba", false)
         )
 
       readBinaryFile(
@@ -443,13 +445,11 @@ class FileServiceSpec
       )
       readBinaryFile(path.getCanonicalPath).toVector should equal(data.toVector)
 
-      Await
-        .result(
-          SharedFileHelper
-            .getSourceToFile(t, 0L)
-            .runFold(akka.util.ByteString.empty)(_ ++ _),
-          20 seconds
-        )
+      SharedFileHelper
+        .stream(t, 0L)
+        .compile
+        .foldChunks(fs2.Chunk.empty[Byte])(_ ++ _)
+        .unsafeRunSync()
         .toArray
         .toVector should equal(data.toVector)
 
@@ -473,9 +473,8 @@ class FileServiceSpec
 
       implicit val historyContext = tasks.fileservice.NoHistory
       val t: SharedFile =
-        Await.result(
-          SharedFileHelper.createFromFile(input, "proba", false),
-          50 seconds
+        await(
+          SharedFileHelper.createFromFile(input, "proba", false)
         )
 
       readBinaryFile(
@@ -485,12 +484,11 @@ class FileServiceSpec
       )
 
       val content =
-        Await.result(
-          SharedFileHelper
-            .getSourceToFile(t, 0L)
-            .runFold(ByteString.empty)(_ ++ _),
-          50 seconds
-        )
+        SharedFileHelper
+          .stream(t, 0L)
+          .compile
+          .foldChunks(fs2.Chunk.empty[Byte])(_ ++ _)
+          .unsafeRunSync()
 
       content.toVector should equal(data.toVector)
 
@@ -507,23 +505,22 @@ class FileServiceSpec
         new File(new java.io.File(getClass.getResource("/").getPath), "test2f")
       folder2.mkdir
       val fs = new FolderFileStorage(folder)
-      val proxiedFs = new ActorFileStorage(
-        system.actorOf(
-          Props(new FileServiceProxy(fs))
-        )
-      )
+      // val proxiedFs = new ActorFileStorage(
+      //   system.actorOf(
+      //     Props(new FileServiceProxy(fs))
+      //   )
+      // )
 
       implicit val serviceimpl =
-        FileServiceComponent(proxiedFs, remoteStore)
+        FileServiceComponent(fs, remoteStore)
       implicit val nlc =
         NodeLocalCache.start.unsafeRunSync()(
           cats.effect.unsafe.implicits.global
         )
       implicit val historyContext = tasks.fileservice.NoHistory
       val t: SharedFile =
-        Await.result(
-          SharedFileHelper.createFromFile(input, "proba", false),
-          50 seconds
+        await(
+          SharedFileHelper.createFromFile(input, "proba", false)
         )
 
       readBinaryFile(
@@ -542,23 +539,19 @@ class FileServiceSpec
       )
       readBinaryFile(path.getCanonicalPath).toVector should equal(data.toVector)
 
-      Await
-        .result(
-          SharedFileHelper
-            .getSourceToFile(t, 0L)
-            .runFold(akka.util.ByteString.empty)(_ ++ _),
-          20 seconds
-        )
+      SharedFileHelper
+        .stream(t, 0L)
+        .compile
+        .foldChunks(fs2.Chunk.empty[Byte])(_ ++ _)
+        .unsafeRunSync()
         .toArray
         .toVector should equal(data.toVector)
 
-      Await
-        .result(
-          SharedFileHelper
-            .getSourceToFile(t, 2L)
-            .runFold(akka.util.ByteString.empty)(_ ++ _),
-          20 seconds
-        )
+      SharedFileHelper
+        .stream(t, 2L)
+        .compile
+        .foldChunks(fs2.Chunk.empty[Byte])(_ ++ _)
+        .unsafeRunSync()
         .toArray
         .toVector should equal(data.toVector.drop(2))
 
@@ -599,10 +592,7 @@ class FileServiceSpec
       )
       readBinaryFile(path.getCanonicalPath).toVector should equal(data.toVector)
 
-      Await.result(
-        SharedFileHelper.isAccessible(t, true),
-        30 seconds
-      ) should be(
+      await(SharedFileHelper.isAccessible(t, true)) should be(
         true
       )
 
@@ -623,14 +613,14 @@ class FileServiceSpec
       val input = new java.io.File(folder, "proba")
       writeBinaryToFile(input.getCanonicalPath, data)
       val fs = new FolderFileStorage(folder)
-      val proxiedFs = new ActorFileStorage(
-        system.actorOf(
-          Props(new FileServiceProxy(fs))
-        )
-      )
+      // val proxiedFs = new ActorFileStorage(
+      //   system.actorOf(
+      //     Props(new FileServiceProxy(fs))
+      //   )
+      // )
 
       implicit val serviceimpl =
-        FileServiceComponent(proxiedFs, remoteStore)
+        FileServiceComponent(fs, remoteStore)
       implicit val nlc =
         NodeLocalCache.start.unsafeRunSync()(
           cats.effect.unsafe.implicits.global

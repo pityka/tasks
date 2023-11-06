@@ -27,10 +27,11 @@ package tasks
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import org.scalatest.matchers.should.Matchers
+import cats.effect.unsafe.implicits.global
 
-import scala.concurrent.Future
 import tasks.jsonitersupport._
 import com.typesafe.config.ConfigFactory
+import cats.effect.IO
 
 object KubernetesTestSlave extends App {
   withTaskSystem { _ =>
@@ -40,10 +41,10 @@ object KubernetesTestSlave extends App {
 
 object KubernetesTest extends TestHelpers {
 
-  val testTask = AsyncTask[Input, Int]("kubernetestest", 1) {
+  val testTask = Task[Input, Int]("kubernetestest", 1) {
     _ => implicit computationEnvironment =>
-      log.info("Hello from task")
-      Future(1)
+      scribe.info("Hello from task")
+      IO(1)
   }
 
   val testConfig2 = {
@@ -66,7 +67,6 @@ object KubernetesTest extends TestHelpers {
 
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
 
       val f1 = testTask(Input(1))(ResourceRequest(1, 500))
 
@@ -78,8 +78,7 @@ object KubernetesTest extends TestHelpers {
         t3 <- f3
       } yield t1 + t2 + t3
 
-      import scala.concurrent.duration._
-      scala.concurrent.Await.result(future, atMost = 400000 seconds)
+      future.unsafeRunSync()
 
     }
   }

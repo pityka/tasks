@@ -27,15 +27,14 @@
 
 package tasks.fileservice
 
-import scala.concurrent.{Future, ExecutionContext}
 import java.io.File
 import tasks.util._
 import tasks.util.eq._
 import tasks.util.config._
-import akka.stream.scaladsl._
-import akka.util._
 import cats.effect.kernel.Resource
 import cats.effect.IO
+import fs2.Stream
+import fs2.Pipe
 
 object FolderFileStorage {
 
@@ -48,10 +47,9 @@ object FolderFileStorage {
 }
 
 class FolderFileStorage(val basePath: File)(implicit
-    ec: ExecutionContext,
     config: TasksConfig,
-    as: akka.actor.ActorSystem
 ) extends ManagedFileStorage {
+
 
   if (basePath.exists && !basePath.isDirectory)
     throw new IllegalArgumentException(s"$basePath exists and not a folder")
@@ -59,8 +57,6 @@ class FolderFileStorage(val basePath: File)(implicit
 
   if (!basePath.isDirectory)
     throw new RuntimeException(s"Could not create $basePath")
-
-  val logger = akka.event.Logging(as, getClass)
 
   override def toString =
     s"FolderFileStorage(basePath=$basePath)"
@@ -80,32 +76,38 @@ class FolderFileStorage(val basePath: File)(implicit
 
   }
 
-  def delete(mp: ManagedFilePath, expectedSize: Long, expectedHash: Int) =
+  def delete(
+      mp: ManagedFilePath,
+      expectedSize: Long,
+      expectedHash: Int
+  ): IO[Boolean] =
     if (config.allowDeletion) {
-      val file = assemblePath(mp)
-      val sizeOnDiskNow = file.length
-      val sizeMatch = sizeOnDiskNow == expectedSize
-      val canRead = file.canRead
-      def contentMatch =
-        canRead && FolderFileStorage.getContentHash(file) === expectedHash
-      val canDelete =
-        canRead && (expectedSize < 0 || (sizeMatch && contentMatch))
-      if (canDelete) {
-        file.delete
-        logger.warning(s"File deleted $file $mp")
-      } else {
-        logger.warning(
-          s"Not deleting file because its size or hash is different than expectation. $file $mp $sizeMatch $contentMatch"
-        )
-        Future.successful(false)
+      IO.interruptible {
+        val file = assemblePath(mp)
+        val sizeOnDiskNow = file.length
+        val sizeMatch = sizeOnDiskNow == expectedSize
+        val canRead = file.canRead
+        def contentMatch =
+          canRead && FolderFileStorage.getContentHash(file) === expectedHash
+        val canDelete =
+          canRead && (expectedSize < 0 || (sizeMatch && contentMatch))
+        if (canDelete) {
+          val deleted = file.delete
+          scribe.warn(s"File deleted $file $mp : $deleted")
+          deleted
+        } else {
+          scribe.warn(
+            s"Not deleting file because its size or hash is different than expectation. $file $mp $sizeMatch $contentMatch"
+          )
+          false
+        }
       }
-      Future.successful(true)
     } else {
-      logger.warning(s"File deletion disabled. Would have deleted $mp")
-      Future.successful(false)
+      scribe.warn(s"File deletion disabled. Would have deleted $mp")
+      IO.pure(false)
     }
 
-  def sharedFolder(prefix: Seq[String]): Future[Option[File]] = Future{
+  def sharedFolder(prefix: Seq[String]): IO[Option[File]] = IO {
     val folder = new File(
       basePath.getAbsolutePath + File.separator + prefix
         .mkString(File.separator)
@@ -114,8 +116,8 @@ class FolderFileStorage(val basePath: File)(implicit
     Some(folder)
   }
 
-  def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean] =
-    Future.successful {
+  def contains(path: ManagedFilePath, size: Long, hash: Int): IO[Boolean] =
+    IO.interruptible {
       val f = assemblePath(path)
       val canRead = f.canRead
       val sizeOnDiskNow = f.length
@@ -126,7 +128,7 @@ class FolderFileStorage(val basePath: File)(implicit
       val pass = canRead && (size < 0 || (sizeMatch && contentMatch))
 
       if (!pass) {
-        logger.debug(
+        scribe.debug(
           s"$this does not contain $path due to: canRead:$canRead, sizeMatch:$sizeMatch   (sizeOnDisk:$sizeOnDiskNow vs expected:$size), contentMatch:$contentMatch. FileOnDisk: $f "
         )
       }
@@ -137,14 +139,14 @@ class FolderFileStorage(val basePath: File)(implicit
   def contains(
       path: ManagedFilePath,
       retrieveSizeAndHash: Boolean
-  ): Future[Option[SharedFile]] =
-    Future.successful {
+  ): IO[Option[SharedFile]] =
+    IO.interruptible {
       val f = assemblePath(path)
       val canRead = f.canRead
       val pass = canRead
 
       if (!pass) {
-        logger.debug(s"$this does not contain $path due to: canRead:$canRead")
+        scribe.debug(s"$this does not contain $path due to: canRead:$canRead")
         None
       } else {
         if (retrieveSizeAndHash) {
@@ -156,23 +158,26 @@ class FolderFileStorage(val basePath: File)(implicit
 
     }
 
-  def createSource(
+  def stream(
       path: ManagedFilePath,
       fromOffset: Long
-  ): Source[ByteString, _] =
-    Source.lazySource(() =>
-      FileIO.fromPath(
-        assemblePath(path).toPath,
-        chunkSize = 8192,
-        startPosition = fromOffset
-      )
-    )
+  ): Stream[IO, Byte] =
+    Stream.unit.flatMap { _ =>
+      fs2.io.file
+        .Files[IO]
+        .readRange(
+          path = fs2.io.file.Path.fromNioPath(assemblePath(path).toPath),
+          start = fromOffset,
+          end = Long.MaxValue,
+          chunkSize = 8192 * 8
+        )
+    }
 
-  def exportFile(path: ManagedFilePath): Resource[IO,File] = {
+  def exportFile(path: ManagedFilePath): Resource[IO, File] = {
     val file = assemblePath(path)
     if (file.canRead) Resource.pure(file)
     else {
-      Resource.raiseError[IO,File,Throwable](
+      Resource.raiseError[IO, File, Throwable](
         new java.nio.file.NoSuchFileException(
           file.getAbsolutePath + " " + System.nanoTime
         )
@@ -188,7 +193,7 @@ class FolderFileStorage(val basePath: File)(implicit
       com.google.common.io.Files.copy(source, tmp)
     } catch {
       case e: java.io.IOException =>
-        logger.error(e, s"Exception while copying $source to $tmp")
+        scribe.error(e, s"Exception while copying $source to $tmp")
         throw e
     }
 
@@ -198,12 +203,12 @@ class FolderFileStorage(val basePath: File)(implicit
       val success = tmp.renameTo(destination)
       if (success) success
       else if (i > 0) {
-        logger.warning(
+        scribe.warn(
           s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}. Try $i more times."
         )
         tryRename(i - 1)
       } else {
-        logger.error(
+        scribe.error(
           s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}"
         )
         false
@@ -236,28 +241,21 @@ class FolderFileStorage(val basePath: File)(implicit
 
   def sink(
       path: ProposedManagedFilePath
-  ): Sink[ByteString, Future[(Long, Int, ManagedFilePath)]] = {
-    val createSink = () => {
-      val tmp = TempFile.createTempFile("foldertmp")
-      Future.successful(
-        FileIO
-          .toPath(tmp.toPath)
-          .mapMaterializedValue(_.flatMap { _ =>
-            val r = importFile(tmp, path)
-            tmp.delete
-            r.map(x => (x._1, x._2, x._3))
-          })
-      )
-    }
-
-    Sink
-      .lazyFutureSink(createSink)
-      .mapMaterializedValue(_.flatten.recoverWith { case _ =>
-        // empty file, upstream terminated without emitting an element
-        val tmp = TempFile.createTempFile("foldertmp")
-        val r = importFile(tmp, path)
-        r.map(x => { tmp.delete; (x._1, x._2, x._3) })
-      })
+  ): Pipe[IO, Byte, (Long, Int, ManagedFilePath)] = { (in: Stream[IO, Byte]) =>
+    val tmp = TempFile.createTempFile("foldertmp")
+    Stream.eval(
+      in.through(
+        fs2.io.file
+          .Files[IO]
+          .writeAll(fs2.io.file.Path.fromNioPath(tmp.toPath()))
+      ).compile
+        .drain
+        .flatMap { _ =>
+          importFile(tmp, path)
+            .guarantee(IO.interruptible { tmp.delete })
+            .map(x => (x._1, x._2, x._3))
+        }
+    )
   }
 
   private def checkContentEquality(file1: File, file2: File) =
@@ -269,12 +267,12 @@ class FolderFileStorage(val basePath: File)(implicit
       ) == FolderFileStorage
         .getContentHash(file2)
 
-  def importFile(
+  override def importFile(
       file: File,
       proposed: ProposedManagedFilePath
-  ): Future[(Long, Int, ManagedFilePath)] =
-    Future.successful({
-      logger.debug(s"Importing file $file under name $proposed")
+  ): IO[(Long, Int, ManagedFilePath)] =
+    IO.blocking({
+      scribe.debug(s"Importing file $file under name $proposed")
       val size = file.length
       val hash = FolderFileStorage.getContentHash(file)
       val managed = proposed.toManaged
@@ -286,16 +284,16 @@ class FolderFileStorage(val basePath: File)(implicit
           val elements = relativeToBase.split('/').toVector.filter(_.nonEmpty)
           ManagedFilePath(elements)
         }
-        (size, hash,  locationAsManagedFilePath)
+        (size, hash, locationAsManagedFilePath)
       } else if (assemblePath(managed).canRead) {
         val finalFile = assemblePath(managed)
-        logger.debug(
+        scribe.debug(
           s"Found a file already in storage with the same name ($finalFile). Check for equality."
         )
         if (checkContentEquality(finalFile, file))
-          (size, hash,  managed)
+          (size, hash, managed)
         else {
-          logger.debug(s"Equality failed. Importing file. $file to $finalFile")
+          scribe.debug(s"Equality failed. Importing file. $file to $finalFile")
 
           if (!config.allowOverwrite) {
             def candidates(i: Int, past: List[File]): List[File] = {
@@ -309,7 +307,7 @@ class FolderFileStorage(val basePath: File)(implicit
 
             val oldFiles = candidates(0, Nil)
 
-            logger.debug(s"Moving $oldFiles away.")
+            scribe.debug(s"Moving $oldFiles away.")
 
             oldFiles
               .map(f => (parseVersion(f) + 1, f))
@@ -325,16 +323,16 @@ class FolderFileStorage(val basePath: File)(implicit
           }
 
           copyFile(file, finalFile)
-          (size, hash,  managed)
+          (size, hash, managed)
         }
 
       } else {
         copyFile(file, assemblePath(managed))
-        (size, hash,  managed)
+        (size, hash, managed)
       }
     })
 
-  def uri(mp: ManagedFilePath) = Future.successful{
+  def uri(mp: ManagedFilePath) = IO.pure {
     // throw new RuntimeException("URI not supported")
     val path = assemblePath(mp).toURI.toString
     Uri(path)

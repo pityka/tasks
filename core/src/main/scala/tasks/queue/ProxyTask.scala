@@ -33,21 +33,23 @@ import tasks.fileservice._
 import tasks.shared._
 import tasks._
 import tasks.wire._
-import scala.concurrent.{Promise, Future}
+import scala.concurrent.Promise
+import cats.effect.IO
+import tasks.caching.TaskResultCache
 
 /* Local proxy of the remotely executed task */
 class ProxyTask[Input, Output](
     taskId: TaskId,
     inputDeserializer: Spore[Unit, Deserializer[Input]],
     outputSerializer: Spore[Unit, Serializer[Output]],
-    function: Spore[Input, ComputationEnvironment => Future[Output]],
+    function: Spore[Input, ComputationEnvironment => IO[Output]],
     input: Input,
     writer: Serializer[Input],
     reader: Deserializer[Output],
     resourceConsumed: VersionedResourceRequest,
     queueActor: ActorRef,
     fileServicePrefix: FileServicePrefix,
-    cacheActor: ActorRef,
+    cache: TaskResultCache,
     priority: Priority,
     promise: Promise[Output],
     labels: Labels,
@@ -68,7 +70,7 @@ class ProxyTask[Input, Output](
 
     val persisted: Option[Input] = input match {
       case x: HasPersistent[_] => Some(x.persistent.asInstanceOf[Input])
-      case _                       => None
+      case _                   => None
     }
 
     val hash: HashedTaskDescription =
@@ -78,19 +80,18 @@ class ProxyTask[Input, Output](
       )
 
     val scheduleTask = ScheduleTask(
-      hash,
-      inputDeserializer.as[AnyRef, AnyRef],
-      outputSerializer.as[AnyRef, AnyRef],
-      function.as[AnyRef, AnyRef],
-      resourceConsumed,
-      queueActor,
-      fileServicePrefix,
-      cacheActor,
-      cache,
-      priority,
-      labels,
-      lineage,
-      self
+      description = hash,
+      inputDeserializer = inputDeserializer.as[AnyRef, AnyRef],
+      outputSerializer = outputSerializer.as[AnyRef, AnyRef],
+      function = function.as[AnyRef, AnyRef],
+      resource = resourceConsumed,
+      queueActor = queueActor,
+      fileServicePrefix = fileServicePrefix,
+      tryCache = cache,
+      priority = priority,
+      labels = labels,
+      lineage = lineage,
+      proxy = self
     )
 
     log.debug("proxy submitting ScheduleTask object to queue.")

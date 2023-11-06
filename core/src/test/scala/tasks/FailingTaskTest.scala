@@ -30,7 +30,7 @@ import org.scalatest.matchers.should.Matchers
 import com.typesafe.config.ConfigFactory
 
 import tasks.jsonitersupport._
-import scala.concurrent.Future
+import cats.effect.IO
 
 object FailingTasksTest extends TestHelpers {
 
@@ -50,32 +50,30 @@ object FailingTasksTest extends TestHelpers {
 
   class TestException extends RuntimeException("expected exception thrown")
 
-  val fail = AsyncTask[Input, String]("failingtasktest-fail", 1) {
-    _ => implicit computationEnvironment =>
-      sideEffect += "execution of fail task"
-      val `true` = true
-      if (`true`) {
-        throw new TestException
-      }
-      Future("fail")
+  val fail = Task[Input, String]("failingtasktest-fail", 1) { _ => _ =>
+    sideEffect += "execution of fail task"
+    val `true` = true
+    if (`true`) {
+      throw new TestException
+    }
+    IO.pure("fail")
   }
 
-  val success = AsyncTask[Input, String]("failingtasktest-success", 1) {
-    _ => implicit computationEnvironment =>
-      sideEffect += "execution of success task"
-      Future("succeeded")
+  val success = Task[Input, String]("failingtasktest-success", 1) { _ => _ =>
+    sideEffect += "execution of success task"
+    IO("succeeded")
   }
 
   def run: Option[(String, String, String)] = {
     withTaskSystem(testConfig) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
+      // import scala.concurrent.ExecutionContext.Implicits.global
 
-      val f1 = fail(Input(1))(ResourceRequest(1, 500)).recover {
+      val f1 = fail(Input(1))(ResourceRequest(1, 500)).handleError {
         case _: TestException => "recovered"
       }
       val f2 = success(Input(2))(ResourceRequest(1, 500))
       val f3 = f1.flatMap(_ =>
-        fail(Input(1))(ResourceRequest(1, 500)).recover {
+        fail(Input(1))(ResourceRequest(1, 500)).handleError {
           case _: TestException => "recovered"
         }
       )

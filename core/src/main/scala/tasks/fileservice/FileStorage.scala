@@ -27,14 +27,7 @@
 
 package tasks.fileservice
 
-import akka.actor._
-import akka.stream.scaladsl._
-import akka.stream._
-import akka.util._
-
 import com.google.common.hash._
-
-import scala.concurrent._
 
 import java.io.{File, InputStream}
 
@@ -43,6 +36,7 @@ import tasks.util.config.TasksConfig
 import tasks.util.eq._
 import cats.effect.kernel.Resource
 import cats.effect.IO
+import fs2.Stream
 
 object FileStorage {
   def getContentHash(is: InputStream): Int = {
@@ -56,65 +50,71 @@ object FileStorage {
 }
 
 class RemoteFileStorage(implicit
-    mat: Materializer,
-    ec: ExecutionContext,
     streamHelper: StreamHelper,
-    as: ActorSystem,
     config: TasksConfig
 ) {
 
-  val log = akka.event.Logging(as.eventStream, "remote-storage")
 
   def uri(mp: RemoteFilePath): Uri = mp.uri
 
-  def createSource(
+  def stream(
       path: RemoteFilePath,
       fromOffset: Long
-  ): Source[ByteString, _] =
-    streamHelper.createSource(uri(path), fromOffset)
+  ): Stream[IO, Byte] =
+    streamHelper.createStream(uri(path), fromOffset)
 
-  def getSizeAndHash(path: RemoteFilePath): Future[(Long, Int)] =
+  def getSizeAndHash(path: RemoteFilePath): IO[(Long, Int)] =
     path.uri.scheme match {
       case "file" =>
-        val file = new File(path.uri.path)
-        openFileInputStream(file) { is =>
-          val hash = FileStorage.getContentHash(is)
-          Future.successful((file.length, hash))
+        IO.interruptible {
+          val file = new File(path.uri.path)
+          val hash = openFileInputStream(file) { is =>
+            FileStorage.getContentHash(is)
+          }
+          (file.length, hash)
         }
       case "s3" | "http" | "https" =>
-        streamHelper.getContentLengthAndETag(uri(path)).map {
-          case (size, etag) =>
+        streamHelper
+          .getContentLengthAndETag(uri(path))
+          .map { case (size, etag) =>
             (
               size.getOrElse(
                 throw new RuntimeException(s"Size can't retrieved for $path")
               ),
               etag.map(_.hashCode).getOrElse(-1)
             )
-        }
+          }
     }
 
-  def contains(path: RemoteFilePath, size: Long, hash: Int): Future[Boolean] =
+  def contains(path: RemoteFilePath, size: Long, hash: Int): IO[Boolean] =
     getSizeAndHash(path)
       .map { case (size1, hash1) =>
         size < 0 || (size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1))
       }
-      .recover { case e =>
-        log.debug("Exception while looking up remote file. {}", e)
+      .handleError { case e =>
+        scribe.debug("Exception while looking up remote file. {}", e)
         false
       }
 
   def exportFile(path: RemoteFilePath): Resource[IO, File] = {
-    val localFile = path.uri.akka.scheme == "file" && new File(
-      path.uri.akka.path.toString
+    val localFile = path.uri.scheme == "file" && new File(
+      path.uri.path.toString
     ).canRead
-    if (localFile) Resource.pure(new File(path.uri.akka.path.toString))
+    if (localFile) Resource.pure(new File(path.uri.path.toString))
     else {
-      Resource.make(IO.fromFuture(IO {
+      Resource.make({
         val file = TempFile.createTempFile("")
-        createSource(path, fromOffset = 0L)
-          .runWith(FileIO.toPath(file.toPath))
+        stream(path, fromOffset = 0L)
+          .through(
+            fs2.io.file
+              .Files[IO]
+              .writeAll(fs2.io.file.Path.fromNioPath(file.toPath))
+          )
+          .compile
+          .drain
           .map(_ => file)
-      }))(file => IO(file.delete()))
+
+      })(file => IO(file.delete()))
     }
 
   }
@@ -123,40 +123,54 @@ class RemoteFileStorage(implicit
 
 trait ManagedFileStorage {
 
-  def uri(mp: ManagedFilePath): Future[Uri]
 
-  def createSource(
+  def uri(mp: ManagedFilePath): IO[Uri]
+
+  def stream(
       path: ManagedFilePath,
       fromOffset: Long
-  ): Source[ByteString, _]
+  ): Stream[IO, Byte]
 
   /* If size < 0 then it must not check the size and the hash
    *  but must return true iff the file is readable
    */
-  def contains(path: ManagedFilePath, size: Long, hash: Int): Future[Boolean]
+  def contains(path: ManagedFilePath, size: Long, hash: Int): IO[Boolean]
 
   def contains(
       path: ManagedFilePath,
       retrieveSizeAndHash: Boolean
-  ): Future[Option[SharedFile]]
+  ): IO[Option[SharedFile]]
 
   def importFile(
       f: File,
       path: ProposedManagedFilePath
-  ): Future[(Long, Int, ManagedFilePath)]
+  ): IO[(Long, Int, ManagedFilePath)] =
+    tasks.util.retryIO(s"upload to $path")(importFile1(f, path), 4)(scribe.Logger[ManagedFileStorage])
+
+  private def importFile1(
+      f: File,
+      path: ProposedManagedFilePath
+  ): IO[(Long, Int, ManagedFilePath)] = IO.unit.flatMap { _ =>
+    fs2.io.file
+      .Files[IO]
+      .readAll(fs2.io.file.Path.fromNioPath(f.toPath))
+      .through(sink(path))
+      .compile
+      .lastOrError
+  }
 
   def sink(
       path: ProposedManagedFilePath
-  ): Sink[ByteString, Future[(Long, Int, ManagedFilePath)]]
+  ): fs2.Pipe[IO, Byte, (Long, Int, ManagedFilePath)]
 
-  def exportFile(path: ManagedFilePath): Resource[IO,File]
+  def exportFile(path: ManagedFilePath): Resource[IO, File]
 
-  def sharedFolder(prefix: Seq[String]): Future[Option[File]]
+  def sharedFolder(prefix: Seq[String]): IO[Option[File]]
 
   def delete(
       path: ManagedFilePath,
       expectedSize: Long,
       expectedHash: Int
-  ): Future[Boolean]
+  ): IO[Boolean]
 
 }

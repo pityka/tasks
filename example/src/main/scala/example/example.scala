@@ -27,8 +27,6 @@ package example
 import tasks._
 import tasks.jsonitersupport._
 
-import scala.concurrent._
-import scala.concurrent.duration._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import cats.effect.IO
@@ -70,7 +68,7 @@ object PiTasks {
     * Specifies input output types and name of task. The tasks's body is an
     * Input => tasks.ComputationEnvironment => Output function
     */
-  val batchCalc = AsyncTask[BatchInput, BatchResult]("batch", 1) {
+  val batchCalc = Task[BatchInput, BatchResult]("batch", 1) {
 
     /* Input of task, does not need to be a pattern match */
     case BatchInput(sizeFile: SharedFile, id: Int) =>
@@ -94,12 +92,12 @@ object PiTasks {
         BatchResult(in, out)
         }
 
-        }.unsafeToFuture()
+        }
   }
 
-  val piCalc = AsyncTask[PiInput, PiResult]("reduce", 1) {
+  val piCalc = Task[PiInput, PiResult]("reduce", 1) {
     case PiInput(in, out) =>
-      _ => Future.successful(PiResult(in.toDouble / (in + out) * 4d))
+      _ => IO.pure(PiResult(in.toDouble / (in + out) * 4d))
   }
 }
 
@@ -123,9 +121,9 @@ object Fib {
     implicit val codec: JsonValueCodec[FibReduce] = JsonCodecMaker.make
   }
 
-  val reduce = AsyncTask[FibReduce, Int]("fibreduce", 1) {
+  val reduce = Task[FibReduce, Int]("fibreduce", 1) {
     case FibReduce(f1, f2) =>
-      _ => Future.successful(f1 + f2)
+      _ => IO.pure(f1 + f2)
   }
 
   /** Recursive Fibonacci
@@ -137,24 +135,24 @@ object Fib {
     * the body of the task is running.
     */
   val fibtask: TaskDefinition[FibInput, Int] =
-    AsyncTask[FibInput, Int]("fib", 1) { case FibInput(n) =>
+    Task[FibInput, Int]("fib", 1) { case FibInput(n) =>
       implicit cxt =>
         n match {
-          case 0 => Future.successful(0)
-          case 1 => Future.successful(1)
+          case 0 => IO.pure(0)
+          case 1 => IO.pure(1)
           case n => {
 
             val f1 = fibtask(FibInput(n - 1))(ResourceRequest(1, 1, 1))
             val f2 = fibtask(FibInput(n - 2))(ResourceRequest(1, 1, 1))
 
-            val f3: Future[Int] = for {
+            val f3: IO[Int] = for {
+              _ <- releaseResourcesEarly
               r1 <- f1
               r2 <- f2
               r3 <- reduce(FibReduce(r1, r2))(ResourceRequest(1, 1, 1))
 
             } yield r3
 
-            releaseResources
 
             f3
 
@@ -177,9 +175,8 @@ object PiApp extends App {
   withTaskSystem { implicit ts =>
     val numTasks = 100
 
-    import scala.concurrent.ExecutionContext.Implicits.global
 
-    val taskSize: Future[SharedFile] = {
+    val taskSize: IO[SharedFile] = {
       val tmp = java.io.File.createTempFile("size", ".txt")
       val writer = new java.io.FileWriter(tmp)
       writer.write("1000")
@@ -189,12 +186,11 @@ object PiApp extends App {
     }
 
     /* Start tasks for Pi */
-    val pi: Future[PiResult] = taskSize.flatMap { taskSize =>
-      Future
-        .sequence(
+    val pi: IO[PiResult] = taskSize.flatMap { taskSize =>
+      IO.parSequenceN(4)(
           1 to numTasks map { i =>
             batchCalc(BatchInput(taskSize, i))(ResourceRequest(1, 1000, 1))
-          }
+          } toList
         )
         .flatMap { batches =>
           piCalc(
@@ -207,8 +203,9 @@ object PiApp extends App {
     val fibResult = fibtask(FibInput(4))(ResourceRequest(1, 1000, 1))
 
     /* Block and wait for the futures */
-    println(Await.result(pi, atMost = 10 minutes))
-    println(Await.result(fibResult, atMost = 10 minutes))
+
+    println(pi.unsafeRunSync())
+    println(fibResult.unsafeRunSync())
 
   }
 

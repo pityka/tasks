@@ -8,10 +8,8 @@ import com.github.plokhotnyuk.jsoniter_scala.core._
 
 class StaticMessageSerializer(system: ExtendedActorSystem) extends Serializer {
 
-  implicit val as = system
+  implicit val as : ExtendedActorSystem = system
 
-  val log =
-    akka.event.Logging(system.eventStream, "tasks.wire.StaticMessageSerializer")
 
   override def identifier: Int = 999
 
@@ -19,7 +17,7 @@ class StaticMessageSerializer(system: ExtendedActorSystem) extends Serializer {
     o match {
       case t: StaticMessage =>
         val encoded = writeToArray(t, WriterConfig)
-        log.debug(s"Encoding {} as {}", t, encoded)
+        scribe.debug(s"Encoding $t as $encoded")
         encoded
     }
 
@@ -30,7 +28,7 @@ class StaticMessageSerializer(system: ExtendedActorSystem) extends Serializer {
       manifest: Option[Class[_]]
   ): AnyRef = {
     val r = readFromArray[StaticMessage](bytes)
-    log.debug(s"Decoding {} as {}", new String(bytes), r)
+    scribe.debug(s"Decoding ${new String(bytes)} as $r")
     r
   }
 
@@ -38,11 +36,9 @@ class StaticMessageSerializer(system: ExtendedActorSystem) extends Serializer {
 
 class ScheduleTaskSerializer(system: ExtendedActorSystem) extends Serializer {
 
-  implicit val as = system
-  implicit val schCodec = ScheduleTask.codec(system)
+  implicit val as  : ExtendedActorSystem = system
+  implicit val schCodec : JsonValueCodec[ScheduleTask]= ScheduleTask.codec(system)
 
-  val log =
-    akka.event.Logging(system.eventStream, "tasks.wire.ScheduleTaskSerializer")
 
   override def identifier: Int = 1000
 
@@ -51,7 +47,7 @@ class ScheduleTaskSerializer(system: ExtendedActorSystem) extends Serializer {
       case t: ScheduleTask =>
         val encoded = writeToArray(t, WriterConfig)
 
-        log.debug(s"Encoding {} as {}", t, encoded)
+        scribe.debug(s"Encoding $t as $encoded")
         encoded
     }
 
@@ -63,17 +59,14 @@ class ScheduleTaskSerializer(system: ExtendedActorSystem) extends Serializer {
   ): AnyRef = {
 
     val r = readFromArray[ScheduleTask](bytes)
-    log.debug(s"Decoding {} as {}", new String(bytes), r)
+    scribe.debug(s"Decoding ${new String(bytes)} as $r")
     r
   }
 
 }
 class SharedFileSerializer(system: ExtendedActorSystem) extends Serializer {
 
-  implicit val as = system
-
-  val log =
-    akka.event.Logging(system.eventStream, "tasks.wire.SharedFileSerializer")
+  implicit val as : ExtendedActorSystem= system
 
   override def identifier: Int = 1001
 
@@ -81,7 +74,7 @@ class SharedFileSerializer(system: ExtendedActorSystem) extends Serializer {
     o match {
       case t: SharedFile =>
         val encoded = writeToArray(t, WriterConfig)
-        log.debug(s"Encoding {} as {}", t, encoded)
+        scribe.debug(s"Encoding $t as $encoded")
         encoded
     }
 
@@ -92,7 +85,7 @@ class SharedFileSerializer(system: ExtendedActorSystem) extends Serializer {
       manifest: Option[Class[_]]
   ): AnyRef = {
     val r = readFromArray[SharedFile](bytes)
-    log.debug(s"Decoding {} as {}", new String(bytes), r)
+    scribe.debug(s"Decoding ${new String(bytes)} as $r")
     r
   }
 

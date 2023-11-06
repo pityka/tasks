@@ -28,16 +28,16 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import org.scalatest.matchers.should.Matchers
 
-import scala.concurrent.Future
 import tasks.jsonitersupport._
 import com.typesafe.config.ConfigFactory
+import cats.effect.IO
 
 object SlaveShutdownTest extends TestHelpers {
 
-  val testTask = AsyncTask[Input, Int]("slaveshutdowntest", 1) {
-    _ => implicit computationEnvironment =>
-      log.info("Hello from task")
-      Future(1)
+  val testTask = Task[Input, Int]("slaveshutdowntest", 1) {
+    _ => _ =>
+      scribe.info("Hello from task")
+      IO(1)
   }
 
   val testConfig2 = {

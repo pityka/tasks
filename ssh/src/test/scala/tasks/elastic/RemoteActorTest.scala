@@ -32,13 +32,12 @@ import tasks.jsonitersupport._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 
-import scala.concurrent.Future
 import tasks._
 import com.typesafe.config.ConfigFactory
 import tasks.util.SerializedActorRef
 import scala.concurrent.duration._
-import akka.event.Logging
 import akka.pattern.ask
+import cats.effect.IO
 
 object SHRemoteActorTest extends TestHelpers {
   import akka.actor._
@@ -46,17 +45,16 @@ object SHRemoteActorTest extends TestHelpers {
     val ar = Array.ofDim[Boolean](n)
     0 until n foreach (i => ar(i) = false)
     val refs = Array.ofDim[ActorRef](n)
-    val log = Logging(context.system, this)
 
     def receive = { case x: Int =>
-      log.info("received: " + x)
+      scribe.info("received: " + x)
       ar(x) = true
       refs(x) = sender()
       if (ar.forall(identity)) {
-        log.info("Unblock")
+        scribe.info("Unblock")
         refs.foreach(_ ! "unblock")
       } else {
-        log.info(
+        scribe.info(
           s"Waiting for ${ar.toList.zipWithIndex.filter(b => !b._1).map(_._2)}"
         )
       }
@@ -78,31 +76,31 @@ object SHRemoteActorTest extends TestHelpers {
   implicit val codec: JsonValueCodec[Seq[String]] = JsonCodecMaker.make
 
   val outerTask =
-    AsyncTask[NumInput, Seq[String]]("remoteactortest_outertask", 1) {
+    Task[NumInput, Seq[String]]("remoteactortest_outertask", 1) {
       case NumInput(num) =>
         implicit ce =>
-          ce.log.info("run outer")
+          scribe.info("run outer")
           implicit val as = ce.actorSystem
           val ac1 = as.actorOf(Props(new Actor1(num)), "1")
 
-          Future
-            .sequence(0 until num map { n =>
+          IO
+            .parSequenceN(4)(0 until num map { n =>
               innerTask(ActorInput(n, SerializedActorRef(ac1)))(
                 ResourceRequest(1, 500),
                 noCache = true
               )
-            })
+            } toList)
 
     }
   val innerTask =
-    AsyncTask[ActorInput, String]("remoteactortest_innertask", 1) {
+    Task[ActorInput, String]("remoteactortest_innertask", 1) {
       case ActorInput(n, actor) =>
         implicit ce =>
-          ce.log.info("run inner " + n)
+          scribe.info("run inner " + n)
           implicit val as = ce.actorSystem
-          actor.resolve(60 seconds).flatMap { ac =>
-            ce.log.info("sending my number " + n)
-            ac.ask(n)(akka.util.Timeout(120 seconds)).mapTo[String]
+          IO.fromFuture(IO.delay(actor.resolve(60 seconds))).flatMap { ac =>
+            scribe.info("sending my number " + n)
+            IO.fromFuture(IO.delay(ac.ask(n)(akka.util.Timeout(120 seconds)).mapTo[String]))
           }
     }
 
@@ -111,7 +109,6 @@ object SHRemoteActorTest extends TestHelpers {
 
     val tmp = tasks.util.TempFile.createTempFile(".temp")
     tmp.delete
-    println(tmp)
     val testConfig2 =
       ConfigFactory.parseString(
         s"""tasks.fileservice.connectToProxy = true

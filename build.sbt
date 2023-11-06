@@ -26,8 +26,8 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.10",
-  crossScalaVersions := Seq("2.12.15", "2.13.10"),
+  scalaVersion := "2.13.12",
+  crossScalaVersions := Seq("2.13.12"),
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -37,7 +37,7 @@ lazy val commonSettings = Seq(
     "-language:postfixOps",
     "-language:implicitConversions",
     "-unchecked", // Enable additional warnings where generated code depends on assumptions.
-    "-Xfatal-warnings", // Fail the compilation if there are any warnings.
+    // "-Xfatal-warnings", // Fail the compilation if there are any warnings.
     "-Xlint:adapted-args", // Warn if an argument list is modified to match the receiver.
     "-Xlint:constant", // Evaluation of a constant arithmetic expression results in an error.
     "-Xlint:delayedinit-select", // Selecting member of DelayedInit.
@@ -51,14 +51,14 @@ lazy val commonSettings = Seq(
     "-Xlint:private-shadow", // A private field (or class parameter) shadows a superclass field.
     "-Xlint:stars-align", // Pattern sequence wildcard must align with sequence component.
     "-Xlint:type-parameter-shadow", // A local type parameter shadows a type already in scope.
-    "-Ywarn-extra-implicit", // Warn when more than one implicit parameter section is defined.
-    "-Ywarn-numeric-widen", // Warn when numerics are widened.
-    "-Ywarn-unused:implicits", // Warn if an implicit parameter is unused.
-    "-Ywarn-unused:imports", // Warn if an import selector is not referenced.
-    "-Ywarn-unused:locals", // Warn if a local definition is unused.
-    "-Ywarn-unused:params", // Warn if a value parameter is unused.
-    "-Ywarn-unused:patvars", // Warn if a variable bound in a pattern is unused.
-    "-Ywarn-unused:privates" // Warn if a private member is unused.
+    // "-Ywarn-extra-implicit", // Warn when more than one implicit parameter section is defined.
+    // "-Ywarn-numeric-widen", // Warn when numerics are widened.
+    // "-Ywarn-unused:implicits", // Warn if an implicit parameter is unused.
+    // "-Ywarn-unused:imports", // Warn if an import selector is not referenced.
+    // "-Ywarn-unused:locals", // Warn if a local definition is unused.
+    // "-Ywarn-unused:params", // Warn if a value parameter is unused.
+    // "-Ywarn-unused:patvars", // Warn if a variable bound in a pattern is unused.
+    // "-Ywarn-unused:privates" // Warn if a private member is unused.
   )
 ) ++ Seq(
   fork := true,
@@ -71,6 +71,9 @@ lazy val circeVersion = "0.14.5"
 lazy val jsoniterVersion = "2.13.31"
 lazy val akkaVersion = "2.6.19"
 lazy val shapelessVersion = "2.3.10"
+lazy val http4sVersion = "0.23.23"
+lazy val scribeVersion = "3.12.2"
+lazy val fs2Version = "3.8.0"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
   .crossType(sbtcrossproject.CrossPlugin.autoImport.CrossType.Pure)
@@ -112,27 +115,30 @@ lazy val spores = project
   )
 lazy val akkaProvided = List(
   "com.typesafe.akka" %% "akka-actor" % akkaVersion % Provided,
-  "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided,
-  "com.typesafe.akka" %% "akka-http" % "10.2.9" % Provided,
-  "com.typesafe.akka" %% "akka-http-xml" % "10.2.9" % Provided,
-  "com.lightbend.akka" %% "akka-stream-alpakka-s3" % "3.0.4" % Provided
+  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion % Provided,
+  "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided
 )
 lazy val core = project
   .in(file("core"))
   .settings(commonSettings: _*)
   .settings(
     name := "tasks-core",
-    PB.targets in Compile := Seq(
-      scalapb.gen() -> (sourceManaged in Compile).value
-    ),
+    
     libraryDependencies ++= Seq(
+      "co.fs2" %% "fs2-io" % fs2Version,
+      "co.fs2" %% "fs2-reactive-streams" % fs2Version,
+      "org.http4s" %% "http4s-ember-client" % http4sVersion,
+      "org.http4s" %% "http4s-ember-server" % http4sVersion,
+      "org.http4s" %% "http4s-dsl" % http4sVersion,
+      "software.amazon.awssdk" % "s3" % "2.20.135",
       "com.google.guava" % "guava" % "31.1-jre", // scala-steward:off
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe" % "config" % "1.4.2",
       "org.typelevel" %% "cats-effect" % "3.4.11",
       "io.github.pityka" %% "selfpackage" % "2.0.0",
       "org.scalatest" %% "scalatest" % "3.2.16" % "test",
-      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
+      "com.outr" %% "scribe" % scribeVersion,
+      "com.outr" %% "scribe-slf4j" % "3.12.2",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test"
@@ -173,52 +179,52 @@ lazy val kubernetes = project
   )
   .dependsOn(core % "compile->compile;test->test")
 
-lazy val tracker = project
-  .in(file("tracker"))
-  .settings(commonSettings: _*)
-  .settings(
-    name := "tasks-tracker",
-    libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.16" % "test",
-      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
-    ) ++ akkaProvided,
-    resources in Compile += (fastOptJS in Compile in uifrontend).value.data
-  )
-  .dependsOn(core % "compile->compile;test->test")
+// lazy val tracker = project
+//   .in(file("tracker"))
+//   .settings(commonSettings: _*)
+//   .settings(
+//     name := "tasks-tracker",
+//     libraryDependencies ++= Seq(
+//       "org.scalatest" %% "scalatest" % "3.2.10" % "test",
+//       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
+//     ) ++ akkaProvided,
+//     // resources in Compile += (fastOptJS in Compile in uifrontend).value.data
+//   )
+//   .dependsOn(core % "compile->compile;test->test")
 
-lazy val uibackend = project
-  .in(file("uibackend"))
-  .settings(commonSettings: _*)
-  .settings(
-    name := "tasks-ui-backend",
-    libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.2.16" % "test"
-    ) ++ akkaProvided,
-    resources in Compile += (fastOptJS in Compile in uifrontend).value.data
-  )
-  .dependsOn(core % "compile->compile;test->test")
+// lazy val uibackend = project
+//   .in(file("uibackend"))
+//   .settings(commonSettings: _*)
+//   .settings(
+//     name := "tasks-ui-backend",
+//     libraryDependencies ++= Seq(
+//       "org.scalatest" %% "scalatest" % "3.2.10" % "test"
+//     ) ++ akkaProvided,
+//     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
+//   )
+//   .dependsOn(core % "compile->compile;test->test")
 
-lazy val uifrontend = project
-  .in(file("uifrontend"))
-  .settings(commonSettings: _*)
-  .settings(
-    name := "tasks-ui-frontend",
-    libraryDependencies ++= Seq(
-      "org.scala-js" %%% "scalajs-dom" % "1.2.0",
-      "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % jsoniterVersion,
-      "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
-      "com.raquo" %%% "laminar" % "0.13.0"
-    ),
-    mimaPreviousArtifacts := Set.empty,
-    fork := false
-  )
-  .dependsOn(sharedJS)
-  .enablePlugins(ScalaJSPlugin)
+// lazy val uifrontend = project
+//   .in(file("uifrontend"))
+//   .settings(commonSettings: _*)
+//   .settings(
+//     name := "tasks-ui-frontend",
+//     libraryDependencies ++= Seq(
+//       "org.scala-js" %%% "scalajs-dom" % "1.2.0",
+//       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % jsoniterVersion,
+//       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
+//       "com.raquo" %%% "laminar" % "0.13.0"
+//     ),
+//     mimaPreviousArtifacts := Set.empty,
+//     fork := false
+//   )
+//   .dependsOn(sharedJS)
+//   .enablePlugins(ScalaJSPlugin)
 
 lazy val example = project
   .in(file("example"))
   .settings(commonSettings: _*)
-  .dependsOn(core, ecoll, ssh)
+  .dependsOn(core, ssh)
   .enablePlugins(JavaAppPackaging)
   .settings(
     executableScriptName := "entrypoint",
@@ -228,6 +234,10 @@ lazy val example = project
     crossScalaVersions := Nil,
     libraryDependencies ++= Seq(
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
+    ) ++ Seq(
+       "com.typesafe.akka" %% "akka-actor" % akkaVersion ,
+  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion ,
+  "com.typesafe.akka" %% "akka-remote" % akkaVersion 
     )
   )
 
@@ -282,17 +292,16 @@ lazy val root = (project in file("."))
   .aggregate(
     spores,
     core,
-    ecoll,
     upicklesupport,
     circe,
     sharedJVM,
     sharedJS,
     ec2,
     ssh,
-    uibackend,
-    uifrontend,
+    // uibackend,
+    // uifrontend,
     kubernetes,
-    tracker,
+    // tracker,
     example
   )
 
@@ -305,7 +314,6 @@ lazy val testables = (project in file("testables"))
   .aggregate(
     spores,
     core,
-    ecoll,
     upicklesupport,
     circe,
     sharedJVM,
