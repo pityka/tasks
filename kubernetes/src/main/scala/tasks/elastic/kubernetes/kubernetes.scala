@@ -252,7 +252,7 @@ object K8SGetNodeName extends GetNodeName {
 }
 
 object K8SElasticSupport extends ElasticSupportFromConfig {
-  implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
+  implicit val fqcn : ElasticSupportFqcn = ElasticSupportFqcn(
     "tasks.elastic.kubernetes.K8SElasticSupport"
   )
   def apply(implicit config: TasksConfig) = {

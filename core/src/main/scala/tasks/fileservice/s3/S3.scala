@@ -42,16 +42,16 @@ case class S3UploadResponse(etag: String, contentLength: Long)
 
 object S3 {
   def makeAWSSDKClient(regionProfileName: Option[String]) = S3AsyncClient
-    .builder()
-    .credentialsProvider(DefaultCredentialsProvider.create())
-    .region({
-      val b = DefaultAwsRegionProviderChain.builder()
-      regionProfileName
-        .foldLeft(b)((a, b) => a.profileName(b))
-        .build
-        .getRegion()
-    })
-    .build()
+      .builder()
+      .credentialsProvider(DefaultCredentialsProvider.create())
+      .region({
+        val b = DefaultAwsRegionProviderChain.builder()
+        regionProfileName
+          .foldLeft(b)((a, b) => a.profileName(b))
+          .build
+          .getRegion()
+      })
+      .build()
 }
 
 /** Wrapper of AWS SDK's S3AsyncClient into fs2.Stream and cats.effect.IO
@@ -158,7 +158,7 @@ class S3(s3: S3AsyncClient) {
       serverSideEncryption: Option[String],
       grantFullControl: List[String]
   ): Pipe[IO, Byte, S3UploadResponse] = {
-    val chunkSizeBytes = math.max(5, partSize) * 1048576
+    val chunkSizeBytes = math.max(5,partSize) * 1048576
 
     def initiateMultipartUpload = {
       val base = CreateMultipartUploadRequest
@@ -273,23 +273,21 @@ class S3(s3: S3AsyncClient) {
 
   }
 
-  def getObjectMetadata(
-      bucket: String,
-      key: String
-  ): IO[Option[HeadObjectResponse]] =
-    io(
-      s3.headObject(
-        HeadObjectRequest
-          .builder()
-          .bucket(bucket)
-          .key(key)
-          .build()
-      )
-    ).map(Option(_))
-      .handleErrorWith(_ match {
-        case _: NoSuchKeyException => IO.pure(Option.empty[HeadObjectResponse])
-        case e: Throwable          => IO.raiseError(e)
-      })
+   def getObjectMetadata(bucket: String, key: String): IO[Option[HeadObjectResponse]] =
+        io(
+          s3.headObject(
+            HeadObjectRequest
+              .builder()
+              .bucket(bucket)
+              .key(key)
+              .build()
+          )
+        ).map(Option(_)).handleErrorWith(_ match {
+          case _: NoSuchKeyException => IO.pure(Option.empty[HeadObjectResponse] )
+          case e : Throwable => IO.raiseError(e)
+        })
+      
+      
 
   /** Reads a file in a single request. Suitable for small files.
     *

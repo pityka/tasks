@@ -56,6 +56,7 @@ object InputWithHasPersistentTest extends TestHelpers {
 
   def run = {
     withTaskSystem(testConfig) { implicit ts =>
+
       val future = for {
         t1 <- task(InputWithHasPersistent(Some(1), Some(1)))(
           ResourceRequest(1, 500)

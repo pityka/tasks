@@ -35,12 +35,12 @@ object EarlyShutdownTest extends TestHelpers {
 
   val sideEffect = scala.collection.mutable.ArrayBuffer[String]()
 
-  val task = Task[Input, Int]("earlyshutdowntest", 1) { _ => _ =>
-    IO {
-      sideEffect += "execution of task"
+  val task = Task[Input, Int]("earlyshutdowntest", 1) {
+    _ =>  _ =>
+      IO{sideEffect += "execution of task"
       Thread.sleep(2000)
       1
-    }
+  }
   }
 
   def run = {

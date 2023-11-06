@@ -27,8 +27,11 @@
 
 package tasks.fileservice
 
+
+
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
+
 
 case class FileServicePrefix(list: Vector[String]) {
   def append(n: String) = FileServicePrefix(list :+ n)

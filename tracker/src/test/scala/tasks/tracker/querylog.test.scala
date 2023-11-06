@@ -98,11 +98,13 @@ object QueryLogTest extends TestHelpers {
 
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
+
       val future = for {
         t1 <- task1(Input(1))(ResourceRequest(1, 500))
       } yield t1
 
       future.timeout(30 seconds).unsafeRunSync()
+
 
     }
   }

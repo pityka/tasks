@@ -34,6 +34,7 @@ import org.http4s.websocket.WebSocketFrame
 
 class AppUIBackendImpl(implicit config: TasksConfig) extends AppUI {
 
+  
   private val ref =
     cats.effect.kernel.Ref[IO].of(UIAppState.empty).unsafeRunSync()
 
@@ -124,7 +125,7 @@ class AppUIBackendImpl(implicit config: TasksConfig) extends AppUI {
 
   def nodeRegistryEventListener: EventListener[NodeRegistry.Event] =
     new EventListener[NodeRegistry.Event] {
-      def close() = () // eventListener ! PoisonPill
+      def close() = () //eventListener ! PoisonPill
       def receive(event: NodeRegistry.Event): Unit = {
         update(event)
       }

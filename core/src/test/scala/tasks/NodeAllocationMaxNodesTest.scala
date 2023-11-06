@@ -58,6 +58,7 @@ object NodeAllocationMaxNodesTest extends TestHelpers {
 
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
+
       val f1 = testTask(Input(1))(ResourceRequest(1, 500))
       val f2 = testTask(Input(2))(ResourceRequest(1, 500))
       val f3 = testTask(Input(3))(ResourceRequest(1, 500))

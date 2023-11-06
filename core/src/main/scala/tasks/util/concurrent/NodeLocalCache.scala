@@ -6,7 +6,7 @@ import cats.syntax.all._
 
 object NodeLocalCache {
 
-  type StateR[A] = Ref[IO, State[A]]
+  type StateR[A] = Ref[IO,State[A]]
 
   case class State[A](
       map: Map[

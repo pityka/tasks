@@ -38,8 +38,8 @@ trait EventListener[-E] {
 trait UIComponentBootstrap {
   def startQueueUI(implicit
       config: TasksConfig
-  ): Resource[IO, QueueUI]
-  def startAppUI(implicit config: TasksConfig): Resource[IO, AppUI]
+  ): Resource[IO,QueueUI]
+  def startAppUI(implicit config: TasksConfig): Resource[IO,AppUI]
 }
 
 trait QueueUI {

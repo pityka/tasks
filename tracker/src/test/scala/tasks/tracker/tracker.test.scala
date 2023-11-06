@@ -60,11 +60,12 @@ object TrackerTest extends TestHelpers {
 
   def run = {
     withTaskSystem(testConfig2) { implicit ts =>
+
       val f1 = testTask(Input(1))(ResourceRequest(1, 500))
       val future = for {
         t1 <- f1
       } yield t1
-      import cats.effect.unsafe.implicits.global
+import cats.effect.unsafe.implicits.global
 
       future.timeout(30 seconds).unsafeRunSync()
 

@@ -121,13 +121,10 @@ package object tasks {
   ): LauncherActor =
     component.launcher
 
-  implicit def resourceAllocated(implicit
-      component: ComputationEnvironment
-  ): ResourceAllocated =
+  implicit def resourceAllocated(implicit component: ComputationEnvironment) : ResourceAllocated =
     component.resourceAllocated
 
-  implicit def log(implicit component: ComputationEnvironment): LoggingAdapter =
-    component.log
+  implicit def log(implicit component: ComputationEnvironment) : LoggingAdapter = component.log
 
   def audit(data: String)(implicit component: ComputationEnvironment): Boolean =
     component.appendLog(LogRecord(data, java.time.Instant.now))

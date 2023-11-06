@@ -88,9 +88,7 @@ object SHResultWithSharedFilesTest extends TestHelpers {
     Task[(Input, SharedFile), Output]("resultwithsharedfilestest", 1) {
       case (_, inputsf) =>
         implicit computationEnvironment =>
-          inputsf.file.allocated
-            .map(_._1)
-            .unsafeRunSync()(cats.effect.unsafe.implicits.global)
+          inputsf.file.allocated.map(_._1).unsafeRunSync()(cats.effect.unsafe.implicits.global)
           val source = fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes()))
           val tmpfile = tasks.util.writeBinaryToFile(Array[Byte](1, 2, 3))
           val fs = List(

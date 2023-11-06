@@ -54,5 +54,5 @@ object eq {
   class SeqWithHas[T](s: Seq[T]) {
     def has(t: T) = s.contains(t)
   }
-  implicit def seq2seqwithhas[T](s: Seq[T]): SeqWithHas[T] = new SeqWithHas(s)
+  implicit def seq2seqwithhas[T](s: Seq[T]) : SeqWithHas[T] = new SeqWithHas(s)
 }

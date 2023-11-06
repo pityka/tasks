@@ -74,29 +74,30 @@ object PiTasks {
     case BatchInput(sizeFile: SharedFile, id: Int) =>
       implicit ctx =>
         /* SharedFile#file downloads the file to the local tmp folder */
-        sizeFile.file.use { localFile =>
-          IO {
-            audit(s"Computing pi, part $id")
+        sizeFile.file.use{ localFile =>
+          IO{
+        audit(s"Computing pi, part $id")
 
-            // Body of the task
-            val sizeInt = scala.io.Source.fromFile(localFile).mkString.toInt
-            val (in, out) = (0 until sizeInt).foldLeft((0, 0)) {
-              case ((countIn, countOut), _) =>
-                val x = scala.util.Random.nextDouble()
-                val y = scala.util.Random.nextDouble()
-                val inside = math.sqrt(x * x + y * y) <= 1.0
-                if (inside) (countIn + 1, countOut) else (countIn, countOut + 1)
+          // Body of the task
+          val sizeInt = scala.io.Source.fromFile(localFile).mkString.toInt
+          val (in, out) = (0 until sizeInt).foldLeft((0, 0)) {
+            case ((countIn, countOut), _) =>
+              val x = scala.util.Random.nextDouble()
+              val y = scala.util.Random.nextDouble()
+              val inside = math.sqrt(x * x + y * y) <= 1.0
+              if (inside) (countIn + 1, countOut) else (countIn, countOut + 1)
 
-              /* Return value */
-            }
-            BatchResult(in, out)
-          }
+          /* Return value */
+        }
+        BatchResult(in, out)
+        }
 
         }
   }
 
-  val piCalc = Task[PiInput, PiResult]("reduce", 1) { case PiInput(in, out) =>
-    _ => IO.pure(PiResult(in.toDouble / (in + out) * 4d))
+  val piCalc = Task[PiInput, PiResult]("reduce", 1) {
+    case PiInput(in, out) =>
+      _ => IO.pure(PiResult(in.toDouble / (in + out) * 4d))
   }
 }
 
@@ -120,8 +121,9 @@ object Fib {
     implicit val codec: JsonValueCodec[FibReduce] = JsonCodecMaker.make
   }
 
-  val reduce = Task[FibReduce, Int]("fibreduce", 1) { case FibReduce(f1, f2) =>
-    _ => IO.pure(f1 + f2)
+  val reduce = Task[FibReduce, Int]("fibreduce", 1) {
+    case FibReduce(f1, f2) =>
+      _ => IO.pure(f1 + f2)
   }
 
   /** Recursive Fibonacci
@@ -150,7 +152,8 @@ object Fib {
 
             } yield r3
 
-            f3.guarantee(IO { releaseResources })
+
+            f3.guarantee(IO{releaseResources})
 
           }
 
@@ -171,6 +174,7 @@ object PiApp extends App {
   withTaskSystem { implicit ts =>
     val numTasks = 100
 
+
     val taskSize: IO[SharedFile] = {
       val tmp = java.io.File.createTempFile("size", ".txt")
       val writer = new java.io.FileWriter(tmp)
@@ -183,14 +187,15 @@ object PiApp extends App {
     /* Start tasks for Pi */
     val pi: IO[PiResult] = taskSize.flatMap { taskSize =>
       IO.parSequenceN(4)(
-        1 to numTasks map { i =>
-          batchCalc(BatchInput(taskSize, i))(ResourceRequest(1, 1000, 1))
-        } toList
-      ).flatMap { batches =>
-        piCalc(
-          PiInput(batches.map(_.inside).sum, batches.map(_.outside).sum)
-        )(ResourceRequest(1, 1000, 1))
-      }
+          1 to numTasks map { i =>
+            batchCalc(BatchInput(taskSize, i))(ResourceRequest(1, 1000, 1))
+          } toList
+        )
+        .flatMap { batches =>
+          piCalc(
+            PiInput(batches.map(_.inside).sum, batches.map(_.outside).sum)
+          )(ResourceRequest(1, 1000, 1))
+        }
     }
 
     /* Start tasks for Fibonacci, subtasks are started by this task. */

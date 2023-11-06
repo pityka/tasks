@@ -195,10 +195,7 @@ class TasksConfig(load: () => Config) extends StrictLogging {
       case x            => Some(x)
     }
 
-  val s3RegionProfileName =
-    if (raw.hasPath("tasks.s3.regionProfileName"))
-      Some(raw.getString("tasks.s3.regionProfileName"))
-    else None
+  val s3RegionProfileName = if (raw.hasPath("tasks.s3.regionProfileName")) Some(raw.getString("tasks.s3.regionProfileName")) else None
 
   val s3ServerSideEncryption = raw.getString("tasks.s3.serverSideEncryption")
 
@@ -212,7 +209,7 @@ class TasksConfig(load: () => Config) extends StrictLogging {
   val s3UploadParallelism = raw.getInt("tasks.s3.uploadParallelism")
 
   val httpRemoteEnabled = raw.getBoolean("tasks.fileservice.remote.http")
-  val s3RemoteEnabled = raw.getBoolean("tasks.fileservice.remote.s3")
+  val s3RemoteEnabled =raw.getBoolean("tasks.fileservice.remote.s3")
 
   def instanceTags =
     raw
