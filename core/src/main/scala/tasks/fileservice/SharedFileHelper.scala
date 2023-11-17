@@ -82,10 +82,10 @@ private[tasks] object SharedFileHelper {
       nlc: NodeLocalCache.State
   ): Resource[IO, File] =
     tasks.util.concurrent.NodeLocalCache
-      .offer("fs::" + sf, getPathToFileUnCachedInResource(sf), nlc)
+      .offer("fs::" + sf, getPathToFileNonCachedFile(sf), nlc)
       .map(_.asInstanceOf[File])
 
-  private def getPathToFileUnCachedInResource(sf: SharedFile)(implicit
+  def getPathToFileNonCachedFile(sf: SharedFile)(implicit
       service: FileServiceComponent
   ): Resource[IO, File] =
     sf.path match {

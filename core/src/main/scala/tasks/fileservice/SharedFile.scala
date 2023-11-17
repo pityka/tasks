@@ -70,6 +70,9 @@ case class SharedFile(
   def file(implicit tsc: TaskSystemComponents): Resource[IO, File] =
     SharedFileHelper.getPathToFile(this)
 
+  def fileNonCached(implicit tsc: TaskSystemComponents): Resource[IO, File] =
+    SharedFileHelper.getPathToFileNonCachedFile(this)
+
   def history(implicit tsc: TaskSystemComponents): IO[History] =
     SharedFileHelper.getHistory(this)
 
