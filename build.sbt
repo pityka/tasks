@@ -71,7 +71,7 @@ lazy val circeVersion = "0.14.5"
 lazy val jsoniterVersion = "2.13.31"
 lazy val akkaVersion = "2.6.19"
 lazy val shapelessVersion = "2.3.10"
-lazy val http4sVersion = "0.23.23"
+lazy val http4sVersion = "0.23.25"
 lazy val scribeVersion = "3.12.2"
 lazy val fs2Version = "3.9.4"
 
