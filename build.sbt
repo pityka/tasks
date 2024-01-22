@@ -73,7 +73,7 @@ lazy val akkaVersion = "2.6.19"
 lazy val shapelessVersion = "2.3.10"
 lazy val http4sVersion = "0.23.23"
 lazy val scribeVersion = "3.12.2"
-lazy val fs2Version = "3.8.0"
+lazy val fs2Version = "3.9.4"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
   .crossType(sbtcrossproject.CrossPlugin.autoImport.CrossType.Pure)
