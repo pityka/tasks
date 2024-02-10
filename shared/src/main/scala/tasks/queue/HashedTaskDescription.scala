@@ -13,7 +13,7 @@ object Base64Data {
   implicit val codec: JsonValueCodec[Base64Data] = JsonCodecMaker.make
 }
 case class HashedTaskDescription(taskId: TaskId, dataHash: String) {
-  def hash = s"$taskId-$dataHash"
+  def hash = s"${taskId.id}-${taskId.version}-$dataHash"
 }
 
 object HashedTaskDescription {

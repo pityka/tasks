@@ -14,7 +14,7 @@ package object circesupport  {
     new Serializer[A] {
 
       override def hash(a: A): String = {
-        Hashing.murmur3_128.hashBytes(apply(a)).toString
+        Hashing.sha256.hashBytes(apply(a)).toString
       }
 
       def apply(a: A) = printer.print(enc(a)).getBytes("UTF-8")

@@ -13,7 +13,7 @@ package object upicklesupport {
 
       override def hash(a: A): String = {
         val os = new ghash.HashingOutputStream(
-          ghash.Hashing.murmur3_128,
+          ghash.Hashing.sha256(),
           ByteStreams.nullOutputStream()
         )
         upickle.default.writeToOutputStream(a, os)
