@@ -26,8 +26,8 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.12",
-  crossScalaVersions := Seq("2.13.12"),
+  scalaVersion := "2.13.13",
+  crossScalaVersions := Seq("2.13.13"),
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
