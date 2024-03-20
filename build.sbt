@@ -72,7 +72,7 @@ lazy val jsoniterVersion = "2.13.31"
 lazy val akkaVersion = "2.6.19"
 lazy val shapelessVersion = "2.3.10"
 lazy val http4sVersion = "0.23.25"
-lazy val scribeVersion = "3.12.2"
+lazy val scribeVersion = "3.13.1"
 lazy val fs2Version = "3.9.4"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
@@ -137,7 +137,7 @@ lazy val core = project
       "io.github.pityka" %% "selfpackage" % "2.0.0",
       "org.scalatest" %% "scalatest" % "3.2.16" % "test",
       "com.outr" %% "scribe" % scribeVersion,
-      "com.outr" %% "scribe-slf4j" % "3.12.2",
+      "com.outr" %% "scribe-slf4j" % "3.13.1",
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test"
