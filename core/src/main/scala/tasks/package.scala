@@ -36,12 +36,12 @@ import tasks.util.config.TasksConfig
 import tasks.deploy._
 import tasks.shared.LogRecord
 
-import scala.language.experimental.macros
+
 import cats.effect.IO
 import tasks.shared.ResourceAllocated
 import cats.effect.kernel.Resource
 
-package object tasks {
+package object tasks extends MacroCalls {
 
   val SharedFile = tasks.fileservice.SharedFile
 
@@ -191,29 +191,7 @@ package object tasks {
     TaskSystemComponents.make(hostConfig, elasticSupport, tconfig) -> hostConfig
   }
 
-  def Task[A <: AnyRef, C](taskID: String, taskVersion: Int)(
-      comp: A => ComputationEnvironment => IO[C]
-  ): TaskDefinition[A, C] =
-    macro TaskDefinitionMacros
-      .taskDefinitionFromTree[A, C]
 
-  def spore[A, B](value: A => B): Spore[A, B] =
-    macro tasks.queue.SporeMacros
-      .sporeImpl[A, B]
-
-  def spore[B](value: () => B): Spore[Unit, B] =
-    macro tasks.queue.SporeMacros
-      .sporeImpl0[B]
-
-  implicit def functionToSporeConversion[A, B](value: A => B): Spore[A, B] =
-    macro tasks.queue.SporeMacros
-      .sporeImpl[A, B]
-
-  implicit def functionToSporeConversion0[B](value: () => B): Spore[Unit, B] =
-    macro tasks.queue.SporeMacros
-      .sporeImpl0[B]
-
-  def makeSerDe[A]: SerDe[A] = macro SerdeMacro.create[A]
 
   type SSerializer[T] = Spore[Unit, Serializer[T]]
   type SDeserializer[T] = Spore[Unit, Deserializer[T]]
