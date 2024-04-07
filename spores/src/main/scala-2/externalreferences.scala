@@ -37,7 +37,6 @@
   * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   */
 package tasks.queue
-
 import scala.reflect.macros.blackbox.Context
 
 object SporeAnalysis {

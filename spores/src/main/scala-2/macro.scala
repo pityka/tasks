@@ -24,9 +24,7 @@
 
 package tasks.queue
 
-trait SporeFun[A, B] {
-  def call(a: A): B
-}
+
 
 object SporeMacros {
   import scala.reflect.macros.blackbox.Context

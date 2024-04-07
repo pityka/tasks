@@ -26,8 +26,8 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.12",
-  crossScalaVersions := Seq("2.13.12"),
+  scalaVersion := "2.13.13",
+  crossScalaVersions := Seq("2.13.13", "3.4.1"),
   parallelExecution in Test := false,
   scalacOptions ++= Seq(
     "-deprecation", // Emit warning and location for usages of deprecated APIs.
@@ -108,10 +108,15 @@ lazy val spores = project
   .settings(
     name := "tasks-spores",
     libraryDependencies ++= Seq(
-      "org.scala-lang" % "scala-reflect" % scalaVersion.value,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % jsoniterVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
-    )
+    ) ++ (CrossVersion.partialVersion(scalaVersion.value) match {
+      case Some((2, 13)) =>
+        Seq(
+          "org.scala-lang" % "scala-reflect" % scalaVersion.value
+        )
+      case _ => Seq.empty
+    })
   )
 lazy val akkaProvided = List(
   "com.typesafe.akka" %% "akka-actor" % akkaVersion % Provided,
