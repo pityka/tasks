@@ -23,7 +23,6 @@
  */
 
 package tasks.queue
-
 import cats.effect.IO
 
 object TaskDefinitionMacros {
