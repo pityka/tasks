@@ -134,7 +134,7 @@ lazy val core = project
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe" % "config" % "1.4.2",
       "org.typelevel" %% "cats-effect" % "3.5.3",
-      "io.github.pityka" %% "selfpackage" % "2.0.0",
+      "io.github.pityka" %% "selfpackage" % "2.0.1",
       "org.scalatest" %% "scalatest" % "3.2.16" % "test",
       "com.outr" %% "scribe" % scribeVersion,
       "com.outr" %% "scribe-slf4j" % "3.12.2",
