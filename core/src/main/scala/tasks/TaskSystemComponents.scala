@@ -56,7 +56,7 @@ import tasks.tasksConfig
 import org.http4s.server.Server
 import com.typesafe.config.ConfigFactory
 
-case class TaskSystemComponents private (
+case class TaskSystemComponents private[tasks] (
     private[tasks] val queue: QueueActor,
     private[tasks] val fs: FileServiceComponent,
     private[tasks] val actorsystem: ActorSystem,
@@ -294,7 +294,7 @@ object TaskSystemComponents {
     val fileServiceComponent = managedFileStorage
       .flatMap(managedFileStorage =>
         remoteFileStorage.map { remoteFileStorage =>
-          scribe.info("File store: " + managedFileStorage) //wrap this
+          scribe.info("File store: " + managedFileStorage) // wrap this
           FileServiceComponent(
             managedFileStorage,
             remoteFileStorage
@@ -481,7 +481,7 @@ object TaskSystemComponents {
 
               val service = new PackageServer(pack)
 
-              val actorsystem = 1 //shade implicit conversion
+              val actorsystem = 1 // shade implicit conversion
               val _ = actorsystem // suppress unused warning
               import com.comcast.ip4s._
 

@@ -34,10 +34,9 @@ import cats.effect.IO
 
 object NodeAllocationTest extends TestHelpers {
 
-  val testTask = Task[Input, Int]("nodeallocationtest", 1) {
-    _ => _ =>
-      scribe.info("Hello from task")
-      IO(1)
+  val testTask = Task[Input, Int]("nodeallocationtest", 1) { _ => _ =>
+    scribe.info("Hello from task")
+    IO(1)
   }
 
   val testConfig2 = {
@@ -46,7 +45,7 @@ object NodeAllocationTest extends TestHelpers {
     ConfigFactory.parseString(
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=0
-      tasks.elastic.engine = "tasks.JvmElasticSupport.JvmGrid"
+      tasks.elastic.engine = "tasks.JvmElasticSupport$$JvmGrid$$"
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
@@ -70,13 +69,16 @@ object NodeAllocationTest extends TestHelpers {
       } yield t1 + t2 + t3
 
       f1.flatTap { case _ =>
-        IO{synchronized {
-          tasks.JvmElasticSupport.taskSystems.head._2.foreach{ case (_, release) =>
-          import cats.effect.unsafe.implicits.global
+        IO {
+          synchronized {
+            tasks.JvmElasticSupport.taskSystems.head._2.foreach {
+              case (_, release) =>
+                import cats.effect.unsafe.implicits.global
 
-          release.unsafeRunSync()
+                release.unsafeRunSync()
+            }
+          }
         }
-        }}
       }
 
       await(future)

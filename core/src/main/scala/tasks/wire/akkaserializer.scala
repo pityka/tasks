@@ -8,8 +8,7 @@ import com.github.plokhotnyuk.jsoniter_scala.core._
 
 class StaticMessageSerializer(system: ExtendedActorSystem) extends Serializer {
 
-  implicit val as : ExtendedActorSystem = system
-
+  implicit val as: ExtendedActorSystem = system
 
   override def identifier: Int = 999
 
@@ -36,9 +35,9 @@ class StaticMessageSerializer(system: ExtendedActorSystem) extends Serializer {
 
 class ScheduleTaskSerializer(system: ExtendedActorSystem) extends Serializer {
 
-  implicit val as  : ExtendedActorSystem = system
-  implicit val schCodec : JsonValueCodec[ScheduleTask]= ScheduleTask.codec(system)
-
+  implicit val as: ExtendedActorSystem = system
+  implicit val schCodec: JsonValueCodec[ScheduleTask] =
+    ScheduleTask.codec(system)
 
   override def identifier: Int = 1000
 
@@ -66,7 +65,7 @@ class ScheduleTaskSerializer(system: ExtendedActorSystem) extends Serializer {
 }
 class SharedFileSerializer(system: ExtendedActorSystem) extends Serializer {
 
-  implicit val as : ExtendedActorSystem= system
+  implicit val as: ExtendedActorSystem = system
 
   override def identifier: Int = 1001
 

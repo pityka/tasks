@@ -34,10 +34,9 @@ import cats.effect.IO
 
 object SlaveShutdownTest extends TestHelpers {
 
-  val testTask = Task[Input, Int]("slaveshutdowntest", 1) {
-    _ => _ =>
-      scribe.info("Hello from task")
-      IO(1)
+  val testTask = Task[Input, Int]("slaveshutdowntest", 1) { _ => _ =>
+    scribe.info("Hello from task")
+    IO(1)
   }
 
   val testConfig2 = {
@@ -46,7 +45,7 @@ object SlaveShutdownTest extends TestHelpers {
     ConfigFactory.parseString(
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=0
-      tasks.elastic.engine = "tasks.JvmElasticSupport.JvmGrid"
+      tasks.elastic.engine = "tasks.JvmElasticSupport$$JvmGrid$$"
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s

@@ -1,7 +1,6 @@
 package tasks
 
-import shapeless.tag.@@
-import shapeless.tag
+import tag.@@
 import com.github.plokhotnyuk.jsoniter_scala.core._
 
 package object shared {

@@ -29,37 +29,51 @@ lazy val commonSettings = Seq(
   scalaVersion := "2.13.13",
   crossScalaVersions := Seq("2.13.13", "3.4.1"),
   parallelExecution in Test := false,
-  scalacOptions ++= Seq(
-    "-deprecation", // Emit warning and location for usages of deprecated APIs.
-    "-encoding",
-    "utf-8", // Specify character encoding used by source files.
-    "-feature", // Emit warning and location for usages of features that should be imported explicitly.
-    "-language:postfixOps",
-    "-language:implicitConversions",
-    "-unchecked", // Enable additional warnings where generated code depends on assumptions.
-    // "-Xfatal-warnings", // Fail the compilation if there are any warnings.
-    "-Xlint:adapted-args", // Warn if an argument list is modified to match the receiver.
-    "-Xlint:constant", // Evaluation of a constant arithmetic expression results in an error.
-    "-Xlint:delayedinit-select", // Selecting member of DelayedInit.
-    "-Xlint:doc-detached", // A Scaladoc comment appears to be detached from its element.
-    "-Xlint:inaccessible", // Warn about inaccessible types in method signatures.
-    "-Xlint:infer-any", // Warn when a type argument is inferred to be `Any`.
-    "-Xlint:missing-interpolator", // A string literal appears to be missing an interpolator id.
-    "-Xlint:nullary-unit", // Warn when nullary methods return Unit.
-    "-Xlint:option-implicit", // Option.apply used implicit view.
-    "-Xlint:poly-implicit-overload", // Parameterized overloaded implicit methods are not visible as view bounds.
-    "-Xlint:private-shadow", // A private field (or class parameter) shadows a superclass field.
-    "-Xlint:stars-align", // Pattern sequence wildcard must align with sequence component.
-    "-Xlint:type-parameter-shadow" // A local type parameter shadows a type already in scope.
-    // "-Ywarn-extra-implicit", // Warn when more than one implicit parameter section is defined.
-    // "-Ywarn-numeric-widen", // Warn when numerics are widened.
-    // "-Ywarn-unused:implicits", // Warn if an implicit parameter is unused.
-    // "-Ywarn-unused:imports", // Warn if an import selector is not referenced.
-    // "-Ywarn-unused:locals", // Warn if a local definition is unused.
-    // "-Ywarn-unused:params", // Warn if a value parameter is unused.
-    // "-Ywarn-unused:patvars", // Warn if a variable bound in a pattern is unused.
-    // "-Ywarn-unused:privates" // Warn if a private member is unused.
-  )
+  scalacOptions ++= (CrossVersion.partialVersion(scalaVersion.value) match {
+    case Some((2, 13)) =>
+      Seq(
+        "-deprecation", // Emit warning and location for usages of deprecated APIs.
+        "-encoding",
+        "utf-8", // Specify character encoding used by source files.
+        "-feature", // Emit warning and location for usages of features that should be imported explicitly.
+        "-language:postfixOps",
+        "-language:implicitConversions",
+        "-unchecked", // Enable additional warnings where generated code depends on assumptions.
+        // "-Xfatal-warnings", // Fail the compilation if there are any warnings.
+        "-Xlint:adapted-args", // Warn if an argument list is modified to match the receiver.
+        "-Xlint:constant", // Evaluation of a constant arithmetic expression results in an error.
+        "-Xlint:delayedinit-select", // Selecting member of DelayedInit.
+        "-Xlint:doc-detached", // A Scaladoc comment appears to be detached from its element.
+        "-Xlint:inaccessible", // Warn about inaccessible types in method signatures.
+        "-Xlint:infer-any", // Warn when a type argument is inferred to be `Any`.
+        "-Xlint:missing-interpolator", // A string literal appears to be missing an interpolator id.
+        "-Xlint:nullary-unit", // Warn when nullary methods return Unit.
+        "-Xlint:option-implicit", // Option.apply used implicit view.
+        "-Xlint:poly-implicit-overload", // Parameterized overloaded implicit methods are not visible as view bounds.
+        "-Xlint:private-shadow", // A private field (or class parameter) shadows a superclass field.
+        "-Xlint:stars-align", // Pattern sequence wildcard must align with sequence component.
+        "-Xlint:type-parameter-shadow" // A local type parameter shadows a type already in scope.
+        // "-Ywarn-extra-implicit", // Warn when more than one implicit parameter section is defined.
+        // "-Ywarn-numeric-widen", // Warn when numerics are widened.
+        // "-Ywarn-unused:implicits", // Warn if an implicit parameter is unused.
+        // "-Ywarn-unused:imports", // Warn if an import selector is not referenced.
+        // "-Ywarn-unused:locals", // Warn if a local definition is unused.
+        // "-Ywarn-unused:params", // Warn if a value parameter is unused.
+        // "-Ywarn-unused:patvars", // Warn if a variable bound in a pattern is unused.
+        // "-Ywarn-unused:privates" // Warn if a private member is unused.
+      )
+    case _ =>
+      Seq(
+        "-experimental",
+        "-encoding",
+        "utf-8",
+        "-feature",
+        "-language:postfixOps",
+        "-language:implicitConversions",
+        "-unchecked",
+        "-deprecation"
+      )
+  })
 ) ++ Seq(
   fork := true,
   cancelable in Global := true,
@@ -70,7 +84,6 @@ lazy val commonSettings = Seq(
 lazy val circeVersion = "0.14.6"
 lazy val jsoniterVersion = "2.13.31"
 lazy val akkaVersion = "2.6.19"
-lazy val shapelessVersion = "2.3.10"
 lazy val http4sVersion = "0.23.25"
 lazy val scribeVersion = "3.13.3"
 lazy val fs2Version = "3.9.4"
@@ -81,7 +94,6 @@ lazy val shared = crossProject(JSPlatform, JVMPlatform)
   .settings(
     name := "tasks-shared",
     libraryDependencies ++= Seq(
-      "com.chuusai" %% "shapeless" % shapelessVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % jsoniterVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
     )
@@ -90,7 +102,6 @@ lazy val shared = crossProject(JSPlatform, JVMPlatform)
   .jsSettings(
     fork := false,
     libraryDependencies ++= Seq(
-      "com.chuusai" %%% "shapeless" % shapelessVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % jsoniterVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
     )
@@ -116,7 +127,9 @@ lazy val spores = project
           "org.scala-lang" % "scala-reflect" % scalaVersion.value
         )
       case _ => Seq.empty
-    })
+    }) ++ List(
+      "org.scalatest" %% "scalatest" % "3.2.16" % "test"
+    )
   )
 lazy val akkaProvided = List(
   "com.typesafe.akka" %% "akka-actor" % akkaVersion % Provided,
@@ -139,14 +152,21 @@ lazy val core = project
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe" % "config" % "1.4.2",
       "org.typelevel" %% "cats-effect" % "3.5.3",
-      "io.github.pityka" %% "selfpackage" % "2.0.0",
+      "io.github.pityka" %% "selfpackage" % "2.0.1",
       "org.scalatest" %% "scalatest" % "3.2.16" % "test",
       "com.outr" %% "scribe" % scribeVersion,
-      "com.outr" %% "scribe-slf4j" % "3.13.3",
+      "com.outr" %% "scribe-slf4j" % scribeVersion,
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test"
-    ) ++ akkaProvided
+    ) ++ akkaProvided ++ (CrossVersion
+      .partialVersion(scalaVersion.value) match {
+      case Some((2, 13)) =>
+        Seq(
+          "org.scala-lang" % "scala-reflect" % scalaVersion.value
+        )
+      case _ => Seq.empty
+    })
   )
   .dependsOn(sharedJVM, spores)
 
@@ -235,9 +255,8 @@ lazy val example = project
     topLevelDirectory := None,
     publishArtifact := false,
     publish / skip := true,
-    crossScalaVersions := Nil,
     libraryDependencies ++= Seq(
-      "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
+      ("com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal")
     ) ++ Seq(
       "com.typesafe.akka" %% "akka-actor" % akkaVersion,
       "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,

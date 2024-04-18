@@ -45,7 +45,7 @@ import cats.effect.IO
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
 
-package object util  {
+package object util {
 
   def base64(b: Array[Byte]): String =
     java.util.Base64.getEncoder.encodeToString(b)
@@ -224,7 +224,7 @@ package object util  {
     * @return
     *   Exit code of the process.
     */
-  def exec(pb: ProcessBuilder)(stdOutFunc: String => Unit = { _: String => })(
+  def exec(pb: ProcessBuilder)(stdOutFunc: String => Unit = { (_: String) => })(
       implicit stdErrFunc: String => Unit = (_: String) => ()
   ): Int =
     pb.run(ProcessLogger(stdOutFunc, stdErrFunc)).exitValue()
@@ -325,13 +325,18 @@ package object util  {
     else f
 
   def reflectivelyInstantiateObject[A](fqcn: String): A = {
-    import scala.reflect.runtime.universe
+    java.lang.Class
+      .forName(fqcn)
+      .getDeclaredConstructor()
+      .newInstance()
+      .asInstanceOf[A]
+    // import scala.reflect.runtime.universe
 
-    val runtimeMirror = universe.runtimeMirror(getClass.getClassLoader)
-    val module = runtimeMirror.staticModule(fqcn)
-    val obj = runtimeMirror.reflectModule(module)
+    // val runtimeMirror = universe.runtimeMirror(getClass.getClassLoader)
+    // val module = runtimeMirror.staticModule(fqcn)
+    // val obj = runtimeMirror.reflectModule(module)
 
-    obj.instance.asInstanceOf[A]
+    // obj.instance.asInstanceOf[A]
 
   }
 

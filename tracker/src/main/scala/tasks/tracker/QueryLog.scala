@@ -90,9 +90,15 @@ object QueryLog {
           elem.resource,
           elem.elapsedTime,
           elem.metadata.toSeq
-            .flatMap(_.dependencies.flatMap(_.context.toSeq.collect {
-              case h: tasks.fileservice.HistoryContextImpl => h.traceId.toList
-            }.flatten))
+            .flatMap(
+              _.dependencies.flatMap(
+                _.context.toSeq
+                  .collect { case h: tasks.fileservice.HistoryContextImpl =>
+                    h.traceId.toList
+                  }
+                  .flatten
+              )
+            )
             .distinct
         )
       )
@@ -326,15 +332,15 @@ object QueryLog {
         val timeUnit = if (seconds) "s" else "h"
 
         s""""${node.id}" [label="${node.taskId}(${formatTime(
-          node.elapsedTime.toDouble,
-          seconds
-        )}$timeUnit,${formatTime(
-          wallClockTime,
-          seconds
-        )}wc$timeUnit,${formatTime(
-          cpuTime,
-          seconds
-        )}c$timeUnit,${node.resource.cpu}c,${cpuNeed}C)"] """
+            node.elapsedTime.toDouble,
+            seconds
+          )}$timeUnit,${formatTime(
+            wallClockTime,
+            seconds
+          )}wc$timeUnit,${formatTime(
+            cpuTime,
+            seconds
+          )}c$timeUnit,${node.resource.cpu}c,${cpuNeed}C)"] """
       }
       .mkString(";")
     val edgelist = s

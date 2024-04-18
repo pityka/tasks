@@ -64,7 +64,7 @@ object SSHSettings {
     }
   }
 
-  implicit def fromConfig(implicit config: TasksConfig) : SSHSettings =
+  implicit def fromConfig(implicit config: TasksConfig): SSHSettings =
     new SSHSettings
 
 }
@@ -244,8 +244,10 @@ object SSHGetNodeName extends GetNodeName {
   }
 }
 
-object SSHElasticSupport extends ElasticSupportFromConfig {
-  implicit val fqcn : ElasticSupportFqcn = ElasticSupportFqcn("tasks.elastic.sh.SSHElasticSupport")
+class SSHElasticSupport extends ElasticSupportFromConfig {
+  implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
+    "tasks.elastic.sh.SSHElasticSupport"
+  )
   def apply(implicit config: TasksConfig) = SimpleElasticSupport(
     fqcn = fqcn,
     hostConfig = None,

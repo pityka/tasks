@@ -74,7 +74,7 @@ object RercursiveTasksTest {
               ResourceRequest(1, 1)
             )
             for {
-              _  <- releaseResourcesEarly
+              _ <- releaseResourcesEarly
               r1 <- f1
               r2 = f2.unsafeRunSync()
             } yield FibOut(r1.n + r2.n)
@@ -110,7 +110,7 @@ hosts.numCPU=4
   }
 
   val pair = defaultTaskSystem(Some(testConfig))._1.allocated.unsafeRunSync()
-  implicit val system : TaskSystemComponents = pair._1
+  implicit val system: TaskSystemComponents = pair._1
   import RercursiveTasksTest._
 
   test("recursive fibonacci") {

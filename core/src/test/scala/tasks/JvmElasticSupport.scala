@@ -86,7 +86,7 @@ object JvmElasticSupport {
     akka.loglevel=OFF
     hosts.master = "${masterAddress.getHostName}:${masterAddress.getPort}"
     hosts.app = false
-    tasks.elastic.engine= "tasks.JvmElasticSupport.JvmGrid"
+    tasks.elastic.engine= "tasks.JvmElasticSupport$$JvmGrid$$"
     jobid = $jobid
     tasks.akka.actorsystem.name = $jobid   
     tasks.addShutdownHook = false 
@@ -128,7 +128,7 @@ object JvmElasticSupport {
 
   object JvmGrid extends ElasticSupportFromConfig {
     implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
-      "tasks.JvmElasticSupport.JvmGrid"
+      "tasks.JvmElasticSupport$JvmGrid$"
     )
     def apply(implicit config: TasksConfig) = SimpleElasticSupport(
       fqcn = fqcn,

@@ -128,7 +128,7 @@ private[tasks] object UntypedResult {
     JsonCodecMaker.make(CodecMakerConfig.withSetMaxInsertNumber(2147483647))
 }
 
-case class ComputationEnvironment(
+class ComputationEnvironment(
     val resourceAllocated: ResourceAllocated,
     implicit val components: TaskSystemComponents,
     implicit val launcher: LauncherActor,
@@ -149,7 +149,15 @@ case class ComputationEnvironment(
   def withFilePrefix[B](
       prefix: Seq[String]
   )(fun: ComputationEnvironment => B): B =
-    fun(copy(components = components.withChildPrefix(prefix)))
+    fun(
+      new ComputationEnvironment(
+        resourceAllocated = resourceAllocated,
+        components = components.withChildPrefix(prefix),
+        launcher = launcher,
+        taskActor = taskActor,
+        taskHash = taskHash
+      )
+    )
 
   implicit def fileServiceComponent: FileServiceComponent = components.fs
 
@@ -229,9 +237,9 @@ private[tasks] class Task(
         codeVersion = tasksConfig.codeVersion,
         traceId = Some(lineage.leaf.toString)
       )
-      val ce = ComputationEnvironment(
+      val ce = new ComputationEnvironment(
         resourceAllocated = resourceAllocated,
-        components = TaskSystemComponents(
+        components = new TaskSystemComponents(
           queue = QueueActor(queueActor),
           fs = fileServiceComponent,
           actorsystem = system,

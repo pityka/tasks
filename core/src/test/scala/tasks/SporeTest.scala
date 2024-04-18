@@ -43,8 +43,8 @@ import cats.effect.IO
 object SporeTest extends TestHelpers with Matchers {
 
   val increment =
-    Task[Spore[Option[Int], String], String]("sporetest", 1) { case sp =>
-      _=> IO(sp(Some(3)))
+    Task[Spore[Option[Int], String], String]("sporetest", 1) { sp => _ =>
+      IO(sp(Some(3)))
     }
 
   def run = {
@@ -76,14 +76,14 @@ object MySpore {
     // without this the compiler blows up
     implicit val codec: JsonValueCodec[User] = JsonCodecMaker.make
 
-    implicit val encoderSpore: Spore[Unit,tasks.queue.Serializer[User]] =
-      spore(() => implicitly[tasks.queue.Serializer[User]])
+    implicit val encoderSpore: Spore[Unit, tasks.queue.Serializer[User]] =
+      spore((_: Unit) => implicitly[tasks.queue.Serializer[User]])
   }
   val serializerSpore = spore { (_: String) =>
     implicitly[tasks.queue.Serializer[User]]
   }
 
-  val nullary = spore { () =>
+  val nullary = spore { (_: Unit) =>
     implicitly[tasks.queue.Serializer[User]]
   }
 
@@ -106,28 +106,19 @@ object MySpore {
     freeze(s)(())
   }
 
-  val implicitSporeResult =
-    MySpore.useSpore((a: String) => Some(a.toInt))
-  val implicitSporeResult0 =
-    MySpore.useSpore0(() => Some(1))
-
   val sporeLeaf = spore { (a: String) =>
     a.toUpperCase()
   }
-  val sporeLeaf0: Spore[Unit, String] = () => "abcd"
 
   def recursive(s: Spore[String, String]) = spore { (a: String) =>
     s(a)
-  }
-  def recursive0(s: Spore[Unit, String]) = spore { () =>
-    s(())
   }
 
   val prim = spore { (_: Long) =>
     3
   }
 
-  val prim2 = spore { () =>
+  val prim2 = spore { (_: Unit) =>
     3
   }
 
@@ -141,14 +132,6 @@ object MySpore {
 class SporeTestSuite extends FunSuite with Matchers {
 
   def freeze[A, B](s: Spore[A, B]) = s.copy[A, B]()
-
-  test(
-    "function literals should be implicitly converted if possible and work"
-  ) {
-
-    MySpore.implicitSporeResult shouldBe Some(3)
-    MySpore.implicitSporeResult0 shouldBe Some(1)
-  }
 
   test("spores should revive") {
     freeze(MySpore.s)(Some(3)) shouldBe "Some(3)"
@@ -186,12 +169,7 @@ class SporeTestSuite extends FunSuite with Matchers {
   test("recursive") {
     val spore = MySpore.recursive(MySpore.sporeLeaf)
     spore("abcd") shouldBe "ABCD"
-    val spore0 = MySpore.recursive0(MySpore.sporeLeaf0)
-    spore0(()) shouldBe "abcd"
 
-    writeToString(
-      spore
-    ) shouldBe """{"fqcn":"tasks.MySpore$spore$macro$1$4","deps":[{"fqcn":"tasks.MySpore$spore$macro$16$1"}]}"""
     readFromString[Spore[String, String]](writeToString(spore)).apply(
       "qwerty"
     ) shouldBe "QWERTY"

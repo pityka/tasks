@@ -138,36 +138,30 @@ class Launcher(
         )
       else scheduleTask.fileServicePrefix
 
-    import scala.reflect.runtime.{universe => ru}
-
     val task: Task =
-      ru.runtimeMirror(getClass().getClassLoader())
-        .reflectClass(ru.typeOf[Task].typeSymbol.asClass)
-        .reflectConstructor(
-          ru.typeOf[Task].decl(ru.termNames.CONSTRUCTOR).asMethod
-        )(
-          scheduleTask.inputDeserializer,
-          scheduleTask.outputSerializer,
-          scheduleTask.function,
-          self,
-          scheduleTask.queueActor,
-          FileServiceComponent(
-            managedStorage,
-            remoteStorage
-          ),
-          cache,
-          nodeLocalCache,
-          allocatedResource.cpuMemoryAllocated,
-          filePrefix,
-          config,
-          scheduleTask.priority,
-          scheduleTask.labels,
-          scheduleTask.description.taskId,
-          scheduleTask.lineage.inherit(scheduleTask.description),
-          scheduleTask.description,
-          scheduleTask.proxy,
-          context.system
-        )
+      new Task(
+        scheduleTask.inputDeserializer,
+        scheduleTask.outputSerializer,
+        scheduleTask.function,
+        self,
+        scheduleTask.queueActor,
+        FileServiceComponent(
+          managedStorage,
+          remoteStorage
+        ),
+        cache,
+        nodeLocalCache,
+        allocatedResource.cpuMemoryAllocated,
+        filePrefix,
+        config,
+        scheduleTask.priority,
+        scheduleTask.labels,
+        scheduleTask.description.taskId,
+        scheduleTask.lineage.inherit(scheduleTask.description),
+        scheduleTask.description,
+        scheduleTask.proxy,
+        context.system
+      )
         .asInstanceOf[Task]
     import akka.pattern.ask
     import context.dispatcher

@@ -141,8 +141,8 @@ class NodeRegistry(
       if (config.logQueueStatus) {
         log.info(
           s"Queued tasks: ${queueStat.queued.size}. Running tasks: ${queueStat.running.size}. Pending nodes: ${state.pending.size} . Running nodes: ${state.running.size}. Largest request: ${queueStat.queued
-            .sortBy(_._2.cpu)
-            .lastOption}/${queueStat.queued.sortBy(_._2.memory).lastOption}"
+              .sortBy(_._2.cpu)
+              .lastOption}/${queueStat.queued.sortBy(_._2.memory).lastOption}"
         )
       }
       try {

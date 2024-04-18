@@ -8,20 +8,19 @@ object SporeMacros:
   def failIfInner(using Quotes) = {
     import quotes.reflect.*
 
-    def isStatic(symbol: Symbol): Boolean = {
-      if (symbol.isNoSymbol) true
+    def isInClass(symbol: Symbol): Boolean = {
+      if (symbol.isNoSymbol) false
       else if (
         (symbol.isClassDef && symbol != symbol.moduleClass) ||
-        symbol.isDefDef ||
-        symbol.isAnonymousFunction ||
         symbol.isAnonymousClass
-      ) false
-      else isStatic(symbol.owner)
+      ) {
+        true
+      } else isInClass(symbol.owner)
     }
 
-    if (!isStatic(Symbol.spliceOwner))
+    if (isInClass(Symbol.spliceOwner))
       report.errorAndAbort(
-        s"${Symbol.spliceOwner.fullName} is not a stable identifier. "
+        s"${Symbol.spliceOwner.fullName} is in a class. "
       )
     else ()
   }
@@ -37,14 +36,25 @@ object SporeMacros:
     failIfInner
 
     import quotes.reflect.*
+    // report.errorAndAbort('{implicitly[Ordering[Double]]}.asTerm.show)
 
     // decompose the lambda to parameter list and body
-    val (lam, params, body) = value.asTerm.underlying match {
-      case f @ quotes.reflect.Lambda(a, b) =>
-        (f, a, b)
+    val (lam, params, body) = value.asTerm match {
+      case Inlined(_, _, ident @ Ident(_)) =>
+        ident.symbol.tree match {
+          case ValDef(_, _, Some(Block(Nil, lam @ Lambda(params, body)))) =>
+            (lam, params, body)
+          case ValDef(_, _, Some(lam @ Lambda(params, body))) =>
+            (lam, params, body)
+          case _ =>
+            throw new MatchError(
+              s"Expected lambda, got: ${ident.symbol.tree} \n ${ident.symbol.tree.show}"
+            )
+        }
+
       case _ =>
         throw new MatchError(
-          s"Expected lambda, got: ${value.asTerm.underlying.show}"
+          s"Expected lambda, got: ${value.asTerm}"
         )
     }
     if (params.size != 1) {
@@ -78,9 +88,10 @@ object SporeMacros:
     def symbolIsSpore(sym: Symbol): Boolean = {
       sym.info match {
         case t: AppliedType =>
-          t.tycon == TypeRepr.of[Spore[?, ?]].asInstanceOf[AppliedType].tycon
+          t.tycon =:= TypeRepr.of[Spore[?, ?]].asInstanceOf[AppliedType].tycon
 
-        case _ => false
+        case _ =>
+          false
       }
     }
 
@@ -105,7 +116,9 @@ object SporeMacros:
                   tree.pos
                 )
 
-              } else {
+              } else if (params.head.symbol == tree.symbol)
+                foundReferencesToSpores
+              else {
                 // report.info(
                 //   s"Found references to spore within spore",
                 //   tree.asExpr
@@ -121,13 +134,14 @@ object SporeMacros:
     }
 
     val (referencesToSporesAsTrees, referencesToSpores) =
-      FindReferencesToSpores.foldOverTree(Nil, body)(value.asTerm.symbol).unzip
+      FindReferencesToSpores.foldOverTree(Nil, body)(body.symbol).unzip
 
     // a tree traverser which replaces each reference of the parameter to a new identifier
     def replaceParam(param: Term) = new quotes.reflect.TreeMap {
       override def transformTerm(tree: Term)(owner: Symbol): Term =
         tree match {
-          case Ident(name) if name == params.head.name => param
+          case i @ Ident(_) if i.symbol == params.head.symbol =>
+            param
           case _ => super.transformTerm(tree)(owner)
         }
     }
@@ -150,8 +164,11 @@ object SporeMacros:
                   Expr(idx)
                 })
               }
-              tree2.asTerm
-            case _ => super.transformTerm(tree)(owner)
+              Select
+                .unique(tree2.asTerm, "asInstanceOf")
+                .appliedToType(tree.symbol.info)
+            case _ =>
+              super.transformTerm(tree)(owner)
           }
       }
       val rewritten = traverse.transformTerm(body)(value.asTerm.symbol)
@@ -167,13 +184,7 @@ object SporeMacros:
       // extend Object with SporeFun[A,B]
       val parents = List(
         TypeTree.of[Object],
-        Applied(
-          TypeIdent(TypeRepr.of[SporeFunWithDependencies].typeSymbol),
-          List(
-            TypeIdent(TypeRepr.of[A].typeSymbol),
-            TypeIdent(TypeRepr.of[B].typeSymbol)
-          )
-        )
+        TypeTree.of[SporeFunWithDependencies[A, B]]
       )
       def declSymbol(clsSymbol: Symbol) = List(
         {
@@ -203,13 +214,15 @@ object SporeMacros:
             case t: Term => t
             case x =>
               throw MatchError(
-                "Expected term. Got: " + x.show(using Printer.TreeStructure)
+                "Expected term. Got in second param: " + x.show(using
+                  Printer.TreeStructure
+                )
               )
           }
 
           Some(
             replaceReferencesToSpores(
-              replaceParam(p1).transformTerm(body)(sym),
+              replaceParam(p1).transformTerm(body.changeOwner(sym))(sym),
               p0
             )
           )
@@ -242,13 +255,13 @@ object SporeMacros:
         Spore[A, B](
           instance.getClass.getName,
           ${
-            Expr.ofList(referencesToSporesAsTrees.map(_.asExprOf[Spore[?, ?]]))
+            Expr.ofList(referencesToSporesAsTrees.map(_.asExprOf[Any]))
           }.asInstanceOf[Seq[Spore[Any, Any]]]
         )
       }
     }
 
-    report.info(s"Rewriting spore body to ${expr.show}")
+    // report.info(s"Rewriting spore body to ${expr.show}")
 
     (expr)
 

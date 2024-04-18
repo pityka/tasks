@@ -114,9 +114,9 @@ class FileServiceSpec
 
       val fs = new FolderFileStorage(folder)
 
-      implicit val serviceimpl =
+      implicit val serviceimpl: FileServiceComponent =
         FileServiceComponent(fs, remoteStore)
-      implicit val historyContext = tasks.fileservice.NoHistory
+      implicit val historyContext: HistoryContext = tasks.fileservice.NoHistory
       await(
         SharedFileHelper.createFromStream(
           fs2.Stream[IO, Byte](),
@@ -145,7 +145,7 @@ class FileServiceSpec
 
       val fs = new FolderFileStorage(folder)
 
-      implicit val serviceimpl =
+      implicit val serviceimpl: FileServiceComponent =
         FileServiceComponent(fs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
 
@@ -171,7 +171,7 @@ class FileServiceSpec
 
       val fs = new FolderFileStorage(folder)
 
-      implicit val serviceimpl =
+      implicit val serviceimpl: FileServiceComponent =
         FileServiceComponent(fs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
 
@@ -208,7 +208,7 @@ class FileServiceSpec
         .use { server =>
           ProxyFileStorage.makeClient(server.baseUri).use { proxiedFs =>
             IO {
-              implicit val serviceimpl =
+              implicit val serviceimpl: FileServiceComponent =
                 FileServiceComponent(proxiedFs, remoteStore)
               implicit val historyContext = tasks.fileservice.NoHistory
 
@@ -247,7 +247,7 @@ class FileServiceSpec
 
       val fs = new FolderFileStorage(folder)
 
-      implicit val serviceimpl =
+      implicit val serviceimpl: FileServiceComponent =
         FileServiceComponent(fs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
       await(
@@ -288,7 +288,7 @@ class FileServiceSpec
       //   )
       // )
 
-      implicit val serviceimpl =
+      implicit val serviceimpl: FileServiceComponent =
         FileServiceComponent(fs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
       await(
@@ -318,7 +318,7 @@ class FileServiceSpec
       folder2.mkdir
       val fs = new FolderFileStorage(folder)
 
-      implicit val serviceimpl =
+      implicit val serviceimpl: FileServiceComponent =
         FileServiceComponent(fs, remoteStore)
       implicit val nlc =
         NodeLocalCache.start.unsafeRunSync()(
@@ -362,7 +362,7 @@ class FileServiceSpec
       folder2.mkdir
       val fs = new FolderFileStorage(folder)
 
-      implicit val serviceimpl =
+      implicit val serviceimpl: FileServiceComponent =
         FileServiceComponent(fs, remoteStore)
       implicit val nlc =
         NodeLocalCache.start.unsafeRunSync()(
@@ -417,7 +417,7 @@ class FileServiceSpec
       //   )
       // )
 
-      implicit val serviceimpl =
+      implicit val serviceimpl: FileServiceComponent =
         FileServiceComponent(fs, remoteStore)
       implicit val nlc =
         NodeLocalCache.start.unsafeRunSync()(
@@ -468,7 +468,7 @@ class FileServiceSpec
       folder2.mkdir
       val fs = new FolderFileStorage(folder)
 
-      implicit val serviceimpl =
+      implicit val serviceimpl: FileServiceComponent =
         FileServiceComponent(fs, remoteStore)
 
       implicit val historyContext = tasks.fileservice.NoHistory
@@ -511,7 +511,7 @@ class FileServiceSpec
       //   )
       // )
 
-      implicit val serviceimpl =
+      implicit val serviceimpl: FileServiceComponent =
         FileServiceComponent(fs, remoteStore)
       implicit val nlc =
         NodeLocalCache.start.unsafeRunSync()(
@@ -569,7 +569,7 @@ class FileServiceSpec
       val input = new java.io.File(folder, "proba")
       writeBinaryToFile(input.getCanonicalPath, data)
       val fs = new FolderFileStorage(folder)
-      implicit val serviceimpl =
+      implicit val serviceimpl: FileServiceComponent =
         FileServiceComponent(fs, remoteStore)
       implicit val nlc =
         NodeLocalCache.start.unsafeRunSync()(
@@ -619,7 +619,7 @@ class FileServiceSpec
       //   )
       // )
 
-      implicit val serviceimpl =
+      implicit val serviceimpl: FileServiceComponent =
         FileServiceComponent(fs, remoteStore)
       implicit val nlc =
         NodeLocalCache.start.unsafeRunSync()(
