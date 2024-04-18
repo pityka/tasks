@@ -109,7 +109,7 @@ object ProxyFileStorage {
   }
 
   def makeClient(
-      uri: org.http4s.Uri,
+      uri: org.http4s.Uri
   ): Resource[IO, ManagedFileStorage] = {
     EmberClientBuilder
       .default[IO]
@@ -121,9 +121,8 @@ object ProxyFileStorage {
 
   final private class ProxyFileStorageClient private[ProxyFileStorage] (
       address: org.http4s.Uri,
-      httpClient: Client[IO],
+      httpClient: Client[IO]
   ) extends ManagedFileStorage {
-
 
     def uri(mp: ManagedFilePath): IO[tasks.util.Uri] =
       httpClient.expect[tasks.util.Uri](

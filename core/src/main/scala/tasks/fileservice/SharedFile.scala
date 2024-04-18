@@ -32,6 +32,8 @@ import tasks.util.Uri
 import tasks.TaskSystemComponents
 import tasks.Implicits._
 import tasks.HasSharedFiles
+import tasks.fs
+import tasks.tasksConfig
 
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
@@ -122,7 +124,7 @@ object SharedFile {
       tsc: TaskSystemComponents
   ): IO[SharedFile] =
     SharedFileHelper.createFromStream(source, name)
-    
+
   def apply(bytes: Array[Byte], name: String)(implicit
       tsc: TaskSystemComponents
   ): IO[SharedFile] =

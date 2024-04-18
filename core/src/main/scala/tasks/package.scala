@@ -36,7 +36,6 @@ import tasks.util.config.TasksConfig
 import tasks.deploy._
 import tasks.shared.LogRecord
 
-
 import cats.effect.IO
 import tasks.shared.ResourceAllocated
 import cats.effect.kernel.Resource
@@ -190,8 +189,6 @@ package object tasks extends MacroCalls {
 
     TaskSystemComponents.make(hostConfig, elasticSupport, tconfig) -> hostConfig
   }
-
-
 
   type SSerializer[T] = Spore[Unit, Serializer[T]]
   type SDeserializer[T] = Spore[Unit, Deserializer[T]]

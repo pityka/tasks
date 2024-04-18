@@ -121,9 +121,11 @@ class EC2CreateNode(
 
   private def requestSpotInstance(requestSize: ResourceRequest) = {
     // size is ignored, instance specification is set in configuration
-    val selectedInstanceType = EC2Operations.workerInstanceType(requestSize).getOrElse(
-      throw new RuntimeException("No instance type could fullfill request")
-    )
+    val selectedInstanceType = EC2Operations
+      .workerInstanceType(requestSize)
+      .getOrElse(
+        throw new RuntimeException("No instance type could fullfill request")
+      )
 
     // Initializes a Spot Instance Request
     val requestRequest = new RequestSpotInstancesRequest();
@@ -251,9 +253,11 @@ object EC2ReaperFactory extends ReaperFactory {
     )
 }
 
-object EC2ElasticSupport extends ElasticSupportFromConfig {
+class EC2ElasticSupport extends ElasticSupportFromConfig {
 
-  implicit val fqcn : ElasticSupportFqcn = ElasticSupportFqcn("tasks.elastic.ec2.EC2ElasticSupport")
+  implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
+    "tasks.elastic.ec2.EC2ElasticSupport"
+  )
 
   def apply(implicit config: TasksConfig) = {
     implicit val ec2 =

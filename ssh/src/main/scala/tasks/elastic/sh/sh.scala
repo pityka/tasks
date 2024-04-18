@@ -120,8 +120,10 @@ object SHGetNodeName extends GetNodeName {
   }
 }
 
-object SHElasticSupport extends ElasticSupportFromConfig {
-  implicit val fqcn : ElasticSupportFqcn = ElasticSupportFqcn("tasks.elastic.sh.SHElasticSupport")
+class SHElasticSupport extends ElasticSupportFromConfig {
+  implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
+    "tasks.elastic.sh.SHElasticSupport"
+  )
   def apply(implicit config: TasksConfig) = SimpleElasticSupport(
     fqcn = fqcn,
     hostConfig = None,

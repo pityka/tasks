@@ -54,7 +54,6 @@ class S3Storage(
 
   override def toString = s"S3Storage(bucket=$bucketName, prefix=$folderPrefix)"
 
-
   def sharedFolder(prefix: Seq[String]): IO[Option[File]] = IO.pure(None)
 
   def contains(

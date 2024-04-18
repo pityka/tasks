@@ -23,19 +23,16 @@
  */
 package tasks.queue
 
-
 trait SporeFun[A, B] {
   def call(a: A): B
 }
 
+trait Revivable[A, B] {
 
-trait Revivable[A,B] {
+  def fqcn: String
+  def dependencies: Seq[Spore[Any, Any]]
 
-  def fqcn: String 
-  def dependencies: Seq[Spore[Any,Any]]
-  
-
-   def revive : SporeFun[A,B] = {
+  def revive: SporeFun[A, B] = {
     try {
       val ctors = java.lang.Class
         .forName(fqcn)
@@ -51,14 +48,12 @@ trait Revivable[A,B] {
       case e: java.lang.NoSuchMethodException =>
         throw SporeException(
           s"Available ctors: ${java.lang.Class
-            .forName(fqcn)
-            .getConstructors()
-            .toList}",
+              .forName(fqcn)
+              .getConstructors()
+              .toList}",
           e
         )
     }
   }
-
- 
 
 }

@@ -105,7 +105,7 @@ private[tasks] class TaskResultCache(
                   (files zip accessibility).filterNot(_._2)
                 scribe.warn(
                   s"Checking: $taskId. Got something ($cacheLookup), but failed to verify after cache. Inaccessible files: ${inaccessibleFiles.size} : ${inaccessibleFiles
-                    .mkString(", ")}"
+                      .mkString(", ")}"
                 )
                 AnswerFromCache(
                   Left("TaskNotFoundInCache"),

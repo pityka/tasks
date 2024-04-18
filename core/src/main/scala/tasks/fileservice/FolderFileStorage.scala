@@ -47,9 +47,8 @@ object FolderFileStorage {
 }
 
 class FolderFileStorage(val basePath: File)(implicit
-    config: TasksConfig,
+    config: TasksConfig
 ) extends ManagedFileStorage {
-
 
   if (basePath.exists && !basePath.isDirectory)
     throw new IllegalArgumentException(s"$basePath exists and not a folder")

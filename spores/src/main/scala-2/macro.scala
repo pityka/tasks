@@ -24,8 +24,6 @@
 
 package tasks.queue
 
-
-
 object SporeMacros {
   import scala.reflect.macros.blackbox.Context
 
@@ -77,7 +75,7 @@ object SporeMacros {
     }
     val $instance = new $name(..${externalReferences.map(_.name)})
     _root_.tasks.queue.Spore[_root_.scala.Unit,$b]($instance.getClass.getName,Seq(..${externalReferences
-      .map(_.name)}))
+        .map(_.name)}).map(_.asInstanceOf[_root_.tasks.queue.Spore[Any,Any]]))
     """
     failIfInner(cxt)
 
@@ -114,7 +112,7 @@ object SporeMacros {
     }
     val $instance = new $name(..${externalReferences.map(_.name)})
     _root_.tasks.queue.Spore[$a,$b]($instance.getClass.getName,Seq(..${externalReferences
-      .map(_.name)}))
+        .map(_.name)}).map(_.asInstanceOf[_root_.tasks.queue.Spore[Any,Any]]))
     """
     failIfInner(cxt)
     t

@@ -12,7 +12,7 @@ trait Deserializer[A] {
 }
 
 object Serializer {
-  val nothing = new Serializer[Nothing] {
+  val nothing: Serializer[Nothing] = new Serializer[Nothing] {
     def apply(a: Nothing): Array[Byte] = Array.empty
     def hash(a: Nothing): String = "nothing"
   }
@@ -40,9 +40,11 @@ object SerDe {
   ): SerDe[A] =
     SerDe(w, r)
 
-  val nothing = SerDe[Nothing](
-    ser = spore(() => Serializer.nothing),
-    deser = spore(() => Deserializer.nothing)
-  )
-}
+  val ns: Spore[Unit, Serializer[Nothing]] =
+    spore((_: Unit) => Serializer.nothing)
 
+  // val nothing = SerDe[Nothing](
+  //   ser = ns,
+  //   deser = spore((_:Unit) => Deserializer.nothing)
+  // )
+}
