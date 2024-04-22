@@ -340,5 +340,5 @@ lazy val testables = (project in file("testables"))
     upicklesupport,
     circe,
     sharedJVM,
-    ssh
+    // ssh
   )
