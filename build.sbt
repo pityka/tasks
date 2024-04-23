@@ -156,7 +156,6 @@ lazy val core = project
       "org.scalatest" %% "scalatest" % "3.2.16" % "test",
       "com.outr" %% "scribe" % scribeVersion,
       "com.outr" %% "scribe-slf4j" % scribeVersion,
-      "org.scala-lang" % "scala-reflect" % scalaVersion.value,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test"
     ) ++ akkaProvided ++ (CrossVersion
@@ -339,6 +338,6 @@ lazy val testables = (project in file("testables"))
     core,
     upicklesupport,
     circe,
-    sharedJVM,
+    sharedJVM
     // ssh
   )
