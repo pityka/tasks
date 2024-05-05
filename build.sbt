@@ -26,8 +26,8 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.13",
-  crossScalaVersions := Seq("2.13.13", "3.4.1"),
+  scalaVersion := "2.13.14",
+  crossScalaVersions := Seq("2.13.14", "3.4.1"),
   parallelExecution in Test := false,
   scalacOptions ++= (CrossVersion.partialVersion(scalaVersion.value) match {
     case Some((2, 13)) =>
