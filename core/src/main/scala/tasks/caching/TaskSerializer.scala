@@ -36,6 +36,10 @@ trait TaskSerializer {
   }
 
   def deserializeResult(byteArray: Array[Byte]): UntypedResult = {
-    readFromArray[UntypedResult](byteArray)
+    readFromArray[UntypedResult](
+      byteArray,
+      config = ReaderConfig.withMaxBufSize(2147483645)
+        .withMaxCharBufSize(2147483645)
+    )
   }
 }

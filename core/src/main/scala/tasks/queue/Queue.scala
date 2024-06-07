@@ -228,34 +228,34 @@ class TaskQueue(
 
     case AskForWork(availableResource) =>
       if (state.negotiation.isEmpty) {
-        log.debug(
-          "AskForWork. Sender: {}. Resource: {}. Negotition state: {}. Queue state: {}",
-          sender(),
-          availableResource,
-          state.negotiation,
-          state.queuedTasks.map { case (_, (sch, _)) =>
+        scribe.debug(
+          s"AskForWork ${sender()} $availableResource ${state.negotiation} ${state.queuedTasks.map { case (_, (sch, _)) =>
             (sch.description.taskId, sch.resource)
-          }.toSeq
+          }.toSeq}"
         )
 
         val launcher = LauncherActor(sender())
 
-        state.queuedTasks
-          .filter { case (_, (sch, _)) =>
+        var maxPrio = Int.MinValue
+        var selected = Option.empty[ScheduleTask]
+        state.queuedTasks.valuesIterator
+          .foreach { case (sch, _) =>
             val ret = availableResource.canFulfillRequest(sch.resource)
-            if (!ret) {
+            if (!ret && (maxPrio == Int.MinValue || sch.priority.toInt > maxPrio)) {
               log.debug(
-                s"Can't fulfill request ${sch.resource} with available resources $availableResource"
+                s"Can't fulfill request ${sch.resource} with available resources $availableResource or lower priority than an already selected task"
               )
+            } else {
+              maxPrio = sch.priority.toInt
+              selected = Some(sch)
             }
-            ret
+
           }
-          .toSeq
-          .sortBy { case (_, (sch, _)) =>
-            sch.priority.toInt
-          }
-          .headOption
-          .foreach { case (_, (sch, _)) =>
+
+        selected match {
+          case None => launcher.actor ! NothingForSchedule
+          case Some(sch) =>
+         
             val withNegotiation = state.update(Negotiating(launcher, sch))
             log.info(
               s"Dequeued task ${sch.description.taskId.id} with priority ${sch.priority}. Sending task to $launcher. (Negotation state of queue: ${state.negotiation})"
@@ -273,8 +273,8 @@ class TaskQueue(
             context.become(running(newState))
 
             launcher.actor ! Schedule(sch)
-
           }
+          
       } else {
         log.debug("AskForWork received but currently in negotiation state.")
       }

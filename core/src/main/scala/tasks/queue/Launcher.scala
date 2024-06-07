@@ -115,6 +115,7 @@ class Launcher(
   private var idleState: Long = 0L
 
   private var denyWorkBeforeShutdown = false
+  private var waitingForWork = false
 
   private var runningTasks
       : List[(Task, ScheduleTask, VersionedResourceAllocated, Long)] =
@@ -186,6 +187,7 @@ class Launcher(
   private def askForWork(): Unit = {
     if (!availableResources.empty && !denyWorkBeforeShutdown) {
       queueActor ! AskForWork(availableResources)
+      waitingForWork = true
     }
   }
 
@@ -303,8 +305,11 @@ class Launcher(
   }
 
   def receive = {
+    case NothingForSchedule =>
+      waitingForWork = false
     case Schedule(scheduleTask) =>
       log.debug(s"Received ScheduleWithProxy ")
+      waitingForWork = false
       if (!denyWorkBeforeShutdown) {
 
         if (isIdle) {
@@ -325,8 +330,11 @@ class Launcher(
 
     case PrintResources =>
       log.info(s"Available resources: $availableResources on $self")
-    case CheckQueue => askForWork()
-    case Ping       => sender() ! Pong
+    case CheckQueue =>
+      if (!waitingForWork) {
+        askForWork()
+      }
+    case Ping => sender() ! Pong
     case PrepareForShutdown =>
       if (isIdle) {
         denyWorkBeforeShutdown = true

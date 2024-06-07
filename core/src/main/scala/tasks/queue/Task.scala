@@ -106,7 +106,10 @@ private[tasks] case class UntypedResultWithMetadata(
 
 private[tasks] object UntypedResultWithMetadata {
   implicit val codec: JsonValueCodec[UntypedResultWithMetadata] =
-    JsonCodecMaker.make
+    JsonCodecMaker.make(CodecMakerConfig
+    .withMapMaxInsertNumber(2147483645)
+    .withSetMaxInsertNumber(2147483645)
+    )
 }
 
 private[tasks] object UntypedResult {
@@ -125,7 +128,10 @@ private[tasks] object UntypedResult {
   }
 
   implicit val codec: JsonValueCodec[UntypedResult] =
-    JsonCodecMaker.make(CodecMakerConfig.withSetMaxInsertNumber(2147483647))
+    JsonCodecMaker.make(CodecMakerConfig
+    .withMapMaxInsertNumber(2147483645)
+    .withSetMaxInsertNumber(2147483645)
+    )
 }
 
 class ComputationEnvironment(

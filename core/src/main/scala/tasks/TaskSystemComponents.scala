@@ -319,7 +319,7 @@ object TaskSystemComponents {
     def initFailed(remoteNodeRegistry: Option[ActorRef]): Unit = {
       if (!hostConfig.isApp && hostConfig.isWorker) {
         scribe.error(
-          "Initialization failed. This is a slave node, notifying remote node registry."
+          "Initialization failed. This is a follower node, notifying remote node registry."
         )
         remoteNodeRegistry.foreach(
           _ ! InitFailed(
@@ -639,7 +639,7 @@ object TaskSystemComponents {
           }
 
         } else {
-          scribe.info("This is not a slave node.")
+          scribe.info("This is not a follower node.")
         }
       })
 
