@@ -66,6 +66,7 @@ case class ResourceAvailable(
 ) {
 
   val gpuWithMultiplicities = ResourceAvailable.zipMultiplicities(gpu)
+  val numGpu = gpu.size
 
   def canFulfillRequest(r: ResourceAllocated) =
     cpu >= r.cpu && memory >= r.memory && scratch >= r.scratch &&
@@ -73,7 +74,7 @@ case class ResourceAvailable(
         .forall(g => gpuWithMultiplicities.contains(g))
 
   def canFulfillRequest(r: ResourceRequest) =
-    cpu >= r.cpu._1 && memory >= r.memory && scratch >= r.scratch && gpu.size >= r.gpu
+    cpu >= r.cpu._1 && memory >= r.memory && scratch >= r.scratch && numGpu >= r.gpu
 
   def substract(r: ResourceRequest) = {
     val remainingCPU = math.max((cpu - r.cpu._2), 0)
@@ -122,7 +123,7 @@ case class ResourceAvailable(
 }
 
 object ResourceAvailable {
-  def zipMultiplicities(l: List[Int]) =
+  private[tasks] def zipMultiplicities(l: List[Int]) =
     l.sorted.foldLeft(List.empty[(Int, Int)]) { case (acc, next) =>
       acc match {
         case (last, i) :: _ if last == next => (next, i + 1) :: acc

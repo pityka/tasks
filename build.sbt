@@ -81,8 +81,8 @@ lazy val commonSettings = Seq(
   scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings"))
 )
 
-lazy val circeVersion = "0.14.7"
-lazy val jsoniterVersion = "2.13.31"
+lazy val circeVersion = "0.14.6"
+lazy val jsoniterVersion = "2.30.1"
 lazy val akkaVersion = "2.6.19"
 lazy val http4sVersion = "0.23.27"
 lazy val scribeVersion = "3.13.3"
