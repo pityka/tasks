@@ -141,7 +141,7 @@ class ComputationEnvironment(
     implicit val components: TaskSystemComponents,
     implicit val launcher: LauncherActor,
     val taskActor: Task,
-    taskHash: HashedTaskDescription
+    val taskHash: HashedTaskDescription
 ) {
 
   private val logQueue =
