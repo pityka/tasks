@@ -128,7 +128,7 @@ lazy val spores = project
         )
       case _ => Seq.empty
     }) ++ List(
-      "org.scalatest" %% "scalatest" % "3.2.16" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.19" % "test"
     )
   )
 lazy val akkaProvided = List(
@@ -153,7 +153,7 @@ lazy val core = project
       "com.typesafe" % "config" % "1.4.2",
       "org.typelevel" %% "cats-effect" % "3.5.3",
       "io.github.pityka" %% "selfpackage" % "2.0.1",
-      "org.scalatest" %% "scalatest" % "3.2.16" % "test",
+      "org.scalatest" %% "scalatest" % "3.2.19" % "test",
       "com.outr" %% "scribe" % scribeVersion,
       "com.outr" %% "scribe-slf4j" % scribeVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
@@ -283,7 +283,7 @@ lazy val circe = project
       "io.circe" %% "circe-core" % circeVersion,
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,
-      "org.scalatest" %% "scalatest" % "3.2.16" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.19" % "test"
     ) ++ akkaProvided
   )
   .dependsOn(core)
@@ -299,7 +299,7 @@ lazy val ecoll = project
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % jsoniterVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test",
-      "org.scalatest" %% "scalatest" % "3.2.16" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.19" % "test"
     ) ++ akkaProvided
   )
   .dependsOn(core)
