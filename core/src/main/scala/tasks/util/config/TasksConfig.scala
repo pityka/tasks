@@ -43,7 +43,7 @@ class TasksConfig(load: () => Config) {
 
   def raw: Config = {
     val currentTime = System.nanoTime
-    if (currentTime - lastLoadedAt.get > maxConfigLoadInterval) {
+    if (false && currentTime - lastLoadedAt.get > maxConfigLoadInterval) {
       scribe.debug("Reload config.")
       val current = load()
       lastLoaded = current
