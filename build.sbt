@@ -82,7 +82,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val circeVersion = "0.14.6"
-lazy val jsoniterVersion = "2.30.1"
+lazy val jsoniterVersion = "2.30.7"
 lazy val akkaVersion = "2.6.19"
 lazy val http4sVersion = "0.23.27"
 lazy val scribeVersion = "3.13.3"
