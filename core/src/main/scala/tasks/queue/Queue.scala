@@ -230,8 +230,8 @@ class TaskQueue(
       if (state.negotiation.isEmpty) {
         scribe.debug(
           s"AskForWork ${sender()} $availableResource ${state.negotiation} ${state.queuedTasks.map { case (_, (sch, _)) =>
-            (sch.description.taskId, sch.resource)
-          }.toSeq}"
+              (sch.description.taskId, sch.resource)
+            }.toSeq}"
         )
 
         val launcher = LauncherActor(sender())
@@ -241,7 +241,9 @@ class TaskQueue(
         state.queuedTasks.valuesIterator
           .foreach { case (sch, _) =>
             val ret = availableResource.canFulfillRequest(sch.resource)
-            if (!ret && (maxPrio == Int.MinValue || sch.priority.toInt > maxPrio)) {
+            if (
+              !ret && (maxPrio == Int.MinValue || sch.priority.toInt > maxPrio)
+            ) {
               log.debug(
                 s"Can't fulfill request ${sch.resource} with available resources $availableResource or lower priority than an already selected task"
               )
@@ -255,7 +257,6 @@ class TaskQueue(
         selected match {
           case None => launcher.actor ! NothingForSchedule
           case Some(sch) =>
-         
             val withNegotiation = state.update(Negotiating(launcher, sch))
             log.info(
               s"Dequeued task ${sch.description.taskId.id} with priority ${sch.priority}. Sending task to $launcher. (Negotation state of queue: ${state.negotiation})"
@@ -273,8 +274,8 @@ class TaskQueue(
             context.become(running(newState))
 
             launcher.actor ! Schedule(sch)
-          }
-          
+        }
+
       } else {
         log.debug("AskForWork received but currently in negotiation state.")
       }

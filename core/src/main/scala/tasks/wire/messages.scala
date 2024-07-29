@@ -53,7 +53,7 @@ private[tasks] case object GetMaximumSlots extends StaticMessage
 private[tasks] case object GetAvailableSlots extends StaticMessage
 
 case class Schedule(sch: ScheduleTask) extends StaticMessage
-case object  NothingForSchedule extends StaticMessage
+case object NothingForSchedule extends StaticMessage
 
 // Messages related to elastic
 
