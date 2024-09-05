@@ -157,6 +157,49 @@ class FileServiceSpec
         data.toVector
       )
     }
+    it("add new file - encrypted") {
+      val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
+      val input = TempFile.createTempFile(".in")
+      writeBinaryToFile(input.getCanonicalPath, data)
+
+      val folder =
+        new File(new java.io.File(getClass.getResource("/").getPath), "test1")
+      folder.mkdir
+      val folder2 =
+        new File(new java.io.File(getClass.getResource("/").getPath), "test1f")
+      folder2.mkdir
+
+      val fs = new EncryptedManagedFileStorage(new FolderFileStorage(folder), "00".repeat(32))
+
+      implicit val serviceimpl: FileServiceComponent =
+        FileServiceComponent(fs, remoteStore)
+      implicit val historyContext = tasks.fileservice.NoHistory
+
+      val t = SharedFileHelper.createFromFile(input, "proba", false).unsafeRunSync()
+
+      readBinaryFile(
+        new java.io.File(folder, "proba").getCanonicalPath
+      ).toVector should not equal(
+        data.toVector
+      )
+
+      implicit val nlc =
+        NodeLocalCache.start.unsafeRunSync()(
+          cats.effect.unsafe.implicits.global
+        )
+
+       val path =
+        Await.result(
+          SharedFileHelper
+            .getPathToFile(t)
+            .allocated
+            .map(_._1)
+            .unsafeToFuture()(cats.effect.unsafe.implicits.global),
+          50 seconds
+        )
+
+      readBinaryFile(path.getCanonicalPath).toVector should equal(data.toVector)
+    }
     it("add new file") {
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
       val input = TempFile.createTempFile(".in")

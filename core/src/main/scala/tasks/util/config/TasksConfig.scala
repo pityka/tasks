@@ -303,4 +303,9 @@ class TasksConfig(load: () => Config) {
   val connectToProxyFileServiceOnMain =
     raw.getBoolean("tasks.fileservice.connectToProxy")
 
+  val storageEncryptionKey =
+    if (raw.hasPath("tasks.fileservice.encryptionKey"))
+      Some(raw.getString("tasks.fileservice.encryptionKey"))
+    else None
+
 }

@@ -4,6 +4,8 @@ Original work (as in https://github.com/pityka/mybiotools/tree/master/Tasks):
 Copyright (c) 2015 ECOLE POLYTECHNIQUE FEDERALE DE LAUSANNE, Switzerland, Group Fellay
 
 Modified work (this repository): Copyright (c) 2016 Istvan Bartha
+With the following exceptions:
+- Aes.scala is distributed under MIT License, Copyright (c) 2023 Jakub Wojnowski. See header.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

@@ -280,14 +280,29 @@ object TaskSystemComponents {
           }
         }
 
-      fileStore.flatMap { fileStore =>
-        fileStore match {
-          case fs: ManagedFileStorage if config.proxyStorage =>
-            proxyFileStorageHttpServer(fs).map(_ => fs)
-
+      fileStore
+        .flatMap {
+          case fs: ManagedFileStorage
+              if config.storageEncryptionKey.isDefined =>
+            Resource.make(
+              IO(
+                new EncryptedManagedFileStorage(
+                  fs,
+                  config.storageEncryptionKey.get
+                )
+              )
+            )(e => IO(e.destroyKey()))
           case fs: ManagedFileStorage => Resource.pure(fs)
+
         }
-      }
+        .flatMap { fileStore =>
+          fileStore match {
+            case fs: ManagedFileStorage if config.proxyStorage =>
+              proxyFileStorageHttpServer(fs).map(_ => fs)
+
+            case fs: ManagedFileStorage => Resource.pure(fs)
+          }
+        }
 
     }
 
