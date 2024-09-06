@@ -85,7 +85,7 @@ lazy val circeVersion = "0.14.9"
 lazy val jsoniterVersion = "2.30.9"
 lazy val akkaVersion = "2.6.19"
 lazy val http4sVersion = "0.23.27"
-lazy val scribeVersion = "3.13.3"
+lazy val scribeVersion = "3.13.5"
 lazy val fs2Version = "3.11.0"
 
 lazy val shared = crossProject(JSPlatform, JVMPlatform)
