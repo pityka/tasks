@@ -38,7 +38,7 @@ import fs2.Pipe
 
 object FolderFileStorage {
 
-  private[tasks] def getContentHash(file: File): Int = {
+  private[tasks] def getContentHashOfFile(file: File,skip:Boolean): Int = if (skip) 0 else {
     openFileInputStream(file) { is =>
       FileStorage.getContentHash(is)
     }
@@ -62,16 +62,20 @@ class FolderFileStorage(val basePath: File)(implicit
 
   private val canonicalBasePath = basePath.getCanonicalPath
 
-  private def fileIsRelativeToBase(f: File): Boolean = {
-    val canonical = f.getCanonicalFile
+  private val tempFolder = new File(basePath, "___TMP___")
+  tempFolder.mkdirs()
+  private val tmpFolderCanonicalPath = tempFolder.getCanonicalPath()  
 
-    def getParents(f: File, p: List[File]): List[File] =
-      if (f == null) p
-      else getParents(f.getParentFile, f :: p)
+  private def createLocalTempFile() = {
+    def try1(i: Int): File = if (i == 0)
+      throw new RuntimeException(s"Could not create temp file in $tempFolder")
+    else {
+      val name = scala.util.Random.alphanumeric.take(128).mkString
+      val f = new File(tempFolder, name)
+      if (f.exists()) try1(i - 1) else f
+    }
 
-    val canonicalParents = getParents(canonical, Nil).map(_.getCanonicalPath)
-
-    (canonicalBasePath :: Nil).exists(path => canonicalParents.contains(path))
+    try1(5)
 
   }
 
@@ -87,7 +91,7 @@ class FolderFileStorage(val basePath: File)(implicit
         val sizeMatch = sizeOnDiskNow == expectedSize
         val canRead = file.canRead
         def contentMatch =
-          canRead && FolderFileStorage.getContentHash(file) === expectedHash
+          canRead && FolderFileStorage.getContentHashOfFile(file, config.skipContentHashCreationUponImport) === expectedHash
         val canDelete =
           canRead && (expectedSize < 0 || (sizeMatch && contentMatch))
         if (canDelete) {
@@ -123,7 +127,7 @@ class FolderFileStorage(val basePath: File)(implicit
       val sizeMatch = sizeOnDiskNow === size
       def contentMatch =
         (config.skipContentHashVerificationAfterCache || (canRead && FolderFileStorage
-          .getContentHash(f) === hash))
+          .getContentHashOfFile(f,config.skipContentHashCreationUponImport) === hash))
       val pass = canRead && (size < 0 || (sizeMatch && contentMatch))
 
       if (!pass) {
@@ -150,7 +154,7 @@ class FolderFileStorage(val basePath: File)(implicit
       } else {
         if (retrieveSizeAndHash) {
           val size = f.length
-          val hash = FolderFileStorage.getContentHash((f))
+          val hash = FolderFileStorage.getContentHashOfFile(f,config.skipContentHashCreationUponImport)
           Some(SharedFileHelper.create(size, hash, path))
         } else Some(SharedFileHelper.create(size = -1L, hash = 0, path))
       }
@@ -183,45 +187,55 @@ class FolderFileStorage(val basePath: File)(implicit
       )
     }
   }
-  private def copyFile(source: File, destination: File): Unit = {
+  private def copyFile(
+      source: File,
+      destination: File,
+      canMove: Boolean
+  ): Unit = {
     val parentFolder = destination.getParentFile
     parentFolder.mkdirs
-    val tmp = new File(parentFolder, destination.getName + ".tmp")
+    if (canMove) {
+      val success = source.renameTo(destination)
+      if (!success) copyFile(source, destination, false)
 
-    try {
-      com.google.common.io.Files.copy(source, tmp)
-    } catch {
-      case e: java.io.IOException =>
-        scribe.error(e, s"Exception while copying $source to $tmp")
-        throw e
-    }
+    } else {
+      val tmp = new File(parentFolder, destination.getName + ".tmp")
 
-    destination.delete
+      try {
+        com.google.common.io.Files.copy(source, tmp)
+      } catch {
+        case e: java.io.IOException =>
+          scribe.error(e, s"Exception while copying $source to $tmp")
+          throw e
+      }
 
-    def tryRename(i: Int): Boolean = {
-      val success = tmp.renameTo(destination)
-      if (success) success
-      else if (i > 0) {
-        scribe.warn(
-          s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}. Try $i more times."
-        )
-        tryRename(i - 1)
-      } else {
-        scribe.error(
+      destination.delete
+
+      def tryRename(i: Int): Boolean = {
+        val success = tmp.renameTo(destination)
+        if (success) success
+        else if (i > 0) {
+          scribe.warn(
+            s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}. Try $i more times."
+          )
+          tryRename(i - 1)
+        } else {
+          scribe.error(
+            s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}"
+          )
+          false
+        }
+      }
+
+      val succ = tryRename(3)
+      if (succ) {
+        tmp.delete
+
+      } else
+        throw new RuntimeException(
           s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}"
         )
-        false
-      }
     }
-
-    val succ = tryRename(3)
-    if (succ) {
-      tmp.delete
-
-    } else
-      throw new RuntimeException(
-        s"can't rename file $tmp to $destination. $tmp canRead : ${tmp.canRead}"
-      )
   }
 
   private def assemblePath(path: ManagedFilePath): File = {
@@ -241,7 +255,7 @@ class FolderFileStorage(val basePath: File)(implicit
   def sink(
       path: ProposedManagedFilePath
   ): Pipe[IO, Byte, (Long, Int, ManagedFilePath)] = { (in: Stream[IO, Byte]) =>
-    val tmp = TempFile.createTempFile("foldertmp")
+    val tmp = createLocalTempFile()
     Stream.eval(
       in.through(
         fs2.io.file
@@ -250,8 +264,8 @@ class FolderFileStorage(val basePath: File)(implicit
       ).compile
         .drain
         .flatMap { _ =>
-          importFile(tmp, path)
-            .guarantee(IO.interruptible { tmp.delete })
+          importFile(tmp, path, canMove = true)
+            .guarantee(IO.interruptible { if (tmp.exists) {tmp.delete} })
             .map(x => (x._1, x._2, x._3))
         }
     )
@@ -261,38 +275,37 @@ class FolderFileStorage(val basePath: File)(implicit
     if (config.folderFileStorageCompleteFileCheck)
       com.google.common.io.Files.equal(file1, file2)
     else
-      file1.length == file2.length && FolderFileStorage.getContentHash(
-        file1
+      file1.length == file2.length && FolderFileStorage.getContentHashOfFile(
+        file1,config.skipContentHashCreationUponImport
       ) == FolderFileStorage
-        .getContentHash(file2)
+        .getContentHashOfFile(file2,config.skipContentHashCreationUponImport)
 
   override def importFile(
       file: File,
-      proposed: ProposedManagedFilePath
-  ): IO[(Long, Int, ManagedFilePath)] =
+      proposed: ProposedManagedFilePath,
+      canMove: Boolean
+  ): IO[(Long, Int, ManagedFilePath)] = {
+    def copy(dest: File) =
+      copyFile(file, dest, canMove)
+
     IO.blocking({
       scribe.debug(s"Importing file $file under name $proposed")
       val size = file.length
-      val hash = FolderFileStorage.getContentHash(file)
+      val hash = FolderFileStorage.getContentHashOfFile(file,config.skipContentHashCreationUponImport)
       val managed = proposed.toManaged
 
-      if (fileIsRelativeToBase(file)) {
-        val locationAsManagedFilePath = {
-          val relativeToBase =
-            file.getAbsolutePath.stripPrefix(canonicalBasePath)
-          val elements = relativeToBase.split('/').toVector.filter(_.nonEmpty)
-          ManagedFilePath(elements)
-        }
-        (size, hash, locationAsManagedFilePath)
-      } else if (assemblePath(managed).canRead) {
+      if (assemblePath(managed).canRead) {
         val finalFile = assemblePath(managed)
         scribe.debug(
           s"Found a file already in storage with the same name ($finalFile). Check for equality."
         )
-        if (checkContentEquality(finalFile, file))
+        println((file,proposed))
+        if (finalFile == file || checkContentEquality(finalFile, file))
           (size, hash, managed)
         else {
-          scribe.debug(s"Equality failed. Importing file. $file to $finalFile")
+          scribe.info(
+            s"Equality check failed for a file at the same path. Importing file. $file to $finalFile"
+          )
 
           if (!config.allowOverwrite) {
             def candidates(i: Int, past: List[File]): List[File] = {
@@ -321,15 +334,16 @@ class FolderFileStorage(val basePath: File)(implicit
               .move(finalFile, assemblePath(managed, ".old.0"))
           }
 
-          copyFile(file, finalFile)
+          copy(finalFile)
           (size, hash, managed)
         }
 
       } else {
-        copyFile(file, assemblePath(managed))
+        copy(assemblePath(managed))
         (size, hash, managed)
       }
     })
+  }
 
   def uri(mp: ManagedFilePath) = IO.pure {
     // throw new RuntimeException("URI not supported")

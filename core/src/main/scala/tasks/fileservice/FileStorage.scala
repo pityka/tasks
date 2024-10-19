@@ -41,7 +41,7 @@ import fs2.Stream
 object FileStorage {
   def getContentHash(is: InputStream): Int = {
     val checkedSize = 1024 * 256
-    val buffer = Array.fill[Byte](checkedSize)(0)
+    val buffer = Array.ofDim[Byte](checkedSize)
     val his = new HashingInputStream(Hashing.crc32c, is)
 
     com.google.common.io.ByteStreams.read(his, buffer, 0, buffer.size)
@@ -141,7 +141,8 @@ trait ManagedFileStorage {
 
   def importFile(
       f: File,
-      path: ProposedManagedFilePath
+      path: ProposedManagedFilePath,
+      canMove: Boolean
   ): IO[(Long, Int, ManagedFilePath)] =
     tasks.util.retryIO(s"upload to $path")(importFile1(f, path), 4)(
       scribe.Logger[ManagedFileStorage]

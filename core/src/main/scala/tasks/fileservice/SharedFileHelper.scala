@@ -210,8 +210,8 @@ private[tasks] object SharedFileHelper {
   ): IO[SharedFile] = {
     val sharedFile = {
       val proposedPath = prefix.propose(name)
-      service.storage.importFile(file, proposedPath).map { f =>
-        if (deleteFile) {
+      service.storage.importFile(file, proposedPath,canMove=true).map { f =>
+        if (deleteFile && file.exists()) {
           file.delete
         }
         SharedFileHelper.create(f._1, f._2, f._3)
@@ -275,11 +275,15 @@ private[tasks] object SharedFileHelper {
       val directoryPath = directory.getAbsolutePath
       IO.parSequenceN(parallelism)(files.map { file =>
         assert(file.getAbsolutePath.startsWith(directoryPath))
+        val pathElements :Seq[String] = file.getAbsolutePath.drop(directoryPath.size).split('/').filter(_.nonEmpty)
+        val folders = pathElements.dropRight(1)
+        val name  = pathElements.last 
+         val prefix1 = prefix.append(folders)
         createFromFile(
           file,
-          file.getAbsolutePath.drop(directoryPath.size).stripPrefix("/"),
+          name,
           deleteFile = false
-        )
+        )(prefix1,service,config,historyContext)
       })
     }
   }

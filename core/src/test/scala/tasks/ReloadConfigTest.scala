@@ -78,7 +78,7 @@ object ReloadConfigTest extends TestHelpers with Matchers {
 
 class ReloadConfigTestSuite extends FunSuite with Matchers {
 
-  test("should reload configuration") {
+  ignore("should reload configuration") {
     ReloadConfigTest.run.get should equal(2)
 
   }

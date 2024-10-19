@@ -89,6 +89,8 @@ class TasksConfig(load: () => Config) {
 
   def skipContentHashVerificationAfterCache =
     raw.getBoolean("tasks.skipContentHashVerificationAfterCache")
+  def skipContentHashCreationUponImport =
+    raw.getBoolean("tasks.skipContentHashCreationUponImport")
 
   val acceptableHeartbeatPause: FD =
     raw.getDuration("tasks.failuredetector.acceptable-heartbeat-pause")
