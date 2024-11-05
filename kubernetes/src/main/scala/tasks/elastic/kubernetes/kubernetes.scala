@@ -30,30 +30,56 @@ import scala.util._
 import tasks.elastic._
 import tasks.shared._
 import tasks.util.config._
-import io.fabric8.kubernetes.client.KubernetesClient
-import io.fabric8.kubernetes.api.model.PodBuilder
-import io.fabric8.kubernetes.client.KubernetesClientBuilder
-import io.fabric8.kubernetes.api.model.Quantity
+
 import tasks.deploy.HostConfigurationFromConfig
 import tasks.util.Uri
 import tasks.util.SimpleSocketAddress
-import io.fabric8.kubernetes.api.model.TolerationBuilder
+import cats.effect._
+import com.goyeau.kubernetes.client._
+import org.typelevel.log4cats.Logger
+import org.typelevel.log4cats.slf4j.Slf4jLogger
+import scala.concurrent.duration._
 
-class K8SShutdown(k8s: KubernetesClient) extends ShutdownNode {
-  def shutdownRunningNode(nodeName: RunningJobId): Unit = {
-    scribe.info(s"Shut down $nodeName")
-    val spl = nodeName.value.split("/")
-    val ns = spl(0)
-    val podName = spl(1)
-    k8s.pods.inNamespace(ns).withName(podName).delete()
+import cats.effect.unsafe.implicits.global
+import io.k8s.api.core.v1.Toleration
+import io.k8s.api.core.v1.Pod
+import io.k8s.api.core.v1.PodSpec
+import io.k8s.api.core.v1.Container
+import io.k8s.api.core.v1.EnvVar
+import io.k8s.api.core.v1.EnvVarSource
+import io.k8s.api.core.v1.ObjectFieldSelector
+import io.k8s.api.core.v1.ResourceFieldSelector
+import io.k8s.api.core.v1.ResourceRequirements
+import io.k8s.apimachinery.pkg.api.resource.Quantity
+import io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta
+
+class K8SShutdown(k8s: Option[KubernetesClient[IO]]) extends ShutdownNode {
+  def shutdownRunningNode(nodeName: RunningJobId): Unit = k8s match {
+    case None =>
+      scribe.error(
+        s"Shut down $nodeName not happening because k8s client is empty. "
+      )
+    case Some(k8s) =>
+      scribe.info(s"Shut down $nodeName")
+      val spl = nodeName.value.split("/")
+      val ns = spl(0)
+      val podName = spl(1)
+      val status = k8s.pods.namespace(ns).delete(name = podName).unsafeRunSync()
+      scribe.info(s"Shutdown status of $podName pod: $status")
   }
 
-  def shutdownPendingNode(nodeName: PendingJobId): Unit = {
-    scribe.info(s"Shut down $nodeName")
-    val spl = nodeName.value.split("/")
-    val ns = spl(0)
-    val podName = spl(1)
-    k8s.pods.inNamespace(ns).withName(podName).delete()
+  def shutdownPendingNode(nodeName: PendingJobId): Unit = k8s match {
+    case None =>
+      scribe.error(
+        s"Shut down $nodeName not happening because k8s client is empty. "
+      )
+    case Some(k8s) =>
+      scribe.info(s"Shut down $nodeName")
+      val spl = nodeName.value.split("/")
+      val ns = spl(0)
+      val podName = spl(1)
+      val status = k8s.pods.namespace(ns).delete(name = podName).unsafeRunSync()
+      scribe.info(s"Shutdown status of $podName pod: $status")
   }
 
 }
@@ -65,177 +91,194 @@ object KubernetesHelpers {
 class K8SCreateNode(
     masterAddress: SimpleSocketAddress,
     codeAddress: CodeAddress,
-    k8s: KubernetesClient
+    k8s: Option[KubernetesClient[IO]]
 )(implicit config: TasksConfig, elasticSupport: ElasticSupportFqcn)
     extends CreateNode {
 
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest
-  ): Try[(PendingJobId, ResourceAvailable)] = {
-
-    val userCPURequest = math.max(requestSize.cpu._2, config.kubernetesCpuMin)
-    val userRamRequest = math.max(requestSize.memory, config.kubernetesRamMin)
-
-    val kubeCPURequest = userCPURequest + config.kubernetesCpuExtra
-    val kubeRamRequest = userRamRequest + config.kubernetesRamExtra
-
-    val script = Deployment.script(
-      memory = userRamRequest,
-      cpu = userCPURequest,
-      scratch = requestSize.scratch,
-      gpus = 0 until requestSize.gpu toList,
-      elasticSupport = elasticSupport,
-      masterAddress = masterAddress,
-      download = Uri(
-        scheme = "http",
-        hostname = codeAddress.address.getHostName,
-        port = codeAddress.address.getPort,
-        path = "/"
-      ),
-      slaveHostname = None,
-      background = false
-    )
-
-    val command = Seq("/bin/bash", "-c", script)
-
-    val podName = KubernetesHelpers.newName
-    val jobName = config.kubernetesNamespace + "/" + podName
-
-    val imageName = config.kubernetesImageName
-
-    val gpuTaintTolerations = config.kubernetesGpuTaintToleration.map {
-      case (effect, key, operator, seconds, value) =>
-        val builder0 = (new TolerationBuilder)
-          .withKey(key)
-          .withEffect(effect)
-          .withOperator(operator)
-        val builder1 = operator match {
-          case "Exists" =>
-            builder0
-          case "Equal" =>
-            builder0.withValue(value)
-          case _ =>
-            scribe.info(s"Unknown operator $operator")
-            builder0
-        }
-
-        val builder2 = effect match {
-          case "NoExecute" =>
-            val s = seconds.toLong
-            if (s >= 0) builder1.withTolerationSeconds(s)
-            else builder1
-          case _ => builder1
-        }
-
-        builder2.build
-    }
-
-    import scala.jdk.CollectionConverters._
-    Try {
-      k8s.pods
-        .inNamespace(config.kubernetesNamespace)
-        .resource(
-          new PodBuilder().withNewMetadata
-            .withName(podName)
-            .endMetadata()
-            .withNewSpec()
-            .addNewContainer
-            .withImage(imageName)
-            .withCommand(command.asJava)
-            .withName("tasks-worker")
-            .withImagePullPolicy(config.kubernetesImagePullPolicy)
-            //  IP
-            .addNewEnv()
-            .withName(config.kubernetesHostNameOrIPEnvVar)
-            .withNewValueFrom()
-            .withNewFieldRef()
-            .withFieldPath("status.podIP")
-            .endFieldRef()
-            .endValueFrom()
-            .endEnv()
-            //  CPU
-            .addNewEnv()
-            .withName(config.kubernetesCpuLimitEnvVar)
-            .withNewValueFrom()
-            .withNewResourceFieldRef()
-            .withContainerName("tasks-worker")
-            .withResource("limits.cpu")
-            .endResourceFieldRef()
-            .endValueFrom()
-            .endEnv()
-            //  RAM
-            .addNewEnv()
-            .withName(config.kubernetesRamLimitEnvVar)
-            .withNewValueFrom()
-            .withNewResourceFieldRef()
-            .withContainerName("tasks-worker")
-            .withResource("limits.memory")
-            .endResourceFieldRef()
-            .endValueFrom()
-            .endEnv()
-            //  SCRATCH
-            .addNewEnv()
-            .withName(config.kubernetesScratchLimitEnvVar)
-            .withNewValueFrom()
-            .withNewResourceFieldRef()
-            .withContainerName("tasks-worker")
-            .withResource("limits.ephemeral-storage")
-            .endResourceFieldRef()
-            .endValueFrom()
-            .endEnv()
-            .addNewEnv()
-            .withName("TASKS_JOB_NAME")
-            .withValue(jobName)
-            .endEnv()
-            .withNewResources()
-            .withRequests(
-              (Map(
-                "cpu" ->
-                  new Quantity(kubeCPURequest.toString),
-                "memory" -> new Quantity(s"${kubeRamRequest}M")
-              ) ++ (if (requestSize.scratch > 0)
-                      Map(
-                        "ephemeral-storage" -> new Quantity(
-                          s"${requestSize.scratch.toString}M"
-                        )
-                      )
-                    else Map.empty)).asJava
-            )
-            .withLimits(
-              (if (requestSize.gpu > 0)
-                 Map(
-                   "nvidia.com/gpu" -> new Quantity(
-                     requestSize.gpu.toString
-                   )
-                 )
-               else Map.empty[String, Quantity]).asJava
-            )
-            .endResources()
-            .endContainer
-            .withRestartPolicy("Never")
-            .withTolerations(
-              (if (requestSize.gpu > 0) gpuTaintTolerations else Nil).asJava
-            )
-            .endSpec
-            .build()
+  ): Try[(PendingJobId, ResourceAvailable)] =
+    k8s match {
+      case None =>
+        scribe.warn(
+          "Spawning new node not happening because k8s client empty. "
         )
-        .create()
+        scala.util.Failure(new RuntimeException("k8s client empty"))
+      case Some(k8s) =>
+        val userCPURequest =
+          math.max(requestSize.cpu._2, config.kubernetesCpuMin)
+        val userRamRequest =
+          math.max(requestSize.memory, config.kubernetesRamMin)
 
-      val available = ResourceAvailable(
-        cpu = userCPURequest,
-        memory = userRamRequest,
-        scratch = requestSize.scratch,
-        gpu = 0 until requestSize.gpu toList
-      )
+        val kubeCPURequest = userCPURequest + config.kubernetesCpuExtra
+        val kubeRamRequest = userRamRequest + config.kubernetesRamExtra
+        val imageName = requestSize.image.getOrElse(config.kubernetesImageName)
+        val script = Deployment.script(
+          memory = userRamRequest,
+          cpu = userCPURequest,
+          scratch = requestSize.scratch,
+          gpus = 0 until requestSize.gpu toList,
+          elasticSupport = elasticSupport,
+          masterAddress = masterAddress,
+          download = Uri(
+            scheme = "http",
+            hostname = codeAddress.address.getHostName,
+            port = codeAddress.address.getPort,
+            path = "/"
+          ),
+          followerHostname = None,
+          background = false,
+          image = Some(imageName)
+        )
 
-      (PendingJobId(jobName), available)
+        val command = Seq("/bin/bash", "-c", script)
+
+        val podName = KubernetesHelpers.newName
+        val jobName = config.kubernetesNamespace + "/" + podName
+
+        
+
+        val podSpecFromConfig: PodSpec = config.kubernetesPodSpec
+          .map { jsonString =>
+            val either = io.circe.parser.decode[PodSpec](jsonString)
+            either.left.foreach(error => scribe.error(error))
+            either.toOption.get
+          }
+          .getOrElse(PodSpec(containers = Nil))
+
+        val resource = Pod(
+          metadata = Some(
+            ObjectMeta(
+              namespace = Some(config.kubernetesNamespace),
+              name = Some(podName)
+            )
+          ),
+          apiVersion = Some("v1"),
+          spec = Some(
+            podSpecFromConfig.copy(
+              containers = List(
+                Container(
+                  image = Some(imageName),
+                  command = Some(command),
+                  name = "tasks-worker",
+                  imagePullPolicy = Some(config.kubernetesImagePullPolicy),
+                  env = Some(
+                    List(
+                      EnvVar(
+                        name = config.kubernetesHostNameOrIPEnvVar,
+                        valueFrom = Some(
+                          EnvVarSource(
+                            fieldRef = Some(
+                              ObjectFieldSelector(
+                                fieldPath = "status.podIP"
+                              )
+                            )
+                          )
+                        )
+                      ),
+                      EnvVar(
+                        name = config.kubernetesCpuLimitEnvVar,
+                        valueFrom = Some(
+                          EnvVarSource(
+                            resourceFieldRef = Some(
+                              ResourceFieldSelector(
+                                containerName = Some("tasks-worker"),
+                                resource = "limits.cpu"
+                              )
+                            )
+                          )
+                        )
+                      ),
+                      EnvVar(
+                        name = config.kubernetesRamLimitEnvVar,
+                        valueFrom = Some(
+                          EnvVarSource(
+                            resourceFieldRef = Some(
+                              ResourceFieldSelector(
+                                containerName = Some("tasks-worker"),
+                                resource = "limits.memory"
+                              )
+                            )
+                          )
+                        )
+                      ),
+                      EnvVar(
+                        name = config.kubernetesScratchLimitEnvVar,
+                        valueFrom = Some(
+                          EnvVarSource(
+                            resourceFieldRef = Some(
+                              ResourceFieldSelector(
+                                containerName = Some("tasks-worker"),
+                                resource = "limits.ephemeral-storage"
+                              )
+                            )
+                          )
+                        )
+                      ),
+                      EnvVar(
+                        name = "TASKS_JOB_NAME",
+                        value = Some(jobName)
+                      )
+                    )
+                  ),
+                  resources = Some(
+                    ResourceRequirements(
+                      requests = Some(
+                        (Map(
+                          "cpu" ->
+                            Quantity(kubeCPURequest.toString),
+                          "memory" -> new Quantity(s"${kubeRamRequest}M")
+                        ) ++ (if (requestSize.scratch > 0)
+                                Map(
+                                  "ephemeral-storage" -> Quantity(
+                                    s"${requestSize.scratch.toString}M"
+                                  )
+                                )
+                              else Map.empty))
+                      ),
+                      limits = Some(
+                        (if (requestSize.gpu > 0)
+                           Map(
+                             "nvidia.com/gpu" -> Quantity(
+                               requestSize.gpu.toString
+                             )
+                           )
+                         else Map.empty[String, Quantity])
+                      )
+                    )
+                  )
+                )
+              ),
+              restartPolicy = Some("Never")
+            )
+          )
+        )
+        scribe.info(resource.toString)
+
+        val t = Try {
+          val status = k8s.pods
+            .namespace(config.kubernetesNamespace)
+            .create(resource)
+            .unsafeRunSync()
+          scribe.info(s"Pod create status = $status of node $jobName")
+
+          val available = ResourceAvailable(
+            cpu = userCPURequest,
+            memory = userRamRequest,
+            scratch = requestSize.scratch,
+            gpu = 0 until requestSize.gpu toList,
+            image = Some(imageName)
+          )
+
+          (PendingJobId(jobName), available)
+        }
+        t
+
     }
-
-  }
 
 }
 
-class K8SCreateNodeFactory(k8s: KubernetesClient)(implicit
+class K8SCreateNodeFactory(k8s: Option[KubernetesClient[IO]])(implicit
     config: TasksConfig,
     fqcn: ElasticSupportFqcn
 ) extends CreateNodeFactory {
@@ -252,16 +295,28 @@ class K8SElasticSupport extends ElasticSupportFromConfig {
     "tasks.elastic.kubernetes.K8SElasticSupport"
   )
   def apply(implicit config: TasksConfig) = {
-    val k8s =
-      (new KubernetesClientBuilder).build
-    SimpleElasticSupport(
-      fqcn = fqcn,
-      hostConfig = Some(new K8SHostConfig()),
-      reaperFactory = None,
-      shutdown = new K8SShutdown(k8s),
-      createNodeFactory = new K8SCreateNodeFactory(k8s),
-      getNodeName = K8SGetNodeName
-    )
+    implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
+
+    val kubernetesClient =
+      KubernetesClient[IO](
+        KubeConfig.standard[IO].map(_.withDefaultAuthorizationCache(5.minutes))
+      )
+    kubernetesClient.attempt.map { k8s =>
+      k8s.left.foreach { throwable =>
+        scribe.error(
+          throwable,
+          "K8S client failed to create. Shutdown and nodefactory won't work"
+        )
+      }
+      SimpleElasticSupport(
+        fqcn = fqcn,
+        hostConfig = Some(new K8SHostConfig()),
+        reaperFactory = None,
+        shutdown = new K8SShutdown(k8s.toOption),
+        createNodeFactory = new K8SCreateNodeFactory(k8s.toOption),
+        getNodeName = K8SGetNodeName
+      )
+    }
   }
 }
 

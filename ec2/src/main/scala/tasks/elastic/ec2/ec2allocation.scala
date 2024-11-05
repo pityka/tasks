@@ -178,8 +178,9 @@ class EC2CreateNode(
         port = codeAddress.address.getPort,
         path = "/"
       ),
-      slaveHostname = None,
-      background = true
+      followerHostname = None,
+      background = true,
+      image = None
     )
 
     launchSpecification.setUserData(gzipBase64(userdata))
@@ -259,7 +260,7 @@ class EC2ElasticSupport extends ElasticSupportFromConfig {
     "tasks.elastic.ec2.EC2ElasticSupport"
   )
 
-  def apply(implicit config: TasksConfig) = {
+  def apply(implicit config: TasksConfig) = cats.effect.Resource.pure {
     implicit val ec2 =
       if (config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
       else AmazonEC2ClientBuilder.standard.withRegion(config.awsRegion).build

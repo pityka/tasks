@@ -1,2 +1,2 @@
-FROM alpine:3.7
-RUN apk add --no-cache curl openjdk8-jre bash unzip
+FROM eclipse-temurin:17
+RUN apt-get update && apt-get install unzip

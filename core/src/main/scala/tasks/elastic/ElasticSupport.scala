@@ -61,7 +61,7 @@ trait ElasticSupport {
 
 trait ElasticSupportFromConfig {
 
-  def apply(implicit config: TasksConfig): ElasticSupport
+  def apply(implicit config: TasksConfig): cats.effect.Resource[cats.effect.IO,ElasticSupport]
 
 }
 

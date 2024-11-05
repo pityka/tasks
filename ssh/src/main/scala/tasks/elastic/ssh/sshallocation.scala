@@ -185,8 +185,9 @@ class SSHCreateNode(
             port = codeAddress.address.getPort,
             path = "/"
           ),
-          slaveHostname = Some(host.hostname),
-          background = true
+          followerHostname = Some(host.hostname),
+          background = true,
+          image = None
         )
         SSHOperations.openSession(host) { session =>
           val command =
@@ -214,7 +215,8 @@ class SSHCreateNode(
               cpu = host.cpu,
               memory = host.memory,
               scratch = host.scratch,
-              gpu = host.gpu
+              gpu = host.gpu,
+              image = None
             )
           )
 
@@ -248,12 +250,12 @@ class SSHElasticSupport extends ElasticSupportFromConfig {
   implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
     "tasks.elastic.sh.SSHElasticSupport"
   )
-  def apply(implicit config: TasksConfig) = SimpleElasticSupport(
+  def apply(implicit config: TasksConfig) = cats.effect.Resource.pure(SimpleElasticSupport(
     fqcn = fqcn,
     hostConfig = None,
     reaperFactory = None,
     shutdown = new SSHShutdown,
     createNodeFactory = new SSHCreateNodeFactory,
     getNodeName = SSHGetNodeName
-  )
+  ))
 }

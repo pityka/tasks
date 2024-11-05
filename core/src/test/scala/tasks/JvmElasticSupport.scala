@@ -33,12 +33,13 @@ import tasks.util.SimpleSocketAddress
 
 import scala.concurrent.Future
 import cats.effect.IO
+import tasks.deploy.HostConfiguration
 
 object JvmElasticSupport {
 
   val taskSystems =
     scala.collection.mutable
-      .ArrayBuffer[(String, Future[(TaskSystemComponents, IO[Unit])])]()
+      .ArrayBuffer[(String, Future[((TaskSystemComponents,HostConfiguration), IO[Unit])])]()
 
   val nodesShutdown = scala.collection.mutable.ArrayBuffer[String]()
 
@@ -91,7 +92,7 @@ object JvmElasticSupport {
     tasks.akka.actorsystem.name = $jobid   
     tasks.addShutdownHook = false 
     tasks.fileservice.storageURI="${config.storageURI.toString}"
-    """)._1.allocated.unsafeRunSync()
+    """).allocated.unsafeRunSync()
       }(scala.concurrent.ExecutionContext.Implicits.global)
       import scala.concurrent.ExecutionContext.Implicits.global
       ts.map(_ => ()).recover { case e =>
@@ -107,7 +108,8 @@ object JvmElasticSupport {
             cpu = requestSize.cpu._1,
             memory = requestSize.memory,
             scratch = requestSize.scratch,
-            gpu = 0 until requestSize.gpu toList
+            gpu = 0 until requestSize.gpu toList,
+            image = None
           )
         )
       )
@@ -130,13 +132,13 @@ object JvmElasticSupport {
     implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
       "tasks.JvmElasticSupport$JvmGrid$"
     )
-    def apply(implicit config: TasksConfig) = SimpleElasticSupport(
+    def apply(implicit config: TasksConfig) = cats.effect.Resource.pure(SimpleElasticSupport(
       fqcn = fqcn,
       hostConfig = None,
       reaperFactory = None,
       shutdown = Shutdown,
       createNodeFactory = new JvmCreateNodeFactory,
       getNodeName = JvmGetNodeName
-    )
+    ))
   }
 }

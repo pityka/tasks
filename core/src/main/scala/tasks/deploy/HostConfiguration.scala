@@ -38,7 +38,15 @@ object Worker extends Role
 
 trait HostConfiguration {
 
-  def myAddress: SimpleSocketAddress
+  /** address to which we bind the application sometimes called internal address
+    */
+  def myAddressBind: SimpleSocketAddress
+
+  /* address seen from outside
+   * sometimes called logical or canonical address
+   * if empty use bind address
+   */
+  def myAddressExternal: Option[SimpleSocketAddress]
 
   def availableCPU: Int
 
@@ -47,6 +55,8 @@ trait HostConfiguration {
   def availableMemory: Int
 
   def availableScratch: Int
+
+  def image: Option[String]
 
   def master: SimpleSocketAddress
 
@@ -67,19 +77,30 @@ trait HostConfigurationFromConfig extends HostConfiguration {
 
   lazy val myAddress = SimpleSocketAddress(myHostname, myPort)
 
+  def myAddressBind: SimpleSocketAddress = myAddress
+
+  def myAddressExternal: Option[SimpleSocketAddress] =
+    config.hostNameExternal.map{v =>
+      val spl = v.split(':')
+      SimpleSocketAddress(spl.head, if (spl.size > 1) spl(1).toInt else myPort)
+    }
+
   lazy val availableCPU = config.hostNumCPU
 
   lazy val availableGPU = config.hostGPU
 
   lazy val availableMemory = config.hostRAM
 
+  lazy val image = config.hostImage
+
   lazy val availableScratch = config.hostScratch
 
-  lazy val master = config.masterAddress.getOrElse(myAddress)
+  lazy val master =
+    config.masterAddress.getOrElse(myAddressExternal.getOrElse(myAddress))
 
   private def startApp = config.startApp
 
-  private val isMaster = myAddress == master
+  private val isMaster = myAddress == master || myAddressExternal.exists(_ == master)
 
   lazy val myRoles: Set[Role] =
     if (config.masterAddress.isDefined && !startApp) Set(Worker)
@@ -96,11 +117,16 @@ class LocalConfiguration(
     val availableGPU: List[Int]
 ) extends HostConfiguration {
 
-  override lazy val myRoles = Set(App, Queue, Worker)
+  def image = Option.empty[String]
 
-  override lazy val master = SimpleSocketAddress("localhost", 0)
+  override val myRoles = Set(App, Queue, Worker)
 
-  val myAddress = master
+  override val master = SimpleSocketAddress("localhost", 0)
+
+  def myAddress = master
+  def myAddressBind: SimpleSocketAddress = master
+  def myAddressExternal: Option[SimpleSocketAddress] = None
+
 }
 
 class LocalConfigurationFromConfig(implicit config: TasksConfig)

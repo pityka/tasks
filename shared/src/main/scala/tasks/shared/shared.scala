@@ -33,13 +33,14 @@ case class ResourceRequest(
     cpu: (Int, Int),
     memory: Int,
     scratch: Int,
-    gpu: Int
+    gpu: Int,
+    image: Option[String]
 )
 
 object ResourceRequest {
 
   def apply(cpu: Int, memory: Int, scratch: Int, gpu: Int): ResourceRequest =
-    ResourceRequest((cpu, cpu), memory, scratch, gpu)
+    ResourceRequest((cpu, cpu), memory, scratch, gpu, None)
 
   implicit val codec: JsonValueCodec[ResourceRequest] = JsonCodecMaker.make
 
@@ -49,7 +50,8 @@ case class ResourceAllocated(
     cpu: Int,
     memory: Int,
     scratch: Int,
-    gpu: List[Int]
+    gpu: List[Int],
+    image: Option[String]
 ) {
   val gpuWithMultiplicities = ResourceAvailable.zipMultiplicities(gpu)
 }
@@ -62,7 +64,8 @@ case class ResourceAvailable(
     cpu: Int,
     memory: Int,
     scratch: Int,
-    gpu: List[Int]
+    gpu: List[Int],
+    image: Option[String]
 ) {
 
   val gpuWithMultiplicities = ResourceAvailable.zipMultiplicities(gpu)
@@ -82,7 +85,8 @@ case class ResourceAvailable(
       remainingCPU,
       memory - r.memory,
       scratch - r.scratch,
-      gpu = gpu.drop(r.gpu)
+      gpu = gpu.drop(r.gpu),
+      image = image
     )
   }
 
@@ -93,7 +97,8 @@ case class ResourceAvailable(
       scratch - r.scratch,
       gpuWithMultiplicities
         .filterNot(avail => r.gpuWithMultiplicities.contains(avail))
-        .map(_._1)
+        .map(_._1),
+      image
     )
 
   def addBack(r: ResourceAllocated) =
@@ -101,7 +106,8 @@ case class ResourceAvailable(
       cpu + r.cpu,
       memory + r.memory,
       scratch + r.scratch,
-      gpu ++ r.gpu
+      gpu ++ r.gpu,
+      image
     )
 
   def maximum(r: ResourceRequest) = {
@@ -113,7 +119,8 @@ case class ResourceAvailable(
       allocatedCPU,
       allocatedMemory,
       allocatedScratch,
-      allocatedGpu
+      allocatedGpu,
+      if (r.image.isEmpty || r.image == image) r.image else None
     )
   }
 
@@ -149,11 +156,12 @@ object VersionedResourceRequest {
       cpu: Int,
       memory: Int,
       scratch: Int,
-      gpu: Int
+      gpu: Int,
+      image: Option[String]
   ): VersionedResourceRequest =
     VersionedResourceRequest(
       codeVersion,
-      ResourceRequest((cpu, cpu), memory, scratch, gpu)
+      ResourceRequest((cpu, cpu), memory, scratch, gpu, image)
     )
 
   implicit val codec: JsonValueCodec[VersionedResourceRequest] =

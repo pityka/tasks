@@ -1,18 +1,16 @@
 package tasks
 
 import tasks.util.config.TasksConfig
-
+import cats.effect._
 package object elastic {
-  def makeElasticSupport(implicit config: TasksConfig): Option[ElasticSupport] =
+  def makeElasticSupport(implicit config: TasksConfig): Resource[IO,Option[ElasticSupport]] =
     config.elasticSupport match {
-      case ""         => None
-      case "NOENGINE" => None
+      case ""         => Resource.pure(None)
+      case "NOENGINE" => Resource.pure(None)
       case reflective =>
-        Some(
           tasks.util
             .reflectivelyInstantiateObject[ElasticSupportFromConfig](reflective)
-            .apply(config)
-        )
+            .apply(config).map(Some(_))
 
     }
 }

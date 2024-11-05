@@ -67,8 +67,9 @@ class SHCreateNode(
         port = codeAddress.address.getPort,
         path = "/"
       ),
-      slaveHostname = None,
-      background = true
+      followerHostname = None,
+      background = true,
+      image = None
     )
 
     val wd = new java.io.File(config.shWorkDir)
@@ -92,7 +93,8 @@ class SHCreateNode(
           cpu = requestSize.cpu._1,
           memory = requestSize.memory,
           scratch = requestSize.scratch,
-          gpu = 0 until requestSize.gpu toList
+          gpu = 0 until requestSize.gpu toList,
+          image = None
         )
       )
     )
@@ -124,12 +126,12 @@ class SHElasticSupport extends ElasticSupportFromConfig {
   implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
     "tasks.elastic.sh.SHElasticSupport"
   )
-  def apply(implicit config: TasksConfig) = SimpleElasticSupport(
+  def apply(implicit config: TasksConfig) = cats.effect.Resource.pure(SimpleElasticSupport(
     fqcn = fqcn,
     hostConfig = None,
     reaperFactory = None,
     shutdown = SHShutdown,
     createNodeFactory = new SHCreateNodeFactory,
     getNodeName = SHGetNodeName
-  )
+  ))
 }

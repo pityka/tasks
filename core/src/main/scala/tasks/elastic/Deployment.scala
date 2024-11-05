@@ -48,15 +48,16 @@ object Deployment {
       elasticSupport: ElasticSupportFqcn,
       masterAddress: SimpleSocketAddress,
       download: Uri,
-      slaveHostname: Option[String],
-      background: Boolean
+      followerHostname: Option[String],
+      background: Boolean,
+      image: Option[String]
   )(implicit config: TasksConfig): String = {
     val packageFileFolder = config.slaveWorkingDirectory
     val packageFileName = config.slavePackageName
     val downloadScript =
       s"cd $packageFileFolder && curl -m 60 $download > $packageFileName && chmod u+x $packageFileName"
 
-    val hostnameString = slaveHostname match {
+    val hostnameString = followerHostname match {
       case None       => ""
       case Some(host) => s"-Dhosts.hostname=$host"
     }
@@ -66,8 +67,10 @@ object Deployment {
         s"-Dhosts.gpusAsCommaString=${gpus.map(_.toString).mkString(",")}"
       else ""
 
+      val hostImageString = if (image.isDefined) s"-Dhosts.image=$image" else ""
+
     val edited =
-      s"./$packageFileName -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString"
+      s"./$packageFileName -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString $hostImageString"
         .replace(
           "{RAM}",
           math

@@ -31,6 +31,7 @@ import tasks.util.SimpleSocketAddress
 import com.typesafe.config.Config
 import scala.jdk.CollectionConverters._
 import tasks.shared.ResourceAvailable
+import com.typesafe.config.ConfigRenderOptions
 
 class TasksConfig(load: () => Config) {
 
@@ -95,6 +96,8 @@ class TasksConfig(load: () => Config) {
   val acceptableHeartbeatPause: FD =
     raw.getDuration("tasks.failuredetector.acceptable-heartbeat-pause")
 
+  val hostImage = if (raw.hasPath("hosts.image") ) Some(raw.getString("hosts.image")) else None
+
   val hostNumCPU = raw.getInt("hosts.numCPU")
 
   val hostGPU = raw.getIntList("hosts.gpus").asScala.toList.map(_.toInt) ++ raw
@@ -109,6 +112,7 @@ class TasksConfig(load: () => Config) {
   val hostScratch = raw.getInt("hosts.scratch")
 
   val hostName = raw.getString("hosts.hostname")
+  val hostNameExternal = if (raw.hasPath("hosts.hostnameExternal")) Some(raw.getString("hosts.hostnameExternal")) else None
 
   val hostPort = raw.getInt("hosts.port")
 
@@ -171,7 +175,13 @@ class TasksConfig(load: () => Config) {
         val cpu = conf.getInt("cpu")
         val ram = conf.getInt("ram")
         val gpu = conf.getInt("gpu")
-        name -> ResourceAvailable(cpu, ram, Int.MaxValue, 0 until gpu toList)
+        name -> ResourceAvailable(
+          cpu,
+          ram,
+          Int.MaxValue,
+          0 until gpu toList,
+          None
+        )
     }
 
   def securityGroups: List[String] =
@@ -255,12 +265,11 @@ class TasksConfig(load: () => Config) {
   def kubernetesRamExtra = raw.getInt("tasks.kubernetes.extralimits.ram")
   def kubernetesRamMin = raw.getInt("tasks.kubernetes.minimumlimits.ram")
 
-  def kubernetesGpuTaintToleration = {
-    val l = raw.getStringList("tasks.kubernetes.gpuTaintToleration").asScala
-    l.grouped(5).toList.filter(_.size == 5).map { l =>
-      // effect,key,operator,seconds,value
-      (l(0), l(1), l(2), l(3), l(4))
-    }
+  def kubernetesPodSpec = {
+    
+    if (raw.hasPath("tasks.kubernetes.podSpec"))
+      Some(raw.getConfig("tasks.kubernetes.podSpec").root().render(ConfigRenderOptions.concise()))
+    else None
   }
 
   def kubernetesNamespace = raw.getString("tasks.kubernetes.namespace")

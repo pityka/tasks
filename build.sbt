@@ -136,6 +136,11 @@ lazy val akkaProvided = List(
   "com.typesafe.akka" %% "akka-slf4j" % akkaVersion % Provided,
   "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided
 )
+lazy val akkaReal = List(
+  "com.typesafe.akka" %% "akka-actor" % akkaVersion ,
+  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion ,
+  "com.typesafe.akka" %% "akka-remote" % akkaVersion 
+)
 lazy val core = project
   .in(file("core"))
   .settings(commonSettings: _*)
@@ -152,7 +157,7 @@ lazy val core = project
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe" % "config" % "1.4.2",
       "org.typelevel" %% "cats-effect" % "3.5.3",
-      "io.github.pityka" %% "selfpackage" % "2.0.1",
+      "io.github.pityka" %% "selfpackage" % "2.1.0",
       "org.scalatest" %% "scalatest" % "3.2.19" % "test",
       "com.outr" %% "scribe" % scribeVersion,
       "com.outr" %% "scribe-slf4j" % scribeVersion,
@@ -197,10 +202,23 @@ lazy val kubernetes = project
   .settings(
     name := "tasks-kubernetes",
     libraryDependencies ++= Seq(
-      "io.fabric8" % "kubernetes-client" % "6.0.0-RC1" // scala-steward:off
+      "com.goyeau" %% "kubernetes-client" % "0.11.0",
+      "io.github.pityka" %% "selfpackage-jib" % "2.1.3",
+      
     ) ++ akkaProvided
   )
   .dependsOn(core % "compile->compile;test->test")
+
+lazy val kubernetesTest = project 
+ .in(file("kubernetes-test"))
+  .settings(commonSettings: _*)
+  .settings(
+    name := "tasks-kubernetes-test",
+    publish / skip := true,
+    libraryDependencies ++= akkaReal
+  )
+  .enablePlugins(JavaAppPackaging)
+  .dependsOn(kubernetes)
 
 // lazy val tracker = project
 //   .in(file("tracker"))

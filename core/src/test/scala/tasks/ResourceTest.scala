@@ -32,16 +32,16 @@ import org.scalatest.matchers.should.Matchers
 class ResourceTest extends FunSuite with Matchers {
 
   test("resource with gpu") {
-    val available = ResourceAvailable(0, 0, 0, List(1, 0, 1, 0))
-    val alloc1 = ResourceAllocated(0, 0, 0, List(0, 0))
-    val alloc2 = ResourceAllocated(0, 0, 0, List(0, 1))
+    val available = ResourceAvailable(0, 0, 0, List(1, 0, 1, 0),None)
+    val alloc1 = ResourceAllocated(0, 0, 0, List(0, 0),None)
+    val alloc2 = ResourceAllocated(0, 0, 0, List(0, 1),None)
     assert(available.canFulfillRequest(alloc1))
     assert(available.canFulfillRequest(alloc2))
     assert(
-      available.substract(alloc2) == ResourceAvailable(0, 0, 0, List(1, 0))
+      available.substract(alloc2) == ResourceAvailable(0, 0, 0, List(1, 0),None)
     )
     assert(
-      available.substract(alloc1) == ResourceAvailable(0, 0, 0, List(1, 1))
+      available.substract(alloc1) == ResourceAvailable(0, 0, 0, List(1, 1),None)
     )
   }
 

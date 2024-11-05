@@ -56,14 +56,14 @@ package object tasks extends MacroCalls {
   ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.ResourceRequest(cpu, memory, scratch, gpu)
+      tasks.shared.ResourceRequest(cpu, memory, scratch, gpu, None)
     )
   def ResourceRequest(cpu: (Int, Int), memory: Int, scratch: Int)(implicit
       codeVersion: CodeVersion
   ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.ResourceRequest(cpu, memory, scratch, 0)
+      tasks.shared.ResourceRequest(cpu, memory, scratch, 0, None)
     )
 
   def ResourceRequest(cpu: (Int, Int), memory: Int)(implicit
@@ -71,7 +71,7 @@ package object tasks extends MacroCalls {
   ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.ResourceRequest(cpu, memory, 1, 0)
+      tasks.shared.ResourceRequest(cpu, memory, 1, 0, None)
     )
 
   def ResourceRequest(cpu: Int, memory: Int)(implicit
@@ -79,7 +79,7 @@ package object tasks extends MacroCalls {
   ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.ResourceRequest((cpu, cpu), memory, 1, 0)
+      tasks.shared.ResourceRequest((cpu, cpu), memory, 1, 0, None)
     )
 
   def ResourceRequest(cpu: Int, memory: Int, scratch: Int)(implicit
@@ -139,30 +139,42 @@ package object tasks extends MacroCalls {
   )(f: TaskSystemComponents => T): Option[T] = {
     import cats.effect.unsafe.implicits.global
 
-    val (resource, hostConfig) = defaultTaskSystem(c)
-    val (tsc, shutdown) = resource.allocated.unsafeRunSync()
+    val resource = defaultTaskSystem(c)
+    val ((tsc,hostConfig), shutdown) = resource.allocated.unsafeRunSync()
     if (hostConfig.myRoles.contains(App)) {
       try {
         Some(f(tsc))
       } finally {
         shutdown.unsafeRunSync()
       }
-    } else None
+    } else {
+      scribe.info("Leaving withTaskSystem lambda without closing taskystem. This is only meaningful for forever running worker node.")
+      // Queue and Worker roles are never stopped
+      None
+    }
 
   }
 
   def defaultTaskSystem
-      : (Resource[IO, TaskSystemComponents], HostConfiguration) =
+      : Resource[IO, (TaskSystemComponents,HostConfiguration)] =
     defaultTaskSystem(None)
-
+    
   def defaultTaskSystem(
       string: String
-  ): (Resource[IO, TaskSystemComponents], HostConfiguration) =
+  ): Resource[IO, (TaskSystemComponents,HostConfiguration)] =
     defaultTaskSystem(Some(ConfigFactory.parseString(string)))
 
+  /**
+    * The user of this resource should check the role of the returned HostConfiguration
+    * If it is not an App, then it is very likely that the correct use case is to return
+    * an IO.never
+    *
+    * @param extraConf
+    * @return
+    */
   def defaultTaskSystem(
       extraConf: Option[Config]
-  ): (Resource[IO, TaskSystemComponents], HostConfiguration) = {
+  ): Resource[IO, (TaskSystemComponents,HostConfiguration)] = {
 
     val configuration = () => {
       ConfigFactory.invalidateCaches
@@ -178,16 +190,15 @@ package object tasks extends MacroCalls {
 
       loaded
     }
-
     implicit val tconfig = tasks.util.config.parse(configuration)
 
     val elasticSupport = elastic.makeElasticSupport
 
     val hostConfig = elasticSupport
-      .flatMap(_.hostConfig)
-      .getOrElse(MasterSlaveGridEngineChosenFromConfig)
+      .map(_.flatMap(_.hostConfig).getOrElse(MasterSlaveGridEngineChosenFromConfig))
+      
 
-    TaskSystemComponents.make(hostConfig, elasticSupport, tconfig) -> hostConfig
+    TaskSystemComponents.make(hostConfig, elasticSupport, tconfig)
   }
 
   type SSerializer[T] = Spore[Unit, Serializer[T]]

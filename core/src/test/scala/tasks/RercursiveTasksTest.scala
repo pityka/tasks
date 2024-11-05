@@ -109,8 +109,8 @@ hosts.numCPU=4
     )
   }
 
-  val pair = defaultTaskSystem(Some(testConfig))._1.allocated.unsafeRunSync()
-  implicit val system: TaskSystemComponents = pair._1
+  val pair = defaultTaskSystem(Some(testConfig)).allocated.unsafeRunSync()
+  implicit val system: TaskSystemComponents = pair._1._1
   import RercursiveTasksTest._
 
   test("recursive fibonacci") {
