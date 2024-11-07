@@ -137,9 +137,9 @@ lazy val akkaProvided = List(
   "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided
 )
 lazy val akkaReal = List(
-  "com.typesafe.akka" %% "akka-actor" % akkaVersion ,
-  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion ,
-  "com.typesafe.akka" %% "akka-remote" % akkaVersion 
+  "com.typesafe.akka" %% "akka-actor" % akkaVersion,
+  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
+  "com.typesafe.akka" %% "akka-remote" % akkaVersion
 )
 lazy val core = project
   .in(file("core"))
@@ -156,7 +156,7 @@ lazy val core = project
       "com.google.guava" % "guava" % "33.0.0-jre", // scala-steward:off
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe" % "config" % "1.4.2",
-      "org.typelevel" %% "cats-effect" % "3.5.3",
+      "org.typelevel" %% "cats-effect" % "3.5.5",
       "io.github.pityka" %% "selfpackage" % "2.1.0",
       "org.scalatest" %% "scalatest" % "3.2.19" % "test",
       "com.outr" %% "scribe" % scribeVersion,
@@ -203,14 +203,13 @@ lazy val kubernetes = project
     name := "tasks-kubernetes",
     libraryDependencies ++= Seq(
       "com.goyeau" %% "kubernetes-client" % "0.11.0",
-      "io.github.pityka" %% "selfpackage-jib" % "2.1.3",
-      
+      "io.github.pityka" %% "selfpackage-jib" % "2.1.3"
     ) ++ akkaProvided
   )
   .dependsOn(core % "compile->compile;test->test")
 
-lazy val kubernetesTest = project 
- .in(file("kubernetes-test"))
+lazy val kubernetesTest = project
+  .in(file("kubernetes-test"))
   .settings(commonSettings: _*)
   .settings(
     name := "tasks-kubernetes-test",
