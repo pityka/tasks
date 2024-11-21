@@ -156,7 +156,7 @@ lazy val core = project
       "com.google.guava" % "guava" % "33.0.0-jre", // scala-steward:off
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe" % "config" % "1.4.2",
-      "org.typelevel" %% "cats-effect" % "3.5.3",
+      "org.typelevel" %% "cats-effect" % "3.5.6",
       "io.github.pityka" %% "selfpackage" % "2.1.0",
       "org.scalatest" %% "scalatest" % "3.2.19" % "test",
       "com.outr" %% "scribe" % scribeVersion,
