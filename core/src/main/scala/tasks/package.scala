@@ -140,7 +140,7 @@ package object tasks extends MacroCalls {
     import cats.effect.unsafe.implicits.global
 
     val resource = defaultTaskSystem(c)
-    val ((tsc,hostConfig), shutdown) = resource.allocated.unsafeRunSync()
+    val ((tsc, hostConfig), shutdown) = resource.allocated.unsafeRunSync()
     if (hostConfig.myRoles.contains(App)) {
       try {
         Some(f(tsc))
@@ -148,7 +148,9 @@ package object tasks extends MacroCalls {
         shutdown.unsafeRunSync()
       }
     } else {
-      scribe.info("Leaving withTaskSystem lambda without closing taskystem. This is only meaningful for forever running worker node.")
+      scribe.info(
+        "Leaving withTaskSystem lambda without closing taskystem. This is only meaningful for forever running worker node."
+      )
       // Queue and Worker roles are never stopped
       None
     }
@@ -156,25 +158,24 @@ package object tasks extends MacroCalls {
   }
 
   def defaultTaskSystem
-      : Resource[IO, (TaskSystemComponents,HostConfiguration)] =
+      : Resource[IO, (TaskSystemComponents, HostConfiguration)] =
     defaultTaskSystem(None)
-    
+
   def defaultTaskSystem(
       string: String
-  ): Resource[IO, (TaskSystemComponents,HostConfiguration)] =
+  ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
     defaultTaskSystem(Some(ConfigFactory.parseString(string)))
 
-  /**
-    * The user of this resource should check the role of the returned HostConfiguration
-    * If it is not an App, then it is very likely that the correct use case is to return
-    * an IO.never
+  /** The user of this resource should check the role of the returned
+    * HostConfiguration If it is not an App, then it is very likely that the
+    * correct use case is to return an IO.never
     *
     * @param extraConf
     * @return
     */
   def defaultTaskSystem(
       extraConf: Option[Config]
-  ): Resource[IO, (TaskSystemComponents,HostConfiguration)] = {
+  ): Resource[IO, (TaskSystemComponents, HostConfiguration)] = {
 
     val configuration = () => {
       ConfigFactory.invalidateCaches
@@ -195,8 +196,9 @@ package object tasks extends MacroCalls {
     val elasticSupport = elastic.makeElasticSupport
 
     val hostConfig = elasticSupport
-      .map(_.flatMap(_.hostConfig).getOrElse(MasterSlaveGridEngineChosenFromConfig))
-      
+      .map(
+        _.flatMap(_.hostConfig).getOrElse(MasterSlaveGridEngineChosenFromConfig)
+      )
 
     TaskSystemComponents.make(hostConfig, elasticSupport, tconfig)
   }

@@ -169,17 +169,21 @@ class FileServiceSpec
         new File(new java.io.File(getClass.getResource("/").getPath), "test1f")
       folder2.mkdir
 
-      val fs = new EncryptedManagedFileStorage(new FolderFileStorage(folder), "00".repeat(32))
+      val fs = new EncryptedManagedFileStorage(
+        new FolderFileStorage(folder),
+        "00".repeat(32)
+      )
 
       implicit val serviceimpl: FileServiceComponent =
         FileServiceComponent(fs, remoteStore)
       implicit val historyContext = tasks.fileservice.NoHistory
 
-      val t = SharedFileHelper.createFromFile(input, "proba", false).unsafeRunSync()
+      val t =
+        SharedFileHelper.createFromFile(input, "proba", false).unsafeRunSync()
 
       readBinaryFile(
         new java.io.File(folder, "proba").getCanonicalPath
-      ).toVector should not equal(
+      ).toVector should not equal (
         data.toVector
       )
 
@@ -188,7 +192,7 @@ class FileServiceSpec
           cats.effect.unsafe.implicits.global
         )
 
-       val path =
+      val path =
         Await.result(
           SharedFileHelper
             .getPathToFile(t)

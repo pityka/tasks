@@ -39,7 +39,9 @@ object JvmElasticSupport {
 
   val taskSystems =
     scala.collection.mutable
-      .ArrayBuffer[(String, Future[((TaskSystemComponents,HostConfiguration), IO[Unit])])]()
+      .ArrayBuffer[
+        (String, Future[((TaskSystemComponents, HostConfiguration), IO[Unit])])
+      ]()
 
   val nodesShutdown = scala.collection.mutable.ArrayBuffer[String]()
 
@@ -132,13 +134,15 @@ object JvmElasticSupport {
     implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
       "tasks.JvmElasticSupport$JvmGrid$"
     )
-    def apply(implicit config: TasksConfig) = cats.effect.Resource.pure(SimpleElasticSupport(
-      fqcn = fqcn,
-      hostConfig = None,
-      reaperFactory = None,
-      shutdown = Shutdown,
-      createNodeFactory = new JvmCreateNodeFactory,
-      getNodeName = JvmGetNodeName
-    ))
+    def apply(implicit config: TasksConfig) = cats.effect.Resource.pure(
+      SimpleElasticSupport(
+        fqcn = fqcn,
+        hostConfig = None,
+        reaperFactory = None,
+        shutdown = Shutdown,
+        createNodeFactory = new JvmCreateNodeFactory,
+        getNodeName = JvmGetNodeName
+      )
+    )
   }
 }
