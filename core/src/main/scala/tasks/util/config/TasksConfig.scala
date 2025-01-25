@@ -96,7 +96,8 @@ class TasksConfig(load: () => Config) {
   val acceptableHeartbeatPause: FD =
     raw.getDuration("tasks.failuredetector.acceptable-heartbeat-pause")
 
-  val hostImage = if (raw.hasPath("hosts.image") ) Some(raw.getString("hosts.image")) else None
+  val hostImage =
+    if (raw.hasPath("hosts.image")) Some(raw.getString("hosts.image")) else None
 
   val hostNumCPU = raw.getInt("hosts.numCPU")
 
@@ -112,7 +113,10 @@ class TasksConfig(load: () => Config) {
   val hostScratch = raw.getInt("hosts.scratch")
 
   val hostName = raw.getString("hosts.hostname")
-  val hostNameExternal = if (raw.hasPath("hosts.hostnameExternal")) Some(raw.getString("hosts.hostnameExternal")) else None
+  val hostNameExternal =
+    if (raw.hasPath("hosts.hostnameExternal"))
+      Some(raw.getString("hosts.hostnameExternal"))
+    else None
 
   val hostPort = raw.getInt("hosts.port")
 
@@ -266,9 +270,14 @@ class TasksConfig(load: () => Config) {
   def kubernetesRamMin = raw.getInt("tasks.kubernetes.minimumlimits.ram")
 
   def kubernetesPodSpec = {
-    
+
     if (raw.hasPath("tasks.kubernetes.podSpec"))
-      Some(raw.getConfig("tasks.kubernetes.podSpec").root().render(ConfigRenderOptions.concise()))
+      Some(
+        raw
+          .getConfig("tasks.kubernetes.podSpec")
+          .root()
+          .render(ConfigRenderOptions.concise())
+      )
     else None
   }
 

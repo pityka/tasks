@@ -229,8 +229,9 @@ class TaskQueue(
     case AskForWork(availableResource) =>
       if (state.negotiation.isEmpty) {
         scribe.debug(
-          s"AskForWork ${sender()} $availableResource ${state.negotiation} ${state.queuedTasks.map { case (_, (sch, _)) =>
-              (sch.description.taskId, sch.resource)
+          s"AskForWork ${sender()} $availableResource ${state.negotiation} ${state.queuedTasks.map {
+              case (_, (sch, _)) =>
+                (sch.description.taskId, sch.resource)
             }.toSeq}"
         )
 

@@ -38,7 +38,10 @@ import fs2.Pipe
 
 object FolderFileStorage {
 
-  private[tasks] def getContentHashOfFile(file: File,skip:Boolean): Int = if (skip) 0 else {
+  private[tasks] def getContentHashOfFile(file: File, skip: Boolean): Int = if (
+    skip
+  ) 0
+  else {
     openFileInputStream(file) { is =>
       FileStorage.getContentHash(is)
     }
@@ -64,7 +67,7 @@ class FolderFileStorage(val basePath: File)(implicit
 
   private val tempFolder = new File(basePath, "___TMP___")
   tempFolder.mkdirs()
-  private val tmpFolderCanonicalPath = tempFolder.getCanonicalPath()  
+  private val tmpFolderCanonicalPath = tempFolder.getCanonicalPath()
 
   private def createLocalTempFile() = {
     def try1(i: Int): File = if (i == 0)
@@ -91,7 +94,10 @@ class FolderFileStorage(val basePath: File)(implicit
         val sizeMatch = sizeOnDiskNow == expectedSize
         val canRead = file.canRead
         def contentMatch =
-          canRead && FolderFileStorage.getContentHashOfFile(file, config.skipContentHashCreationUponImport) === expectedHash
+          canRead && FolderFileStorage.getContentHashOfFile(
+            file,
+            config.skipContentHashCreationUponImport
+          ) === expectedHash
         val canDelete =
           canRead && (expectedSize < 0 || (sizeMatch && contentMatch))
         if (canDelete) {
@@ -127,7 +133,10 @@ class FolderFileStorage(val basePath: File)(implicit
       val sizeMatch = sizeOnDiskNow === size
       def contentMatch =
         (config.skipContentHashVerificationAfterCache || (canRead && FolderFileStorage
-          .getContentHashOfFile(f,config.skipContentHashCreationUponImport) === hash))
+          .getContentHashOfFile(
+            f,
+            config.skipContentHashCreationUponImport
+          ) === hash))
       val pass = canRead && (size < 0 || (sizeMatch && contentMatch))
 
       if (!pass) {
@@ -154,7 +163,10 @@ class FolderFileStorage(val basePath: File)(implicit
       } else {
         if (retrieveSizeAndHash) {
           val size = f.length
-          val hash = FolderFileStorage.getContentHashOfFile(f,config.skipContentHashCreationUponImport)
+          val hash = FolderFileStorage.getContentHashOfFile(
+            f,
+            config.skipContentHashCreationUponImport
+          )
           Some(SharedFileHelper.create(size, hash, path))
         } else Some(SharedFileHelper.create(size = -1L, hash = 0, path))
       }
@@ -265,7 +277,7 @@ class FolderFileStorage(val basePath: File)(implicit
         .drain
         .flatMap { _ =>
           importFile(tmp, path, canMove = true)
-            .guarantee(IO.interruptible { if (tmp.exists) {tmp.delete} })
+            .guarantee(IO.interruptible { if (tmp.exists) { tmp.delete } })
             .map(x => (x._1, x._2, x._3))
         }
     )
@@ -276,9 +288,10 @@ class FolderFileStorage(val basePath: File)(implicit
       com.google.common.io.Files.equal(file1, file2)
     else
       file1.length == file2.length && FolderFileStorage.getContentHashOfFile(
-        file1,config.skipContentHashCreationUponImport
+        file1,
+        config.skipContentHashCreationUponImport
       ) == FolderFileStorage
-        .getContentHashOfFile(file2,config.skipContentHashCreationUponImport)
+        .getContentHashOfFile(file2, config.skipContentHashCreationUponImport)
 
   override def importFile(
       file: File,
@@ -291,7 +304,10 @@ class FolderFileStorage(val basePath: File)(implicit
     IO.blocking({
       scribe.debug(s"Importing file $file under name $proposed")
       val size = file.length
-      val hash = FolderFileStorage.getContentHashOfFile(file,config.skipContentHashCreationUponImport)
+      val hash = FolderFileStorage.getContentHashOfFile(
+        file,
+        config.skipContentHashCreationUponImport
+      )
       val managed = proposed.toManaged
 
       if (assemblePath(managed).canRead) {
@@ -299,7 +315,7 @@ class FolderFileStorage(val basePath: File)(implicit
         scribe.debug(
           s"Found a file already in storage with the same name ($finalFile). Check for equality."
         )
-        println((file,proposed))
+        println((file, proposed))
         if (finalFile == file || checkContentEquality(finalFile, file))
           (size, hash, managed)
         else {
