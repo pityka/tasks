@@ -107,7 +107,9 @@ object TaskSystemComponents {
 
           val packageServerPort = hostConfig.myAddressBind.getPort + 1
 
-          val packageServerHostname = hostConfig.myAddressExternal.getOrElse(hostConfig.myAddressBind).getHostName
+          val packageServerHostname = hostConfig.myAddressExternal
+            .getOrElse(hostConfig.myAddressBind)
+            .getHostName
 
           val rootHistory = NoHistory
 
@@ -141,7 +143,9 @@ object TaskSystemComponents {
 
           val emitLog = Resource.eval(IO {
             scribe.info("Listening on: " + hostConfig.myAddressBind.toString)
-            scribe.info("External address: " + hostConfig.myAddressExternal.toString)
+            scribe.info(
+              "External address: " + hostConfig.myAddressExternal.toString
+            )
             scribe.info("CPU: " + hostConfig.availableCPU.toString)
             scribe.info("RAM: " + hostConfig.availableMemory.toString)
             scribe.info("SCRATCH: " + hostConfig.availableScratch.toString)
@@ -726,7 +730,8 @@ object TaskSystemComponents {
           """
               }
 
-              val externalAddress = hostConfig.myAddressExternal.getOrElse(hostConfig.myAddressBind)
+              val externalAddress =
+                hostConfig.myAddressExternal.getOrElse(hostConfig.myAddressBind)
               val internalAddress = hostConfig.myAddressBind
 
               val akkaProgrammaticalConfiguration =
