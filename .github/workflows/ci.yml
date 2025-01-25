@@ -16,7 +16,7 @@ jobs:
       with:
         distribution: temurin
         java-version: 17
-    - uses: actions/setup-sbt@v1
+    - uses: sbt/setup-sbt@v1
     - name: Compile
       run: sbt clean +testables/test versionPolicyCheck
 
