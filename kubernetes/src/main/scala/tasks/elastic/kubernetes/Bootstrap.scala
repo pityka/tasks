@@ -117,9 +117,12 @@ object Bootstrap {
       scribe.info("No MY_POD_IP env found. Create pod of master.")
       k8sClientResource
         .flatMap { k8s =>
+          val pathOfEntrypointInBootstrapContainer =
+            tconfig.kubernetesImageApplicationSubPath
           val container = selfpackage.jib.containerize(
             out = addScribe(containerizer),
-            mainClassNameArg = Some(mainClassName)
+            mainClassNameArg = Some(mainClassName),
+            pathInContainer = pathOfEntrypointInBootstrapContainer
           )
 
           scribe.info(
@@ -133,7 +136,7 @@ object Bootstrap {
 
           val kubeCPURequest = userCPURequest + tconfig.kubernetesCpuExtra
           val kubeRamRequest = userRamRequest + tconfig.kubernetesRamExtra
-          val podName = ("main-" + KubernetesHelpers.newName).take(47)
+          val podName = ("tasks-app-" + KubernetesHelpers.newName).take(47)
 
           val imageName = container.getTargetImage().toString
 
@@ -145,6 +148,7 @@ object Bootstrap {
             }
             .getOrElse(PodSpec(containers = Nil))
 
+          val containerName = "tasks-app"
           val resource = Pod(
             metadata = Some(
               ObjectMeta(
@@ -160,8 +164,13 @@ object Bootstrap {
                 containers = List(
                   Container(
                     image = Some(imageName),
-                    command = Some(List("bash", "/app/entrypoint.sh")),
-                    name = "tasks-master",
+                    command = Some(
+                      List(
+                        "bash",
+                        s"$pathOfEntrypointInBootstrapContainer/entrypoint.sh"
+                      )
+                    ),
+                    name = containerName,
                     imagePullPolicy = Some(tconfig.kubernetesImagePullPolicy),
                     env = Some(
                       List(
@@ -237,23 +246,36 @@ object Bootstrap {
                 }
 
               val podIsRunning = phaseStream
-                .takeWhile(either => !either.exists(_.exists(_ == "Running")))
+                .takeThrough(either =>
+                  either match {
+                    case Left(error) =>
+                      scribe.error(error)
+                      false
+                    case Right(None) =>
+                      scribe.error("No phase in pod status")
+                      false
+                    case Right(Some(phase)) =>
+                      phase != "Running" && phase != "Failed"
+                  }
+                )
                 .evalTap(phase =>
                   IO { scribe.info(s"$podName in phase $phase") }
                 )
                 .compile
-                .drain
-                .flatTap(_ =>
-                  IO { scribe.info(s"$podName reached Running phase. ") }
+                .last
+                .map(option =>
+                  option.exists(_.exists(_.exists(_ == "Running")))
                 )
 
               fs2.Stream
                 .eval(podIsRunning)
-                .flatMap(_ =>
-                  k8s.pods
-                    .namespace(tconfig.kubernetesNamespace)
-                    .log(podName, Some("tasks-master"), follow = true)
-                    .flatMap(response => response.bodyText)
+                .flatMap(podIsRunning =>
+                  if (podIsRunning)
+                    k8s.pods
+                      .namespace(tconfig.kubernetesNamespace)
+                      .log(podName, Some(containerName), follow = true)
+                      .flatMap(response => response.bodyText)
+                  else fs2.Stream.empty
                 )
             } else {
               scribe.error("Failed pod creation")
@@ -280,7 +302,10 @@ object Bootstrap {
               .flatMap(_ =>
                 k8s.pods.namespace(tconfig.kubernetesNamespace).delete(podName)
               )
-              .map(_ => None)
+              .map(deletionStatus => {
+                scribe.info(s"Deletion status $deletionStatus")
+                None
+              })
           )
 
         }

@@ -57,7 +57,6 @@ object KubernetesTest extends IOApp {
       IO(1)
   }
 
-  // tasks.worker-main-class = "tasks.KubernetesTestSlave"
   val testConfig2 = {
     val tmp = tasks.util.TempFile.createTempFile(".temp")
     tmp.delete
@@ -69,7 +68,7 @@ object KubernetesTest extends IOApp {
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
-      tasks.kubernetes.image = "eclipse-temurin-unzip"
+      tasks.kubernetes.image = "eclipse-temurin:17.0.13_11-jre-ubi9-minimal"
       tasks.kubernetes.image-pull-policy = "IfNotPresent"
       
       tasks.kubernetes.podSpec = {

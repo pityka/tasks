@@ -67,7 +67,7 @@ object Deployment {
         s"-Dhosts.gpusAsCommaString=${gpus.map(_.toString).mkString(",")}"
       else ""
 
-    val hostImageString = if (image.isDefined) s"-Dhosts.image=$image" else ""
+    val hostImageString = if (image.isDefined) s"-Dhosts.image=${image.get}" else ""
 
     val edited =
       s"./$packageFileName -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString $hostImageString"

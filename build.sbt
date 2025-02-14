@@ -157,7 +157,7 @@ lazy val core = project
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe" % "config" % "1.4.2",
       "org.typelevel" %% "cats-effect" % "3.5.3",
-      "io.github.pityka" %% "selfpackage" % "2.1.0",
+      "io.github.pityka" %% "selfpackage" % "2.1.6",
       "org.scalatest" %% "scalatest" % "3.2.19" % "test",
       "com.outr" %% "scribe" % scribeVersion,
       "com.outr" %% "scribe-slf4j" % scribeVersion,
@@ -203,7 +203,7 @@ lazy val kubernetes = project
     name := "tasks-kubernetes",
     libraryDependencies ++= Seq(
       "com.goyeau" %% "kubernetes-client" % "0.11.0",
-      "io.github.pityka" %% "selfpackage-jib" % "2.1.3",
+      "io.github.pityka" %% "selfpackage-jib" % "2.1.6",
       
     ) ++ akkaProvided
   )

@@ -250,6 +250,7 @@ class TasksConfig(load: () => Config) {
   val appUIServerPort = raw.getInt("tasks.ui.app.port")
 
   def kubernetesImageName = raw.getString("tasks.kubernetes.image")
+  val kubernetesImageApplicationSubPath = raw.getString("tasks.kubernetes.imageApplicationSubPath")
 
   def kubernetesHostNameOrIPEnvVar =
     raw.getString("tasks.kubernetes.hostnameOrIPEnvVar")
