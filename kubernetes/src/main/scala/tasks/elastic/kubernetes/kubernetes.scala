@@ -136,8 +136,6 @@ class K8SCreateNode(
         val podName = KubernetesHelpers.newName
         val jobName = config.kubernetesNamespace + "/" + podName
 
-        
-
         val podSpecFromConfig: PodSpec = config.kubernetesPodSpec
           .map { jsonString =>
             val either = io.circe.parser.decode[PodSpec](jsonString)

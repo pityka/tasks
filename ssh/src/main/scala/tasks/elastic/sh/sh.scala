@@ -126,12 +126,14 @@ class SHElasticSupport extends ElasticSupportFromConfig {
   implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
     "tasks.elastic.sh.SHElasticSupport"
   )
-  def apply(implicit config: TasksConfig) = cats.effect.Resource.pure(SimpleElasticSupport(
-    fqcn = fqcn,
-    hostConfig = None,
-    reaperFactory = None,
-    shutdown = SHShutdown,
-    createNodeFactory = new SHCreateNodeFactory,
-    getNodeName = SHGetNodeName
-  ))
+  def apply(implicit config: TasksConfig) = cats.effect.Resource.pure(
+    SimpleElasticSupport(
+      fqcn = fqcn,
+      hostConfig = None,
+      reaperFactory = None,
+      shutdown = SHShutdown,
+      createNodeFactory = new SHCreateNodeFactory,
+      getNodeName = SHGetNodeName
+    )
+  )
 }
