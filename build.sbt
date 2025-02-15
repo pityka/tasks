@@ -27,7 +27,7 @@ inThisBuild(
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.13.14",
-  crossScalaVersions := Seq("2.13.14", "3.4.3"),
+  crossScalaVersions := Seq("2.13.14", "3.6.3"),
   parallelExecution in Test := false,
   scalacOptions ++= (CrossVersion.partialVersion(scalaVersion.value) match {
     case Some((2, 13)) =>
@@ -137,9 +137,9 @@ lazy val akkaProvided = List(
   "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided
 )
 lazy val akkaReal = List(
-  "com.typesafe.akka" %% "akka-actor" % akkaVersion ,
-  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion ,
-  "com.typesafe.akka" %% "akka-remote" % akkaVersion 
+  "com.typesafe.akka" %% "akka-actor" % akkaVersion,
+  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
+  "com.typesafe.akka" %% "akka-remote" % akkaVersion
 )
 lazy val core = project
   .in(file("core"))
@@ -203,14 +203,13 @@ lazy val kubernetes = project
     name := "tasks-kubernetes",
     libraryDependencies ++= Seq(
       "com.goyeau" %% "kubernetes-client" % "0.11.0",
-      "io.github.pityka" %% "selfpackage-jib" % "2.1.6",
-      
+      "io.github.pityka" %% "selfpackage-jib" % "2.1.6"
     ) ++ akkaProvided
   )
   .dependsOn(core % "compile->compile;test->test")
 
-lazy val kubernetesTest = project 
- .in(file("kubernetes-test"))
+lazy val kubernetesTest = project
+  .in(file("kubernetes-test"))
   .settings(commonSettings: _*)
   .settings(
     name := "tasks-kubernetes-test",
