@@ -145,6 +145,8 @@ class K8SCreateNode(
             either.toOption.get
           }
           .getOrElse(PodSpec(containers = Nil))
+        
+        val containerFromConfig = podSpecFromConfig.containers.headOption.getOrElse(Container(""))
 
         val resource = Pod(
           metadata = Some(
@@ -157,12 +159,13 @@ class K8SCreateNode(
           spec = Some(
             podSpecFromConfig.copy(
               containers = List(
-                Container(
+                containerFromConfig.copy(
                   image = Some(imageName),
                   command = Some(command),
                   name = "tasks-worker",
                   imagePullPolicy = Some(config.kubernetesImagePullPolicy),
                   env = Some(
+                    containerFromConfig.env.getOrElse(Nil) ++
                     List(
                       EnvVar(
                         name = config.kubernetesHostNameOrIPEnvVar,

@@ -73,7 +73,17 @@ object KubernetesTest extends IOApp {
       
       tasks.kubernetes.podSpec = {
         automountServiceAccountToken = false
-        containers = []
+        containers = [
+          {
+            name = "xyz"
+            env = [ 
+              {
+                name = "xyzenv"
+                value = "xyzvalue"
+              }
+            ]
+          }
+        ]
       }
       
       """

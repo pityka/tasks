@@ -148,6 +148,8 @@ object Bootstrap {
             }
             .getOrElse(PodSpec(containers = Nil))
 
+          val containerFromConfig = podSpecFromConfig.containers.headOption.getOrElse(Container(""))
+
           val containerName = "tasks-app"
           val resource = Pod(
             metadata = Some(
@@ -162,7 +164,7 @@ object Bootstrap {
               podSpecFromConfig.copy(
                 automountServiceAccountToken = Some(true),
                 containers = List(
-                  Container(
+                  containerFromConfig.copy(
                     image = Some(imageName),
                     command = Some(
                       List(
@@ -173,6 +175,7 @@ object Bootstrap {
                     name = containerName,
                     imagePullPolicy = Some(tconfig.kubernetesImagePullPolicy),
                     env = Some(
+                      containerFromConfig.env.getOrElse(Nil) ++
                       List(
                         EnvVar(
                           name = tconfig.kubernetesHostNameOrIPEnvVar,
