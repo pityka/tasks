@@ -33,7 +33,7 @@ import tasks.fileservice._
 import tasks.util.config._
 import tasks.shared._
 import tasks._
-
+import tasks.util.message._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 
@@ -41,8 +41,6 @@ import java.time.Instant
 import cats.effect.IO
 import tasks.TaskSystemComponents
 import tasks.caching.TaskResultCache
-import tasks.util.MessageData
-import tasks.util.Address
 import tasks.util.Messenger
 
 case class UntypedResult(
@@ -196,7 +194,7 @@ class Task(
     taskId: TaskId,
     lineage: TaskLineage,
     taskHash: HashedTaskDescription,
-    val proxy: tasks.util.Address,
+    val proxy: tasks.util.message.Address,
     messenger: Messenger
 ) {
 
@@ -239,7 +237,7 @@ class Task(
     try {
       val history = HistoryContextImpl(
         task = History.TaskVersion(taskId.id, taskId.version),
-        codeVersion = tasksConfig.codeVersion,
+        codeVersion = tasksConfig.codeVersion.s,
         traceId = Some(lineage.leaf.toString)
       )
       val ce = new ComputationEnvironment(

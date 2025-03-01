@@ -30,7 +30,7 @@ import tasks.util._
 import tasks.util.config.TasksConfig
 import tasks.wire._
 import scala.util.Try
-
+import tasks.util.message._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import tasks.queue.LauncherActor

@@ -45,7 +45,7 @@ package object tasks extends MacroCalls {
   type SharedFile = tasks.fileservice.SharedFile
 
   type CodeVersion = tasks.shared.CodeVersion
-  val CodeVersion = tasks.shared.CodeVersion _
+  val CodeVersion = tasks.shared.CodeVersion
 
   type ResourceRequest = tasks.shared.VersionedResourceRequest
 

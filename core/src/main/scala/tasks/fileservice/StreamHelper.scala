@@ -95,7 +95,7 @@ class StreamHelper(
           val clength = response.contentLength
           val acceptsRanges = response.headers
             .get[org.http4s.headers.`Accept-Ranges`]
-            .filter(_.rangeUnits == RangeUnit.Bytes)
+            .filter(_.rangeUnits.contains(RangeUnit.Bytes))
             .isDefined
           IO.pure((clength, acceptsRanges))
         }

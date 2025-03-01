@@ -30,7 +30,7 @@ import tasks.queue._
 import tasks.wire._
 import tasks.util.config.TasksConfig
 import cats.effect.IO
-import tasks.util.MessageData.ScheduleTask
+import tasks.util.message.MessageData.ScheduleTask
 
 private[tasks] case class AnswerFromCache(
     message: Either[String, Option[UntypedResult]],

@@ -6,7 +6,7 @@ import cats.effect.kernel.Ref
 import cats.effect.IO
 import cats.effect.kernel.Clock
 import cats.effect.kernel.Resource
-
+import tasks.util.message._
 private[tasks] object HeartBeatIO {
 
   case class Deadline(
@@ -72,7 +72,7 @@ private[tasks] object HeartBeatIO {
             .takeWhile(identity)
 
           responseStream
-            .mergeHaltBoth(pingStream)
+            .mergeHaltBoth(pingStream.map(_ => ()))
             .compile
             .drain
             .flatMap { _ =>

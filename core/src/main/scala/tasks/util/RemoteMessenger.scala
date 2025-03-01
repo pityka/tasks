@@ -1,5 +1,5 @@
 package tasks.util
-import org.http4s._
+import org.http4s.{ Message => _ ,_}
 import org.http4s.dsl.io._
 import cats.effect.IO
 import cats.effect.kernel.Ref
@@ -13,9 +13,9 @@ import tasks.util.config.TasksConfig
 import tasks.deploy.HostConfiguration
 import tasks.deploy.LocalConfiguration
 import tasks.fileservice.FileServicePrefix
-import tasks.util.Message
-import cats.instances.list
 
+import cats.instances.list
+import tasks.util.message._
 class RemoteMessenger(
     client: Client[IO],
     listeningUri: org.http4s.Uri,

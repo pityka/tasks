@@ -32,11 +32,11 @@ import tasks.util.config._
 import tasks.wire._
 import scala.util.{Failure, Success}
 import tasks.util.Messenger
-import tasks.util.Message
-import tasks.util.MessageData
+import tasks.util.message.Message
+import tasks.util.message.MessageData
 import tasks.util.Actor
 import cats.effect.unsafe.implicits.global
-import tasks.util.Address
+import tasks.util.message.Address
 import cats.effect.IO
 import cats.effect.kernel.Ref
 import tasks.util.SimpleSocketAddress
