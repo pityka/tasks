@@ -51,6 +51,7 @@ object Deployment {
       followerHostname: Option[String],
       followerExternalHostname: Option[String],
       followerMayUseArbitraryPort: Boolean,
+      followerNodeName: Option[String],
       background: Boolean,
       image: Option[String]
   )(implicit config: TasksConfig): String = {
@@ -67,6 +68,10 @@ object Deployment {
       case None       => ""
       case Some(host) => s"-Dhosts.hostnameExternal=$host"
     }
+    val followerNodeNameString = followerNodeName match {
+      case None       => ""
+      case Some(value) => s"-Dtasks.elastic.nodename=$value"
+    }
 
     val mayUseArbitraryPortString = s"-Dhosts.mayUseArbitraryPort=${followerMayUseArbitraryPort}"
 
@@ -79,7 +84,7 @@ object Deployment {
       if (image.isDefined) s"-Dhosts.image=${image.get}" else ""
 
     val edited =
-      s"./$packageFileName -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString $hostImageString $externalHostnameString $mayUseArbitraryPortString"
+      s"./$packageFileName -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString $hostImageString $externalHostnameString  $mayUseArbitraryPortString $followerNodeNameString"
         .replace(
           "{RAM}",
           math

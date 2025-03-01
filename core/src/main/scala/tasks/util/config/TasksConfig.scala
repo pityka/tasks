@@ -250,7 +250,16 @@ class TasksConfig(load: () => Config) {
 
   val appUIServerHost = raw.getString("tasks.ui.app.host")
 
-  val appUIServerPort = raw.getInt("tasks.ui.app.port")  
+  val appUIServerPort = raw.getInt("tasks.ui.app.port")
+
+  val dockerImageName = raw.getString("tasks.docker.image")
+
+  val dockerEnvVars = raw.getStringList("tasks.docker.env").asScala.grouped(2).map{ g =>
+    (g(0),g(1))  
+  }
+  def dockerContexts = raw.getConfigList("tasks.docker.contexts").asScala
+  val dockerNetwork = raw.getString("tasks.docker.network")
+
 
   def kubernetesImageName = raw.getString("tasks.kubernetes.image")
   val kubernetesImageApplicationSubPath =
