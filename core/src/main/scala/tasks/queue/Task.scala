@@ -27,15 +27,12 @@
 
 package tasks.queue
 
-import akka.actor.{Actor, PoisonPill, ActorRef}
-
 import scala.util._
 
 import tasks.fileservice._
 import tasks.util.config._
 import tasks.shared._
 import tasks._
-import tasks.wire._
 
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
@@ -44,9 +41,11 @@ import java.time.Instant
 import cats.effect.IO
 import tasks.TaskSystemComponents
 import tasks.caching.TaskResultCache
-import akka.actor.ActorSystem
+import tasks.util.MessageData
+import tasks.util.Address
+import tasks.util.Messenger
 
-private[tasks] case class UntypedResult(
+case class UntypedResult(
     files: Set[SharedFile],
     data: Base64Data,
     mutableFiles: Option[Set[SharedFile]]
@@ -139,7 +138,7 @@ private[tasks] object UntypedResult {
 class ComputationEnvironment(
     val resourceAllocated: ResourceAllocated,
     implicit val components: TaskSystemComponents,
-    implicit val launcher: LauncherActor,
+    implicit val launcher: LauncherHandle,
     val taskActor: Task,
     val taskHash: HashedTaskDescription
 ) {
@@ -169,8 +168,6 @@ class ComputationEnvironment(
 
   implicit def fileServiceComponent: FileServiceComponent = components.fs
 
-  implicit def actorSystem: akka.actor.ActorSystem = components.actorsystem
-
   implicit def filePrefix: FileServicePrefix = components.filePrefix
 
   implicit def queue: QueueActor = components.queue
@@ -182,12 +179,12 @@ class ComputationEnvironment(
 
 }
 
-private[tasks] class Task(
+class Task(
     inputDeserializer: Spore[AnyRef, AnyRef],
     outputSerializer: Spore[AnyRef, AnyRef],
     function: Spore[AnyRef, AnyRef],
-    launcherActor: ActorRef,
-    queueActor: ActorRef,
+    launcherActor: LauncherHandle,
+    queueActor: QueueActor,
     fileServiceComponent: FileServiceComponent,
     cache: TaskResultCache,
     nodeLocalCache: NodeLocalCache.State,
@@ -199,14 +196,14 @@ private[tasks] class Task(
     taskId: TaskId,
     lineage: TaskLineage,
     taskHash: HashedTaskDescription,
-    proxy: ActorRef,
-    system: ActorSystem
+    val proxy: tasks.util.Address,
+    messenger: Messenger
 ) {
 
-  private def handleError(exception: Throwable): Unit = {
+  private def handleError(exception: Throwable) = {
     exception.printStackTrace()
     scribe.error(exception, "Task failed.")
-    launcherActor ! Launcher.InternalMessageTaskFailed(this, exception)
+    launcherActor.internalMessageTaskFailed(this, exception)
   }
 
   private def handleCompletion(
@@ -214,11 +211,11 @@ private[tasks] class Task(
       startTimeStamp: Instant,
       noCache: Boolean
   ) =
-    program.attempt.map {
+    program.attempt.flatMap {
       case Right((result, dependencies)) =>
         scribe.debug("Task success. ")
         val endTimeStamp = Instant.now
-        launcherActor ! Launcher.InternalMessageFromTask(
+        launcherActor.internalMessageFromTask(
           this,
           UntypedResultWithMetadata(
             result,
@@ -248,9 +245,8 @@ private[tasks] class Task(
       val ce = new ComputationEnvironment(
         resourceAllocated = resourceAllocated,
         components = new TaskSystemComponents(
-          queue = QueueActor(queueActor),
+          queue = queueActor,
           fs = fileServiceComponent,
-          actorsystem = system,
           cache = cache,
           nodeLocalCache = nodeLocalCache,
           filePrefix = fileServicePrefix,
@@ -258,9 +254,10 @@ private[tasks] class Task(
           historyContext = history,
           priority = priority,
           labels = labels,
-          lineage = lineage
+          lineage = lineage,
+          messenger = messenger
         ),
-        launcher = LauncherActor(launcherActor),
+        launcher = launcherActor,
         taskActor = this,
         taskHash = taskHash
       )
@@ -285,18 +282,15 @@ private[tasks] class Task(
         IO.raiseError(assertionError)
     }
 
-  def start(input: InputData): Unit = {
+  def start(input: MessageData.InputData): IO[Unit] = {
+    import MessageData.InputData
     val InputData(b64InputData, noCache) = input
-    import cats.effect.unsafe.implicits.global
+
     handleCompletion(
       executeTaskProgram(b64InputData),
       startTimeStamp = java.time.Instant.now,
       noCache = noCache
-    ).unsafeRunAsync {
-      case Left(ex) =>
-        scribe.error(ex, "Unhandled unexpected exception.")
-      case Right(_) =>
-    }
+    )
 
   }
 }

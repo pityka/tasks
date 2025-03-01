@@ -25,9 +25,6 @@
 
 package tasks.elastic
 
-import akka.actor.{ActorRef, ExtendedActorSystem, ActorSystem}
-
-import tasks.shared.monitor._
 import tasks.shared._
 import tasks.util._
 import tasks.util.config.TasksConfig
@@ -36,19 +33,13 @@ import scala.util.Try
 
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
+import tasks.queue.LauncherActor
 
 case class Node(
     name: RunningJobId,
     size: ResourceAvailable,
-    launcherActor: ActorRef
+    launcherActor: LauncherActor
 )
-
-object Node {
-  implicit def dec(implicit as: ExtendedActorSystem): JsonValueCodec[Node] = {
-    val _ = as // suppressing unused warning
-    JsonCodecMaker.make
-  }
-}
 
 trait GetNodeName {
   def getNodeName: String
@@ -83,25 +74,25 @@ trait CreateNodeFactory {
   ): CreateNode
 }
 
-trait ReaperFactory {
-  def apply(implicit system: ActorSystem, config: TasksConfig): ActorRef
-}
+// trait ReaperFactory {
+//   def apply(implicit system: ActorSystem, config: TasksConfig): ActorRef
+// }
 
 trait DecideNewNode {
   def needNewNode(
-      q: QueueStat,
+      q: MessageData.QueueStat,
       registeredNodes: Seq[ResourceAvailable],
       pendingNodes: Seq[ResourceAvailable]
   ): Map[ResourceRequest, Int]
 }
 
-class ShutdownReaper(id: RunningJobId, shutdown: ShutdownRunningNode)
-    extends Reaper {
+// class ShutdownReaper(id: RunningJobId, shutdown: ShutdownRunningNode)
+//     extends Reaper {
 
-  def allSoulsReaped(): Unit = {
-    log.info(s"All souls reaped. Call shutdown node on $id.")
-    shutdown.shutdownRunningNode(id)
-  }
-}
+//   def allSoulsReaped(): Unit = {
+//     log.info(s"All souls reaped. Call shutdown node on $id.")
+//     shutdown.shutdownRunningNode(id)
+//   }
+// }
 
 case class CodeAddress(address: SimpleSocketAddress, codeVersion: CodeVersion)

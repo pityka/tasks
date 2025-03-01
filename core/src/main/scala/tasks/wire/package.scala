@@ -2,31 +2,10 @@ package tasks
 
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
-import akka.actor._
 
 import java.io.File
 
 package object wire {
-
-  implicit def actorRefCodec(implicit
-      as: ExtendedActorSystem
-  ): JsonValueCodec[ActorRef] = {
-    val codec0: JsonValueCodec[String] = JsonCodecMaker.make
-
-    new JsonValueCodec[ActorRef] {
-      val nullValue: ActorRef = null.asInstanceOf[ActorRef]
-
-      def encodeValue(x: ActorRef, out: JsonWriter): _root_.scala.Unit = {
-        val path = akka.serialization.Serialization.serializedActorPath(x)
-        codec0.encodeValue(path, out)
-      }
-
-      def decodeValue(in: JsonReader, default: ActorRef): ActorRef = {
-        val dto = codec0.decodeValue(in, codec0.nullValue)
-        as.provider.resolveActorRef(dto)
-      }
-    }
-  }
 
   implicit val throwableCodec: JsonValueCodec[Throwable] = {
     type DTO = (String, List[(String, String, String, Int)])

@@ -49,11 +49,13 @@ object Deployment {
       masterAddress: SimpleSocketAddress,
       download: Uri,
       followerHostname: Option[String],
+      followerExternalHostname: Option[String],
+      followerMayUseArbitraryPort: Boolean,
       background: Boolean,
       image: Option[String]
   )(implicit config: TasksConfig): String = {
-    val packageFileFolder = config.slaveWorkingDirectory
-    val packageFileName = config.slavePackageName
+    val packageFileFolder = config.workerWorkingDirectory
+    val packageFileName = config.workerPackageName
     val downloadScript =
       s"cd $packageFileFolder && curl -m 60 $download > $packageFileName && chmod u+x $packageFileName"
 
@@ -61,16 +63,23 @@ object Deployment {
       case None       => ""
       case Some(host) => s"-Dhosts.hostname=$host"
     }
+    val externalHostnameString = followerExternalHostname match {
+      case None       => ""
+      case Some(host) => s"-Dhosts.hostnameExternal=$host"
+    }
+
+    val mayUseArbitraryPortString = s"-Dhosts.mayUseArbitraryPort=${followerMayUseArbitraryPort}"
 
     val gpuString =
       if (gpus.size > 0)
         s"-Dhosts.gpusAsCommaString=${gpus.map(_.toString).mkString(",")}"
       else ""
 
-    val hostImageString = if (image.isDefined) s"-Dhosts.image=${image.get}" else ""
+    val hostImageString =
+      if (image.isDefined) s"-Dhosts.image=${image.get}" else ""
 
     val edited =
-      s"./$packageFileName -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString $hostImageString"
+      s"./$packageFileName -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString $hostImageString $externalHostnameString $mayUseArbitraryPortString"
         .replace(
           "{RAM}",
           math

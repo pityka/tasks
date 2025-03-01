@@ -110,6 +110,15 @@ case class ResourceAvailable(
       image
     )
 
+  def minimum(r:ResourceRequest) = 
+    ResourceAllocated(
+      r.cpu._1,
+      r.memory,
+      r.scratch,
+      gpu.take(r.gpu),
+      None
+    )
+
   def maximum(r: ResourceRequest) = {
     val allocatedMemory = math.min(r.memory, memory)
     val allocatedCPU = math.min(cpu, r.cpu._2)

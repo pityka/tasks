@@ -25,6 +25,7 @@
 package tasks
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
+import cats.effect.unsafe.implicits.global
 
 import org.scalatest.matchers.should.Matchers
 
@@ -54,7 +55,7 @@ object ReloadConfigTest extends TestHelpers with Matchers {
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
       tasks.maxConfigLoadInterval = 2 seconds
-      akka.loglevel=OFF
+      
       """
     )
   }
@@ -69,7 +70,7 @@ object ReloadConfigTest extends TestHelpers with Matchers {
         t2 <- f2
       } yield t1 + t2
 
-      await(future)
+      (future)
 
     }
   }
@@ -79,7 +80,7 @@ object ReloadConfigTest extends TestHelpers with Matchers {
 class ReloadConfigTestSuite extends FunSuite with Matchers {
 
   ignore("should reload configuration") {
-    ReloadConfigTest.run.get should equal(2)
+    ReloadConfigTest.run.unsafeRunSync().get should equal(2)
 
   }
 

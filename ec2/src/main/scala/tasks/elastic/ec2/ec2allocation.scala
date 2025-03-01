@@ -28,7 +28,6 @@
 
 package tasks.elastic.ec2
 
-import akka.actor.{ActorSystem, Props, ActorRef}
 import scala.util._
 
 import tasks.elastic._
@@ -179,6 +178,8 @@ class EC2CreateNode(
         path = "/"
       ),
       followerHostname = None,
+      followerExternalHostname = None,
+      followerMayUseArbitraryPort = true,
       background = true,
       image = None
     )
@@ -216,22 +217,12 @@ class EC2CreateNode(
 
 }
 
-class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig)
-    extends Reaper {
+// class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig)
+//     extends Reaper {
 
-  val ec2 =
-    if (config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
-    else AmazonEC2ClientBuilder.standard.withRegion(config.awsRegion).build
-
-  def allSoulsReaped(): Unit = {
-    log.debug("All souls reaped. Calling system.shutdown.")
-    if (terminateSelf) {
-      val nodename = EC2Operations.readMetadata("instance-id").head
-      EC2Operations.terminateInstance(ec2, nodename)
-    }
-    context.system.terminate()
-  }
-}
+//     context.system.terminate()
+//   }
+// }
 
 class EC2CreateNodeFactory(implicit
     config: TasksConfig,
@@ -246,31 +237,35 @@ object EC2GetNodeName extends GetNodeName {
   def getNodeName = EC2Operations.readMetadata("instance-id").head
 }
 
-object EC2ReaperFactory extends ReaperFactory {
-  def apply(implicit system: ActorSystem, config: TasksConfig): ActorRef =
-    system.actorOf(
-      Props(new EC2Reaper(config.terminateMaster)),
-      name = "reaper"
-    )
-}
-
 class EC2ElasticSupport extends ElasticSupportFromConfig {
 
   implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
     "tasks.elastic.ec2.EC2ElasticSupport"
   )
+  import cats.effect.IO
+  def apply(implicit config: TasksConfig) = cats.effect.Resource.make {
+    IO {
+      implicit val ec2 =
+        if (config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
+        else AmazonEC2ClientBuilder.standard.withRegion(config.awsRegion).build
+      SimpleElasticSupport(
+        fqcn = fqcn,
+        hostConfig = Some(new EC2MasterSlave),
+        shutdown = new EC2Shutdown(ec2),
+        createNodeFactory = new EC2CreateNodeFactory,
+        getNodeName = EC2GetNodeName
+      )
+    }
+  } { release =>
+    if (config.terminateMaster) cats.effect.IO {
+      val ec2 =
+        if (config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
+        else AmazonEC2ClientBuilder.standard.withRegion(config.awsRegion).build
 
-  def apply(implicit config: TasksConfig) = cats.effect.Resource.pure {
-    implicit val ec2 =
-      if (config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
-      else AmazonEC2ClientBuilder.standard.withRegion(config.awsRegion).build
-    SimpleElasticSupport(
-      fqcn = fqcn,
-      hostConfig = Some(new EC2MasterSlave),
-      reaperFactory = Some(EC2ReaperFactory),
-      shutdown = new EC2Shutdown(ec2),
-      createNodeFactory = new EC2CreateNodeFactory,
-      getNodeName = EC2GetNodeName
-    )
+      val nodename = EC2Operations.readMetadata("instance-id").head
+      EC2Operations.terminateInstance(ec2, nodename)
+
+    }
+    else IO.unit
   }
 }

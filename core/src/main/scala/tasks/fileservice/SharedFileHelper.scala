@@ -25,8 +25,6 @@
 
 package tasks.fileservice
 
-import akka.actor._
-
 import java.io.File
 
 import tasks.util._
@@ -210,7 +208,7 @@ private[tasks] object SharedFileHelper {
   ): IO[SharedFile] = {
     val sharedFile = {
       val proposedPath = prefix.propose(name)
-      service.storage.importFile(file, proposedPath,canMove=true).map { f =>
+      service.storage.importFile(file, proposedPath, canMove = true).map { f =>
         if (deleteFile && file.exists()) {
           file.delete
         }
@@ -257,7 +255,6 @@ private[tasks] object SharedFileHelper {
   def createFromFolder(parallelism: Int)(callback: File => List[File])(implicit
       prefix: FileServicePrefix,
       service: FileServiceComponent,
-      context: ActorRefFactory,
       config: TasksConfig,
       historyContext: HistoryContext
   ): IO[List[SharedFile]] = {
@@ -275,15 +272,19 @@ private[tasks] object SharedFileHelper {
       val directoryPath = directory.getAbsolutePath
       IO.parSequenceN(parallelism)(files.map { file =>
         assert(file.getAbsolutePath.startsWith(directoryPath))
-        val pathElements :Seq[String] = file.getAbsolutePath.drop(directoryPath.size).split('/').filter(_.nonEmpty)
+        val pathElements: Seq[String] = file.getAbsolutePath
+          .drop(directoryPath.size)
+          .split('/')
+          .toIndexedSeq
+          .filter(_.nonEmpty)
         val folders = pathElements.dropRight(1)
-        val name  = pathElements.last 
-         val prefix1 = prefix.append(folders)
+        val name = pathElements.last
+        val prefix1 = prefix.append(folders)
         createFromFile(
           file,
           name,
           deleteFile = false
-        )(prefix1,service,config,historyContext)
+        )(prefix1, service, config, historyContext)
       })
     }
   }

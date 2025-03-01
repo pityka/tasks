@@ -27,8 +27,6 @@
 
 package tasks.caching
 
-import akka.actor.ActorSystem
-
 import tasks.queue._
 import tasks._
 import tasks.util.config._
@@ -46,7 +44,7 @@ private[tasks] class SharedFileCache(implicit
 ) extends Cache
     with TaskSerializer {
 
-  override def toString = "SharedFileCache"
+  override def toString = s"SharedFileCache($fileServiceComponent)"
 
   def shutDown() = ()
 
@@ -94,12 +92,14 @@ private[tasks] class SharedFileCache(implicit
       implicit val historyContext = tasks.fileservice.NoHistory
       val hash = hashedTaskDescription.hash
       val value = serializeResult(untypedResult)
+      val fname = "__meta__result__" + hash
       for {
         _ <- SharedFileHelper
           .createFromStream(
             fs2.Stream.chunk(Chunk.array(value)),
-            name = "__meta__result__" + hash
+            name = fname
           )
+        _ <- IO(scribe.debug(s"Saved ${hashedTaskDescription.taskId} ${hashedTaskDescription.dataHash} to ${p.list.mkString("/")}/$fname"))
 
       } yield ()
 

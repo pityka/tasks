@@ -25,6 +25,7 @@
 package tasks
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
+import cats.effect.unsafe.implicits.global
 
 import org.scalatest.matchers.should.Matchers
 
@@ -45,11 +46,12 @@ object NodeAllocationTest extends TestHelpers {
     ConfigFactory.parseString(
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=0
+      tasks.disableRemoting = false
       tasks.elastic.engine = "tasks.JvmElasticSupport$$JvmGrid$$"
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
-      akka.loglevel=OFF
+      
       """
     )
   }
@@ -81,7 +83,7 @@ object NodeAllocationTest extends TestHelpers {
         }
       }
 
-      await(future)
+      (future)
 
     }
   }
@@ -90,8 +92,14 @@ object NodeAllocationTest extends TestHelpers {
 
 class NodeAllocationTestSuite extends FunSuite with Matchers {
 
+  scribe.Logger.root
+  .clearHandlers()
+  .clearModifiers()
+  .withHandler(minimumLevel = Some(scribe.Level.Debug))
+  .replace()
+
   test("elastic node allocation should spawn nodes") {
-    NodeAllocationTest.run.get should equal(3)
+    NodeAllocationTest.run.unsafeRunSync().get should equal(3)
 
   }
 

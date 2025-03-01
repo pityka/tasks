@@ -37,8 +37,6 @@ import tasks.wire._
 import tasks.elastic._
 import tasks.shared._
 
-import akka.actor._
-
 import java.io.File
 
 import scala.concurrent.Await
@@ -59,7 +57,6 @@ import com.typesafe.config.ConfigFactory
 case class TaskSystemComponents private[tasks] (
     private[tasks] val queue: QueueActor,
     private[tasks] val fs: FileServiceComponent,
-    private[tasks] val actorsystem: ActorSystem,
     private[tasks] val cache: TaskResultCache,
     private[tasks] val nodeLocalCache: NodeLocalCache.State,
     private[tasks] val filePrefix: FileServicePrefix,
@@ -67,7 +64,8 @@ case class TaskSystemComponents private[tasks] (
     private[tasks] val historyContext: HistoryContext,
     private[tasks] val priority: Priority,
     private[tasks] val labels: Labels,
-    private[tasks] val lineage: TaskLineage
+    private[tasks] val lineage: TaskLineage,
+    private[tasks] val messenger: Messenger
 ) {
 
   def withChildPrefix(name: String) =
@@ -107,7 +105,9 @@ object TaskSystemComponents {
 
           val packageServerPort = hostConfig.myAddressBind.getPort + 1
 
-          val packageServerHostname = hostConfig.myAddressExternal.getOrElse(hostConfig.myAddressBind).getHostName
+          val packageServerHostname = hostConfig.myAddressExternal
+            .getOrElse(hostConfig.myAddressBind)
+            .getHostName
 
           val rootHistory = NoHistory
 
@@ -140,8 +140,16 @@ object TaskSystemComponents {
           }
 
           val emitLog = Resource.eval(IO {
-            scribe.info("Listening on: " + hostConfig.myAddressBind.toString)
-            scribe.info("External address: " + hostConfig.myAddressExternal.toString)
+            hostConfig match {
+              case _: LocalConfiguration =>
+                scribe.info("Remoting disabled.")
+              case _ =>
+                scribe
+                  .info("Listening on: " + hostConfig.myAddressBind.toString)
+                scribe.info(
+                  "External address: " + hostConfig.myAddressExternal.toString
+                )
+            }
             scribe.info("CPU: " + hostConfig.availableCPU.toString)
             scribe.info("RAM: " + hostConfig.availableMemory.toString)
             scribe.info("SCRATCH: " + hostConfig.availableScratch.toString)
@@ -338,7 +346,7 @@ object TaskSystemComponents {
               }
             )
 
-          def cacheActor(fs: FileServiceComponent) = Resource.eval(IO {
+          def cache(fs: FileServiceComponent) = Resource.eval(IO {
             val cache: Cache =
               if (config.cacheEnabled)
                 new SharedFileCache()(
@@ -353,127 +361,98 @@ object TaskSystemComponents {
           val nodeLocalCache =
             Resource.eval(NodeLocalCache.start.timeout(60 seconds))
 
-          def initFailed(remoteNodeRegistry: Option[ActorRef]): Unit = {
+          def initFailed(
+              remoteNodeRegistry: Option[RemoteNodeRegistry],
+              messenger: Messenger
+          ) = {
             if (!hostConfig.isApp && hostConfig.isWorker) {
               scribe.error(
                 "Initialization failed. This is a follower node, notifying remote node registry."
               )
-              remoteNodeRegistry.foreach(
-                _ ! InitFailed(
-                  PendingJobId(elasticSupport.get.getNodeName.getNodeName)
+              messenger.submit(
+                Message(
+                  MessageData.InitFailed(
+                    PendingJobId(elasticSupport.get.getNodeName.getNodeName)
+                  ),
+                  from = Address("_noaddress_"),
+                  to = remoteNodeRegistry.get.address
                 )
               )
-            }
+            } else IO.unit
           }
 
           case class ActorSet1(
-              queueActor: ActorRef,
-              reaperActor: ActorRef,
-              remoteNodeRegistry: Option[ActorRef]
+              remoteNodeRegistry: Option[RemoteNodeRegistry]
           )
 
-          def makeActors(
-              fileServiceComponent: FileServiceComponent,
-              system: ActorSystem,
-              cache: TaskResultCache
+          def makeQueue(
+              cache: TaskResultCache,
+              messenger: Messenger,
+              remoteNodeRegistry: Option[RemoteNodeRegistry]
+          ): Resource[IO, QueueActor] = {
+
+            Resource
+              .eval(IO {
+                if (hostConfig.isQueue) {
+                  QueueActor.makeWithRunloop(cache, messenger)(config)
+
+                } else {
+
+                  Resource.eval(
+                    QueueActor
+                      .makeReference(
+                        masterAddress,
+                        messenger,
+                        remoteNodeRegistry
+                      )(config)
+                      .flatMap {
+                        case Right(value) => IO.pure(value)
+                        case Left(e) =>
+                          initFailed(remoteNodeRegistry, messenger) *> IO
+                            .raiseError(
+                              new RuntimeException("Remote queue failed", e)
+                            )
+                      }
+                  )
+                }
+              })
+              .flatMap(identity)
+              .attempt
+              .evalMap {
+                case Right(value) => IO.pure(value)
+                case Left(e) =>
+                  initFailed(remoteNodeRegistry, messenger) *> IO.raiseError(
+                    new RuntimeException("Remote queue failed", e)
+                  )
+              }
+
+          }
+
+          def makeRemoteNodeRegistry(
+              messenger: Messenger,
+              elasticSupport: Option[ElasticSupport]
           ) = {
 
-            Resource.make {
-              IO.interruptible {
+            if (
+              !hostConfig.isApp && hostConfig.isWorker && elasticSupport.isDefined
+            ) {
+              scribe.info(
+                "This is a remote worker node. Looking for remote node registry."
+              )
+              Resource.eval(
+                NodeRegistry
+                  .makeReference(masterAddress, messenger, elasticSupport)(
+                    config
+                  )
+                  .map(Some(_))
+              )
+            } else Resource.pure[IO, Option[RemoteNodeRegistry]](None)
 
-                val reaperActor: ActorRef =
-                  elasticSupport.flatMap(
-                    _.reaperFactory.map(_.apply(system, config))
-                  ) match {
-                    case None =>
-                      system.actorOf(
-                        Props[ShutdownActorSystemReaper](),
-                        name = "reaper"
-                      )
-                    case Some(reaper) => reaper
-                  }
-
-                val remoteNodeRegistry: Option[ActorRef] =
-                  if (
-                    !hostConfig.isApp && hostConfig.isWorker && elasticSupport.isDefined
-                  ) {
-                    scribe.info(
-                      "This is a remote worker node. Looking for remote node registry."
-                    )
-                    val remoteActorPath =
-                      s"akka://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/noderegistry"
-                    val noderegistry = Try(
-                      Await.result(
-                        system
-                          .actorSelection(remoteActorPath)
-                          .resolveOne(60 seconds),
-                        atMost = 60 seconds
-                      )
-                    )
-                    scribe.info("Remote node registry: " + noderegistry)
-                    noderegistry match {
-                      case Success(nr) => Some(nr)
-                      case Failure(e) =>
-                        scribe.error(
-                          e,
-                          "Failed to contact remote node registry. Shut down job."
-                        )
-                        try {
-                          elasticSupport.get.selfShutdownNow()
-                        } finally {
-                          scribe.info("Stop jvm")
-                          System.exit(1)
-                        }
-                        None
-                    }
-                  } else None
-
-                val queueActor =
-                  try {
-                    if (hostConfig.isQueue) {
-
-                      val localActor =
-                        system.actorOf(
-                          Props(new TaskQueue(Nil, cache)(config))
-                            .withDispatcher("taskqueue"),
-                          "queue"
-                        )
-                      reaperActor ! WatchMe(localActor)
-                      localActor
-                    } else {
-                      val actorPath =
-                        s"akka://tasks@${masterAddress.getHostName}:${masterAddress.getPort}/user/queue"
-                      val remoteActor = Await.result(
-                        system
-                          .actorSelection(actorPath)
-                          .resolveOne(600 seconds),
-                        atMost = 600 seconds
-                      )
-
-                      remoteActor
-                    }
-                  } catch {
-                    case e: Throwable => {
-                      initFailed(remoteNodeRegistry)
-                      throw e
-                    }
-                  }
-
-                scribe.info("Queue: " + queueActor)
-                ActorSet1(queueActor, reaperActor, remoteNodeRegistry)
-              }
-            }(actorSet =>
-              IO {
-                awaitReaper(actorSet.reaperActor)
-                if (hostConfig.isQueue) {
-                  actorSet.queueActor ! PoisonPill
-                }
-              }
-            )
           }
 
           def elasticSupportFactory(
-              queueActor: ActorRef
+              queueActor: QueueActor,
+              messenger: Messenger
           ): Resource[IO, Option[ElasticSupport#Inner]] =
             if (hostConfig.isApp || hostConfig.isWorker) {
 
@@ -494,7 +473,7 @@ object TaskSystemComponents {
                 elasticSupport.map(es =>
                   es(
                     masterAddress = hostConfig.master,
-                    queueActor = QueueActor(queueActor),
+                    queueActor = queueActor,
                     resource = ResourceAvailable(
                       cpu = hostConfig.availableCPU,
                       memory = hostConfig.availableMemory,
@@ -503,7 +482,7 @@ object TaskSystemComponents {
                       image = hostConfig.image
                     ),
                     codeAddress = codeAddress,
-                    eventListener = None
+                    messenger = messenger
                   )(config)
                 )
               })
@@ -556,75 +535,62 @@ object TaskSystemComponents {
 
           def localNodeRegistry(
               elasticSupportFactory: Option[ElasticSupport#Inner],
-              reaperActor: ActorRef,
-              system: ActorSystem
-          ): Resource[IO, Option[ActorRef]] =
-            Resource.make(IO {
-              if (hostConfig.isApp && elasticSupportFactory.isDefined) {
+              messenger: Messenger
+          ): Resource[IO, Unit] =
+            if (hostConfig.isApp && elasticSupportFactory.isDefined) {
 
-                val props = Props(elasticSupportFactory.get.createRegistry.get)
+              tasks.util.Actor.makeFromBehavior(
+                elasticSupportFactory.get.createRegistry.get,
+                messenger
+              )
 
-                val localActor = system
-                  .actorOf(
-                    props.withDispatcher("noderegistry-pinned"),
-                    "noderegistry"
-                  )
-
-                reaperActor ! WatchMe(localActor)
-
-                Some(localActor)
-              } else None
-            }) { localActor =>
-              IO { localActor.foreach(_ ! PoisonPill) }
-            }
+            } else Resource.unit
 
           def launcherActor(
-              queueActor: ActorRef,
+              queueActor: QueueActor,
               nodeLocalCache: NodeLocalCache.State,
               fs: FileServiceComponent,
               cache: TaskResultCache,
-              system: ActorSystem
+              messenger: Messenger
           ) =
-            Resource.eval(IO {
-              if (hostConfig.availableCPU > 0 && hostConfig.isWorker) {
-                val refreshInterval = config.askInterval
-                val localActor = system.actorOf(
-                  Props(
-                    new Launcher(
-                      queueActor,
-                      nodeLocalCache,
-                      VersionedResourceAvailable(
-                        config.codeVersion,
-                        ResourceAvailable(
-                          cpu = hostConfig.availableCPU,
-                          memory = hostConfig.availableMemory,
-                          scratch = hostConfig.availableScratch,
-                          gpu = hostConfig.availableGPU,
-                          image = hostConfig.image
-                        )
-                      ),
-                      refreshInterval = refreshInterval,
-                      remoteStorage = fs.remote,
-                      managedStorage = fs.storage,
-                      cache = cache
-                    )(config)
-                  ).withDispatcher("launcher"),
-                  "launcher"
-                )
-                Some(localActor)
-              } else None
-            })
+            if (hostConfig.availableCPU > 0 && hostConfig.isWorker) {
+              val refreshInterval = config.askInterval
+              Launcher
+                .makeHandle(
+                  queueActor,
+                  nodeLocalCache,
+                  VersionedResourceAvailable(
+                    config.codeVersion,
+                    ResourceAvailable(
+                      cpu = hostConfig.availableCPU,
+                      memory = hostConfig.availableMemory,
+                      scratch = hostConfig.availableScratch,
+                      gpu = hostConfig.availableGPU,
+                      image = hostConfig.image
+                    )
+                  ),
+                  refreshInterval = refreshInterval,
+                  remoteStorage = fs.remote,
+                  managedStorage = fs.storage,
+                  cache = cache,
+                  messenger = messenger,
+                  address = Address(
+                    s"Launcher-${hostConfig.myAddressExternal.getOrElse(hostConfig.myAddressBind).toString}"
+                  )
+                )(config)
+                .map(Some(_))
+
+            } else Resource.pure[IO, Option[LauncherHandle]](None)
 
           def components(
-              queueActor: ActorRef,
+              queueActor: QueueActor,
               fileServiceComponent: FileServiceComponent,
               cache: TaskResultCache,
               nodeLocalCache: NodeLocalCache.State,
-              system: ActorSystem
+              messenger: Messenger
           ) = TaskSystemComponents(
-            queue = QueueActor(queueActor),
+            queue = queueActor,
             fs = fileServiceComponent,
-            actorsystem = system,
             cache = cache,
             nodeLocalCache = nodeLocalCache,
             filePrefix = FileServicePrefix(Vector()),
@@ -632,16 +598,17 @@ object TaskSystemComponents {
             historyContext = rootHistory,
             priority = Priority(0),
             labels = Labels.empty,
-            lineage = TaskLineage.root
+            lineage = TaskLineage.root,
+            messenger = messenger
           )
 
           def notifyRegistry(
               elasticSupportFactory: Option[ElasticSupport#Inner],
-              launcherActor: Option[ActorRef],
-              remoteNodeRegistry: Option[ActorRef],
-              system: ActorSystem
-          ) =
-            Resource.eval(IO {
+              launcherActor: Option[LauncherActor],
+              remoteNodeRegistry: Option[RemoteNodeRegistry],
+              messenger: Messenger
+          ): Resource[IO, Unit] = {
+            val delayed: IO[Resource[IO, Unit]] = IO {
               if (
                 !hostConfig.isApp && hostConfig.isWorker && elasticSupportFactory.isDefined && launcherActor.isDefined
               ) {
@@ -664,153 +631,107 @@ object TaskSystemComponents {
                   scribe.error(
                     s"Temp folder is not writeable (${System.getProperty("java.io.tmpdir")}). Failing slave init."
                   )
-                  initFailed(remoteNodeRegistry)
+                  Resource.eval(initFailed(remoteNodeRegistry, messenger))
                 } else {
 
-                  remoteNodeRegistry.get ! NodeComingUp(
-                    Node(
-                      RunningJobId(nodeName),
-                      ResourceAvailable(
-                        hostConfig.availableCPU,
-                        hostConfig.availableMemory,
-                        hostConfig.availableScratch,
-                        hostConfig.availableGPU,
-                        hostConfig.image
-                      ),
-                      launcherActor.get
+                  Resource
+                    .eval(
+                      messenger.submit(
+                        Message(
+                          MessageData.NodeComingUp(
+                            Node(
+                              RunningJobId(nodeName),
+                              ResourceAvailable(
+                                hostConfig.availableCPU,
+                                hostConfig.availableMemory,
+                                hostConfig.availableScratch,
+                                hostConfig.availableGPU,
+                                hostConfig.image
+                              ),
+                              LauncherActor(launcherActor.get.address.withAddress(messenger.listeningAddress))
+                            )
+                          ),
+                          from = Address("_noaddress_"),
+                          to = remoteNodeRegistry.get.address
+                        )
+                      )
                     )
-                  )
-
-                  system.actorOf(
-                    Props(elasticSupportFactory.get.createSelfShutdown)
-                      .withDispatcher("selfshutdown-pinned")
-                  )
+                    .flatMap(_ => elasticSupportFactory.get.createSelfShutdown)
                 }
 
               } else {
                 scribe.info("This is not a follower node.")
+                Resource.unit[IO]
               }
-            })
-
-          def awaitReaper(reaperActor: ActorRef) = IO.interruptible {
-            val latch = new java.util.concurrent.CountDownLatch(1)
-            reaperActor ! Latch(latch)
-            scribe.info(
-              "Shutting down tasksystem. Blocking until all watched actors have terminated."
-            )
-            latch.await
-          }
-
-          def makeAS = Resource.make(IO {
-            val finalAkkaConfiguration = {
-
-              val actorProvider = hostConfig match {
-                case _: LocalConfiguration => "akka.actor.LocalActorRefProvider"
-                case _ => "akka.remote.RemoteActorRefProvider"
-              }
-
-              val serializers = hostConfig match {
-                case _: LocalConfiguration => ""
-                case _                     => """
-    serializers {
-      static = "tasks.wire.StaticMessageSerializer"
-      sch = "tasks.wire.ScheduleTaskSerializer"
-      sf = "tasks.wire.SharedFileSerializer"
-    }
-
-  serialization-bindings {
-      "tasks.wire.StaticMessage" = static
-      "tasks.queue.ScheduleTask" = sch
-      "tasks.fileservice.SharedFile" = sf
-    }
-          """
-              }
-
-              val externalAddress = hostConfig.myAddressExternal.getOrElse(hostConfig.myAddressBind)
-              val internalAddress = hostConfig.myAddressBind
-
-              val akkaProgrammaticalConfiguration =
-                ConfigFactory.parseString(s"""
-        
-        akka {
-          actor {
-            provider = "${actorProvider}"
-            $serializers
-          }
-          remote {
-            artery {
-              canonical.hostname = "${externalAddress.getHostName}"
-              canonical.port = ${externalAddress.getPort.toString}
-              bind.hostname = "${internalAddress.getHostName}"
-              bind.port = ${internalAddress.getPort.toString}
-            }
-            
-         }
-
-         
-
-
-        }
-          """)
-
-              ConfigFactory.defaultOverrides
-                .withFallback(akkaProgrammaticalConfiguration)
-                .withFallback(ConfigFactory.parseResources("akka.conf"))
-                .withFallback(ConfigFactory.load)
-
             }
 
-            ActorSystem(config.actorSystemName, finalAkkaConfiguration)
-          })(as =>
-            IO.fromFuture {
-              IO(as.terminate())
-            }.void
-          )
+            Resource.eval(delayed).flatMap(identity)
+          }
+
+          // def awaitReaper(reaperActor: ActorRef) = IO.interruptible {
+          //   val latch = new java.util.concurrent.CountDownLatch(1)
+          //   reaperActor ! Latch(latch)
+          //   scribe.info(
+          //     "Shutting down tasksystem. Blocking until all watched actors have terminated."
+          //   )
+          //   latch.await
+          // }
 
           for {
+            _ <- Resource.make(
+              IO(scribe.debug("Start allocation of TaskSystem"))
+            )(_ => IO(scribe.debug("Finished deallocation of TaskSystem")))
             _ <- emitLog
-            as <- makeAS
+            messenger <- Messenger.make(hostConfig)
+            remoteNodeRegistry <- makeRemoteNodeRegistry(
+              messenger,
+              elasticSupport
+            )
             fileServiceComponent <- fileServiceComponent
-            nodeLocalCache <- nodeLocalCache
-            cache <- cacheActor(fileServiceComponent)
-            actorSet <- makeActors(
-              fileServiceComponent = fileServiceComponent,
-              system = as,
-              cache = cache
+            cache <- cache(fileServiceComponent)
+            _ <- Resource.eval(IO(scribe.info(s"Cache: $cache")))
+            queue <- makeQueue(
+              cache = cache,
+              messenger = messenger,
+              remoteNodeRegistry = remoteNodeRegistry
             )
 
             elasticSupportFactory <- elasticSupportFactory(
-              actorSet.queueActor
+              queue,
+              messenger
             )
             _ <- packageServer(
               elasticSupportFactory
             )
             localNodeRegistry <- localNodeRegistry(
               elasticSupportFactory,
-              actorSet.reaperActor,
-              as
+              messenger
             )
-            launcherActor <- launcherActor(
-              queueActor = actorSet.queueActor,
+            nodeLocalCache <- nodeLocalCache
+            launcherHandle <- launcherActor(
+              queueActor = queue,
               nodeLocalCache = nodeLocalCache,
               fs = fileServiceComponent,
-              system = as,
-              cache = cache
+              cache = cache,
+              messenger = messenger
             )
             _ <- notifyRegistry(
               elasticSupportFactory,
-              launcherActor,
-              actorSet.remoteNodeRegistry,
-              as
+              launcherHandle.map(_.launcherActor),
+              remoteNodeRegistry,
+              messenger
             )
+            _ <- Resource.make(
+              IO(scribe.debug("Finished allocation of TaskSystem"))
+            )(_ => IO(scribe.debug("Start deallocation of TaskSystem")))
 
           } yield (
             components(
-              actorSet.queueActor,
-              fileServiceComponent,
-              cache,
-              nodeLocalCache,
-              as
+              queueActor = queue,
+              fileServiceComponent = fileServiceComponent,
+              cache = cache,
+              nodeLocalCache = nodeLocalCache,
+              messenger = messenger
             ),
             hostConfig
           )

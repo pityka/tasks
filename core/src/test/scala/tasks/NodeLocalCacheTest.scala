@@ -25,6 +25,7 @@
 package tasks
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
+import cats.effect.unsafe.implicits.global
 
 import org.scalatest.matchers.should.Matchers
 
@@ -71,7 +72,7 @@ object NodeLocalCacheTest extends TestHelpers {
         t4 <- testTask(Input(4))(ResourceRequest(1, 500))
       } yield t1 + t4
 
-      await(future)
+      (future)
 
     }
   }
@@ -83,7 +84,7 @@ class NodeLocalCacheTestSuite extends FunSuite with Matchers {
   test(
     "node local cache should not execute the same key twice, unless dropped"
   ) {
-    NodeLocalCacheTest.run.get should equal(4)
+    NodeLocalCacheTest.run.unsafeRunSync().get should equal(4)
     NodeLocalCacheTest.sideEffect.count(_ == "execution of task") shouldBe 4
     NodeLocalCacheTest.sideEffect.count(
       _ == "execution of nodelocalcache factory 1"

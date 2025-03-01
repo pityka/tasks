@@ -51,6 +51,55 @@ class SHCreateNode(
     elasticSupport: ElasticSupportFqcn
 ) extends CreateNode {
 
+  /** Execute command with user function to process each line of output.
+    *
+    * Based on from
+    * http://www.jroller.com/thebugslayer/entry/executing_external_system_commands_in
+    * Creates 2 new threads: one for the stdout, one for the stderror.
+    * @param pb
+    *   Description of the executable process
+    * @return
+    *   Exit code of the process.
+    */
+  private def exec(pb: ProcessBuilder)(stdOutFunc: String => Unit = { (_: String) => })(
+      implicit stdErrFunc: String => Unit = (_: String) => ()
+  ): Int =
+    pb.run(ProcessLogger(stdOutFunc, stdErrFunc)).exitValue()
+
+  /** Execute command. Returns stdout and stderr as strings, and true if it was
+    * successful.
+    *
+    * A process is considered successful if its exit code is 0 and the error
+    * stream is empty. The latter criterion can be disabled with the
+    * unsuccessfulOnErrorStream parameter.
+    * @param pb
+    *   The process description.
+    * @param unsuccessfulOnErrorStream
+    *   if true, then the process is considered as a failure if its stderr is
+    *   not empty.
+    * @param atMost
+    *   max waiting time.
+    * @return
+    *   (stdout,stderr,success) triples
+    */
+  private def execGetStreamsAndCode(
+      pb: ProcessBuilder,
+      unsuccessfulOnErrorStream: Boolean = true
+  ): (List[String], List[String], Boolean) = {
+    var ls: List[String] = Nil
+    var lse: List[String] = Nil
+    var boolean = true
+    val exitvalue = exec(pb) { ln =>
+      ls = ln :: ls
+    } { ln =>
+      if (unsuccessfulOnErrorStream) {
+        boolean = false
+      }; lse = ln :: lse
+    }
+    (ls.reverse, lse.reverse, boolean && (exitvalue == 0))
+  }
+
+
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest
   ): Try[Tuple2[PendingJobId, ResourceAvailable]] = {
@@ -68,6 +117,8 @@ class SHCreateNode(
         path = "/"
       ),
       followerHostname = None,
+      followerExternalHostname = None,
+      followerMayUseArbitraryPort = true,
       background = true,
       image = None
     )
@@ -79,10 +130,11 @@ class SHCreateNode(
         Seq(
           "bash",
           "-c",
-          s"cd ${wd.getCanonicalPath};" + script
-        )
+          script
+        ),
+        cwd = wd
       )
-    )
+    )    
 
     val pid = stdout.mkString("").trim.toInt
 
@@ -126,12 +178,13 @@ class SHElasticSupport extends ElasticSupportFromConfig {
   implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
     "tasks.elastic.sh.SHElasticSupport"
   )
-  def apply(implicit config: TasksConfig) = cats.effect.Resource.pure(SimpleElasticSupport(
-    fqcn = fqcn,
-    hostConfig = None,
-    reaperFactory = None,
-    shutdown = SHShutdown,
-    createNodeFactory = new SHCreateNodeFactory,
-    getNodeName = SHGetNodeName
-  ))
+  def apply(implicit config: TasksConfig) = cats.effect.Resource.pure(
+    SimpleElasticSupport(
+      fqcn = fqcn,
+      hostConfig = None,
+      shutdown = SHShutdown,
+      createNodeFactory = new SHCreateNodeFactory,
+      getNodeName = SHGetNodeName
+    )
+  )
 }

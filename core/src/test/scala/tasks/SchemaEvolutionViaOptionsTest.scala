@@ -25,6 +25,7 @@
 package tasks
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
+import cats.effect.unsafe.implicits.global
 
 import org.scalatest.matchers.should.Matchers
 
@@ -33,6 +34,7 @@ import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import com.typesafe.config.ConfigFactory
 import cats.effect.IO
+import cats.Applicative
 
 object SchemaEvolutionViaOptionsTest extends TestHelpers {
 
@@ -45,7 +47,7 @@ object SchemaEvolutionViaOptionsTest extends TestHelpers {
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
     hosts.numCPU=4
     tasks.createFilePrefixForTaskId = false
-    akka.loglevel=OFF
+    
     """
     )
   }
@@ -77,7 +79,7 @@ object SchemaEvolutionViaOptionsTest extends TestHelpers {
         t1 <- task1(Input1(1))(ResourceRequest(1, 500))
       } yield t1
 
-      await(future)
+      (future)
 
     }
 
@@ -86,7 +88,7 @@ object SchemaEvolutionViaOptionsTest extends TestHelpers {
         t1 <- task2(Input2(1, None))(ResourceRequest(1, 500))
       } yield t1
 
-      await(future)
+      (future)
 
     }
 
@@ -95,11 +97,16 @@ object SchemaEvolutionViaOptionsTest extends TestHelpers {
         t1 <- task2(Input2(1, Some(2)))(ResourceRequest(1, 500))
       } yield t1
 
-      await(future)
+      (future)
 
     }
 
-    run1.get + run2.get + run3.get
+    for {
+      run1 <- run1 
+      run2 <- run2 
+      run3 <- run3
+    } yield (run1.get + run2.get + run3.get)
+    
   }
 
 }
@@ -107,7 +114,7 @@ object SchemaEvolutionViaOptionsTest extends TestHelpers {
 class SchemaEvolutionViaOptionsTestSuite extends FunSuite with Matchers {
 
   test("schema evolution via options should work") {
-    SchemaEvolutionViaOptionsTest.run shouldBe 3
+    SchemaEvolutionViaOptionsTest.run.unsafeRunSync() shouldBe 3
     SchemaEvolutionViaOptionsTest.sideEffect.count(
       _ == "execution of task"
     ) shouldBe 2

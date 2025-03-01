@@ -37,7 +37,7 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import tasks.releaseResourcesEarly
 
-object RercursiveTasksTest {
+object RecursiveCachedTaskTestSuite {
 
   def serial(n: Int): Int = n match {
     case 0 => 0
@@ -45,12 +45,12 @@ object RercursiveTasksTest {
     case _ => serial(n - 1) + serial(n - 2)
   }
 
-  case class FibInput(n: Option[Int], tag: Option[List[Boolean]])
+  case class FibInput(n: Option[Int])
 
   object FibInput {
     implicit val codec: JsonValueCodec[FibInput] = JsonCodecMaker.make
 
-    def apply(n: Int): FibInput = FibInput(Some(n), tag = Some(Nil))
+    def apply(n: Int): FibInput = FibInput(Some(n))
   }
 
   case class FibOut(n: Int)
@@ -62,22 +62,21 @@ object RercursiveTasksTest {
   val fibtask: TaskDefinition[FibInput, FibOut] =
     Task[FibInput, FibOut]("fib", 1) {
 
-      case FibInput(Some(n), Some(tag)) => { implicit ce =>
+      case FibInput(Some(n)) => { implicit ce =>
         
         val prg = n match {
           case 0 => IO.pure(FibOut(0))
           case 1 => IO.pure(FibOut(1))
           case n => {
-            val f1 = fibtask(FibInput(Some(n - 1), Some(false :: tag)))(
+            val f1 = fibtask(FibInput(Some(n - 1)))(
               ResourceRequest(1, 1)
             )
-            val f2 = fibtask(FibInput(Some(n - 2), Some(true :: tag)))(
+            val f2 = fibtask(FibInput(Some(n - 2)))(
               ResourceRequest(1, 1)
             )
             for {
               _ <- releaseResourcesEarly
-              r <- IO.both(f1,f2)
-              
+              r <- IO.both(f1,f2)              
             } yield FibOut(r._1.n + r._2.n)
           }
 
@@ -92,11 +91,13 @@ object RercursiveTasksTest {
 
 }
 
-class RecursiveTaskTestSuite
+class RecursiveCachedTaskTestSuite
     extends FunSuite
     with Matchers
     with BeforeAndAfterAll
     with TestHelpers {
+
+   
 
   override val testConfig = {
     val tmp = tasks.util.TempFile.createTempFile(".temp")
@@ -104,7 +105,8 @@ class RecursiveTaskTestSuite
     ConfigFactory.parseString(
       s"""
       
-tasks.cacheEnabled = false
+tasks.cacheEnabled = true
+tasks.createFilePrefixForTaskId = false
 tasks.disableRemoting = true
 hosts.numCPU=4
       tasks.fileservice.storageURI=${tmp.getAbsolutePath}
@@ -115,7 +117,7 @@ hosts.numCPU=4
   
   val pair = defaultTaskSystem(Some(testConfig)).allocated.unsafeRunSync()
   implicit val system: TaskSystemComponents = pair._1._1
-  import RercursiveTasksTest._
+  import RecursiveCachedTaskTestSuite._
 
   test("recursive fibonacci") {
     val n = 16

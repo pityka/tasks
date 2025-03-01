@@ -200,8 +200,8 @@ object PiApp extends App {
     /* Block and wait for the futures */
 
     println(pi.unsafeRunSync())
-    println(fibResult.unsafeRunSync())
+    fibResult
 
-  }
+  }.unsafeRunSync()
 
 }

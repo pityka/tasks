@@ -23,6 +23,7 @@
  */
 
 package tasks
+import cats.effect.unsafe.implicits.global
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
@@ -52,7 +53,6 @@ object CacheWithoutFilePrefixTest extends TestHelpers {
         s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=4
       tasks.createFilePrefixForTaskId = false
-      akka.loglevel=OFF
       """
       )
     }
@@ -64,7 +64,7 @@ object CacheWithoutFilePrefixTest extends TestHelpers {
         t3 <- task(Input(2))(ResourceRequest(1, 500))
       } yield t1 + t2 + t3
 
-      await(future)
+      future
 
     }
   }
@@ -76,7 +76,7 @@ class CacheWithoutFilePrefixTestSuite extends FunSuite with Matchers {
   test(
     "caching should work even if with  tasks.createFilePrefixForTaskId = false"
   ) {
-    CacheWithoutFilePrefixTest.run.get shouldBe 3
+    CacheWithoutFilePrefixTest.run.unsafeRunSync().get shouldBe 3
     CacheWithoutFilePrefixTest.sideEffect.count(
       _ == "execution of task"
     ) shouldBe 2
