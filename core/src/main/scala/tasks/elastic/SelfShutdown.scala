@@ -25,34 +25,33 @@
 
 package tasks.elastic
 
-import akka.actor.{Actor, ActorLogging}
-
 import tasks.shared._
 import tasks.util._
 import tasks.util.config._
 import tasks.queue.QueueActor
+import cats.effect.kernel.Clock
+import cats.effect.IO
+import tasks.util.Messenger
+import cats.effect.kernel.Resource
 
-class SelfShutdown(
-    shutdownRunningNode: ShutdownRunningNode,
-    id: RunningJobId,
-    queueActor: QueueActor
-)(implicit config: TasksConfig)
-    extends Actor
-    with ActorLogging {
-
-  private case object QueueLostOrStopped
-
-  def shutdown() = {
-    shutdownRunningNode.shutdownRunningNode(id)
-  }
-
-  override def preStart(): Unit = {
-    HeartBeatActor.watch(queueActor.actor, QueueLostOrStopped, self)
-  }
-
-  def receive = { case QueueLostOrStopped =>
-    log.error("QueueLostOrStopped received. Shutting down.")
-    shutdown()
-
+object SelfShutdown {
+  def make(
+      shutdownRunningNode: ShutdownRunningNode,
+      id: RunningJobId,
+      queueActor: QueueActor,
+      messenger: Messenger
+  )(implicit config: TasksConfig, clock: Clock[IO]) = {
+    val shutdown = IO.delay {
+      shutdownRunningNode.shutdownRunningNode(id)
+    }
+    Resource.make(
+      HeartBeatIO
+        .make(
+          target = queueActor.address,
+          sideEffect = shutdown,
+          messenger = messenger
+        )
+        .start
+    )(_.cancel)
   }
 }

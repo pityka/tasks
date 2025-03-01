@@ -53,11 +53,11 @@ object SporeTest extends TestHelpers with Matchers {
     withTaskSystem(
       Some(
         ConfigFactory.parseString(
-          s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}\nakka.loglevel=OFF"
+          s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}\n"
         )
       )
     ) { implicit ts =>
-      (await(increment(spore { (a: Option[Int]) =>
+      ((increment(spore { (a: Option[Int]) =>
         a.toString
       })(ResourceRequest(1, 500))))
 
@@ -159,7 +159,9 @@ class SporeTestSuite extends FunSuite with Matchers {
   }
 
   test("spores should work in tasks") {
-    SporeTest.run.get should equal("Some(3)")
+    import cats.effect.unsafe.implicits.global
+
+    SporeTest.run.unsafeRunSync().get should equal("Some(3)")
   }
   test("primitive return type") {
     MySpore.prim(1L) shouldBe 3

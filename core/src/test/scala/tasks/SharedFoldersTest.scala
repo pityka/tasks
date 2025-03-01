@@ -28,6 +28,7 @@
 package tasks
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
+import cats.effect.unsafe.implicits.global
 
 import org.scalatest.matchers.should.Matchers
 
@@ -62,11 +63,11 @@ object SharedFoldersTest extends TestHelpers {
     withTaskSystem(
       Some(
         ConfigFactory.parseString(
-          s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}\nakka.loglevel=OFF"
+          s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}\n"
         )
       )
     ) { implicit ts =>
-      (await(increment(Input(0))(ResourceRequest(1, 500))))
+      ((increment(Input(0))(ResourceRequest(1, 500))))
 
     }
   }
@@ -74,9 +75,10 @@ object SharedFoldersTest extends TestHelpers {
 }
 
 class SharedFoldersTestSuite extends FunSuite with Matchers {
+import cats.effect.unsafe.implicits.global
 
   test("SharedFile.fromFolder should import intermediate folders ") {
-    val sf = SharedFoldersTest.run.get
+    val sf = SharedFoldersTest.run.unsafeRunSync().get
     val expectedFile = new File(
       SharedFoldersTest.tmp.getAbsolutePath + "/sharedFolders/intermediate/fileName"
     )

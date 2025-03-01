@@ -58,7 +58,7 @@
 //     withTaskSystem(
 //       Some(
 //         ConfigFactory.parseString(
-//           s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}\nakka.loglevel=OFF"
+//           s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}\n"
 //         )
 //       )
 //     ) { implicit ts =>

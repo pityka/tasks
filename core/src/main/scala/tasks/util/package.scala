@@ -74,11 +74,12 @@ package object util {
         if (available(p)) Success(p) else Failure(new RuntimeException)
       }
       .getOrElse {
-
+        if (config.mayUseArbitraryPort) {
         val s = new java.net.ServerSocket(0);
         val p = s.getLocalPort()
         s.close
         p
+        } else throw new RuntimeException(s"Configured port ${config.hostPort} already taken. ")
       }
 
   def stackTraceAsString(t: Any): String = {
@@ -127,16 +128,7 @@ package object util {
       param.close()
     }
 
-  /** Writes text data to file. */
-  def writeToFile(fileName: String, data: java.lang.String): Unit =
-    useResource(new PrintWriter(new BufferedWriter(new FileWriter(fileName)))) {
-      writer =>
-        writer.write(data)
-    }
-
-  /** Writes text data to file. */
-  def writeToFile(file: File, data: String): Unit =
-    writeToFile(file.getAbsolutePath, data)
+ 
 
   /** Writes binary data to file. */
   def writeBinaryToFile(fileName: String, data: Array[Byte]): Unit =
@@ -145,15 +137,6 @@ package object util {
         writer.write(data)
     }
 
-  /** Writes binary data to file. */
-  def writeBinaryToFile(file: File, data: Array[Byte]): Unit =
-    writeBinaryToFile(file.getAbsolutePath, data)
-
-  def writeBinaryToFile(data: Array[Byte]): File = {
-    val file = File.createTempFile("tmp", "tmp")
-    writeBinaryToFile(file.getAbsolutePath, data)
-    file
-  }
 
   /** Returns an iterator on the InputStream's data.
     *
@@ -172,95 +155,11 @@ package object util {
     }
   }
 
-  /** Reads file contents into a bytearray. */
-  def readBinaryFile(fileName: String): Array[Byte] = {
-    useResource(new BufferedInputStream(new FileInputStream(fileName))) { f =>
-      readBinaryStream(f)
-    }
-  }
-
-  /** Reads file contents into a bytearray. */
-  def readBinaryFile(f: File): Array[Byte] = readBinaryFile(f.getAbsolutePath)
-
-  /** Reads file contents into a bytearray. */
-  def readBinaryStream(f: java.io.InputStream): Array[Byte] = {
-    val BufferSize = 8196
-    var byteString = akka.util.ByteString()
-    val buffer = Array.ofDim[Byte](BufferSize)
-    var c = 0
-    while (c >= 0) {
-      c = f.read(buffer)
-      if (c >= 0) {
-        val bs = akka.util.ByteString.fromArray(buffer, 0, c)
-        byteString ++= bs
-      }
-    }
-    byteString.toArray
-  }
-
-  /** Opens a buffered java.io.BufferedOutputStream on the file. Closes it after
-    * the block is executed.
-    */
-  def openFileOutputStream[T](fileName: File, append: Boolean = false)(
-      func: BufferedOutputStream => T
-  ) =
-    useResource(
-      new BufferedOutputStream(new FileOutputStream(fileName, append))
-    )(func)
-
   /** Opens a buffered java.io.BufferedInputStream on the file. Closes it after
     * the block is executed.
     */
   def openFileInputStream[T](fileName: File)(func: BufferedInputStream => T) =
     useResource(new BufferedInputStream(new FileInputStream(fileName)))(func)
-
-  /** Execute command with user function to process each line of output.
-    *
-    * Based on from
-    * http://www.jroller.com/thebugslayer/entry/executing_external_system_commands_in
-    * Creates 2 new threads: one for the stdout, one for the stderror.
-    * @param pb
-    *   Description of the executable process
-    * @return
-    *   Exit code of the process.
-    */
-  def exec(pb: ProcessBuilder)(stdOutFunc: String => Unit = { (_: String) => })(
-      implicit stdErrFunc: String => Unit = (_: String) => ()
-  ): Int =
-    pb.run(ProcessLogger(stdOutFunc, stdErrFunc)).exitValue()
-
-  /** Execute command. Returns stdout and stderr as strings, and true if it was
-    * successful.
-    *
-    * A process is considered successful if its exit code is 0 and the error
-    * stream is empty. The latter criterion can be disabled with the
-    * unsuccessfulOnErrorStream parameter.
-    * @param pb
-    *   The process description.
-    * @param unsuccessfulOnErrorStream
-    *   if true, then the process is considered as a failure if its stderr is
-    *   not empty.
-    * @param atMost
-    *   max waiting time.
-    * @return
-    *   (stdout,stderr,success) triples
-    */
-  def execGetStreamsAndCode(
-      pb: ProcessBuilder,
-      unsuccessfulOnErrorStream: Boolean = true
-  ): (List[String], List[String], Boolean) = {
-    var ls: List[String] = Nil
-    var lse: List[String] = Nil
-    var boolean = true
-    val exitvalue = exec(pb) { ln =>
-      ls = ln :: ls
-    } { ln =>
-      if (unsuccessfulOnErrorStream) {
-        boolean = false
-      }; lse = ln :: lse
-    }
-    (ls.reverse, lse.reverse, boolean && (exitvalue == 0))
-  }
 
   /** Merge maps with key collision
     * @param fun
@@ -294,23 +193,6 @@ package object util {
     }
   }
 
-  def retryFuture[A](tag: String)(f: => Future[A], c: Int)(implicit
-      as: akka.actor.ActorSystem,
-      ec: ExecutionContext,
-      log: scribe.Logger
-  ): Future[A] =
-    if (c > 0) f.recoverWith { case e =>
-      log.error(e, s"Failed $tag. Retry $c more times.")
-      akka.pattern.after(2 seconds, as.scheduler)(
-        retryFuture(tag)(
-          {
-            log.debug(s"Retrying $tag"); f
-          },
-          c - 1
-        )
-      )
-    }
-    else f
   def retryIO[A](tag: String)(f: => IO[A], c: Int)(implicit
       log: scribe.Logger
   ): IO[A] =
@@ -330,13 +212,7 @@ package object util {
       .getDeclaredConstructor()
       .newInstance()
       .asInstanceOf[A]
-    // import scala.reflect.runtime.universe
-
-    // val runtimeMirror = universe.runtimeMirror(getClass.getClassLoader)
-    // val module = runtimeMirror.staticModule(fqcn)
-    // val obj = runtimeMirror.reflectModule(module)
-
-    // obj.instance.asInstanceOf[A]
+   
 
   }
 

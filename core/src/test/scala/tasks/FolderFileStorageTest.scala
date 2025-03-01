@@ -25,6 +25,7 @@
 package tasks
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
+import cats.effect.unsafe.implicits.global
 
 import org.scalatest.matchers.should.Matchers
 import java.io.File
@@ -43,7 +44,7 @@ object FolderFileStorageTest extends TestHelpers with Matchers {
         local <- sf.file.allocated.map(_._1)
         sf2 <- {
           val newPath = new File(local.getParentFile.getParentFile, "uncle")
-          tasks.util.openFileOutputStream(newPath)(_.write("boo".getBytes))
+          writeBinaryToFile(newPath,"boo".getBytes)
           SharedFile(newPath, "something")
 
         }
@@ -57,7 +58,7 @@ object FolderFileStorageTest extends TestHelpers with Matchers {
         t11 <- task1(Input(1))(ResourceRequest(1, 500))
       } yield t11
 
-      await(future)
+      (future)
 
     }
   }
@@ -67,7 +68,7 @@ object FolderFileStorageTest extends TestHelpers with Matchers {
 class FolderFileStorageTestSuite extends FunSuite with Matchers {
 
   test("importing a file relative to the base folder should work correctly") {
-    FolderFileStorageTest.run.get shouldBe true
+    FolderFileStorageTest.run.unsafeRunSync().get shouldBe true
   }
 
 }

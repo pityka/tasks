@@ -23,6 +23,7 @@
  */
 
 package tasks
+import cats.effect.unsafe.implicits.global
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
@@ -47,7 +48,7 @@ object DeleteSharedFileTest extends TestHelpers {
         _ <- sf.delete
       } yield local
 
-      await(future)
+      (future)
 
     }
   }
@@ -57,7 +58,7 @@ object DeleteSharedFileTest extends TestHelpers {
 class DeleteSharedFileTestSuite extends FunSuite with Matchers {
 
   test("SharedFile.delete should not delete a file unless config flag is set") {
-    DeleteSharedFileTest.run.get.canRead shouldBe true
+    DeleteSharedFileTest.run.unsafeRunSync().get.canRead shouldBe true
 
   }
 

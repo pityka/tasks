@@ -26,6 +26,7 @@
  */
 
 package tasks
+import cats.effect.unsafe.implicits.global
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
@@ -58,11 +59,11 @@ object DSLTest extends TestHelpers with Matchers {
     withTaskSystem(
       Some(
         ConfigFactory.parseString(
-          s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}\nakka.loglevel=OFF"
+          s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}\n"
         )
       )
     ) { implicit ts =>
-      (await(increment(Input(0))(ResourceRequest(1, 500))))
+      ((increment(Input(0))(ResourceRequest(1, 500))))
 
     }
   }
@@ -72,7 +73,7 @@ object DSLTest extends TestHelpers with Matchers {
 class TaskDSLTestSuite extends FunSuite with Matchers {
 
   test("task execution should work") {
-    DSLTest.run.get should equal(1)
+    DSLTest.run.unsafeRunSync().get should equal(1)
   }
 
 }

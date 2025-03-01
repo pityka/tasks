@@ -25,6 +25,7 @@
 package tasks
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
+import cats.effect.unsafe.implicits.global
 
 import org.scalatest.matchers.should.Matchers
 
@@ -144,7 +145,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
         tmut1 <- taskWithMutable(Input(1))(ResourceRequest(1, 500))
         path <- tmut1.sf.uri
         _ = {
-          util.writeBinaryToFile(
+          writeBinaryToFile(
             new java.io.File(path.path),
             Array[Byte](1, 2, 3)
           )
@@ -152,7 +153,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
         _ <- taskWithMutable(Input(1))(ResourceRequest(1, 500))
       } yield t51
 
-      await(future)
+      (future)
 
     }
   }
@@ -164,7 +165,7 @@ class InputWithSharedFilesTestSuite extends FunSuite with Matchers {
   test(
     "a failing task should propagate its exception and not interfere with other tasks"
   ) {
-    InputWithSharedFilesTest.run
+    InputWithSharedFilesTest.run.unsafeRunSync()
     InputWithSharedFilesTest.sideEffect.count(
       _ == "execution of task 1"
     ) shouldBe 2

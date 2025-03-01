@@ -127,6 +127,8 @@ class K8SCreateNode(
             path = "/"
           ),
           followerHostname = None,
+          followerExternalHostname = None,
+          followerMayUseArbitraryPort = true,
           background = false,
           image = Some(imageName)
         )
@@ -136,8 +138,6 @@ class K8SCreateNode(
         val podName = KubernetesHelpers.newName
         val jobName = config.kubernetesNamespace + "/" + podName
 
-        
-
         val podSpecFromConfig: PodSpec = config.kubernetesPodSpec
           .map { jsonString =>
             val either = io.circe.parser.decode[PodSpec](jsonString)
@@ -145,8 +145,9 @@ class K8SCreateNode(
             either.toOption.get
           }
           .getOrElse(PodSpec(containers = Nil))
-        
-        val containerFromConfig = podSpecFromConfig.containers.headOption.getOrElse(Container(""))
+
+        val containerFromConfig =
+          podSpecFromConfig.containers.headOption.getOrElse(Container(""))
 
         val resource = Pod(
           metadata = Some(
@@ -166,63 +167,63 @@ class K8SCreateNode(
                   imagePullPolicy = Some(config.kubernetesImagePullPolicy),
                   env = Some(
                     containerFromConfig.env.getOrElse(Nil) ++
-                    List(
-                      EnvVar(
-                        name = config.kubernetesHostNameOrIPEnvVar,
-                        valueFrom = Some(
-                          EnvVarSource(
-                            fieldRef = Some(
-                              ObjectFieldSelector(
-                                fieldPath = "status.podIP"
+                      List(
+                        EnvVar(
+                          name = config.kubernetesHostNameOrIPEnvVar,
+                          valueFrom = Some(
+                            EnvVarSource(
+                              fieldRef = Some(
+                                ObjectFieldSelector(
+                                  fieldPath = "status.podIP"
+                                )
                               )
                             )
                           )
-                        )
-                      ),
-                      EnvVar(
-                        name = config.kubernetesCpuLimitEnvVar,
-                        valueFrom = Some(
-                          EnvVarSource(
-                            resourceFieldRef = Some(
-                              ResourceFieldSelector(
-                                containerName = Some("tasks-worker"),
-                                resource = "limits.cpu"
+                        ),
+                        EnvVar(
+                          name = config.kubernetesCpuLimitEnvVar,
+                          valueFrom = Some(
+                            EnvVarSource(
+                              resourceFieldRef = Some(
+                                ResourceFieldSelector(
+                                  containerName = Some("tasks-worker"),
+                                  resource = "limits.cpu"
+                                )
                               )
                             )
                           )
-                        )
-                      ),
-                      EnvVar(
-                        name = config.kubernetesRamLimitEnvVar,
-                        valueFrom = Some(
-                          EnvVarSource(
-                            resourceFieldRef = Some(
-                              ResourceFieldSelector(
-                                containerName = Some("tasks-worker"),
-                                resource = "limits.memory"
+                        ),
+                        EnvVar(
+                          name = config.kubernetesRamLimitEnvVar,
+                          valueFrom = Some(
+                            EnvVarSource(
+                              resourceFieldRef = Some(
+                                ResourceFieldSelector(
+                                  containerName = Some("tasks-worker"),
+                                  resource = "limits.memory"
+                                )
                               )
                             )
                           )
-                        )
-                      ),
-                      EnvVar(
-                        name = config.kubernetesScratchLimitEnvVar,
-                        valueFrom = Some(
-                          EnvVarSource(
-                            resourceFieldRef = Some(
-                              ResourceFieldSelector(
-                                containerName = Some("tasks-worker"),
-                                resource = "limits.ephemeral-storage"
+                        ),
+                        EnvVar(
+                          name = config.kubernetesScratchLimitEnvVar,
+                          valueFrom = Some(
+                            EnvVarSource(
+                              resourceFieldRef = Some(
+                                ResourceFieldSelector(
+                                  containerName = Some("tasks-worker"),
+                                  resource = "limits.ephemeral-storage"
+                                )
                               )
                             )
                           )
+                        ),
+                        EnvVar(
+                          name = "TASKS_JOB_NAME",
+                          value = Some(jobName)
                         )
-                      ),
-                      EnvVar(
-                        name = "TASKS_JOB_NAME",
-                        value = Some(jobName)
                       )
-                    )
                   ),
                   resources = Some(
                     ResourceRequirements(
@@ -314,7 +315,6 @@ class K8SElasticSupport extends ElasticSupportFromConfig {
       SimpleElasticSupport(
         fqcn = fqcn,
         hostConfig = Some(new K8SHostConfig()),
-        reaperFactory = None,
         shutdown = new K8SShutdown(k8s.toOption),
         createNodeFactory = new K8SCreateNodeFactory(k8s.toOption),
         getNodeName = K8SGetNodeName

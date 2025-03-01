@@ -30,6 +30,7 @@ import tasks.queue._
 import tasks.wire._
 import tasks.util.config.TasksConfig
 import cats.effect.IO
+import tasks.util.MessageData.ScheduleTask
 
 private[tasks] case class AnswerFromCache(
     message: Either[String, Option[UntypedResult]],
@@ -42,6 +43,7 @@ private[tasks] class TaskResultCache(
     fileService: FileServiceComponent,
     config: TasksConfig
 ) {
+  override def toString = s"TaskResultCache(cacheMap=$cacheMap,filService=$fileService)"
   def checkResult(
       scheduleTask: ScheduleTask,
       originalSender: Proxy
@@ -66,7 +68,7 @@ private[tasks] class TaskResultCache(
       cacheLookup <- lookup
       answer <- cacheLookup match {
         case None =>
-          scribe.debug(s"Checking: $taskId. Not found in cache.")
+          scribe.debug(s"Checking: $taskId ${scheduleTask.description.dataHash}. Not found in cache.")
           IO.pure(
             AnswerFromCache(
               Left("TaskNotFoundInCache"),
@@ -75,13 +77,13 @@ private[tasks] class TaskResultCache(
             )
           )
         case _ if !config.verifySharedFileInCache =>
-          scribe.debug(s"Checking: $taskId. Got something (not verified).")
+          scribe.debug(s"Checking: $taskId ${scheduleTask.description.dataHash}. Got something (not verified).")
           IO.pure(
             AnswerFromCache(Right(cacheLookup), originalSender, scheduleTask)
           )
         case Some(cacheLookup) =>
           scribe.debug(
-            s"Checking: $taskId. Got something $cacheLookup, verifying.."
+            s"Checking: $taskId ${scheduleTask.description.dataHash}. Got something $cacheLookup, verifying.."
           )
           val files = cacheLookup.files.toSeq.map(sf => (sf, true))
           val mutableFiles =
@@ -95,7 +97,7 @@ private[tasks] class TaskResultCache(
             .map(seq => (seq, seq.forall(identity)))
             .handleError { case e =>
               scribe.warn(
-                s"Checking: $taskId. Got something ($cacheLookup), but failed to verify after cache with error: $e."
+                s"Checking: $taskId ${scheduleTask.description.dataHash}. Got something ($cacheLookup), but failed to verify after cache with error: $e."
               )
               (Nil, false)
             }
@@ -104,7 +106,7 @@ private[tasks] class TaskResultCache(
                 val inaccessibleFiles =
                   (files zip accessibility).filterNot(_._2)
                 scribe.warn(
-                  s"Checking: $taskId. Got something ($cacheLookup), but failed to verify after cache. Inaccessible files: ${inaccessibleFiles.size} : ${inaccessibleFiles
+                  s"Checking: $taskId ${scheduleTask.description.dataHash}. Got something ($cacheLookup), but failed to verify after cache. Inaccessible files: ${inaccessibleFiles.size} : ${inaccessibleFiles
                       .mkString(", ")}"
                 )
                 AnswerFromCache(
@@ -113,7 +115,7 @@ private[tasks] class TaskResultCache(
                   scheduleTask
                 )
               case (_, true) =>
-                scribe.debug(s"Checking: $taskId. Got something (verified).")
+                scribe.debug(s"Checking: $taskId ${scheduleTask.description.dataHash}d. Got something (verified).")
                 AnswerFromCache(
                   Right(Some(cacheLookup)),
                   originalSender,
@@ -135,7 +137,7 @@ private[tasks] class TaskResultCache(
       result: UntypedResult,
       prefixFromTask: FileServicePrefix
   ): IO[Unit] = {
-    scribe.debug("SavingResult")
+    scribe.debug(s"SavingResult: ${sch.taskId} ${sch.dataHash}")
 
     val prefix = config.cachePath match {
       case None => prefixFromTask

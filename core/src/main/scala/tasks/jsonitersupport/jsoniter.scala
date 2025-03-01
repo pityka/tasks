@@ -5,7 +5,6 @@ import com.github.plokhotnyuk.jsoniter_scala.core._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.google.common.{hash => ghash}
 import com.google.common.io.ByteStreams
-import tasks.util.SerializedActorRef
 
 package object jsonitersupport {
 
@@ -35,9 +34,6 @@ package object jsonitersupport {
 
   implicit val sharedFileCodec: JsonValueCodec[SharedFile] =
     JsonCodecMaker.make[SharedFile]
-
-  implicit val serializedActorRefCodec: JsonValueCodec[SerializedActorRef] =
-    JsonCodecMaker.make[SerializedActorRef]
 
   // standard types
 

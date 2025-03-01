@@ -80,7 +80,7 @@ trait HostConfigurationFromConfig extends HostConfiguration {
   def myAddressBind: SimpleSocketAddress = myAddress
 
   def myAddressExternal: Option[SimpleSocketAddress] =
-    config.hostNameExternal.map{v =>
+    config.hostNameExternal.map { v =>
       val spl = v.split(':')
       SimpleSocketAddress(spl.head, if (spl.size > 1) spl(1).toInt else myPort)
     }
@@ -100,7 +100,8 @@ trait HostConfigurationFromConfig extends HostConfiguration {
 
   private def startApp = config.startApp
 
-  private val isMaster = myAddress == master || myAddressExternal.exists(_ == master)
+  private val isMaster =
+    myAddress == master || myAddressExternal.exists(_ == master)
 
   lazy val myRoles: Set[Role] =
     if (config.masterAddress.isDefined && !startApp) Set(Worker)

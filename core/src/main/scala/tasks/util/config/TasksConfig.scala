@@ -82,10 +82,10 @@ class TasksConfig(load: () => Config) {
 
   val disableRemoting = raw.getBoolean("tasks.disableRemoting")
 
-  val slaveWorkingDirectory =
+  val workerWorkingDirectory =
     raw.getString("tasks.elastic.workerWorkingDirectory")
 
-  val slavePackageName =
+  val workerPackageName =
     raw.getString("tasks.elastic.workerPackageName")
 
   def skipContentHashVerificationAfterCache =
@@ -96,7 +96,8 @@ class TasksConfig(load: () => Config) {
   val acceptableHeartbeatPause: FD =
     raw.getDuration("tasks.failuredetector.acceptable-heartbeat-pause")
 
-  val hostImage = if (raw.hasPath("hosts.image") ) Some(raw.getString("hosts.image")) else None
+  val hostImage =
+    if (raw.hasPath("hosts.image")) Some(raw.getString("hosts.image")) else None
 
   val hostNumCPU = raw.getInt("hosts.numCPU")
 
@@ -112,9 +113,13 @@ class TasksConfig(load: () => Config) {
   val hostScratch = raw.getInt("hosts.scratch")
 
   val hostName = raw.getString("hosts.hostname")
-  val hostNameExternal = if (raw.hasPath("hosts.hostnameExternal")) Some(raw.getString("hosts.hostnameExternal")) else None
+  val hostNameExternal =
+    if (raw.hasPath("hosts.hostnameExternal"))
+      Some(raw.getString("hosts.hostnameExternal"))
+    else None
 
   val hostPort = raw.getInt("hosts.port")
+  val mayUseArbitraryPort = raw.getBoolean("hosts.mayUseArbitraryPort")
 
   val masterAddress =
     if (raw.hasPath("hosts.master")) {
@@ -235,8 +240,6 @@ class TasksConfig(load: () => Config) {
 
   val terminateMaster = raw.getBoolean("tasks.elastic.aws.terminateMaster")
 
-  val actorSystemName = raw.getString("tasks.akka.actorsystem.name")
-
   val addShutdownHook = raw.getBoolean("tasks.addShutdownHook")
 
   val uiFqcn = raw.getString("tasks.ui.fqcn")
@@ -249,8 +252,22 @@ class TasksConfig(load: () => Config) {
 
   val appUIServerPort = raw.getInt("tasks.ui.app.port")
 
+  def dockerHostNameOrIPEnvVar =
+    raw.getString("tasks.docker.hostnameOrIPEnvVar")
+
+  val dockerImageApplicationSubPath =
+    raw.getString("tasks.docker.imageApplicationSubPath")
+  def dockerImageName = raw.getString("tasks.docker.image")
+  val dockerEnvVars = raw.getStringList("tasks.docker.env").asScala.grouped(2).map{ g =>
+    (g(0),g(1))  
+  }
+  val dockerContexts = raw.getConfigList("tasks.docker.contexts").asScala
+
   def kubernetesImageName = raw.getString("tasks.kubernetes.image")
-  val kubernetesImageApplicationSubPath = raw.getString("tasks.kubernetes.imageApplicationSubPath")
+  val kubernetesImageApplicationSubPath =
+    raw.getString("tasks.kubernetes.imageApplicationSubPath")
+
+ 
 
   def kubernetesHostNameOrIPEnvVar =
     raw.getString("tasks.kubernetes.hostnameOrIPEnvVar")
@@ -267,9 +284,14 @@ class TasksConfig(load: () => Config) {
   def kubernetesRamMin = raw.getInt("tasks.kubernetes.minimumlimits.ram")
 
   def kubernetesPodSpec = {
-    
+
     if (raw.hasPath("tasks.kubernetes.podSpec"))
-      Some(raw.getConfig("tasks.kubernetes.podSpec").root().render(ConfigRenderOptions.concise()))
+      Some(
+        raw
+          .getConfig("tasks.kubernetes.podSpec")
+          .root()
+          .render(ConfigRenderOptions.concise())
+      )
     else None
   }
 

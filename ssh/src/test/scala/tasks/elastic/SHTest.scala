@@ -33,10 +33,12 @@ import tasks.jsonitersupport._
 import com.typesafe.config.ConfigFactory
 import cats.effect.IO
 
-object TestSlave extends App {
-  withTaskSystem { _ =>
-    Thread.sleep(100000)
-  }
+object TestWorker extends App {
+  withTaskSystem(ConfigFactory.parseString(
+    "tasks.disableRemoting = false"
+  )) { _ =>
+    IO.never
+  }.unsafeRunSync()
 }
 
 object SHTest extends TestHelpers {
@@ -54,14 +56,15 @@ object SHTest extends TestHelpers {
     ConfigFactory.parseString(
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=0
+      tasks.disableRemoting = false
       tasks.elastic.engine = "tasks.elastic.sh.SHElasticSupport"
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 5 s
-      tasks.worker-main-class = "tasks.TestSlave"
+      tasks.worker-main-class = "tasks.TestWorker"
       tasks.elastic.sh.workdir = ${tmp.getAbsolutePath}
       tasks.resubmitFailedTask = true
-      akka.loglevel=INFO
+      
       tasks.elastic.maxNodesCumulative = 1000
       """
     )
@@ -79,7 +82,7 @@ object SHTest extends TestHelpers {
         t3 <- f3
       } yield t1 + t2 + t3
 
-      future.unsafeRunSync()
+      future
 
     }
   }
@@ -89,7 +92,7 @@ object SHTest extends TestHelpers {
 class SHTestSuite extends FunSuite with Matchers {
 
   test("sh allocation should spawn nodes") {
-    (SHTest.run.get: Int) should equal(3)
+    (SHTest.run.unsafeRunSync().get: Int) should equal(3)
 
   }
 

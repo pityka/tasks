@@ -27,19 +27,12 @@
 
 package tasks
 
-import akka.actor.ActorSystem
-
 import tasks.queue._
 import tasks.fileservice._
 import tasks.wire._
 import tasks.caching.TaskResultCache
 
 private[tasks] object Implicits {
-
-  implicit def actorsystem(implicit
-      component: TaskSystemComponents
-  ): ActorSystem =
-    component.actorsystem
 
   implicit def filePrefix(implicit
       component: TaskSystemComponents

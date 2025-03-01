@@ -27,15 +27,6 @@
 
 package tasks.queue
 
-import akka.actor.{
-  Actor,
-  PoisonPill,
-  ActorRef,
-  Props,
-  Cancellable,
-  ExtendedActorSystem
-}
-
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
@@ -48,89 +39,322 @@ import tasks.wire._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import tasks.caching.TaskResultCache
-import akka.util.Timeout
+import cats.effect.unsafe.implicits.global
+import cats.effect.kernel.Ref
+import tasks.util.Actor.ActorBehavior
+import cats.effect.IO
+import cats.effect.kernel.Ref
+import cats.effect.FiberIO
 
 object Base64DataHelpers {
   def toBytes(b64: Base64Data): Array[Byte] = base64(b64.value)
   def apply(b: Array[Byte]): Base64Data = Base64Data(base64(b))
 }
 
-case class ScheduleTask(
-    description: HashedTaskDescription,
-    inputDeserializer: Spore[AnyRef, AnyRef],
-    outputSerializer: Spore[AnyRef, AnyRef],
-    function: Spore[AnyRef, AnyRef],
-    resource: VersionedResourceRequest,
-    queueActor: ActorRef,
-    fileServicePrefix: FileServicePrefix,
-    tryCache: Boolean,
-    priority: Priority,
-    labels: Labels,
-    lineage: TaskLineage,
-    proxy: ActorRef
-)
+private[tasks] object Launcher {
 
-object ScheduleTask {
-  implicit def codec(as: ExtendedActorSystem): JsonValueCodec[ScheduleTask] = {
-    implicit val actorRefCod = tasks.wire.actorRefCodec(as)
-    val _ = (as, actorRefCod)
-    JsonCodecMaker.make
+  def makeHandle(
+      queueActor: QueueActor,
+      nodeLocalCache: NodeLocalCache.State,
+      slots: VersionedResourceAvailable,
+      refreshInterval: FiniteDuration,
+      remoteStorage: RemoteFileStorage,
+      managedStorage: ManagedFileStorage,
+      cache: TaskResultCache,
+      messenger: Messenger,
+      address: Address
+  )(implicit config: TasksConfig) = tasks.util.Actor.makeFromBehavior(
+    new LauncherBehavior(
+      queueActor,
+      nodeLocalCache,
+      slots,
+      refreshInterval,
+      remoteStorage,
+      managedStorage,
+      cache,
+      messenger,
+      address
+    ),
+    messenger
+  )
+
+  case class State(
+      maxResources: VersionedResourceAvailable,
+      availableResources: VersionedResourceAvailable,
+      idleState: Long = 0,
+      denyWorkBeforeShutdown: Boolean = false,
+      waitingForWork: Boolean = false,
+      runningTasks: List[
+        (Task, MessageData.ScheduleTask, VersionedResourceAllocated, Long)
+      ] = Nil,
+      resourceDeallocatedAt: Map[Task, Long] = Map(),
+      freed: Set[Task] = Set[Task](),
+      fibers: List[FiberIO[Unit]] = Nil
+  ) {
+    def isIdle = runningTasks.isEmpty
   }
 
+  def askForWork(
+      state: State,
+      messenger: Messenger,
+      address: Address,
+      queueActor: QueueActor
+  ) = {
+    if (!state.availableResources.empty && !state.denyWorkBeforeShutdown) {
+
+      val effect =
+        messenger.submit(
+          Message(
+            MessageData.AskForWork(state.availableResources),
+            to = queueActor.address,
+            from = address
+          )
+        )
+
+      (state.copy(waitingForWork = true), effect)
+    } else (state, IO.unit)
+  }
 }
 
-object Launcher {
-  private[tasks] case class InternalMessageFromTask(
-      actor: Task,
+private[tasks] case class LauncherActor(address: tasks.util.Address)
+
+case class LauncherHandle(
+    address: tasks.util.Address,
+    ref: Ref[IO, Launcher.State],
+    queueActor: QueueActor,
+    cache: TaskResultCache,
+    messenger: Messenger,
+    config: TasksConfig
+) {
+  private[tasks] val launcherActor = LauncherActor(address)
+  def release(task: Task) = ref.flatModify { state =>
+    val allocated = state.runningTasks.find(_._1 == task).map(_._3)
+    val newState = if (allocated.isEmpty) {
+      scribe.error("Can't find actor ")
+      state
+    } else {
+      state.copy(
+        availableResources = state.availableResources.addBack(allocated.get),
+        freed = state.freed + task,
+        resourceDeallocatedAt = state.resourceDeallocatedAt + (
+          (
+            task,
+            System.nanoTime
+          )
+        )
+      )
+    }
+    Launcher.askForWork(newState, messenger, address, queueActor)
+  }
+  private[tasks] def internalMessageFromTask(
+      task: Task,
       result: UntypedResultWithMetadata
-  )
+  ) = {
+    ref.flatModify { state =>
+      val (st1, io1) = taskFinished(state, task, result)
+      val (st2, io2) = Launcher.askForWork(st1, messenger, address, queueActor)
+      (st2, io1 *> io2)
+    }
 
-  private[tasks] case class InternalMessageTaskFailed(
-      actor: Task,
+  }
+  private[tasks] def internalMessageTaskFailed(
+      task: Task,
       cause: Throwable
-  )
+  ) = {
 
-  private[tasks] case class Release(task: Task)
+    ref.flatModify { state =>
+      val (st1, io1) = taskFailed(state, task, cause)
+      val (st2, io2) = Launcher.askForWork(st1, messenger, address, queueActor)
+      (st2, io1 *> io2)
+    }
+
+  }
+
+  private def taskFinished(
+      state: Launcher.State,
+      taskActor: Task,
+      receivedResult: UntypedResultWithMetadata
+  ) = {
+    val elem = state.runningTasks
+      .find(_._1 == taskActor)
+      .getOrElse(
+        throw new RuntimeException("Wrong message received. No such taskActor.")
+      )
+    val scheduleTask = elem._2
+    val resourceAllocated = elem._3
+    val elapsedTime = ElapsedTimeNanoSeconds(
+      state.resourceDeallocatedAt
+        .get(taskActor)
+        .getOrElse(System.nanoTime) - elem._4
+    )
+
+    val sideEffect = if (!receivedResult.noCache) {
+
+      cache
+        .saveResult(
+          scheduleTask.description,
+          receivedResult.untypedResult,
+          scheduleTask.fileServicePrefix
+            .append(scheduleTask.description.taskId.id)
+        )
+        .timeout(config.cacheTimeout)
+        .attempt
+        .flatMap {
+          case Left(e) =>
+            IO(scribe.error(e, s"Failed to save ${scheduleTask.description}"))
+          case Right(_) =>
+            messenger
+              .submit(
+                Message(
+                  from = address,
+                  to = queueActor.address,
+                  data = MessageData.TaskDone(
+                    scheduleTask,
+                    receivedResult,
+                    elapsedTime,
+                    resourceAllocated.cpuMemoryAllocated
+                  )
+                )
+              )
+        }
+
+    } else {
+      messenger
+        .submit(
+          Message(
+            from = address,
+            to = queueActor.address,
+            data = MessageData.TaskDone(
+              scheduleTask,
+              receivedResult,
+              elapsedTime,
+              resourceAllocated.cpuMemoryAllocated
+            )
+          )
+        )
+
+    }
+
+    val st0 = state.copy(
+      runningTasks = state.runningTasks.filterNot(_ == elem)
+    )
+    val st1 = if (!st0.freed.contains(taskActor)) {
+      st0.copy(availableResources =
+        st0.availableResources.addBack(resourceAllocated)
+      )
+    } else {
+      st0.copy(
+        freed = st0.freed - taskActor,
+        resourceDeallocatedAt = st0.resourceDeallocatedAt - taskActor
+      )
+    }
+    (st1, sideEffect)
+  }
+
+  private def taskFailed(
+      state: Launcher.State,
+      taskActor: Task,
+      cause: Throwable
+  ) = {
+
+    val elem = state.runningTasks
+      .find(_._1 == taskActor)
+      .getOrElse(
+        throw new RuntimeException("Wrong message received. No such taskActor.")
+      )
+    val sch = elem._2
+
+    val st0 = state.copy(runningTasks = state.runningTasks.filterNot(_ == elem))
+
+    val st1 = if (!st0.freed.contains(taskActor)) {
+      st0.copy(availableResources = st0.availableResources.addBack(elem._3))
+    } else {
+      st0.copy(
+        freed = st0.freed - taskActor,
+        resourceDeallocatedAt = st0.resourceDeallocatedAt - taskActor
+      )
+    }
+
+    val sideEffect = messenger
+      .submit(
+        Message(
+          from = address,
+          to = queueActor.address,
+          data = MessageData.TaskFailedMessageToQueue(sch, cause)
+        )
+      )
+
+    (st1, sideEffect)
+
+  }
 }
 
-class Launcher(
-    queueActor: ActorRef,
+class LauncherBehavior(
+    queueActor: QueueActor,
     nodeLocalCache: NodeLocalCache.State,
     slots: VersionedResourceAvailable,
     refreshInterval: FiniteDuration,
     remoteStorage: RemoteFileStorage,
     managedStorage: ManagedFileStorage,
-    cache: TaskResultCache
+    cache: TaskResultCache,
+    messenger: Messenger,
+    val address: Address
 )(implicit config: TasksConfig)
-    extends Actor
-    with akka.actor.ActorLogging {
+    extends ActorBehavior[Launcher.State, LauncherHandle](messenger) {
+  override def release(st: Launcher.State): IO[Unit] =
+    IO.parSequenceN(1)(st.fibers.map(_.cancel)).void
+  def derive(
+      ref: Ref[IO, Launcher.State]
+  ): LauncherHandle = {
 
-  private case object CheckQueue
-  private case object PrintResources
+    LauncherHandle(address, ref, queueActor, cache, messenger, config)
+  }
+  val init: Launcher.State =
+    Launcher.State(maxResources = slots, availableResources = slots)
 
-  private val maxResources: VersionedResourceAvailable = slots
-  private var availableResources: VersionedResourceAvailable = maxResources
+  import Launcher.State
 
-  private def isIdle = runningTasks.isEmpty
-  private var idleState: Long = 0L
+  override def schedulers(
+      ref: Ref[IO, State]
+  ): Option[IO[fs2.Stream[IO, Unit]]] = Some(
+    IO {
+      val scribeScheduler = fs2.Stream.fixedRate[IO](20 seconds).evalMap { _ =>
+        ref.get.flatMap(state =>
+          IO(
+            scribe.info(
+              s"Available resources: ${state.availableResources} on $address"
+            )
+          )
+        )
+      }
+      val askForWorkScheduler =
+        fs2.Stream.fixedRate[IO](refreshInterval).evalMap { _ =>
+          ref.flatModify { state =>
+            if (!state.waitingForWork) {
+              val (newState, effect) =
+                Launcher.askForWork(state, messenger, address, queueActor)
+              (newState, effect)
+            } else (state, IO.unit)
+          }
+        }
 
-  private var denyWorkBeforeShutdown = false
-  private var waitingForWork = false
+      scribeScheduler.mergeHaltBoth(askForWorkScheduler)
+    }
+  )
 
-  private var runningTasks
-      : List[(Task, ScheduleTask, VersionedResourceAllocated, Long)] =
-    Nil
+  private def launch(
+      state: State,
+      scheduleTask: MessageData.ScheduleTask,
+      ref: Ref[IO, State]
+  ) = {
 
-  private var resourceDeallocatedAt: Map[Task, Long] = Map()
+    scribe.debug("Launch method")
 
-  private var freed = Set[Task]()
-
-  private def launch(scheduleTask: ScheduleTask) = {
-
-    log.debug("Launch method")
-
-    val allocatedResource = availableResources.maximum(scheduleTask.resource)
-    availableResources = availableResources.substract(allocatedResource)
+    val allocatedResource =
+      state.availableResources.maximum(scheduleTask.resource)
+    val newState = state.copy(availableResources =
+      state.availableResources.substract(allocatedResource)
+    )
 
     val filePrefix =
       if (config.createFilePrefixForTaskId)
@@ -144,7 +368,7 @@ class Launcher(
         scheduleTask.inputDeserializer,
         scheduleTask.outputSerializer,
         scheduleTask.function,
-        self,
+        derive(ref),
         scheduleTask.queueActor,
         FileServiceComponent(
           managedStorage,
@@ -161,211 +385,79 @@ class Launcher(
         scheduleTask.lineage.inherit(scheduleTask.description),
         scheduleTask.description,
         scheduleTask.proxy,
-        context.system
+        messenger
       )
-        .asInstanceOf[Task]
-    import akka.pattern.ask
-    import context.dispatcher
-    (scheduleTask.proxy
-      .?(NeedInput)(Timeout(2147483.seconds)))
-      .mapTo[InputData]
-      .foreach { input =>
-        task.start(input)
-        log.debug("Task started")
-      }
 
-    runningTasks = (
-      task,
-      scheduleTask,
-      allocatedResource,
-      System.nanoTime
-    ) :: runningTasks
-
-    allocatedResource
-  }
-
-  private def askForWork(): Unit = {
-    if (!availableResources.empty && !denyWorkBeforeShutdown) {
-      queueActor ! AskForWork(availableResources)
-      waitingForWork = true
-    }
-  }
-
-  private var scheduler: Cancellable = null
-  private var logScheduler: Cancellable = null
-
-  override def preStart(): Unit = {
-    log.debug("TaskLauncher starting")
-
-    import context.dispatcher
-
-    logScheduler = context.system.scheduler.scheduleAtFixedRate(
-      initialDelay = 0 seconds,
-      interval = 20 seconds,
-      receiver = self,
-      message = PrintResources
+    val sideEffect = sendTo(
+      msg = MessageData.NeedInput,
+      target = scheduleTask.proxy
     )
-    scheduler = context.system.scheduler.scheduleAtFixedRate(
-      initialDelay = 0 seconds,
-      interval = refreshInterval,
-      receiver = self,
-      message = CheckQueue
-    )
-
-  }
-
-  override def postStop(): Unit = {
-    scheduler.cancel()
-
-    logScheduler.cancel()
-
-    log.info(
-      s"TaskLauncher stopped, sent PoisonPill to ${runningTasks.size} running tasks."
-    )
-  }
-
-  private def taskFinished(
-      taskActor: Task,
-      receivedResult: UntypedResultWithMetadata
-  ): Unit = {
-    val elem = runningTasks
-      .find(_._1 == taskActor)
-      .getOrElse(
-        throw new RuntimeException("Wrong message received. No such taskActor.")
-      )
-    val scheduleTask = elem._2
-    val resourceAllocated = elem._3
-    val elapsedTime = ElapsedTimeNanoSeconds(
-      resourceDeallocatedAt.get(taskActor).getOrElse(System.nanoTime) - elem._4
-    )
-
-    if (!receivedResult.noCache) {
-      import context.dispatcher
-      import cats.effect.unsafe.implicits.global
-
-      cache
-        .saveResult(
-          scheduleTask.description,
-          receivedResult.untypedResult,
-          scheduleTask.fileServicePrefix
-            .append(scheduleTask.description.taskId.id)
-        )
-        .timeout(config.cacheTimeout)
-        .attempt
-        .unsafeToFuture()
-        .onComplete {
-          case Failure(e) =>
-            log.error(e, s"Failed to save ${scheduleTask.description}")
-          case Success(_) =>
-            queueActor ! TaskDone(
-              scheduleTask,
-              receivedResult,
-              elapsedTime,
-              resourceAllocated.cpuMemoryAllocated
-            )
-        }
-    } else {
-      queueActor ! TaskDone(
+    val newState2 = newState.copy(
+      runningTasks = (
+        task,
         scheduleTask,
-        receivedResult,
-        elapsedTime,
-        resourceAllocated.cpuMemoryAllocated
-      )
-    }
+        allocatedResource,
+        System.nanoTime
+      ) :: newState.runningTasks
+    )
 
-    runningTasks = runningTasks.filterNot(_ == elem)
-    if (!freed.contains(taskActor)) {
-      availableResources = availableResources.addBack(resourceAllocated)
-    } else {
-      freed -= taskActor
-      resourceDeallocatedAt -= taskActor
-    }
+    (allocatedResource, newState2, sideEffect)
   }
 
-  private def taskFailed(taskActor: Task, cause: Throwable): Unit = {
-
-    val elem = runningTasks
-      .find(_._1 == taskActor)
-      .getOrElse(
-        throw new RuntimeException("Wrong message received. No such taskActor.")
-      )
-    val sch = elem._2
-
-    runningTasks = runningTasks.filterNot(_ == elem)
-
-    if (!freed.contains(taskActor)) {
-      availableResources = availableResources.addBack(elem._3)
-    } else {
-      freed -= taskActor
-      resourceDeallocatedAt -= taskActor
-    }
-
-    queueActor ! TaskFailedMessageToQueue(sch, cause)
-
-  }
-
-  def receive = {
-    case NothingForSchedule =>
-      waitingForWork = false
-    case Schedule(scheduleTask) =>
-      log.debug(s"Received ScheduleWithProxy ")
-      waitingForWork = false
-      if (!denyWorkBeforeShutdown) {
-
-        if (isIdle) {
-          idleState += 1
+  def receive = (state, stateRef) => {
+    case Message(t: MessageData.InputData, from, _) =>
+      state -> state.runningTasks
+        .find(_._1.proxy == from)
+        .get
+        ._1
+        .start(t)
+        .start
+        .flatMap { fiber =>
+          stateRef.update(state => state.copy(fibers = fiber :: state.fibers))
         }
-        val allocated = launch(scheduleTask)
-        sender() ! QueueAck(allocated)
-        askForWork()
-      }
+    case Message(MessageData.NothingForSchedule, from, _) =>
+      state.copy(waitingForWork = false) -> IO.unit
+    case Message(MessageData.Schedule(scheduleTask), from, _) =>
+      scribe.debug(s"Received ScheduleWithProxy ")
+      val st0 = state.copy(waitingForWork = false)
+      val (newState, sideEffects) = if (!st0.denyWorkBeforeShutdown) {
 
-    case Launcher.InternalMessageFromTask(actor, result) =>
-      taskFinished(actor, result)
-      askForWork()
+        val st1 = if (st0.isIdle) {
+          st0.copy(idleState = st0.idleState + 1)
+        } else st0
+        val (allocated, st2, io1) = launch(st1, scheduleTask, stateRef)
+        val io2 = sendTo(target = from, msg = MessageData.QueueAck(allocated))
+        val (st3, io3) =
+          Launcher.askForWork(st2, messenger, address, queueActor)
+        (st3, io1 *> io2 *> io3)
+      } else (st0, IO.unit)
+      newState -> sideEffects
 
-    case Launcher.InternalMessageTaskFailed(actor, cause) =>
-      taskFailed(actor, cause)
-      askForWork()
+    case Message(MessageData.Ping, from, _) =>
+      state -> sendTo(from, MessageData.Ping)
+    case Message(MessageData.PrepareForShutdown, from, _) =>
+      val (newState, sideEffect) = if (state.isIdle) {
 
-    case PrintResources =>
-      log.info(s"Available resources: $availableResources on $self")
-    case CheckQueue =>
-      if (!waitingForWork) {
-        askForWork()
-      }
-    case Ping => sender() ! Pong
-    case PrepareForShutdown =>
-      if (isIdle) {
-        denyWorkBeforeShutdown = true
-        sender() ! ReadyForShutdown
-      }
-
-    case WhatAreYouDoing =>
-      val idle = isIdle
-      log.debug(s"Received WhatAreYouDoing. idle:$idle, idleState:$idleState")
-      if (idle) {
-        sender() ! Idling(idleState)
-      } else {
-        sender() ! Working
-      }
-
-    case Launcher.Release(taskActor) =>
-      val allocated = runningTasks.find(_._1 == taskActor).map(_._3)
-      if (allocated.isEmpty) log.error("Can't find actor ")
-      else {
-        availableResources = availableResources.addBack(allocated.get)
-        freed = freed + taskActor
-        resourceDeallocatedAt = resourceDeallocatedAt + (
-          (
-            taskActor,
-            System.nanoTime
-          )
+        (
+          state.copy(denyWorkBeforeShutdown = true),
+          sendTo(from, MessageData.ReadyForShutdown)
         )
-      }
-      askForWork()
+      } else (state, IO.unit)
+      newState -> sideEffect
 
-    case other => log.debug("unhandled" + other)
+    case Message(MessageData.WhatAreYouDoing, from, _) =>
+      val idle = state.isIdle
+      scribe.debug(
+        s"Received WhatAreYouDoing. idle:$idle, idleState:${state.idleState}"
+      )
+      if (idle) {
+        state -> sendTo(from, MessageData.Idling(state.idleState))
+
+      } else {
+        state -> sendTo(from, MessageData.Working)
+      }
+
+    case other => state -> IO(scribe.debug("unhandled" + other))
 
   }
 

@@ -158,7 +158,7 @@ object ResultWithSharedFilesTest extends TestHelpers {
         t1.immutableFiles.map(_.name)
       )
 
-      await(future)
+      (future)
 
     }
   }
@@ -166,10 +166,11 @@ object ResultWithSharedFilesTest extends TestHelpers {
 }
 
 class WithSharedFilesTestSuite extends FunSuite with Matchers {
+  import cats.effect.unsafe.implicits.global
 
   test("task output <: ResultWithSharedFiles should be cached ") {
     val (t1Files, t2Files, t1MutablesFiles, t1ImmutablesFiles) =
-      ResultWithSharedFilesTest.run.get
+      ResultWithSharedFilesTest.run.unsafeRunSync().get
     t1Files.distinct.size shouldBe 18
     (t1Files zip t2Files) foreach { case (f1, f2) =>
       f1 shouldBe f2

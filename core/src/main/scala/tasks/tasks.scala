@@ -31,6 +31,7 @@ import tasks.queue._
 import tasks.shared.{Priority, Labels}
 import scala.concurrent._
 import cats.effect.IO
+import cats.effect.kernel.Deferred
 
 trait HasSharedFiles extends Product {
   private[tasks] def immutableFiles: Seq[SharedFile]
@@ -142,40 +143,40 @@ case class TaskDefinition[A: Serializer, B: Deserializer](
   )(implicit components: TaskSystemComponents): IO[B] = {
     implicit val queue = components.queue
     implicit val cache = components.cache
-    implicit val context = components.actorsystem
     implicit val prefix = components.filePrefix
-
-    import akka.actor.Props
 
     val taskId1 = taskId
 
-    val promise = Promise[B]()
-
-    context.actorOf(
-      Props(
-        new ProxyTask[A, B](
-          taskId = taskId1,
-          inputDeserializer = rs,
-          outputSerializer = ws,
-          function = fs,
-          input = a,
-          writer = writer1,
-          reader = reader2,
-          resourceConsumed = resource,
-          queueActor = queue.actor,
-          fileServicePrefix = prefix,
-          cache = cache,
-          priority =
-            Priority(priorityBase.toInt + components.priority.toInt + 1),
-          promise = promise,
-          labels = components.labels ++ labels,
-          lineage = components.lineage,
-          noCache = noCache
-        )
-      ).withDispatcher("proxytask-dispatcher")
-    )
-
-    IO.fromFuture(IO.delay(promise.future))
+    Deferred[IO, Either[Throwable, B]].flatMap { deferred =>
+      val behavior = new ProxyTask[A, B](
+        taskId = taskId1,
+        inputDeserializer = rs,
+        outputSerializer = ws,
+        function = fs,
+        input = a,
+        writer = writer1,
+        reader = reader2,
+        resourceConsumed = resource,
+        queueActor = queue,
+        fileServicePrefix = prefix,
+        cache = cache,
+        priority = Priority(priorityBase.toInt + components.priority.toInt + 1),
+        promise = deferred,
+        labels = components.labels ++ labels,
+        lineage = components.lineage,
+        noCache = noCache,
+        messenger = components.messenger
+      )
+      val r = tasks.util.Actor
+        .makeFromBehavior[Unit, Proxy](behavior, components.messenger)
+      r.allocated.flatMap { case (proxy, dealloc) =>
+        deferred.get.flatMap { value =>
+          dealloc.flatMap { _ =>
+            IO.fromEither(value)
+          }
+        }
+      }
+    }
 
   }
 

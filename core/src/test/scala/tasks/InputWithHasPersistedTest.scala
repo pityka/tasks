@@ -25,6 +25,7 @@
 package tasks
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
+import cats.effect.unsafe.implicits.global
 
 import org.scalatest.matchers.should.Matchers
 
@@ -68,7 +69,7 @@ object InputWithHasPersistentTest extends TestHelpers {
         )
       } yield t1 + t2 + t3
 
-      await(future)
+      (future)
 
     }
   }
@@ -80,7 +81,7 @@ class InputWithHasPersistentTestSuite extends FunSuite with Matchers {
   test(
     "a failing task should propagate its exception and not interfere with other tasks"
   ) {
-    InputWithHasPersistentTest.run.get shouldBe 3
+    InputWithHasPersistentTest.run.unsafeRunSync().get shouldBe 3
     InputWithHasPersistentTest.sideEffect.count(
       _ == "execution of task"
     ) shouldBe 2

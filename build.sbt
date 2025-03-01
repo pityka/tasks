@@ -39,7 +39,7 @@ lazy val commonSettings = Seq(
         "-language:postfixOps",
         "-language:implicitConversions",
         "-unchecked", // Enable additional warnings where generated code depends on assumptions.
-        // "-Xfatal-warnings", // Fail the compilation if there are any warnings.
+        "-Xfatal-warnings", // Fail the compilation if there are any warnings.
         "-Xlint:adapted-args", // Warn if an argument list is modified to match the receiver.
         "-Xlint:constant", // Evaluation of a constant arithmetic expression results in an error.
         "-Xlint:delayedinit-select", // Selecting member of DelayedInit.
@@ -83,7 +83,6 @@ lazy val commonSettings = Seq(
 
 lazy val circeVersion = "0.14.9"
 lazy val jsoniterVersion = "2.30.9"
-lazy val akkaVersion = "2.6.19"
 lazy val http4sVersion = "0.23.27"
 lazy val scribeVersion = "3.13.3"
 lazy val fs2Version = "3.11.0"
@@ -131,16 +130,7 @@ lazy val spores = project
       "org.scalatest" %% "scalatest" % "3.2.19" % "test"
     )
   )
-lazy val akkaProvided = List(
-  "com.typesafe.akka" %% "akka-actor" % akkaVersion % Provided,
-  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion % Provided,
-  "com.typesafe.akka" %% "akka-remote" % akkaVersion % Provided
-)
-lazy val akkaReal = List(
-  "com.typesafe.akka" %% "akka-actor" % akkaVersion ,
-  "com.typesafe.akka" %% "akka-slf4j" % akkaVersion ,
-  "com.typesafe.akka" %% "akka-remote" % akkaVersion 
-)
+
 lazy val core = project
   .in(file("core"))
   .settings(commonSettings: _*)
@@ -154,7 +144,6 @@ lazy val core = project
       "org.http4s" %% "http4s-dsl" % http4sVersion,
       "software.amazon.awssdk" % "s3" % "2.23.13",
       "com.google.guava" % "guava" % "33.0.0-jre", // scala-steward:off
-      "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
       "com.typesafe" % "config" % "1.4.2",
       "org.typelevel" %% "cats-effect" % "3.5.3",
       "io.github.pityka" %% "selfpackage" % "2.1.6",
@@ -163,7 +152,7 @@ lazy val core = project
       "com.outr" %% "scribe-slf4j" % scribeVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test"
-    ) ++ akkaProvided ++ (CrossVersion
+    ) ++ (CrossVersion
       .partialVersion(scalaVersion.value) match {
       case Some((2, 13)) =>
         Seq(
@@ -181,7 +170,7 @@ lazy val ec2 = project
     name := "tasks-ec2",
     libraryDependencies ++= Seq(
       "com.amazonaws" % "aws-java-sdk-ec2" % "1.12.244" // scala-steward:off
-    ) ++ akkaProvided
+    )
   )
   .dependsOn(core)
 
@@ -192,7 +181,7 @@ lazy val ssh = project
     name := "tasks-ssh",
     libraryDependencies ++= Seq(
       "ch.ethz.ganymed" % "ganymed-ssh2" % "262"
-    ) ++ akkaProvided
+    )
   )
   .dependsOn(core % "compile->compile;test->test")
 
@@ -203,19 +192,17 @@ lazy val kubernetes = project
     name := "tasks-kubernetes",
     libraryDependencies ++= Seq(
       "com.goyeau" %% "kubernetes-client" % "0.11.0",
-      "io.github.pityka" %% "selfpackage-jib" % "2.1.6",
-      
-    ) ++ akkaProvided
+      "io.github.pityka" %% "selfpackage-jib" % "2.1.6"
+    )
   )
   .dependsOn(core % "compile->compile;test->test")
 
-lazy val kubernetesTest = project 
- .in(file("kubernetes-test"))
+lazy val kubernetesTest = project
+  .in(file("kubernetes-test"))
   .settings(commonSettings: _*)
   .settings(
     name := "tasks-kubernetes-test",
-    publish / skip := true,
-    libraryDependencies ++= akkaReal
+    publish / skip := true
   )
   .enablePlugins(JavaAppPackaging)
   .dependsOn(kubernetes)
@@ -228,7 +215,7 @@ lazy val kubernetesTest = project
 //     libraryDependencies ++= Seq(
 //       "org.scalatest" %% "scalatest" % "3.2.10" % "test",
 //       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
-//     ) ++ akkaProvided,
+//     ) ,
 //     // resources in Compile += (fastOptJS in Compile in uifrontend).value.data
 //   )
 //   .dependsOn(core % "compile->compile;test->test")
@@ -240,7 +227,7 @@ lazy val kubernetesTest = project
 //     name := "tasks-ui-backend",
 //     libraryDependencies ++= Seq(
 //       "org.scalatest" %% "scalatest" % "3.2.10" % "test"
-//     ) ++ akkaProvided,
+//     ) ,
 //     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
 //   )
 //   .dependsOn(core % "compile->compile;test->test")
@@ -274,10 +261,6 @@ lazy val example = project
     publish / skip := true,
     libraryDependencies ++= Seq(
       ("com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal")
-    ) ++ Seq(
-      "com.typesafe.akka" %% "akka-actor" % akkaVersion,
-      "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
-      "com.typesafe.akka" %% "akka-remote" % akkaVersion
     )
   )
 
@@ -288,7 +271,7 @@ lazy val upicklesupport = project
     name := "tasks-upickle",
     libraryDependencies ++= Seq(
       "com.lihaoyi" %% "upickle" % "1.4.4"
-    ) ++ akkaProvided
+    )
   )
   .dependsOn(core)
 
@@ -302,23 +285,7 @@ lazy val circe = project
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,
       "org.scalatest" %% "scalatest" % "3.2.19" % "test"
-    ) ++ akkaProvided
-  )
-  .dependsOn(core)
-
-lazy val ecoll = project
-  .in(file("collection"))
-  .settings(commonSettings: _*)
-  .settings(
-    name := "tasks-ecoll",
-    libraryDependencies ++= Seq(
-      "io.github.pityka" %% "flatjoin-akka-stream" % "0.0.17",
-      "io.github.pityka" %% "lame-bgzip-index" % "0.0.4",
-      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % jsoniterVersion,
-      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
-      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test",
-      "org.scalatest" %% "scalatest" % "3.2.19" % "test"
-    ) ++ akkaProvided
+    )
   )
   .dependsOn(core)
 

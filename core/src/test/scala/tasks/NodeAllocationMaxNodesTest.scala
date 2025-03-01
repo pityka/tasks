@@ -25,6 +25,7 @@
 package tasks
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
+import cats.effect.unsafe.implicits.global
 
 import org.scalatest.matchers.should.Matchers
 
@@ -50,7 +51,7 @@ object NodeAllocationMaxNodesTest extends TestHelpers {
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.elastic.maxNodes = 0
-      akka.loglevel=OFF
+      tasks.disableRemoting = false
       """
     )
   }
@@ -65,8 +66,8 @@ object NodeAllocationMaxNodesTest extends TestHelpers {
         t2 <- f2
         t3 <- f3
       } yield t1 + t2 + t3
-
-      Try(await(future)).toOption
+import scala.concurrent.duration._
+      (future).timeout(30 seconds).attempt.map(_.toOption)
 
     }
   }
@@ -76,7 +77,7 @@ object NodeAllocationMaxNodesTest extends TestHelpers {
 class NodeAllocationMaxNodesTestSuite extends FunSuite with Matchers {
 
   test("elastic node allocation should respect max node configuration") {
-    NodeAllocationMaxNodesTest.run.get shouldBe None
+    NodeAllocationMaxNodesTest.run.unsafeRunSync().get shouldBe None
 
   }
 

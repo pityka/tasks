@@ -103,7 +103,7 @@ object KubernetesTest extends IOApp {
 
     future.map { t =>
       assert(t == 3)
-      if (t ==3) {
+      if (t == 3) {
         scribe.info("SUCCESS")
       } else {
         scribe.error("FAIL")
@@ -129,14 +129,13 @@ object KubernetesTest extends IOApp {
     val containerizer = Containerizer
       .to(DockerDaemonImage.named("kubetestmaster"))
 
-    val resultOrBlock = 
+    val resultOrBlock =
       Bootstrap.entrypoint(
         config = Some(testConfig2),
         containerizer = containerizer,
         k8sClientResource = kubernetesClient,
         mainClassName = "tasks.KubernetesTest"
       )(ts => useTs(ts))
-    
 
     resultOrBlock.flatMap { x =>
       IO {

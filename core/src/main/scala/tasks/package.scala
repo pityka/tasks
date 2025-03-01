@@ -25,8 +25,6 @@
  * SOFTWARE.
  */
 
-import akka.actor.ActorSystem
-
 import com.typesafe.config.{Config, ConfigFactory}
 
 import tasks.wire._
@@ -105,7 +103,7 @@ package object tasks extends MacroCalls {
     component.fs
 
   def releaseResourcesEarly(implicit comp: ComputationEnvironment) =
-    IO.delay(comp.launcher.actor ! Launcher.Release(comp.taskActor))
+    comp.launcher.release(comp.taskActor)
 
   implicit def ts(implicit
       component: ComputationEnvironment
@@ -115,7 +113,7 @@ package object tasks extends MacroCalls {
   implicit def launcherActor(implicit
       component: ComputationEnvironment
   ): LauncherActor =
-    component.launcher
+    component.launcher.launcherActor
 
   implicit def resourceAllocated(implicit
       component: ComputationEnvironment
@@ -125,56 +123,58 @@ package object tasks extends MacroCalls {
   def audit(data: String)(implicit component: ComputationEnvironment): Boolean =
     component.appendLog(LogRecord(data, java.time.Instant.now))
 
-  def withTaskSystem[T](f: TaskSystemComponents => T): Option[T] =
+  def withTaskSystem[T](f: TaskSystemComponents => IO[T]): IO[Option[T]] =
     withTaskSystem(None)(f)
 
-  def withTaskSystem[T](c: Config)(f: TaskSystemComponents => T): Option[T] =
+  def withTaskSystem[T](c: Config)(f: TaskSystemComponents => IO[T]): IO[Option[T]] =
     withTaskSystem(Some(c))(f)
 
-  def withTaskSystem[T](s: String)(f: TaskSystemComponents => T): Option[T] =
+  def withTaskSystem[T](s: String)(f: TaskSystemComponents => IO[T]): IO[Option[T]] =
     withTaskSystem(Some(ConfigFactory.parseString(s)))(f)
 
   def withTaskSystem[T](
       c: Option[Config]
-  )(f: TaskSystemComponents => T): Option[T] = {
-    import cats.effect.unsafe.implicits.global
+  )(f: TaskSystemComponents => IO[T]): IO[Option[T]] = {
 
     val resource = defaultTaskSystem(c)
-    val ((tsc,hostConfig), shutdown) = resource.allocated.unsafeRunSync()
-    if (hostConfig.myRoles.contains(App)) {
-      try {
-        Some(f(tsc))
-      } finally {
-        shutdown.unsafeRunSync()
-      }
+    
+    resource.allocated.flatMap{
+      case ((tsc, hostConfig), shutdown)  =>
+      if (hostConfig.myRoles.contains(App)) {
+      
+        f(tsc).attempt.map(_.toOption) <* shutdown.start
     } else {
-      scribe.info("Leaving withTaskSystem lambda without closing taskystem. This is only meaningful for forever running worker node.")
+      scribe.info(
+        "Leaving withTaskSystem lambda without closing taskystem. This is only meaningful for forever running worker node."
+      )
       // Queue and Worker roles are never stopped
-      None
+      IO.never[Option[T]]
+      
     }
+    }
+    
 
   }
 
   def defaultTaskSystem
-      : Resource[IO, (TaskSystemComponents,HostConfiguration)] =
+      : Resource[IO, (TaskSystemComponents, HostConfiguration)] =
     defaultTaskSystem(None)
-    
+
   def defaultTaskSystem(
       string: String
-  ): Resource[IO, (TaskSystemComponents,HostConfiguration)] =
+  ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
     defaultTaskSystem(Some(ConfigFactory.parseString(string)))
 
-  /**
-    * The user of this resource should check the role of the returned HostConfiguration
-    * If it is not an App, then it is very likely that the correct use case is to return
-    * an IO.never
+  /** The user of this resource should check the role of the returned
+    * HostConfiguration If it is not an App, then it is very likely that the
+    * correct use case is to return an IO.never
     *
     * @param extraConf
     * @return
     */
   def defaultTaskSystem(
       extraConf: Option[Config]
-  ): Resource[IO, (TaskSystemComponents,HostConfiguration)] = {
+  ): Resource[IO, (TaskSystemComponents, HostConfiguration)] = {
 
     val configuration = () => {
       ConfigFactory.invalidateCaches
@@ -195,8 +195,9 @@ package object tasks extends MacroCalls {
     val elasticSupport = elastic.makeElasticSupport
 
     val hostConfig = elasticSupport
-      .map(_.flatMap(_.hostConfig).getOrElse(MasterSlaveGridEngineChosenFromConfig))
-      
+      .map(
+        _.flatMap(_.hostConfig).getOrElse(MasterSlaveGridEngineChosenFromConfig)
+      )
 
     TaskSystemComponents.make(hostConfig, elasticSupport, tconfig)
   }

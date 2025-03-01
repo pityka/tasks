@@ -29,8 +29,10 @@ import tasks.shared._
 import tasks.util.config._
 import tasks.deploy._
 import tasks.queue.QueueActor
-import tasks.ui.EventListener
 import tasks.util.SimpleSocketAddress
+import tasks.util.Messenger
+import cats.effect.kernel.Resource
+import cats.effect.IO
 
 trait ElasticSupport {
 
@@ -38,13 +40,11 @@ trait ElasticSupport {
 
   def hostConfig: Option[HostConfiguration]
 
-  def reaperFactory: Option[ReaperFactory]
-
   def selfShutdownNow(): Unit
 
   trait Inner {
     def createRegistry: Option[NodeRegistry]
-    def createSelfShutdown: SelfShutdown
+    def createSelfShutdown: Resource[IO, Unit]
     def getNodeName: String
   }
   def getNodeName: GetNodeName
@@ -54,21 +54,22 @@ trait ElasticSupport {
       queueActor: QueueActor,
       resource: ResourceAvailable,
       codeAddress: Option[CodeAddress],
-      eventListener: Option[EventListener[NodeRegistry.Event]]
+      messenger: Messenger
   )(implicit config: TasksConfig): Inner
 
 }
 
 trait ElasticSupportFromConfig {
 
-  def apply(implicit config: TasksConfig): cats.effect.Resource[cats.effect.IO,ElasticSupport]
+  def apply(implicit
+      config: TasksConfig
+  ): cats.effect.Resource[cats.effect.IO, ElasticSupport]
 
 }
 
 case class SimpleElasticSupport(
     val fqcn: ElasticSupportFqcn,
     val hostConfig: Option[HostConfiguration],
-    reaperFactory: Option[ReaperFactory],
     shutdown: ShutdownNode,
     createNodeFactory: CreateNodeFactory,
     val getNodeName: GetNodeName
@@ -82,7 +83,7 @@ case class SimpleElasticSupport(
       queueActor: QueueActor,
       resource: ResourceAvailable,
       codeAddress: Option[CodeAddress],
-      eventListener: Option[EventListener[NodeRegistry.Event]]
+      messenger: Messenger
   )(implicit config: TasksConfig) =
     new Inner {
       def getNodeName = self.getNodeName.getNodeName
@@ -94,15 +95,17 @@ case class SimpleElasticSupport(
             decideNewNode = new SimpleDecideNewNode(codeAddress.codeVersion),
             shutdownNode = shutdown,
             targetQueue = queueActor,
-            eventListener = eventListener
+            messenger = messenger
           )
         )
-      def createSelfShutdown =
-        new SelfShutdown(
+      def createSelfShutdown = SelfShutdown
+        .make(
           shutdownRunningNode = shutdown,
           id = RunningJobId(this.getNodeName),
-          queueActor = queueActor
+          queueActor = queueActor,
+          messenger = messenger
         )
+        .map(_ => ())
     }
 
 }

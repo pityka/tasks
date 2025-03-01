@@ -91,7 +91,7 @@ object QueryLogTest extends TestHelpers {
       tasks.tracker.fqcn = default
       tasks.tracker.logFile = ${file.getAbsolutePath}
       tasks.fileservice.writeFileHistories = true
-      akka.loglevel=OFF
+      
       """
     )
   }

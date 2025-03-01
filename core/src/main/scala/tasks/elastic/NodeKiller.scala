@@ -25,108 +25,121 @@
 
 package tasks.elastic
 
-import akka.actor.{Actor, ActorRef, ActorLogging, PoisonPill, Cancellable}
 import scala.concurrent.duration._
 
 import tasks.util._
 import tasks.util.config._
 import tasks.wire._
 import tasks.queue.LauncherActor
+import cats.effect.unsafe.implicits.global
+import cats.effect.IO
+import cats.effect.FiberIO
+import cats.effect.kernel.Ref
+
+object NodeKiller {
+  case class State(
+      lastIdleSessionStart: Long = System.nanoTime(),
+      lastIdleState: Long = 0L,
+      targetIsIdle: Boolean = true,
+      fibers: List[FiberIO[Unit]] = Nil
+  )
+}
 
 class NodeKiller(
     shutdownNode: ShutdownNode,
     targetLauncherActor: LauncherActor,
     targetNode: Node,
-    listener: ActorRef
+    listener: Address,
+    messenger: Messenger
 )(implicit config: TasksConfig)
-    extends Actor
-    with ActorLogging {
+    extends Actor.ActorBehavior[NodeKiller.State, Unit](messenger) {
+  val init = NodeKiller.State()
+  def derive(ref: Ref[IO, NodeKiller.State]): Unit = ()
+  val address = Address(s"NodeKiller-target=$targetLauncherActor")
 
-  private case object TargetStopped
+  override def schedulers(
+      ref: Ref[IO, NodeKiller.State]
+  ): Option[IO[fs2.Stream[IO, Unit]]] = Some {
+    HeartBeatIO
+      .make(targetLauncherActor.address, IO.delay(shutdown()), messenger)
+      .start
+      .flatMap { fiber =>
+        ref.update(st => st.copy(fibers = fiber :: st.fibers))
+      }
+      .map(_ =>
+        fs2.Stream.fixedRate[IO](config.nodeKillerMonitorInterval).evalMap {
+          _ =>
+            ref.get
+              .flatMap {
+                state =>
+                  if (
+                    state.targetIsIdle &&
+                    (System
+                      .nanoTime() - state.lastIdleSessionStart) >= config.idleNodeTimeout.toNanos
+                  ) {
 
-  private var scheduler: Cancellable = null
-  private var heartBeat: ActorRef = null
+                    IO(
+                      scribe.info(
+                        "Target is idle. Start shutdown sequence. Send PrepareForShutdown to " + targetLauncherActor
+                      )
+                    ) *> messenger
+                      .submit(
+                        Message(
+                          MessageData.PrepareForShutdown,
+                          from = address,
+                          to = targetLauncherActor.address
+                        )
+                      )
+                      .map(_ =>
+                        scribe.info(
+                          "PrepareForShutdown sent to " + targetLauncherActor
+                        )
+                      )
 
-  override def preStart(): Unit = {
-    log.debug(
-      "NodeKiller start. Monitoring actor: " + targetLauncherActor + " on node: " + targetNode.name
-    )
-
-    import context.dispatcher
-
-    scheduler = context.system.scheduler.scheduleAtFixedRate(
-      initialDelay = 0 seconds,
-      interval = config.nodeKillerMonitorInterval,
-      receiver = self,
-      message = MeasureTime
-    )
-
-    heartBeat =
-      HeartBeatActor.watch(targetLauncherActor.actor, TargetStopped, self)
-
+                  } else {
+                    messenger
+                      .submit(
+                        Message(
+                          MessageData.WhatAreYouDoing,
+                          from = address,
+                          to = targetLauncherActor.address
+                        )
+                      )
+                  }
+              }
+        }
+      )
   }
 
-  override def postStop(): Unit = {
-    if (scheduler != null) {
-      scheduler.cancel()
-    }
-
-    if (heartBeat != null) {
-      heartBeat ! PoisonPill
-    }
-
-    log.info("NodeKiller stopped.")
-  }
-
-  var lastIdleSessionStart: Long = System.nanoTime()
-
-  var lastIdleState: Long = 0L
-
-  var targetIsIdle = true
+  override def release(st: NodeKiller.State): IO[Unit] =
+    IO.parSequenceN(1)(st.fibers.map(_.cancel)).void
 
   def shutdown() = {
-    log.info(
+    scribe.info(
       "Shutting down target node: name= " + targetNode.name + " , actor= " + targetLauncherActor
     )
     shutdownNode.shutdownRunningNode(targetNode.name)
-    listener ! RemoveNode(targetNode)
-    scheduler.cancel()
-    self ! PoisonPill
+    sendTo(
+      listener,
+      MessageData.RemoveNode(targetNode)
+    ) *> stopProcessingMessages
   }
 
-  def receive = {
-    case TargetStopped =>
-      shutdown()
-    case MeasureTime =>
-      if (
-        targetIsIdle &&
-        (System
-          .nanoTime() - lastIdleSessionStart) >= config.idleNodeTimeout.toNanos
-      ) {
-        try {
-          log.info(
-            "Target is idle. Start shutdown sequence. Send PrepareForShutdown to " + targetLauncherActor
-          )
-          targetLauncherActor.actor ! PrepareForShutdown
-          log.info("PrepareForShutdown sent to " + targetLauncherActor)
-        } catch {
-          case _: java.nio.channels.ClosedChannelException => shutdown()
-        }
-      } else {
-        targetLauncherActor.actor ! WhatAreYouDoing
-      }
+  def receive = (state, ref) => {
+    case Message(MessageData.Idling(idlingState), from, _) =>
+      val st0 = if (state.lastIdleState < idlingState) {
+        state.copy(
+          lastIdleSessionStart = System.nanoTime(),
+          lastIdleState = idlingState
+        )
+      } else state
+      val st1 = st0.copy(targetIsIdle = true)
+      (st1 -> IO.unit)
 
-    case Idling(state) =>
-      if (lastIdleState < state) {
-        lastIdleSessionStart = System.nanoTime()
-        lastIdleState = state
-      }
-      targetIsIdle = true
+    case Message(MessageData.Working, from, _) =>
+      state.copy(targetIsIdle = false) -> IO.unit
 
-    case Working =>
-      targetIsIdle = false
-
-    case ReadyForShutdown => shutdown()
+    case Message(MessageData.ReadyForShutdown, from, _) => state -> shutdown()
   }
 
 }

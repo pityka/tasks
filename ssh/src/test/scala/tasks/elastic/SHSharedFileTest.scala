@@ -27,6 +27,7 @@ package tasks.elastic
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import org.scalatest.matchers.should.Matchers
+import cats.effect.unsafe.implicits.global
 
 import tasks.jsonitersupport._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
@@ -92,7 +93,11 @@ object SHResultWithSharedFilesTest extends TestHelpers {
             .map(_._1)
             .unsafeRunSync()(cats.effect.unsafe.implicits.global)
           val source = fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes()))
-          val tmpfile = tasks.util.writeBinaryToFile(Array[Byte](1, 2, 3))
+          val tmpfile = {
+            val tmp = java.io.File.createTempFile("dsfsdf","dfs")
+            tasks.util.writeBinaryToFile(tmp.getAbsolutePath,Array[Byte](1, 2, 3))
+            tmp 
+          }
           val fs = List(
             SharedFile(tmpfile, "f1"),
             SharedFile(source, "f2"),
@@ -143,22 +148,24 @@ object SHResultWithSharedFilesTest extends TestHelpers {
     val testConfig2 =
       ConfigFactory.parseString(
         s"""tasks.fileservice.connectToProxy = true
-        akka.loglevel= OFF
+        
         tasks.fileservice.storageURI=${tmp.getAbsolutePath}
         tasks.fileservice.proxyStorage=true
       hosts.numCPU=0
+      tasks.disableRemoting = false
       tasks.elastic.engine = "tasks.elastic.sh.SHElasticSupport"
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 5 s
-      tasks.worker-main-class = "tasks.TestSlave"
+      tasks.worker-main-class = "tasks.TestWorker"
       tasks.elastic.sh.workdir = ${tmp.getAbsolutePath}
       tasks.elastic.javaCommandLine = "-Dtasks.fileservice.connectToProxy=true"
       """
       )
 
     withTaskSystem(testConfig2.withFallback(testConfig)) { implicit ts =>
-      val tmpfile = tasks.util.writeBinaryToFile(Array[Byte](1, 2, 3))
+      val tmpfile =  java.io.File.createTempFile("dsfsdf","dfs")
+        tasks.util.writeBinaryToFile(tmpfile.getAbsolutePath,Array[Byte](1, 2, 3))
       val sf = await(SharedFile(tmpfile, "input.txt"))
       val f1 = testTask(Input(1) -> sf)(ResourceRequest(1, 500))
       val f2 = testTask(Input(1) -> sf)(ResourceRequest(1, 500))
@@ -180,7 +187,7 @@ object SHResultWithSharedFilesTest extends TestHelpers {
         t1.immutableFiles.map(_.name)
       )
 
-      await(future)
+      (future)
 
     }
   }
@@ -191,7 +198,7 @@ class SHWithSharedFilesTestSuite extends FunSuite with Matchers {
 
   test("task output <: ResultWithSharedFiles should be cached ") {
     val (t1Files, t2Files, t1MutablesFiles, t1ImmutablesFiles) =
-      SHResultWithSharedFilesTest.run.get
+      SHResultWithSharedFilesTest.run.unsafeRunSync().get
     t1Files.distinct.size shouldBe 18
     (t1Files zip t2Files) foreach { case (f1, f2) =>
       f1 shouldBe f2

@@ -26,6 +26,7 @@
  */
 
 package tasks
+import cats.effect.unsafe.implicits.global
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
@@ -55,11 +56,11 @@ object ExecOnceTest extends TestHelpers with Matchers {
     withTaskSystem(
       Some(
         ConfigFactory.parseString(
-          s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}\nakka.loglevel=OFF"
+          s"tasks.fileservice.storageURI=${tmp.getAbsolutePath}\n"
         )
       )
     ) { implicit ts =>
-      await(IO.parTraverseN(100)((1 to 10000).toList) { input =>
+      (IO.parTraverseN(100)((1 to 10000).toList) { input =>
         increment(Input(0))(
           ResourceRequest(1, 500),
           labels = tasks.shared.Labels(List(input.toString -> input.toString))
@@ -74,7 +75,8 @@ object ExecOnceTest extends TestHelpers with Matchers {
 class ExecOnceTestSute extends FunSuite with Matchers {
 
   test("same task sent multiple times should execute exactly once") {
-    ExecOnceTest.run.get shouldBe (1 to 10000).map(_ => 1)
+
+    ExecOnceTest.run.unsafeRunSync().get shouldBe (1 to 10000).map(_ => 1)
     ExecOnceTest.sideEffect.size shouldBe 1
   }
 

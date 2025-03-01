@@ -27,8 +27,6 @@
 
 package tasks.queue
 
-import akka.actor.{Actor, PoisonPill, ActorRef}
-
 import tasks.fileservice._
 import tasks.shared._
 import tasks._
@@ -36,6 +34,15 @@ import tasks.wire._
 import scala.concurrent.Promise
 import cats.effect.IO
 import tasks.caching.TaskResultCache
+import tasks.util.MessageData
+import tasks.util.Messenger
+import tasks.util.Message
+import tasks.util.Address
+import cats.effect.unsafe.implicits.global
+import cats.effect.kernel.Deferred
+import cats.effect.kernel.Ref
+
+case class Proxy(address: tasks.util.Address)
 
 /* Local proxy of the remotely executed task */
 class ProxyTask[Input, Output](
@@ -47,26 +54,31 @@ class ProxyTask[Input, Output](
     writer: Serializer[Input],
     reader: Deserializer[Output],
     resourceConsumed: VersionedResourceRequest,
-    queueActor: ActorRef,
+    queueActor: QueueActor,
     fileServicePrefix: FileServicePrefix,
     cache: TaskResultCache,
     priority: Priority,
-    promise: Promise[Output],
+    promise: Deferred[IO, Either[Throwable, Output]],
     labels: Labels,
     lineage: TaskLineage,
-    noCache: Boolean
-) extends Actor
-    with akka.actor.ActorLogging {
+    noCache: Boolean,
+    messenger: Messenger
+) extends tasks.util.Actor.ActorBehavior[Unit, Proxy](messenger) {
+  val address: Address = Address(
+    s"ProxyTask-$taskId-${input.hashCode()}-${scala.util.Random.nextString(32)}"
+  )
+  val init = ()
+  def derive(ref: Ref[IO, Unit]): Proxy = Proxy(address)
 
-  private def distributeResult(result: Output): Unit = {
-    log.debug("Completing promise.")
-    promise.success(result)
+  private def distributeResult(result: Output) = {
+    scribe.debug("Completing promise.")
+    promise.complete(Right(result))
   }
 
-  private def notifyListenersOnFailure(cause: Throwable): Unit =
-    promise.failure(cause)
+  private def notifyListenersOnFailure(cause: Throwable) =
+    promise.complete(Left(cause))
 
-  private def startTask(cache: Boolean): Unit = {
+  private def startTask(cache: Boolean) = {
 
     val persisted: Option[Input] = input match {
       case x: HasPersistent[_] => Some(x.persistent.asInstanceOf[Input])
@@ -79,7 +91,7 @@ class ProxyTask[Input, Output](
         writer.hash(persisted.getOrElse(input))
       )
 
-    val scheduleTask = ScheduleTask(
+    val scheduleTask = MessageData.ScheduleTask(
       description = hash,
       inputDeserializer = inputDeserializer.as[AnyRef, AnyRef],
       outputSerializer = outputSerializer.as[AnyRef, AnyRef],
@@ -91,56 +103,61 @@ class ProxyTask[Input, Output](
       priority = priority,
       labels = labels,
       lineage = lineage,
-      proxy = self
+      proxy = address
     )
 
-    log.debug("proxy submitting ScheduleTask object to queue.")
+    scribe.debug("proxy submitting ScheduleTask object to queue.")
 
-    queueActor ! scheduleTask
-  }
-
-  override def preStart() = {
-    log.debug("ProxyTask prestart.")
-    startTask(cache = true)
+    messenger.submit(
+      Message(from = address, to = queueActor.address, data = scheduleTask)
+    )
 
   }
 
-  override def postStop() = {
-    log.debug("ProxyTask stopped. {} {} {}", taskId, input, self)
-  }
+  override def schedulers(
+      ref: Ref[IO, Unit]
+  ): Option[IO[fs2.Stream[IO, Unit]]] = Some(IO {
+    (fs2.Stream.unit ++ fs2.Stream.never[IO]).evalMap(_ =>
+      startTask(cache = true)
+    )
+  })
 
-  def receive = {
-    case NeedInput =>
-      sender() ! InputData(Base64DataHelpers(writer(input)), noCache)
-    case MessageFromTask(untypedOutput, retrievedFromCache) =>
+  def receive = (state, stateRef) => {
+    case Message(MessageData.NeedInput, from, _) =>
+      () -> sendTo(
+        from,
+        MessageData.InputData(Base64DataHelpers(writer(input)), noCache)
+      )
+
+    case Message(
+          MessageData.MessageFromTask(untypedOutput, retrievedFromCache),
+          from,
+          _
+        ) =>
       reader(Base64DataHelpers.toBytes(untypedOutput.data)) match {
         case Right(output) =>
-          log.debug(
-            "MessageFromTask received from: {}, {}, {}",
-            sender(),
-            untypedOutput,
-            output
+          scribe.debug(
+            s"MessageFromTask received from: $from, $untypedOutput, $output"
           )
-          distributeResult(output)
-          self ! PoisonPill
+          () -> distributeResult(output) *> stopProcessingMessages
         case Left(error) if retrievedFromCache =>
-          log.error(
-            s"MessageFromTask received from cache and failed to decode: ${sender()}, $untypedOutput, $error. Task is rescheduled without caching."
+          scribe.error(
+            s"MessageFromTask received from cache and failed to decode: ${from}, $untypedOutput, $error. Task is rescheduled without caching."
           )
-          startTask(cache = false)
+          () -> startTask(cache = false)
         case Left(error) =>
-          log.error(
+          scribe.error(
             error,
-            s"MessageFromTask received not from cache and failed to decode: ${sender()}, $untypedOutput, $error. Execution failed."
+            s"MessageFromTask received not from cache and failed to decode: ${from}, $untypedOutput, $error. Execution failed."
           )
-          notifyListenersOnFailure(new RuntimeException(error))
-          self ! PoisonPill
+          () -> notifyListenersOnFailure(
+            new RuntimeException(error)
+          ) *> stopProcessingMessages
       }
 
-    case TaskFailedMessageToProxy(_, cause) =>
-      log.error(cause, "Execution failed. ")
-      notifyListenersOnFailure(cause)
-      self ! PoisonPill
+    case Message(MessageData.TaskFailedMessageToProxy(_, cause), from, _) =>
+      scribe.error(cause, "Execution failed. ")
+      () -> notifyListenersOnFailure(cause) *> stopProcessingMessages
   }
 
 }

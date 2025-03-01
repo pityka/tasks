@@ -25,6 +25,7 @@
 package tasks
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
+import cats.effect.unsafe.implicits.global
 
 import org.scalatest.matchers.should.Matchers
 import com.typesafe.config.ConfigFactory
@@ -43,7 +44,7 @@ object FailingTasksTest extends TestHelpers {
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=4
       tasks.cache.enabled = false
-      akka.loglevel=OFF
+      
       """
     )
   }
@@ -64,7 +65,7 @@ object FailingTasksTest extends TestHelpers {
     IO("succeeded")
   }
 
-  def run: Option[(String, String, String)] = {
+  def run: IO[Option[(String, String, String)]] = {
     withTaskSystem(testConfig) { implicit ts =>
       // import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -83,7 +84,7 @@ object FailingTasksTest extends TestHelpers {
         t3 <- f3
       } yield (t1, t2, t3)
 
-      await(future)
+      (future)
 
     }
   }
@@ -95,7 +96,7 @@ class FailingTasksTestSuite extends FunSuite with Matchers {
   test(
     "a failing task should propagate its exception and not interfere with other tasks"
   ) {
-    FailingTasksTest.run.get shouldBe (("recovered", "succeeded", "recovered"))
+    FailingTasksTest.run.unsafeRunSync().get shouldBe (("recovered", "succeeded", "recovered"))
   }
 
 }

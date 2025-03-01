@@ -148,7 +148,8 @@ object Bootstrap {
             }
             .getOrElse(PodSpec(containers = Nil))
 
-          val containerFromConfig = podSpecFromConfig.containers.headOption.getOrElse(Container(""))
+          val containerFromConfig =
+            podSpecFromConfig.containers.headOption.getOrElse(Container(""))
 
           val containerName = "tasks-app"
           val resource = Pod(
@@ -176,20 +177,20 @@ object Bootstrap {
                     imagePullPolicy = Some(tconfig.kubernetesImagePullPolicy),
                     env = Some(
                       containerFromConfig.env.getOrElse(Nil) ++
-                      List(
-                        EnvVar(
-                          name = tconfig.kubernetesHostNameOrIPEnvVar,
-                          valueFrom = Some(
-                            EnvVarSource(
-                              fieldRef = Some(
-                                ObjectFieldSelector(
-                                  fieldPath = "status.podIP"
+                        List(
+                          EnvVar(
+                            name = tconfig.kubernetesHostNameOrIPEnvVar,
+                            valueFrom = Some(
+                              EnvVarSource(
+                                fieldRef = Some(
+                                  ObjectFieldSelector(
+                                    fieldPath = "status.podIP"
+                                  )
                                 )
                               )
                             )
                           )
                         )
-                      )
                     ),
                     resources = Some(
                       ResourceRequirements(
