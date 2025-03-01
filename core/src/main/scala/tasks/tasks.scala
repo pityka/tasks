@@ -160,7 +160,7 @@ case class TaskDefinition[A: Serializer, B: Deserializer](
         queueActor = queue,
         fileServicePrefix = prefix,
         cache = cache,
-        priority = Priority(priorityBase.toInt + components.priority.toInt + 1),
+        priority = Priority(priorityBase.s + components.priority.s + 1),
         promise = deferred,
         labels = components.labels ++ labels,
         lineage = components.lineage,

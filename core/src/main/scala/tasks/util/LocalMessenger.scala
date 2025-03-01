@@ -3,7 +3,7 @@ import cats.effect.IO
 import cats.effect.kernel.Ref
 import cats.effect.kernel.Resource
 import fs2.concurrent.Channel
-
+import tasks.util.message._
 object LocalMessenger {
   def make = Resource.make(
     Ref

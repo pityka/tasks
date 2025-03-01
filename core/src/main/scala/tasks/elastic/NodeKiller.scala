@@ -26,7 +26,7 @@
 package tasks.elastic
 
 import scala.concurrent.duration._
-
+import tasks.util.message._
 import tasks.util._
 import tasks.util.config._
 import tasks.wire._

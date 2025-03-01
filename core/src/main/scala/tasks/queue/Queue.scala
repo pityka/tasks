@@ -36,7 +36,6 @@ import tasks.util.config._
 import tasks.wire._
 import tasks._
 import tasks.caching.TaskResultCache
-import tasks.util.MessageData.ScheduleTask
 import cats.effect.IO
 import tasks.caching.AnswerFromCache
 import cats.effect.FiberIO
@@ -44,6 +43,8 @@ import cats.effect.kernel.Ref
 import cats.effect.kernel.Resource
 import tasks.util.Actor.ActorBehavior
 import tasks.elastic.RemoteNodeRegistry
+import tasks.util.message._
+import tasks.util.message.MessageData.ScheduleTask
 
 object TaskQueue {
   case class ScheduleTaskEqualityProjection(
@@ -319,13 +320,13 @@ final class TaskQueue(
           .foreach { case (sch, _) =>
             val ret = availableResource.canFulfillRequest(sch.resource)
             if (
-              !ret && (maxPrio == Int.MinValue || sch.priority.toInt > maxPrio)
+              !ret && (maxPrio == Int.MinValue || sch.priority.s > maxPrio)
             ) {
               scribe.debug(
                 s"Can't fulfill request ${sch.resource} with available resources $availableResource or lower priority than an already selected task"
               )
             } else {
-              maxPrio = sch.priority.toInt
+              maxPrio = sch.priority.s
               selected = Some(sch)
             }
 

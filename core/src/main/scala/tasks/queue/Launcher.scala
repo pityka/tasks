@@ -35,7 +35,7 @@ import tasks.util.config._
 import tasks.shared._
 import tasks.fileservice._
 import tasks.wire._
-
+import tasks.util.message._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import tasks.caching.TaskResultCache
@@ -116,10 +116,10 @@ private[tasks] object Launcher {
   }
 }
 
-private[tasks] case class LauncherActor(address: tasks.util.Address)
+private[tasks] case class LauncherActor(address: tasks.util.message.Address)
 
 case class LauncherHandle(
-    address: tasks.util.Address,
+    address: tasks.util.message.Address,
     ref: Ref[IO, Launcher.State],
     queueActor: QueueActor,
     cache: TaskResultCache,

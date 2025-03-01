@@ -71,7 +71,7 @@ object TaskDefinitionMacros {
         $i2,
         $i3,
         _root_.tasks.queue.TaskId($taskID, $taskVersion)
-      )($serA, $deserC)
+      )(using $serA, $deserC)
     }
 
     val block = Block(List(d1, d2, d3), td.asTerm)

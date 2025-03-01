@@ -36,7 +36,7 @@ import tasks.fileservice._
 import tasks.wire._
 import tasks.elastic._
 import tasks.shared._
-
+import tasks.util.message._
 import java.io.File
 
 import scala.concurrent.Await

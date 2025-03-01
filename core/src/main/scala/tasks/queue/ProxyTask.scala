@@ -34,15 +34,15 @@ import tasks.wire._
 import scala.concurrent.Promise
 import cats.effect.IO
 import tasks.caching.TaskResultCache
-import tasks.util.MessageData
+import tasks.util.message.MessageData
 import tasks.util.Messenger
-import tasks.util.Message
-import tasks.util.Address
+import tasks.util.message.Message
+import tasks.util.message.Address
 import cats.effect.unsafe.implicits.global
 import cats.effect.kernel.Deferred
 import cats.effect.kernel.Ref
-
-case class Proxy(address: tasks.util.Address)
+import tasks.util.message._
+case class Proxy(address: tasks.util.message.Address)
 
 /* Local proxy of the remotely executed task */
 class ProxyTask[Input, Output](

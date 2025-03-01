@@ -26,8 +26,8 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.14",
-  crossScalaVersions := Seq("2.13.14", "3.4.3"),
+  scalaVersion := "2.13.16",
+  crossScalaVersions := Seq("2.13.16", "3.6.3"),
   parallelExecution in Test := false,
   scalacOptions ++= (CrossVersion.partialVersion(scalaVersion.value) match {
     case Some((2, 13)) =>
@@ -82,7 +82,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val circeVersion = "0.14.9"
-lazy val jsoniterVersion = "2.30.9"
+lazy val jsoniterVersion = "2.33.2"
 lazy val http4sVersion = "0.23.27"
 lazy val scribeVersion = "3.13.3"
 lazy val fs2Version = "3.11.0"
