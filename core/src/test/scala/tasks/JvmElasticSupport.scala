@@ -84,7 +84,8 @@ object JvmElasticSupport {
       val ts = Future {
         import cats.effect.unsafe.implicits.global
 
-        defaultTaskSystem(s"""
+        defaultTaskSystem(
+          s"""
     
     hosts.master = "${masterAddress.getHostName}:${masterAddress.getPort}"
     hosts.app = false
@@ -93,10 +94,9 @@ object JvmElasticSupport {
     tasks.addShutdownHook = false 
     tasks.fileservice.storageURI="${config.storageURI.toString}"
     """,
-    Resource.pure(None),
-    JvmGrid.make.map(Some(_))
-
-    ).allocated.unsafeRunSync()
+          Resource.pure(None),
+          JvmGrid.make.map(Some(_))
+        ).allocated.unsafeRunSync()
       }(scala.concurrent.ExecutionContext.Implicits.global)
       import scala.concurrent.ExecutionContext.Implicits.global
       ts.map(_ => ()).recover { case e =>
@@ -122,8 +122,7 @@ object JvmElasticSupport {
 
   }
 
-  class JvmCreateNodeFactory
-      extends CreateNodeFactory {
+  class JvmCreateNodeFactory extends CreateNodeFactory {
     def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
       new JvmCreateNode(master)
   }
@@ -133,8 +132,8 @@ object JvmElasticSupport {
   }
 
   object JvmGrid {
-    
-    def make  : Resource[IO,ElasticSupport] = cats.effect.Resource.pure(
+
+    def make: Resource[IO, ElasticSupport] = cats.effect.Resource.pure(
       SimpleElasticSupport(
         hostConfig = None,
         shutdown = Shutdown,

@@ -133,8 +133,6 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   val acceptableHeartbeatPause: FD =
     raw.getDuration("tasks.failuredetector.acceptable-heartbeat-pause")
 
-  
-
   val storageURI =
     new java.net.URI(raw.getString("tasks.fileservice.storageURI"))
 
@@ -166,12 +164,8 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   def logQueueStatus = raw.getBoolean("tasks.elastic.logQueueStatus")
 
-  
-
   def additionalJavaCommandline =
     raw.getString("tasks.elastic.javaCommandLine")
-
- 
 
   val s3RegionProfileName =
     if (raw.hasPath("tasks.s3.regionProfileName"))
@@ -192,8 +186,6 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   val httpRemoteEnabled = raw.getBoolean("tasks.fileservice.remote.http")
   val s3RemoteEnabled = raw.getBoolean("tasks.fileservice.remote.s3")
 
-  
-
   val addShutdownHook = raw.getBoolean("tasks.addShutdownHook")
 
   val uiFqcn = raw.getString("tasks.ui.fqcn")
@@ -204,9 +196,7 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   val appUIServerHost = raw.getString("tasks.ui.app.host")
 
-  val appUIServerPort = raw.getInt("tasks.ui.app.port") 
-
-  
+  val appUIServerPort = raw.getInt("tasks.ui.app.port")
 
   val workerMainClass = raw.getString("tasks.worker-main-class")
 

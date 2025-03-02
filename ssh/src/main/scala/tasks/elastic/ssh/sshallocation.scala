@@ -66,11 +66,9 @@ object SSHSettings {
     }
   }
 
-  
-
 }
 
-class SSHSettings( config: SSHConfig) {
+class SSHSettings(config: SSHConfig) {
   import SSHSettings._
 
   val hosts: collection.mutable.Map[String, (Host, Boolean)] =
@@ -245,20 +243,20 @@ object SSHGetNodeName extends GetNodeName {
 }
 
 class SSHConfig(raw: Config) {
-    val sshHosts = raw.getObject("tasks.elastic.ssh.hosts")
+  val sshHosts = raw.getObject("tasks.elastic.ssh.hosts")
 }
 
 object SSHElasticSupport {
-  
-  def make( config: Option[Config]) : Resource[IO,ElasticSupport] = {
+
+  def make(config: Option[Config]): Resource[IO, ElasticSupport] = {
     val sshConfig = new SSHConfig(tasks.util.loadConfig(config))
     cats.effect.Resource.pure(
-    SimpleElasticSupport(
-      hostConfig = None,
-      shutdown = new SSHShutdown(sshConfig),
-      createNodeFactory = new SSHCreateNodeFactory(sshConfig),
-      getNodeName = SSHGetNodeName
+      SimpleElasticSupport(
+        hostConfig = None,
+        shutdown = new SSHShutdown(sshConfig),
+        createNodeFactory = new SSHCreateNodeFactory(sshConfig),
+        getNodeName = SSHGetNodeName
+      )
     )
-  )
   }
 }

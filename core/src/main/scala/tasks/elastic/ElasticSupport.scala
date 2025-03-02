@@ -57,7 +57,6 @@ trait ElasticSupport {
 
 }
 
-
 case class SimpleElasticSupport(
     val hostConfig: Option[HostConfiguration],
     shutdown: ShutdownNode,

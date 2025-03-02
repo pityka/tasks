@@ -81,7 +81,11 @@ object DockerTest extends TestHelpers {
   }
 
   def run = {
-    withTaskSystem(testConfig2, Resource.pure(None), DockerElasticSupport.make(Some(testConfig2)).map(Some(_))) { implicit ts =>
+    withTaskSystem(
+      testConfig2,
+      Resource.pure(None),
+      DockerElasticSupport.make(Some(testConfig2)).map(Some(_))
+    ) { implicit ts =>
       val f1 = testTask(Input(1))(ResourceRequest(1, 500))
 
       val f2 = f1.flatMap(_ => testTask(Input(2))(ResourceRequest(1, 500)))

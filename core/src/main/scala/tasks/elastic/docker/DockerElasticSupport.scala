@@ -54,17 +54,16 @@ import com.typesafe.config.ConfigFactory
   * the node registry is not working.
   */
 object DockerElasticSupport {
- 
-  def make(config: Option[Config]) : Resource[IO,ElasticSupport] =
-    {
-      val dockerConfig = new DockerConfig(tasks.util.loadConfig(config))
-      Resource.eval(Ref.of[IO, Map[NodeName, ContainerId]](Map.empty)).flatMap {
+
+  def make(config: Option[Config]): Resource[IO, ElasticSupport] = {
+    val dockerConfig = new DockerConfig(tasks.util.loadConfig(config))
+    Resource.eval(Ref.of[IO, Map[NodeName, ContainerId]](Map.empty)).flatMap {
       ref =>
         cats.effect.Resource.pure(
           SimpleElasticSupport(
             hostConfig = None,
             shutdown = new DockerShutdown(ref),
-            createNodeFactory = new DockerCreateNodeFactory(ref,dockerConfig),
+            createNodeFactory = new DockerCreateNodeFactory(ref, dockerConfig),
             getNodeName = DockerGetNodeName
           )
         )
@@ -73,7 +72,7 @@ object DockerElasticSupport {
 }
 
 class DockerConfig(raw: Config) {
-   val dockerImageName = raw.getString("tasks.docker.image")
+  val dockerImageName = raw.getString("tasks.docker.image")
 
   val dockerEnvVars =
     raw.getStringList("tasks.docker.env").asScala.grouped(2).map { g =>
@@ -115,12 +114,15 @@ object DockerSettings {
         Host.fromConfig(config)
 
       }.toList
-    Ref.of[IO, List[Host]](hosts).map(r => new DockerSettings(r,config))
+    Ref.of[IO, List[Host]](hosts).map(r => new DockerSettings(r, config))
   }
 
 }
 
-class DockerSettings(hosts: Ref[IO, List[DockerSettings.Host]], config: DockerConfig) {
+class DockerSettings(
+    hosts: Ref[IO, List[DockerSettings.Host]],
+    config: DockerConfig
+) {
   import DockerSettings._
 
   def allocate(h: ResourceRequest) = hosts.modify { hosts =>
@@ -150,9 +152,8 @@ class DockerSettings(hosts: Ref[IO, List[DockerSettings.Host]], config: DockerCo
 }
 
 class DockerShutdown(
-    nodeNamesToContainerIds: Ref[IO, Map[NodeName, ContainerId]],
-)
-    extends ShutdownNode {
+    nodeNamesToContainerIds: Ref[IO, Map[NodeName, ContainerId]]
+) extends ShutdownNode {
 
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
     val contextName = nodeName.value.split(":")(0)
@@ -184,7 +185,7 @@ class DockerCreateNode(
     masterAddress: SimpleSocketAddress,
     codeAddress: CodeAddress,
     nodeNamesToContainerIds: Ref[IO, Map[NodeName, ContainerId]],
-    config: DockerConfig,
+    config: DockerConfig
 ) extends CreateNode {
 
   val settings = DockerSettings.fromConfig(config).unsafeRunSync()
@@ -288,7 +289,7 @@ class DockerCreateNode(
 class DockerCreateNodeFactory(
     nodeNamesToContainerIds: Ref[IO, Map[NodeName, ContainerId]],
     config: DockerConfig
-)extends CreateNodeFactory {
+) extends CreateNodeFactory {
   def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
     new DockerCreateNode(master, codeAddress, nodeNamesToContainerIds, config)
 }

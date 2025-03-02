@@ -102,7 +102,9 @@ class SHCreateNode(
 
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest
-  )(implicit config: TasksConfig): Try[Tuple2[PendingJobId, ResourceAvailable]] = {
+  )(implicit
+      config: TasksConfig
+  ): Try[Tuple2[PendingJobId, ResourceAvailable]] = {
     val script = Deployment.script(
       memory = requestSize.memory,
       cpu = requestSize.cpu._2,
@@ -171,10 +173,8 @@ object SHGetNodeName extends GetNodeName {
   }
 }
 
-
-
 object SHElasticSupport {
-  def make : Resource[IO,ElasticSupport] = cats.effect.Resource.pure(
+  def make: Resource[IO, ElasticSupport] = cats.effect.Resource.pure(
     SimpleElasticSupport(
       hostConfig = None,
       shutdown = SHShutdown,

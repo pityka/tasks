@@ -96,8 +96,7 @@ class K8SCreateNode(
     codeAddress: CodeAddress,
     k8s: Option[KubernetesClient[IO]],
     k8sConfig: K8SConfig
-)
-    extends CreateNode {
+) extends CreateNode {
 
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest
@@ -116,7 +115,8 @@ class K8SCreateNode(
 
         val kubeCPURequest = userCPURequest + k8sConfig.kubernetesCpuExtra
         val kubeRamRequest = userRamRequest + k8sConfig.kubernetesRamExtra
-        val imageName = requestSize.image.getOrElse(k8sConfig.kubernetesImageName)
+        val imageName =
+          requestSize.image.getOrElse(k8sConfig.kubernetesImageName)
         val script = Deployment.script(
           memory = userRamRequest,
           cpu = userCPURequest,
@@ -286,17 +286,18 @@ class K8SCreateNode(
 
 }
 
-class K8SCreateNodeFactory(k8s: Option[KubernetesClient[IO]], config: K8SConfig) extends CreateNodeFactory {
+class K8SCreateNodeFactory(k8s: Option[KubernetesClient[IO]], config: K8SConfig)
+    extends CreateNodeFactory {
   def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
-    new K8SCreateNode(master, codeAddress, k8s,config)
+    new K8SCreateNode(master, codeAddress, k8s, config)
 }
 
 object K8SGetNodeName extends GetNodeName {
   def getNodeName = System.getenv("TASKS_JOB_NAME")
 }
 
- class K8SConfig(val raw: Config) extends ConfigValuesForHostConfiguration  {
-def kubernetesImageName = raw.getString("tasks.kubernetes.image")
+class K8SConfig(val raw: Config) extends ConfigValuesForHostConfiguration {
+  def kubernetesImageName = raw.getString("tasks.kubernetes.image")
   val kubernetesImageApplicationSubPath =
     raw.getString("tasks.kubernetes.imageApplicationSubPath")
 
@@ -332,9 +333,9 @@ def kubernetesImageName = raw.getString("tasks.kubernetes.image")
     raw.getString("tasks.kubernetes.image-pull-policy")
 }
 
-object K8SElasticSupport{
-  
-  def make(config: Option[Config]) : Resource[IO,ElasticSupport] = {
+object K8SElasticSupport {
+
+  def make(config: Option[Config]): Resource[IO, ElasticSupport] = {
     implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
     val k8sConfig = new K8SConfig(tasks.util.loadConfig(config))
     val kubernetesClient =
@@ -358,11 +359,7 @@ object K8SElasticSupport{
   }
 }
 
-
-class K8SHostConfig(val config: K8SConfig)
-    extends HostConfigurationFromConfig {
-
-  
+class K8SHostConfig(val config: K8SConfig) extends HostConfigurationFromConfig {
 
   private lazy val myhostname =
     Option(System.getenv(config.kubernetesHostNameOrIPEnvVar))

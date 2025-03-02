@@ -87,7 +87,7 @@ class EC2CreateNode(
       requestSize: ResourceRequest
   )(implicit config: TasksConfig): Try[(PendingJobId, ResourceAvailable)] =
     Try {
-      val (requestid, instancetype) = requestSpotInstance(requestSize,config)
+      val (requestid, instancetype) = requestSpotInstance(requestSize, config)
       val jobid = PendingJobId(requestid)
       val size = instancetype._2
       (jobid, size)
@@ -119,7 +119,10 @@ class EC2CreateNode(
 
   }
 
-  private def requestSpotInstance(requestSize: ResourceRequest,config: TasksConfig) = {
+  private def requestSpotInstance(
+      requestSize: ResourceRequest,
+      config: TasksConfig
+  ) = {
     // size is ignored, instance specification is set in configuration
     val selectedInstanceType = EC2Operations
       .workerInstanceType(requestSize)(ec2Config)
@@ -220,17 +223,17 @@ class EC2CreateNode(
 
 class EC2CreateNodeFactory(
     config: EC2Config,
-    ec2: AmazonEC2,
+    ec2: AmazonEC2
 ) extends CreateNodeFactory {
   def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
-    new EC2CreateNode(master, codeAddress, ec2,  config)
+    new EC2CreateNode(master, codeAddress, ec2, config)
 }
 
 object EC2GetNodeName extends GetNodeName {
   def getNodeName = EC2Operations.readMetadata("instance-id").head
 }
 
-class EC2Config(val raw:Config) extends ConfigValuesForHostConfiguration {
+class EC2Config(val raw: Config) extends ConfigValuesForHostConfiguration {
   val awsRegion: String = raw.getString("tasks.elastic.aws.region")
 
   def spotPrice: Double = raw.getDouble("tasks.elastic.aws.spotPrice")
@@ -272,7 +275,7 @@ class EC2Config(val raw:Config) extends ConfigValuesForHostConfiguration {
 
   val terminateMaster = raw.getBoolean("tasks.elastic.aws.terminateMaster")
 
-   def iamRole = {
+  def iamRole = {
     val s = raw.getString("tasks.elastic.aws.iamRole")
     if (s == "" || s == "-") None
     else Some(s)
@@ -291,28 +294,35 @@ object EC2ElasticSupport {
   def apply(config: Option[Config]) = {
     val ec2Config = new EC2Config(tasks.util.loadConfig(config))
     cats.effect.Resource.make {
-    IO {
-      
-      implicit val ec2 =
-        if (ec2Config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
-        else AmazonEC2ClientBuilder.standard.withRegion(ec2Config.awsRegion).build
-      SimpleElasticSupport(
-        hostConfig = Some(new EC2MasterSlave(ec2Config)),
-        shutdown = new EC2Shutdown(ec2),
-        createNodeFactory = new EC2CreateNodeFactory(ec2Config, ec2),
-        getNodeName = EC2GetNodeName
-      )
-    }
-  } { release =>
-    if (ec2Config.terminateMaster) cats.effect.IO {
-      val ec2 =
-        if (ec2Config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
-        else AmazonEC2ClientBuilder.standard.withRegion(ec2Config.awsRegion).build
+      IO {
 
-      val nodename = EC2Operations.readMetadata("instance-id").head
-      EC2Operations.terminateInstance(ec2, nodename)
+        implicit val ec2 =
+          if (ec2Config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
+          else
+            AmazonEC2ClientBuilder.standard
+              .withRegion(ec2Config.awsRegion)
+              .build
+        SimpleElasticSupport(
+          hostConfig = Some(new EC2MasterSlave(ec2Config)),
+          shutdown = new EC2Shutdown(ec2),
+          createNodeFactory = new EC2CreateNodeFactory(ec2Config, ec2),
+          getNodeName = EC2GetNodeName
+        )
+      }
+    } { release =>
+      if (ec2Config.terminateMaster) cats.effect.IO {
+        val ec2 =
+          if (ec2Config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
+          else
+            AmazonEC2ClientBuilder.standard
+              .withRegion(ec2Config.awsRegion)
+              .build
 
+        val nodename = EC2Operations.readMetadata("instance-id").head
+        EC2Operations.terminateInstance(ec2, nodename)
+
+      }
+      else IO.unit
     }
-    else IO.unit
-  }}
+  }
 }

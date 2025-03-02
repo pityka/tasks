@@ -58,7 +58,11 @@ object NodeAllocationTest extends TestHelpers {
   }
 
   def run = {
-    withTaskSystem(testConfig2, Resource.pure(None), JvmGrid.make.map(Some(_))) { implicit ts =>
+    withTaskSystem(
+      testConfig2,
+      Resource.pure(None),
+      JvmGrid.make.map(Some(_))
+    ) { implicit ts =>
       import scala.concurrent.ExecutionContext.Implicits.global
 
       val f1 = testTask(Input(1))(ResourceRequest(1, 500))
