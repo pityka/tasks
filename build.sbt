@@ -207,48 +207,6 @@ lazy val kubernetesTest = project
   .enablePlugins(JavaAppPackaging)
   .dependsOn(kubernetes)
 
-// lazy val tracker = project
-//   .in(file("tracker"))
-//   .settings(commonSettings: _*)
-//   .settings(
-//     name := "tasks-tracker",
-//     libraryDependencies ++= Seq(
-//       "org.scalatest" %% "scalatest" % "3.2.10" % "test",
-//       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
-//     ) ,
-//     // resources in Compile += (fastOptJS in Compile in uifrontend).value.data
-//   )
-//   .dependsOn(core % "compile->compile;test->test")
-
-// lazy val uibackend = project
-//   .in(file("uibackend"))
-//   .settings(commonSettings: _*)
-//   .settings(
-//     name := "tasks-ui-backend",
-//     libraryDependencies ++= Seq(
-//       "org.scalatest" %% "scalatest" % "3.2.10" % "test"
-//     ) ,
-//     resources in Compile += (fastOptJS in Compile in uifrontend).value.data
-//   )
-//   .dependsOn(core % "compile->compile;test->test")
-
-// lazy val uifrontend = project
-//   .in(file("uifrontend"))
-//   .settings(commonSettings: _*)
-//   .settings(
-//     name := "tasks-ui-frontend",
-//     libraryDependencies ++= Seq(
-//       "org.scala-js" %%% "scalajs-dom" % "1.2.0",
-//       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % jsoniterVersion,
-//       "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
-//       "com.raquo" %%% "laminar" % "0.13.0"
-//     ),
-//     mimaPreviousArtifacts := Set.empty,
-//     fork := false
-//   )
-//   .dependsOn(sharedJS)
-//   .enablePlugins(ScalaJSPlugin)
-
 lazy val example = project
   .in(file("example"))
   .settings(commonSettings: _*)
@@ -305,8 +263,6 @@ lazy val root = (project in file("."))
     sharedJS,
     ec2,
     ssh,
-    // uibackend,
-    // uifrontend,
     kubernetes,
     // tracker,
     example
