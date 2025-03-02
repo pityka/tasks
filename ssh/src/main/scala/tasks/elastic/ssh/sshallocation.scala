@@ -187,6 +187,7 @@ class SSHCreateNode(
           ),
           followerHostname = Some(host.hostname),
           followerExternalHostname = None,
+          followerNodeName = None,
           followerMayUseArbitraryPort = true,
           background = true,
           image = None

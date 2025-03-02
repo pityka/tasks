@@ -37,8 +37,8 @@ import java.io.File
 import cats.effect.kernel.Resource
 import cats.effect.IO
 import fs2.{Stream, Pipe}
-import software.amazon.awssdk.services.s3.model.HeadObjectResponse
 import tasks.fileservice._
+import tasks.fileservice.s3.S3Client.ObjectMetaData
 
 class S3Storage(
     bucketName: String,
@@ -47,7 +47,7 @@ class S3Storage(
     cannedAcls: Seq[String],
     grantFullControl: Seq[String],
     uploadParallelism: Int,
-    s3: tasks.fileservice.s3.S3
+    s3: tasks.fileservice.s3.S3Client
 )(implicit
     config: TasksConfig
 ) extends ManagedFileStorage {
@@ -82,9 +82,9 @@ class S3Storage(
         case None => false
       }
 
-  private def getLengthAndHash(meta: HeadObjectResponse) = {
-    val size1: Long = meta.contentLength()
-    val hash1: Int = meta.eTag().hashCode()
+  private def getLengthAndHash(meta: ObjectMetaData) = {
+    val size1: Long = meta.contentLength
+    val hash1: Int = meta.eTag.hashCode()
     (size1, hash1)
   }
 

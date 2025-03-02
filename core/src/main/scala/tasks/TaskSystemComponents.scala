@@ -84,6 +84,7 @@ object TaskSystemComponents {
   def make(
       hostConfig: Resource[IO, HostConfiguration],
       elasticSupport: Resource[IO, Option[ElasticSupport]],
+      s3ClientResource: Resource[IO, Option[tasks.fileservice.s3.S3Client]],
       config: TasksConfig
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
     hostConfig.flatMap { hostConfig =>
@@ -111,19 +112,11 @@ object TaskSystemComponents {
 
           val rootHistory = NoHistory
 
-          val s3Client =
-            Resource.make[IO, Option[tasks.fileservice.s3.S3]](IO {
-              if (
-                config.storageURI.getScheme == "s3" || config.s3RemoteEnabled
-              ) {
-                val s3AWSSDKClient =
-                  tasks.fileservice.s3.S3
-                    .makeAWSSDKClient(config.s3RegionProfileName)
-
-                Option(new tasks.fileservice.s3.S3(s3AWSSDKClient))
-
-              } else None
-            })(v => IO { v.foreach(_.s3.close) })
+          val s3Client = s3ClientResource.map { s3Client =>
+            if (config.storageURI.getScheme == "s3" || config.s3RemoteEnabled) {
+              s3Client
+            } else None
+          }
 
           val httpClient =
             if (config.httpRemoteEnabled)
@@ -249,7 +242,7 @@ object TaskSystemComponents {
                   val _ = actorsystem // suppress unused warning
 
                   s3Client.map(s3Client =>
-                    new s3.S3Storage(
+                    new fileservice.s3.S3Storage(
                       bucketName = s3bucket.get._1,
                       folderPrefix = s3bucket.get._2,
                       sse = config.s3ServerSideEncryption,
@@ -648,7 +641,10 @@ object TaskSystemComponents {
                                 hostConfig.availableGPU,
                                 hostConfig.image
                               ),
-                              LauncherActor(launcherActor.get.address.withAddress(messenger.listeningAddress))
+                              LauncherActor(
+                                launcherActor.get.address
+                                  .withAddress(messenger.listeningAddress)
+                              )
                             )
                           ),
                           from = Address("_noaddress_"),

@@ -37,6 +37,7 @@ import tasks.shared.LogRecord
 import cats.effect.IO
 import tasks.shared.ResourceAllocated
 import cats.effect.kernel.Resource
+import tasks.fileservice.s3.S3Client
 
 package object tasks extends MacroCalls {
 
@@ -124,46 +125,70 @@ package object tasks extends MacroCalls {
     component.appendLog(LogRecord(data, java.time.Instant.now))
 
   def withTaskSystem[T](f: TaskSystemComponents => IO[T]): IO[Option[T]] =
-    withTaskSystem(None)(f)
+    withTaskSystem(None, Resource.pure(None))(f)
 
-  def withTaskSystem[T](c: Config)(f: TaskSystemComponents => IO[T]): IO[Option[T]] =
-    withTaskSystem(Some(c))(f)
+  def withTaskSystem[T](c: Config, s3Client: Resource[IO, Option[S3Client]])(
+      f: TaskSystemComponents => IO[T]
+  ): IO[Option[T]] =
+    withTaskSystem(Some(c), s3Client)(f)
 
-  def withTaskSystem[T](s: String)(f: TaskSystemComponents => IO[T]): IO[Option[T]] =
-    withTaskSystem(Some(ConfigFactory.parseString(s)))(f)
+  def withTaskSystem[T](c: Config)(
+      f: TaskSystemComponents => IO[T]
+  ): IO[Option[T]] =
+    withTaskSystem(Some(c), Resource.pure(None))(f)
+
+  def withTaskSystem[T](c: Option[Config])(
+      f: TaskSystemComponents => IO[T]
+  ): IO[Option[T]] =
+    withTaskSystem(c, Resource.pure(None))(f)
+
+  def withTaskSystem[T](s: String, s3Client: Resource[IO, Option[S3Client]])(
+      f: TaskSystemComponents => IO[T]
+  ): IO[Option[T]] =
+    withTaskSystem(Some(ConfigFactory.parseString(s)), s3Client)(f)
 
   def withTaskSystem[T](
-      c: Option[Config]
+      c: Option[Config],
+      s3Client: Resource[IO, Option[S3Client]]
   )(f: TaskSystemComponents => IO[T]): IO[Option[T]] = {
 
-    val resource = defaultTaskSystem(c)
-    
-    resource.allocated.flatMap{
-      case ((tsc, hostConfig), shutdown)  =>
+    val resource = defaultTaskSystem(c, s3Client)
+
+    resource.allocated.flatMap { case ((tsc, hostConfig), shutdown) =>
       if (hostConfig.myRoles.contains(App)) {
-      
+
         f(tsc).attempt.map(_.toOption) <* shutdown.start
-    } else {
-      scribe.info(
-        "Leaving withTaskSystem lambda without closing taskystem. This is only meaningful for forever running worker node."
-      )
-      // Queue and Worker roles are never stopped
-      IO.never[Option[T]]
-      
+      } else {
+        scribe.info(
+          "Leaving withTaskSystem lambda without closing taskystem. This is only meaningful for forever running worker node."
+        )
+        // Queue and Worker roles are never stopped
+        IO.never[Option[T]]
+
+      }
     }
-    }
-    
 
   }
 
   def defaultTaskSystem
       : Resource[IO, (TaskSystemComponents, HostConfiguration)] =
-    defaultTaskSystem(None)
+    defaultTaskSystem(None, Resource.pure(None))
+
+  def defaultTaskSystem(
+      string: String,
+      s3Client: Resource[IO, Option[S3Client]]
+  ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
+    defaultTaskSystem(Some(ConfigFactory.parseString(string)), s3Client)
 
   def defaultTaskSystem(
       string: String
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
-    defaultTaskSystem(Some(ConfigFactory.parseString(string)))
+    defaultTaskSystem(Some(ConfigFactory.parseString(string)), Resource.pure(None))
+
+  def defaultTaskSystem(
+      extraConf: Option[Config]
+  ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
+    defaultTaskSystem(extraConf, Resource.pure(None))
 
   /** The user of this resource should check the role of the returned
     * HostConfiguration If it is not an App, then it is very likely that the
@@ -173,7 +198,8 @@ package object tasks extends MacroCalls {
     * @return
     */
   def defaultTaskSystem(
-      extraConf: Option[Config]
+      extraConf: Option[Config],
+      s3Client: Resource[IO, Option[S3Client]]
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] = {
 
     val configuration = () => {
@@ -199,7 +225,7 @@ package object tasks extends MacroCalls {
         _.flatMap(_.hostConfig).getOrElse(MasterSlaveGridEngineChosenFromConfig)
       )
 
-    TaskSystemComponents.make(hostConfig, elasticSupport, tconfig)
+    TaskSystemComponents.make(hostConfig, elasticSupport, s3Client, tconfig)
   }
 
   type SSerializer[T] = Spore[Unit, Serializer[T]]

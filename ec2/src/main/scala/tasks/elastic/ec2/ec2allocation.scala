@@ -179,6 +179,7 @@ class EC2CreateNode(
       ),
       followerHostname = None,
       followerExternalHostname = None,
+      followerNodeName = None,
       followerMayUseArbitraryPort = true,
       background = true,
       image = None

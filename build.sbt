@@ -141,8 +141,7 @@ lazy val core = project
       "co.fs2" %% "fs2-reactive-streams" % fs2Version,
       "org.http4s" %% "http4s-ember-client" % http4sVersion,
       "org.http4s" %% "http4s-ember-server" % http4sVersion,
-      "org.http4s" %% "http4s-dsl" % http4sVersion,
-      "software.amazon.awssdk" % "s3" % "2.23.13",
+      "org.http4s" %% "http4s-dsl" % http4sVersion,      
       "com.google.guava" % "guava" % "33.0.0-jre", // scala-steward:off
       "com.typesafe" % "config" % "1.4.2",
       "org.typelevel" %% "cats-effect" % "3.5.3",
@@ -170,6 +169,17 @@ lazy val ec2 = project
     name := "tasks-ec2",
     libraryDependencies ++= Seq(
       "com.amazonaws" % "aws-java-sdk-ec2" % "1.12.244" // scala-steward:off
+    )
+  )
+  .dependsOn(core)
+
+lazy val s3 = project
+  .in(file("s3"))
+  .settings(commonSettings: _*)
+  .settings(
+    name := "tasks-s3",
+    libraryDependencies ++= Seq(
+      "software.amazon.awssdk" % "s3" % "2.23.13" // scala-steward:off
     )
   )
   .dependsOn(core)
@@ -262,6 +272,7 @@ lazy val root = (project in file("."))
     sharedJVM,
     sharedJS,
     ec2,
+    s3,
     ssh,
     kubernetes,
     // tracker,

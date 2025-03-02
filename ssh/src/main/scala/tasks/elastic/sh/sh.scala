@@ -119,6 +119,7 @@ class SHCreateNode(
       followerHostname = None,
       followerExternalHostname = None,
       followerMayUseArbitraryPort = true,
+      followerNodeName = None,
       background = true,
       image = None
     )

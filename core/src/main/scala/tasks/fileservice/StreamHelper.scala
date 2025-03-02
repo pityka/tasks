@@ -33,9 +33,9 @@ import org.http4s.headers.ETag
 import org.http4s.RangeUnit
 import org.http4s
 import fs2.Chunk
-
+import s3.S3Client
 class StreamHelper(
-    s3Client: Option[tasks.fileservice.s3.S3],
+    s3Client: Option[S3Client],
     httpClient: Option[Client[IO]]
 ) {
 
@@ -269,7 +269,7 @@ class StreamHelper(
       .getObjectMetadata(bucket, key)
       .map {
         case None    => (None, None)
-        case Some(x) => Some(x.contentLength.toLong) -> Some(x.eTag())
+        case Some(x) => Some(x.contentLength.toLong) -> Some(x.eTag)
       }
 
   }

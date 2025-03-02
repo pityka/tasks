@@ -37,7 +37,6 @@ import java.io.File
 import cats.effect.kernel.Resource
 import cats.effect.IO
 import fs2.{Stream, Pipe}
-import software.amazon.awssdk.services.s3.model.HeadObjectResponse
 import tasks.fileservice._
 import cats.effect.std.SecureRandom
 

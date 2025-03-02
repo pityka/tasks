@@ -129,6 +129,7 @@ class K8SCreateNode(
           followerHostname = None,
           followerExternalHostname = None,
           followerMayUseArbitraryPort = true,
+          followerNodeName = None,
           background = false,
           image = Some(imageName)
         )

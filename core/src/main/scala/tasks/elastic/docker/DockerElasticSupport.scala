@@ -48,6 +48,9 @@ import cats.effect.kernel.Resource
   * The application must run on a host which can execute docker --context .. run ..
   * The network of the containers are set to --network=host so that the docker networking is skipped.
   * This is needed because the application is not part of docker networking.
+  * 
+  * The feature where workers shutting down themselves due to lost connection to the node registry
+  * is not working.
   *
   */
 class DockerElasticSupport extends ElasticSupportFromConfig {
