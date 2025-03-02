@@ -3,20 +3,22 @@ package tasks
 import tasks.queue._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
-import com.google.common.{hash => ghash}
-import com.google.common.io.ByteStreams
+import cats.effect.IO
 
 package object jsonitersupport {
 
   implicit def ser[A: JsonValueCodec]: Serializer[A] =
     new Serializer[A] {
-      def hash(a: A): String = {
-        val os = new ghash.HashingOutputStream(
-          ghash.Hashing.sha256(),
-          ByteStreams.nullOutputStream()
-        )
-        writeToStream(a, os)
-        os.hash().toString()
+      override def hash(a: A): IO[String] = {
+        fs2.io
+          .readOutputStream[IO](16384)(os => IO(writeToStream(a, os)))
+          .through(
+            fs2.hashing.Hashing[IO].hash(fs2.hashing.HashAlgorithm.SHA256)
+          )
+          .compile
+          .lastOrError
+          .map(_.toString())
+
       }
 
       def apply(a: A) = writeToArray(a)

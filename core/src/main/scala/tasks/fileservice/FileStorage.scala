@@ -27,8 +27,6 @@
 
 package tasks.fileservice
 
-import com.google.common.hash._
-
 import java.io.{File, InputStream}
 
 import tasks.util._
@@ -39,13 +37,13 @@ import cats.effect.IO
 import fs2.Stream
 
 object FileStorage {
-  def getContentHash(is: InputStream): Int = {
+  def getContentHash(is: fs2.Stream[IO, Byte]): IO[Int] = {
     val checkedSize = 1024 * 256
-    val buffer = Array.ofDim[Byte](checkedSize)
-    val his = new HashingInputStream(Hashing.crc32c, is)
-
-    com.google.common.io.ByteStreams.read(his, buffer, 0, buffer.size)
-    his.hash.asInt
+    is.take(checkedSize)
+      .through(fs2.hashing.Hashing[IO].hash(fs2.hashing.HashAlgorithm.MD5))
+      .compile
+      .lastOrError
+      .map(_.bytes.take(4).toByteBuffer.asIntBuffer().get())
   }
 }
 
@@ -64,14 +62,21 @@ class RemoteFileStorage(implicit
 
   def getSizeAndHash(path: RemoteFilePath): IO[(Long, Int)] =
     path.uri.scheme match {
-      case "file" =>
-        IO.interruptible {
-          val file = new File(path.uri.path)
-          val hash = openFileInputStream(file) { is =>
-            FileStorage.getContentHash(is)
+      case "file" => {
+        val file = new File(path.uri.path)
+        FileStorage
+          .getContentHash(
+            fs2.io.file
+              .Files[IO]
+              .readAll(fs2.io.file.Path.fromNioPath(file.toPath))
+          )
+          .flatMap { hash =>
+            val length = IO(file.length())
+            length.map { length =>
+              (length, hash)
+            }
           }
-          (file.length, hash)
-        }
+      }
       case "s3" | "http" | "https" =>
         streamHelper
           .getContentLengthAndETag(uri(path))

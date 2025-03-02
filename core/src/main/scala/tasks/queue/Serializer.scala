@@ -1,10 +1,18 @@
 package tasks.queue
 
 import tasks.spore
+import cats.effect.IO
 
 trait Serializer[A] {
   def apply(a: A): Array[Byte]
-  def hash(a: A): String
+  def hash(a: A): IO[String] = fs2.Stream
+    .chunk(fs2.Chunk.array(apply(a)))
+    .through(
+      fs2.hashing.Hashing[IO].hash(fs2.hashing.HashAlgorithm.SHA256)
+    )
+    .compile
+    .lastOrError
+    .map(_.toString())
 }
 
 trait Deserializer[A] {
@@ -14,7 +22,6 @@ trait Deserializer[A] {
 object Serializer {
   val nothing: Serializer[Nothing] = new Serializer[Nothing] {
     def apply(a: Nothing): Array[Byte] = Array.empty
-    def hash(a: Nothing): String = "nothing"
   }
 }
 object Deserializer {

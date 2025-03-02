@@ -85,32 +85,39 @@ class ProxyTask[Input, Output](
       case _                   => None
     }
 
-    val hash: HashedTaskDescription =
-      HashedTaskDescription(
-        taskId,
-        writer.hash(persisted.getOrElse(input))
+    val hash: IO[HashedTaskDescription] = writer
+      .hash(persisted.getOrElse(input))
+      .map(hash =>
+        HashedTaskDescription(
+          taskId,
+          hash
+        )
       )
 
-    val scheduleTask = MessageData.ScheduleTask(
-      description = hash,
-      inputDeserializer = inputDeserializer.as[AnyRef, AnyRef],
-      outputSerializer = outputSerializer.as[AnyRef, AnyRef],
-      function = function.as[AnyRef, AnyRef],
-      resource = resourceConsumed,
-      queueActor = queueActor,
-      fileServicePrefix = fileServicePrefix,
-      tryCache = cache,
-      priority = priority,
-      labels = labels,
-      lineage = lineage,
-      proxy = address
-    )
+    val scheduleTask = hash.map { hash =>
+      MessageData.ScheduleTask(
+        description = hash,
+        inputDeserializer = inputDeserializer.as[AnyRef, AnyRef],
+        outputSerializer = outputSerializer.as[AnyRef, AnyRef],
+        function = function.as[AnyRef, AnyRef],
+        resource = resourceConsumed,
+        queueActor = queueActor,
+        fileServicePrefix = fileServicePrefix,
+        tryCache = cache,
+        priority = priority,
+        labels = labels,
+        lineage = lineage,
+        proxy = address
+      )
+    }
 
     scribe.debug("proxy submitting ScheduleTask object to queue.")
 
-    messenger.submit(
-      Message(from = address, to = queueActor.address, data = scheduleTask)
-    )
+    scheduleTask.flatMap { scheduleTask =>
+      messenger.submit(
+        Message(from = address, to = queueActor.address, data = scheduleTask)
+      )
+    }
 
   }
 

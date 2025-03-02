@@ -4,17 +4,12 @@ import io.circe.generic.semiauto._
 import io.circe.{Encoder, Decoder, Printer}
 import tasks.fileservice.{FilePath, RemoteFilePath, ManagedFilePath}
 import tasks.util.Uri
-import com.google.common.hash.Hashing
 
 package object circesupport {
   private val printer = Printer.noSpaces.copy(dropNullValues = true)
 
   implicit def serializer[A](implicit enc: Encoder[A]): Serializer[A] =
     new Serializer[A] {
-
-      override def hash(a: A): String = {
-        Hashing.sha256.hashBytes(apply(a)).toString
-      }
 
       def apply(a: A) = printer.print(enc(a)).getBytes("UTF-8")
     }

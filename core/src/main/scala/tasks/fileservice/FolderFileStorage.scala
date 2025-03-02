@@ -35,17 +35,20 @@ import cats.effect.kernel.Resource
 import cats.effect.IO
 import fs2.Stream
 import fs2.Pipe
+import java.nio.file.StandardCopyOption
 
 object FolderFileStorage {
 
-  private[tasks] def getContentHashOfFile(file: File, skip: Boolean): Int = if (
-    skip
-  ) 0
-  else {
-    openFileInputStream(file) { is =>
-      FileStorage.getContentHash(is)
+  private[tasks] def getContentHashOfFile(file: File, skip: Boolean): IO[Int] =
+    if (skip) IO.pure(0)
+    else {
+      FileStorage
+        .getContentHash(
+          fs2.io.file
+            .Files[IO]
+            .readAll(fs2.io.file.Path.fromNioPath(file.toPath))
+        )
     }
-  }
 
 }
 
@@ -70,7 +73,7 @@ class FolderFileStorage(val basePath: File)(implicit
   private val tmpFolderCanonicalPath = tempFolder.getCanonicalPath()
 
   private def createLocalTempFile() = {
-    def try1(i: Int): File = if (i == 0)
+    def try1(i: Int): File = if (i === 0)
       throw new RuntimeException(s"Could not create temp file in $tempFolder")
     else {
       val name = scala.util.Random.alphanumeric.take(128).mkString
@@ -88,27 +91,43 @@ class FolderFileStorage(val basePath: File)(implicit
       expectedHash: Int
   ): IO[Boolean] =
     if (config.allowDeletion) {
-      IO.interruptible {
+
+      {
         val file = assemblePath(mp)
-        val sizeOnDiskNow = file.length
-        val sizeMatch = sizeOnDiskNow == expectedSize
-        val canRead = file.canRead
-        def contentMatch =
-          canRead && FolderFileStorage.getContentHashOfFile(
-            file,
-            config.skipContentHashCreationUponImport
-          ) === expectedHash
-        val canDelete =
-          canRead && (expectedSize < 0 || (sizeMatch && contentMatch))
-        if (canDelete) {
-          val deleted = file.delete
-          scribe.warn(s"File deleted $file $mp : $deleted")
-          deleted
-        } else {
-          scribe.warn(
-            s"Not deleting file because its size or hash is different than expectation. $file $mp $sizeMatch $contentMatch"
-          )
-          false
+        val sizeOnDiskNow = IO(file.length)
+        val hash = FolderFileStorage.getContentHashOfFile(
+          file,
+          config.skipContentHashCreationUponImport
+        )
+        val canRead = IO(file.canRead)
+
+        val sizeMatch = sizeOnDiskNow.map(_ === expectedSize)
+        val contentMatch = hash.map(_ === expectedHash)
+
+        //  canRead && (expectedSize < 0 || (sizeMatch && contentMatch))
+        val canDelete = canRead.flatMap { canRead =>
+          if (!canRead) IO.pure(false)
+          else {
+            if (expectedSize < 0) IO.pure(true)
+            else
+              sizeMatch.flatMap { sizeMatch =>
+                if (sizeMatch) contentMatch
+                else IO.pure(false)
+              }
+
+          }
+        }
+        canDelete.map { canDelete =>
+          if (canDelete) {
+            val deleted = file.delete
+            scribe.warn(s"File deleted $file $mp : $deleted")
+            deleted
+          } else {
+            scribe.warn(
+              s"Not deleting file because its size or hash is different than expectation. $file $mp $sizeMatch $contentMatch"
+            )
+            false
+          }
         }
       }
     } else {
@@ -125,41 +144,67 @@ class FolderFileStorage(val basePath: File)(implicit
     Some(folder)
   }
 
-  def contains(path: ManagedFilePath, size: Long, hash: Int): IO[Boolean] =
-    IO.interruptible {
-      val f = assemblePath(path)
-      val canRead = f.canRead
-      val sizeOnDiskNow = f.length
-      val sizeMatch = sizeOnDiskNow === size
-      def contentMatch =
-        (config.skipContentHashVerificationAfterCache || (canRead && FolderFileStorage
-          .getContentHashOfFile(
-            f,
-            config.skipContentHashCreationUponImport
-          ) === hash))
-      val pass = canRead && (size < 0 || (sizeMatch && contentMatch))
-
-      if (!pass) {
-        scribe.debug(
-          s"$this does not contain $path due to: canRead:$canRead, sizeMatch:$sizeMatch   (sizeOnDisk:$sizeOnDiskNow vs expected:$size), contentMatch:$contentMatch. FileOnDisk: $f "
+  def contains(path: ManagedFilePath, size: Long, hash: Int): IO[Boolean] = {
+    val f = assemblePath(path)
+    IO.interruptible(f.canRead).memoize.flatMap { canRead =>
+      val sizeOnDiskNow = IO.interruptible(f.length)
+      val sizeMatch = sizeOnDiskNow
+        .map(sizeOnDiskNow => (sizeOnDiskNow, sizeOnDiskNow === size))
+      val hashMatch = FolderFileStorage
+        .getContentHashOfFile(
+          f,
+          config.skipContentHashCreationUponImport
         )
+        .map(_ === hash)
+      val contentMatch =
+        if (config.skipContentHashVerificationAfterCache) IO.pure(true)
+        else
+          canRead.flatMap { canRead =>
+            if (!canRead) IO.pure(false)
+            else hashMatch
+          }
+
+      val pass = canRead.flatMap { canRead =>
+        if (!canRead) IO.pure(false)
+        else {
+          if (size < 0) IO.pure(true)
+          else
+            sizeMatch.flatMap { case (_, sizeMatch) =>
+              if (!sizeMatch) IO.pure(false)
+              else contentMatch
+            }
+        }
       }
 
+      pass.flatMap { pass =>
+        if (!pass) {
+          for {
+            canRead <- canRead
+            sizeMatch <- sizeMatch
+            contentMatch <- contentMatch
+          } yield {
+            scribe.debug(
+              s"$this does not contain $path due to: canRead:$canRead, sizeMatch:${sizeMatch._2}   (sizeOnDisk:${sizeMatch._1} vs expected:$size), contentMatch:$contentMatch. FileOnDisk: $f "
+            )
+            pass
+          }
+        } else IO.pure(pass)
+      }
       pass
     }
+  }
 
   def contains(
       path: ManagedFilePath,
       retrieveSizeAndHash: Boolean
-  ): IO[Option[SharedFile]] =
-    IO.interruptible {
-      val f = assemblePath(path)
-      val canRead = f.canRead
+  ): IO[Option[SharedFile]] = {
+    val f = assemblePath(path)
+    IO.interruptible(f.canRead).flatMap { canRead =>
       val pass = canRead
 
       if (!pass) {
         scribe.debug(s"$this does not contain $path due to: canRead:$canRead")
-        None
+        IO.pure(None)
       } else {
         if (retrieveSizeAndHash) {
           val size = f.length
@@ -167,11 +212,15 @@ class FolderFileStorage(val basePath: File)(implicit
             f,
             config.skipContentHashCreationUponImport
           )
-          Some(SharedFileHelper.create(size, hash, path))
-        } else Some(SharedFileHelper.create(size = -1L, hash = 0, path))
+          hash.map { hash =>
+            Some(SharedFileHelper.create(size, hash, path))
+          }
+        } else
+          IO.pure(Some(SharedFileHelper.create(size = -1L, hash = 0, path)))
       }
 
     }
+  }
 
   def stream(
       path: ManagedFilePath,
@@ -214,7 +263,11 @@ class FolderFileStorage(val basePath: File)(implicit
       val tmp = new File(parentFolder, destination.getName + ".tmp")
 
       try {
-        com.google.common.io.Files.copy(source, tmp)
+        java.nio.file.Files.copy(
+          source.toPath(),
+          tmp.toPath(),
+          java.nio.file.StandardCopyOption.REPLACE_EXISTING
+        )
       } catch {
         case e: java.io.IOException =>
           scribe.error(e, s"Exception while copying $source to $tmp")
@@ -283,15 +336,39 @@ class FolderFileStorage(val basePath: File)(implicit
     )
   }
 
-  private def checkContentEquality(file1: File, file2: File) =
-    if (config.folderFileStorageCompleteFileCheck)
-      com.google.common.io.Files.equal(file1, file2)
-    else
-      file1.length == file2.length && FolderFileStorage.getContentHashOfFile(
+  private def checkContentEquality(file1: File, file2: File): IO[Boolean] =
+    if (config.folderFileStorageCompleteFileCheck) {
+      val s1 = fs2.io.file
+        .Files[IO]
+        .readAll(fs2.io.file.Path.fromNioPath(file1.toPath))
+      val s2 = fs2.io.file
+        .Files[IO]
+        .readAll(fs2.io.file.Path.fromNioPath(file2.toPath))
+
+      s1.chunks
+        .zip(s2.chunks)
+        .map { case (c1, c2) => c1.equals(c2) }
+        .takeThrough(identity)
+        .compile
+        .last
+        .map(_.isEmpty)
+
+    } else {
+      val a1 = FolderFileStorage.getContentHashOfFile(
         file1,
         config.skipContentHashCreationUponImport
-      ) == FolderFileStorage
+      )
+      val a2 = FolderFileStorage
         .getContentHashOfFile(file2, config.skipContentHashCreationUponImport)
+
+      val lengthMatch = IO.interruptible(file1.length === file2.length)
+
+      lengthMatch.flatMap { lengthMatch =>
+        if (lengthMatch) IO.both(a1, a2).map(x => x._1 === x._2)
+        else IO.pure(false)
+      }
+
+    }
 
   override def importFile(
       file: File,
@@ -301,64 +378,74 @@ class FolderFileStorage(val basePath: File)(implicit
     def copy(dest: File) =
       copyFile(file, dest, canMove)
 
-    IO.blocking({
-      scribe.debug(s"Importing file $file under name $proposed")
-      val size = file.length
-      val hash = FolderFileStorage.getContentHashOfFile(
+    val managed = proposed.toManaged
+    FolderFileStorage
+      .getContentHashOfFile(
         file,
         config.skipContentHashCreationUponImport
       )
-      val managed = proposed.toManaged
+      .flatMap { hash =>
+        IO.blocking((file.length(), assemblePath(managed).canRead)).flatMap {
+          case (size, canRead) =>
+            scribe.debug(s"Importing file $file under name $proposed")
 
-      if (assemblePath(managed).canRead) {
-        val finalFile = assemblePath(managed)
-        scribe.debug(
-          s"Found a file already in storage with the same name ($finalFile). Check for equality."
-        )
-        println((file, proposed))
-        if (finalFile == file || checkContentEquality(finalFile, file))
-          (size, hash, managed)
-        else {
-          scribe.info(
-            s"Equality check failed for a file at the same path. Importing file. $file to $finalFile"
-          )
+            if (canRead) {
+              val finalFile = assemblePath(managed)
+              scribe.debug(
+                s"Found a file already in storage with the same name ($finalFile). Check for equality."
+              )
+              checkContentEquality(finalFile, file).flatMap { contentEquals =>
+                if (finalFile === file || contentEquals)
+                  IO.pure((size, hash, managed))
+                else
+                  IO {
+                    scribe.info(
+                      s"Equality check failed for a file at the same path. Importing file. $file to $finalFile"
+                    )
 
-          if (!config.allowOverwrite) {
-            def candidates(i: Int, past: List[File]): List[File] = {
-              val candidate = assemblePath(managed, ".old." + i)
-              if (candidate.canRead) candidates(i + 1, candidate :: past)
-              else past
-            }
+                    if (!config.allowOverwrite) {
+                      def candidates(i: Int, past: List[File]): List[File] = {
+                        val candidate = assemblePath(managed, ".old." + i)
+                        if (candidate.canRead)
+                          candidates(i + 1, candidate :: past)
+                        else past
+                      }
 
-            def parseVersion(f: File): Int =
-              f.getName.split("\\.").last.toInt
+                      def parseVersion(f: File): Int =
+                        f.getName.split("\\.").last.toInt
 
-            val oldFiles = candidates(0, Nil)
+                      val oldFiles = candidates(0, Nil)
 
-            scribe.debug(s"Moving $oldFiles away.")
+                      scribe.debug(s"Moving $oldFiles away.")
 
-            oldFiles
-              .map(f => (parseVersion(f) + 1, f))
-              .sortBy(_._1)
-              .reverse
-              .foreach { case (newversion, f) =>
-                com.google.common.io.Files
-                  .move(f, assemblePath(managed, ".old." + newversion))
+                      oldFiles
+                        .map(f => (parseVersion(f) + 1, f))
+                        .sortBy(_._1)
+                        .reverse
+                        .foreach { case (newversion, f) =>
+                          java.nio.file.Files.move(
+                            f.toPath(),
+                            assemblePath(managed, ".old." + newversion).toPath()
+                          )
+                        }
+
+                      java.nio.file.Files.move(
+                        finalFile.toPath(),
+                        assemblePath(managed, ".old.0").toPath()
+                      )
+                    }
+
+                    copy(finalFile)
+                    (size, hash, managed)
+                  }
               }
-
-            com.google.common.io.Files
-              .move(finalFile, assemblePath(managed, ".old.0"))
-          }
-
-          copy(finalFile)
-          (size, hash, managed)
+            } else
+              IO.blocking {
+                copy(assemblePath(managed))
+                (size, hash, managed)
+              }
         }
-
-      } else {
-        copy(assemblePath(managed))
-        (size, hash, managed)
       }
-    })
   }
 
   def uri(mp: ManagedFilePath) = IO.pure {

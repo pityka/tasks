@@ -70,6 +70,13 @@ class FileServiceSpec
 
   }
 
+  def tempFolder() = {
+    val t = TempFile.createTempFile("fileservicespec")
+    t.delete 
+    assert(t.mkdir) 
+    t
+  }
+
   implicit val prefix: FileServicePrefix = FileServicePrefix(Vector())
 
   describe("fileservice new file folderstorage ") {
@@ -78,18 +85,9 @@ class FileServiceSpec
       val input = TempFile.createTempFile(".in")
       writeBinaryToFile(input, data)
 
-      val folder =
-        new File(
-          new java.io.File(getClass.getResource("/").getPath),
-          "test-empty-source"
-        )
-      folder.mkdir
-      val folder2 =
-        new File(
-          new java.io.File(getClass.getResource("/").getPath),
-          "test-empty-sourcef"
-        )
-      folder2.mkdir
+      val folder = tempFolder()
+      
+     
 
       val fs = new FolderFileStorage(folder)
 
@@ -115,12 +113,8 @@ class FileServiceSpec
       val input = TempFile.createTempFile(".in")
       writeBinaryToFile(input, data)
 
-      val folder =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test1")
-      folder.mkdir
-      val folder2 =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test1f")
-      folder2.mkdir
+      val folder = tempFolder()
+      
 
       val fs = new FolderFileStorage(folder)
 
@@ -130,6 +124,9 @@ class FileServiceSpec
 
       SharedFileHelper.createFromFile(input, "proba", false).unsafeRunSync()
 
+      println(readBinaryFile(
+        new java.io.File(folder, "proba").getCanonicalPath
+      ).toVector)
       readBinaryFile(
         new java.io.File(folder, "proba").getCanonicalPath
       ).toVector should equal(
@@ -141,12 +138,8 @@ class FileServiceSpec
       val input = TempFile.createTempFile(".in")
       writeBinaryToFile(input, data)
 
-      val folder =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test1")
-      folder.mkdir
-      val folder2 =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test1f")
-      folder2.mkdir
+      val folder = tempFolder()
+      
 
       val fs = new EncryptedManagedFileStorage(
         new FolderFileStorage(folder),
@@ -188,12 +181,8 @@ class FileServiceSpec
       val input = TempFile.createTempFile(".in")
       writeBinaryToFile(input, data)
 
-      val folder =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test1")
-      folder.mkdir
-      val folder2 =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test1f")
-      folder2.mkdir
+      val folder = tempFolder()
+      
 
       val fs = new FolderFileStorage(folder)
 
@@ -214,12 +203,8 @@ class FileServiceSpec
       val input = TempFile.createTempFile(".in")
       writeBinaryToFile(input, data)
 
-      val folder =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test1")
-      folder.mkdir
-      val folder2 =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test1f")
-      folder2.mkdir
+      val folder = tempFolder()
+     
 
       val fs = new FolderFileStorage(folder)
 
@@ -258,18 +243,7 @@ class FileServiceSpec
       val input = TempFile.createTempFile(".in")
       writeBinaryToFile(input, data)
 
-      val folder =
-        new File(
-          new java.io.File(getClass.getResource("/").getPath),
-          "test1-from-source"
-        )
-      folder.mkdir
-      val folder2 =
-        new File(
-          new java.io.File(getClass.getResource("/").getPath),
-          "test1f-fro-source"
-        )
-      folder2.mkdir
+      val folder = tempFolder()
 
       val fs = new FolderFileStorage(folder)
 
@@ -294,25 +268,11 @@ class FileServiceSpec
       val input = TempFile.createTempFile(".in")
       writeBinaryToFile(input, data)
 
-      val folder =
-        new File(
-          new java.io.File(getClass.getResource("/").getPath),
-          "test1-from-source"
-        )
-      folder.mkdir
-      val folder2 =
-        new File(
-          new java.io.File(getClass.getResource("/").getPath),
-          "test1f-fro-source"
-        )
-      folder2.mkdir
+      val folder = tempFolder()
+  
 
       val fs = new FolderFileStorage(folder)
-      // val proxiedFs = new ActorFileStorage(
-      //   system.actorOf(
-      //     Props(new FileServiceProxy(fs))
-      //   )
-      // )
+  
 
       implicit val serviceimpl: FileServiceComponent =
         FileServiceComponent(fs, remoteStore)
@@ -336,12 +296,7 @@ class FileServiceSpec
       val input = TempFile.createTempFile(".in")
       writeBinaryToFile(input, data)
 
-      val folder =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test2")
-      folder.mkdir
-      val folder2 =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test2f")
-      folder2.mkdir
+      val folder = tempFolder()
       val fs = new FolderFileStorage(folder)
 
       implicit val serviceimpl: FileServiceComponent =
@@ -380,12 +335,7 @@ class FileServiceSpec
       val input = TempFile.createTempFile(".in")
       writeBinaryToFile(input, data)
 
-      val folder =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test2")
-      folder.mkdir
-      val folder2 =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test2f")
-      folder2.mkdir
+     val folder = tempFolder()
       val fs = new FolderFileStorage(folder)
 
       implicit val serviceimpl: FileServiceComponent =
@@ -430,18 +380,9 @@ class FileServiceSpec
       val input = TempFile.createTempFile(".in")
       writeBinaryToFile(input, data)
 
-      val folder =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test2")
-      folder.mkdir
-      val folder2 =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test2f")
-      folder2.mkdir
+      val folder = tempFolder()
       val fs = new FolderFileStorage(folder)
-      // val proxiedFs = new ActorFileStorage(
-      //   system.actorOf(
-      //     Props(new FileServiceProxy(fs))
-      //   )
-      // )
+    
 
       implicit val serviceimpl: FileServiceComponent =
         FileServiceComponent(fs, remoteStore)
@@ -486,12 +427,7 @@ class FileServiceSpec
       val input = TempFile.createTempFile(".in")
       writeBinaryToFile(input, data)
 
-      val folder =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test2")
-      folder.mkdir
-      val folder2 =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test2f")
-      folder2.mkdir
+      val folder = tempFolder()
       val fs = new FolderFileStorage(folder)
 
       implicit val serviceimpl: FileServiceComponent =
@@ -524,12 +460,7 @@ class FileServiceSpec
       val input = TempFile.createTempFile(".in")
       writeBinaryToFile(input, data)
 
-      val folder =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test2")
-      folder.mkdir
-      val folder2 =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test2f")
-      folder2.mkdir
+      val folder = tempFolder()
       val fs = new FolderFileStorage(folder)
       // val proxiedFs = new ActorFileStorage(
       //   system.actorOf(
@@ -586,12 +517,7 @@ class FileServiceSpec
     it("after cache restart") {
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
 
-      val folder =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test3")
-      folder.mkdir
-      val folder2 =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test3f")
-      folder2.mkdir
+      val folder = tempFolder()
       val input = new java.io.File(folder, "proba")
       writeBinaryToFile(input, data)
       val fs = new FolderFileStorage(folder)
@@ -605,7 +531,13 @@ class FileServiceSpec
       val t: SharedFile = SharedFileHelper.createForTesting(
         "proba",
         16,
-        com.google.common.hash.Hashing.crc32c.hashBytes(data).asInt
+        fs2.Stream
+          .chunk(fs2.Chunk.array(data))
+          .through(fs2.hashing.Hashing[IO].hash(fs2.hashing.HashAlgorithm.MD5))
+          .compile
+          .lastOrError
+          .map(_.bytes.take(4).toByteBuffer.asIntBuffer().get)
+          .unsafeRunSync()
       )
 
       val path = Await.result(
@@ -630,12 +562,7 @@ class FileServiceSpec
     it("after cache restart") {
       val data = Array[Byte](0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7)
 
-      val folder =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test9")
-      folder.mkdir
-      val folder2 =
-        new File(new java.io.File(getClass.getResource("/").getPath), "test9f")
-      folder2.mkdir
+      val folder = tempFolder()
       val input = new java.io.File(folder, "proba")
       writeBinaryToFile(input, data)
       val fs = new FolderFileStorage(folder)
@@ -655,7 +582,13 @@ class FileServiceSpec
       val t: SharedFile = SharedFileHelper.createForTesting(
         "proba",
         16,
-        com.google.common.hash.Hashing.crc32c.hashBytes(data).asInt
+        fs2.Stream
+          .chunk(fs2.Chunk.array(data))
+          .through(fs2.hashing.Hashing[IO].hash(fs2.hashing.HashAlgorithm.MD5))
+          .compile
+          .lastOrError
+          .map(_.bytes.take(4).toByteBuffer.asIntBuffer().get)
+          .unsafeRunSync()
       )
 
       val path = Await.result(
