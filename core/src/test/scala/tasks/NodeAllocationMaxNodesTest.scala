@@ -33,6 +33,8 @@ import tasks.jsonitersupport._
 import com.typesafe.config.ConfigFactory
 import scala.util._
 import cats.effect.IO
+import cats.effect.kernel.Resource
+import tasks.JvmElasticSupport.JvmGrid
 
 object NodeAllocationMaxNodesTest extends TestHelpers {
 
@@ -47,7 +49,6 @@ object NodeAllocationMaxNodesTest extends TestHelpers {
     ConfigFactory.parseString(
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=0
-      tasks.elastic.engine = "tasks.JvmElasticSupport$$JvmGrid$$"
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.elastic.maxNodes = 0
@@ -57,7 +58,7 @@ object NodeAllocationMaxNodesTest extends TestHelpers {
   }
 
   def run = {
-    withTaskSystem(testConfig2) { implicit ts =>
+    withTaskSystem(testConfig2, Resource.pure(None), JvmGrid.make.map(Some(_))) { implicit ts =>
       val f1 = testTask(Input(1))(ResourceRequest(1, 500))
       val f2 = testTask(Input(2))(ResourceRequest(1, 500))
       val f3 = testTask(Input(3))(ResourceRequest(1, 500))

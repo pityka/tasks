@@ -125,34 +125,47 @@ package object tasks extends MacroCalls {
     component.appendLog(LogRecord(data, java.time.Instant.now))
 
   def withTaskSystem[T](f: TaskSystemComponents => IO[T]): IO[Option[T]] =
-    withTaskSystem(None, Resource.pure(None))(f)
+    withTaskSystem(None, Resource.pure(None), Resource.pure(None))(f)
 
-  def withTaskSystem[T](c: Config, s3Client: Resource[IO, Option[S3Client]])(
+  def withTaskSystem[T](
+      c: Config,
+      s3Client: Resource[IO, Option[S3Client]],
+      elasticSupport: Resource[IO, Option[elastic.ElasticSupport]]
+  )(
       f: TaskSystemComponents => IO[T]
   ): IO[Option[T]] =
-    withTaskSystem(Some(c), s3Client)(f)
+    withTaskSystem(Some(c), s3Client, elasticSupport)(f)
 
   def withTaskSystem[T](c: Config)(
       f: TaskSystemComponents => IO[T]
   ): IO[Option[T]] =
-    withTaskSystem(Some(c), Resource.pure(None))(f)
+    withTaskSystem(Some(c), Resource.pure(None), Resource.pure(None))(f)
 
   def withTaskSystem[T](c: Option[Config])(
       f: TaskSystemComponents => IO[T]
   ): IO[Option[T]] =
-    withTaskSystem(c, Resource.pure(None))(f)
+    withTaskSystem(c, Resource.pure(None), Resource.pure(None))(f)
 
-  def withTaskSystem[T](s: String, s3Client: Resource[IO, Option[S3Client]])(
+  def withTaskSystem[T](
+      s: String,
+      s3Client: Resource[IO, Option[S3Client]],
+      elasticSupport: Resource[IO, Option[elastic.ElasticSupport]]
+  )(
       f: TaskSystemComponents => IO[T]
   ): IO[Option[T]] =
-    withTaskSystem(Some(ConfigFactory.parseString(s)), s3Client)(f)
+    withTaskSystem(
+      Some(ConfigFactory.parseString(s)),
+      s3Client,
+      elasticSupport
+    )(f)
 
   def withTaskSystem[T](
       c: Option[Config],
-      s3Client: Resource[IO, Option[S3Client]]
+      s3Client: Resource[IO, Option[S3Client]],
+      elasticSupport: Resource[IO, Option[elastic.ElasticSupport]]
   )(f: TaskSystemComponents => IO[T]): IO[Option[T]] = {
 
-    val resource = defaultTaskSystem(c, s3Client)
+    val resource = defaultTaskSystem(c, s3Client, elasticSupport)
 
     resource.allocated.flatMap { case ((tsc, hostConfig), shutdown) =>
       if (hostConfig.myRoles.contains(App)) {
@@ -172,26 +185,32 @@ package object tasks extends MacroCalls {
 
   def defaultTaskSystem
       : Resource[IO, (TaskSystemComponents, HostConfiguration)] =
-    defaultTaskSystem(None, Resource.pure(None))
+    defaultTaskSystem(None, Resource.pure(None), Resource.pure(None))
 
   def defaultTaskSystem(
       string: String,
-      s3Client: Resource[IO, Option[S3Client]]
+      s3Client: Resource[IO, Option[S3Client]],
+      elasticSupport: Resource[IO, Option[elastic.ElasticSupport]]
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
-    defaultTaskSystem(Some(ConfigFactory.parseString(string)), s3Client)
+    defaultTaskSystem(
+      Some(ConfigFactory.parseString(string)),
+      s3Client,
+      elasticSupport
+    )
 
   def defaultTaskSystem(
       string: String
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
     defaultTaskSystem(
       Some(ConfigFactory.parseString(string)),
+      Resource.pure(None),
       Resource.pure(None)
     )
 
   def defaultTaskSystem(
       extraConf: Option[Config]
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
-    defaultTaskSystem(extraConf, Resource.pure(None))
+    defaultTaskSystem(extraConf, Resource.pure(None), Resource.pure(None))
 
   /** The user of this resource should check the role of the returned
     * HostConfiguration If it is not an App, then it is very likely that the
@@ -202,26 +221,20 @@ package object tasks extends MacroCalls {
     */
   def defaultTaskSystem(
       extraConf: Option[Config],
-      s3Client: Resource[IO, Option[S3Client]]
+      s3Client: Resource[IO, Option[S3Client]],
+      elasticSupport: Resource[IO, Option[elastic.ElasticSupport]]
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] = {
 
     val configuration = () => {
       ConfigFactory.invalidateCaches
 
-      val loaded = (extraConf.map { extraConf =>
-        ConfigFactory.defaultOverrides
-          .withFallback(extraConf)
-          .withFallback(ConfigFactory.load)
-      } getOrElse
-        ConfigFactory.load)
+      val loaded = tasks.util.loadConfig(extraConf)
 
       ConfigFactory.invalidateCaches
 
       loaded
     }
     implicit val tconfig = tasks.util.config.parse(configuration)
-
-    val elasticSupport = elastic.makeElasticSupport
 
     val hostConfig = elasticSupport
       .map(

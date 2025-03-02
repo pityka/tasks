@@ -36,8 +36,6 @@ import cats.effect.IO
 
 trait ElasticSupport {
 
-  def fqcn: ElasticSupportFqcn
-
   def hostConfig: Option[HostConfiguration]
 
   def selfShutdownNow(): Unit
@@ -59,16 +57,8 @@ trait ElasticSupport {
 
 }
 
-trait ElasticSupportFromConfig {
-
-  def apply(implicit
-      config: TasksConfig
-  ): cats.effect.Resource[cats.effect.IO, ElasticSupport]
-
-}
 
 case class SimpleElasticSupport(
-    val fqcn: ElasticSupportFqcn,
     val hostConfig: Option[HostConfiguration],
     shutdown: ShutdownNode,
     createNodeFactory: CreateNodeFactory,

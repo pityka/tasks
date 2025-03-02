@@ -32,21 +32,22 @@ import scala.jdk.CollectionConverters._
 
 import tasks.shared._
 import tasks.util.config.TasksConfig
+import tasks.elastic.ec2.EC2Config
 
 object EC2Operations {
 
   val scratch = Int.MaxValue
 
-  def instanceTypes(implicit config: TasksConfig) = config.ec2InstanceTypes
+  def instanceTypes(implicit config: EC2Config) = config.ec2InstanceTypes
 
-  def currentInstanceType(implicit config: TasksConfig) =
+  def currentInstanceType(implicit config: EC2Config) =
     instanceTypes
       .find(_._1 == readMetadata("instance-type").head)
       .getOrElse(instanceTypes.head)
 
   def workerInstanceType(
       requestSize: ResourceRequest
-  )(implicit config: TasksConfig) =
+  )(implicit config: EC2Config) =
     instanceTypes
       .find { case (_, instancetype) =>
         instancetype.cpu >= requestSize.cpu._1 && instancetype.memory >= requestSize.memory && instancetype.scratch >= requestSize.scratch && instancetype.gpu.size >= requestSize.gpu

@@ -275,6 +275,7 @@ lazy val root = (project in file("."))
     s3,
     ssh,
     kubernetes,
+    kubernetesTest,
     // tracker,
     example
   )

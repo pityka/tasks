@@ -32,12 +32,16 @@ import org.scalatest.matchers.should.Matchers
 import tasks.jsonitersupport._
 import com.typesafe.config.ConfigFactory
 import cats.effect.IO
+import cats.effect.kernel.Resource
+import tasks.elastic.sh.SHElasticSupport
 
 object TestWorker extends App {
   withTaskSystem(
     ConfigFactory.parseString(
       "tasks.disableRemoting = false"
-    )
+    ),
+    Resource.pure(None),
+    SHElasticSupport.make.map(Some(_))
   ) { _ =>
     IO.never
   }.unsafeRunSync()
@@ -59,7 +63,6 @@ object SHTest extends TestHelpers {
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=0
       tasks.disableRemoting = false
-      tasks.elastic.engine = "tasks.elastic.sh.SHElasticSupport"
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 5 s
@@ -73,7 +76,11 @@ object SHTest extends TestHelpers {
   }
 
   def run = {
-    withTaskSystem(testConfig2) { implicit ts =>
+    withTaskSystem(
+      testConfig2,
+      Resource.pure(None),
+      SHElasticSupport.make.map(Some(_))
+    ) { implicit ts =>
       val f1 = testTask(Input(1))(ResourceRequest(1, 500))
 
       val f2 = f1.flatMap(_ => testTask(Input(2))(ResourceRequest(1, 500)))

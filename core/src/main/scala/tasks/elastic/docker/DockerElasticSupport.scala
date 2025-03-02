@@ -40,6 +40,7 @@ import cats.effect.kernel.Ref
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import cats.effect.kernel.Resource
+import com.typesafe.config.ConfigFactory
 
 /** Elastic support for simple docker context based remote deployments
   *
@@ -52,23 +53,34 @@ import cats.effect.kernel.Resource
   * The feature where workers shutting down themselves due to lost connection to
   * the node registry is not working.
   */
-class DockerElasticSupport extends ElasticSupportFromConfig {
-  implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
-    "tasks.elastic.docker.DockerElasticSupport"
-  )
-  def apply(implicit config: TasksConfig) =
-    Resource.eval(Ref.of[IO, Map[NodeName, ContainerId]](Map.empty)).flatMap {
+object DockerElasticSupport {
+ 
+  def make(config: Option[Config]) : Resource[IO,ElasticSupport] =
+    {
+      val dockerConfig = new DockerConfig(tasks.util.loadConfig(config))
+      Resource.eval(Ref.of[IO, Map[NodeName, ContainerId]](Map.empty)).flatMap {
       ref =>
         cats.effect.Resource.pure(
           SimpleElasticSupport(
-            fqcn = fqcn,
             hostConfig = None,
             shutdown = new DockerShutdown(ref),
-            createNodeFactory = new DockerCreateNodeFactory(ref),
+            createNodeFactory = new DockerCreateNodeFactory(ref,dockerConfig),
             getNodeName = DockerGetNodeName
           )
         )
     }
+  }
+}
+
+class DockerConfig(raw: Config) {
+   val dockerImageName = raw.getString("tasks.docker.image")
+
+  val dockerEnvVars =
+    raw.getStringList("tasks.docker.env").asScala.grouped(2).map { g =>
+      (g(0), g(1))
+    }
+  def dockerContexts = raw.getConfigList("tasks.docker.contexts").asScala
+  val dockerNetwork = raw.getString("tasks.docker.network")
 }
 
 object DockerSettings {
@@ -97,20 +109,18 @@ object DockerSettings {
     }
   }
 
-  implicit def fromConfig(implicit config: TasksConfig): IO[DockerSettings] = {
+  implicit def fromConfig(implicit config: DockerConfig): IO[DockerSettings] = {
     val hosts =
       config.dockerContexts.map { case config =>
         Host.fromConfig(config)
 
       }.toList
-    Ref.of[IO, List[Host]](hosts).map(r => new DockerSettings(r))
+    Ref.of[IO, List[Host]](hosts).map(r => new DockerSettings(r,config))
   }
 
 }
 
-class DockerSettings(hosts: Ref[IO, List[DockerSettings.Host]])(implicit
-    config: TasksConfig
-) {
+class DockerSettings(hosts: Ref[IO, List[DockerSettings.Host]], config: DockerConfig) {
   import DockerSettings._
 
   def allocate(h: ResourceRequest) = hosts.modify { hosts =>
@@ -140,8 +150,8 @@ class DockerSettings(hosts: Ref[IO, List[DockerSettings.Host]])(implicit
 }
 
 class DockerShutdown(
-    nodeNamesToContainerIds: Ref[IO, Map[NodeName, ContainerId]]
-)(implicit config: TasksConfig)
+    nodeNamesToContainerIds: Ref[IO, Map[NodeName, ContainerId]],
+)
     extends ShutdownNode {
 
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
@@ -173,13 +183,11 @@ case class ContainerId(s: String)
 class DockerCreateNode(
     masterAddress: SimpleSocketAddress,
     codeAddress: CodeAddress,
-    nodeNamesToContainerIds: Ref[IO, Map[NodeName, ContainerId]]
-)(implicit
-    config: TasksConfig,
-    elasticSupport: ElasticSupportFqcn
+    nodeNamesToContainerIds: Ref[IO, Map[NodeName, ContainerId]],
+    config: DockerConfig,
 ) extends CreateNode {
 
-  val settings = DockerSettings.fromConfig.unsafeRunSync()
+  val settings = DockerSettings.fromConfig(config).unsafeRunSync()
 
   override def convertRunningToPending(
       p: RunningJobId
@@ -198,7 +206,7 @@ class DockerCreateNode(
 
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest
-  ): Try[(PendingJobId, ResourceAvailable)] =
+  )(implicit tasksConfig: TasksConfig): Try[(PendingJobId, ResourceAvailable)] =
     settings
       .allocate(requestSize)
       .flatMap {
@@ -210,7 +218,6 @@ class DockerCreateNode(
             cpu = allocated.cpu,
             scratch = allocated.scratch,
             gpus = allocated.gpu.zipWithIndex.map(_._2),
-            elasticSupport = elasticSupport,
             masterAddress = masterAddress,
             download = Uri(
               scheme = "http",
@@ -279,13 +286,11 @@ class DockerCreateNode(
 }
 
 class DockerCreateNodeFactory(
-    nodeNamesToContainerIds: Ref[IO, Map[NodeName, ContainerId]]
-)(implicit
-    config: TasksConfig,
-    elasticSupport: ElasticSupportFqcn
-) extends CreateNodeFactory {
+    nodeNamesToContainerIds: Ref[IO, Map[NodeName, ContainerId]],
+    config: DockerConfig
+)extends CreateNodeFactory {
   def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
-    new DockerCreateNode(master, codeAddress, nodeNamesToContainerIds)
+    new DockerCreateNode(master, codeAddress, nodeNamesToContainerIds, config)
 }
 
 object DockerGetNodeName extends GetNodeName {

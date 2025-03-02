@@ -33,7 +33,44 @@ import scala.jdk.CollectionConverters._
 import tasks.shared.ResourceAvailable
 import com.typesafe.config.ConfigRenderOptions
 
-class TasksConfig(load: () => Config) {
+trait ConfigValuesForHostConfiguration {
+  def raw: Config
+  def hostImage =
+    if (raw.hasPath("hosts.image")) Some(raw.getString("hosts.image")) else None
+
+  def hostNumCPU = raw.getInt("hosts.numCPU")
+
+  def hostGPU = raw.getIntList("hosts.gpus").asScala.toList.map(_.toInt) ++ raw
+    .getString("hosts.gpusAsCommaString")
+    .split(",")
+    .toList
+    .filter(_.nonEmpty)
+    .map(_.toInt)
+
+  def hostRAM = raw.getInt("hosts.RAM")
+
+  def hostScratch = raw.getInt("hosts.scratch")
+
+  def hostName = raw.getString("hosts.hostname")
+  def hostNameExternal =
+    if (raw.hasPath("hosts.hostnameExternal"))
+      Some(raw.getString("hosts.hostnameExternal"))
+    else None
+
+  def hostPort = raw.getInt("hosts.port")
+  def mayUseArbitraryPort = raw.getBoolean("hosts.mayUseArbitraryPort")
+
+  def masterAddress =
+    if (raw.hasPath("hosts.master")) {
+      val h = raw.getString("hosts.master").split(":")(0)
+      val p = raw.getString("hosts.master").split(":")(1).toInt
+      Some(SimpleSocketAddress(h, p))
+    } else None
+
+  def startApp = raw.getBoolean("hosts.app")
+}
+
+class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   private val lastLoadedAt =
     new java.util.concurrent.atomic.AtomicLong(System.nanoTime)
@@ -96,39 +133,7 @@ class TasksConfig(load: () => Config) {
   val acceptableHeartbeatPause: FD =
     raw.getDuration("tasks.failuredetector.acceptable-heartbeat-pause")
 
-  val hostImage =
-    if (raw.hasPath("hosts.image")) Some(raw.getString("hosts.image")) else None
-
-  val hostNumCPU = raw.getInt("hosts.numCPU")
-
-  val hostGPU = raw.getIntList("hosts.gpus").asScala.toList.map(_.toInt) ++ raw
-    .getString("hosts.gpusAsCommaString")
-    .split(",")
-    .toList
-    .filter(_.nonEmpty)
-    .map(_.toInt)
-
-  val hostRAM = raw.getInt("hosts.RAM")
-
-  val hostScratch = raw.getInt("hosts.scratch")
-
-  val hostName = raw.getString("hosts.hostname")
-  val hostNameExternal =
-    if (raw.hasPath("hosts.hostnameExternal"))
-      Some(raw.getString("hosts.hostnameExternal"))
-    else None
-
-  val hostPort = raw.getInt("hosts.port")
-  val mayUseArbitraryPort = raw.getBoolean("hosts.mayUseArbitraryPort")
-
-  val masterAddress =
-    if (raw.hasPath("hosts.master")) {
-      val h = raw.getString("hosts.master").split(":")(0)
-      val p = raw.getString("hosts.master").split(":")(1).toInt
-      Some(SimpleSocketAddress(h, p))
-    } else None
-
-  val startApp = raw.getBoolean("hosts.app")
+  
 
   val storageURI =
     new java.net.URI(raw.getString("tasks.fileservice.storageURI"))
@@ -137,10 +142,6 @@ class TasksConfig(load: () => Config) {
 
   val parallelismOfCacheAccessibilityCheck =
     raw.getInt("tasks.cache.accessibility-check-parallelism")
-
-  val sshHosts = raw.getObject("tasks.elastic.ssh.hosts")
-
-  val elasticSupport = raw.getString("tasks.elastic.engine")
 
   def idleNodeTimeout: FD = raw.getDuration("tasks.elastic.idleNodeTimeout")
 
@@ -165,51 +166,12 @@ class TasksConfig(load: () => Config) {
 
   def logQueueStatus = raw.getBoolean("tasks.elastic.logQueueStatus")
 
-  val awsRegion: String = raw.getString("tasks.elastic.aws.region")
-
-  def spotPrice: Double = raw.getDouble("tasks.elastic.aws.spotPrice")
-
-  def amiID: String = raw.getString("tasks.elastic.aws.ami")
-
-  def securityGroup: String = raw.getString("tasks.elastic.aws.securityGroup")
-
-  def ec2InstanceTypes =
-    raw.getConfigList("tasks.elastic.aws.instances").asScala.toList.map {
-      conf =>
-        val name = conf.getString("name")
-        val cpu = conf.getInt("cpu")
-        val ram = conf.getInt("ram")
-        val gpu = conf.getInt("gpu")
-        name -> ResourceAvailable(
-          cpu,
-          ram,
-          Int.MaxValue,
-          0 until gpu toList,
-          None
-        )
-    }
-
-  def securityGroups: List[String] =
-    raw.getStringList("tasks.elastic.aws.securityGroups").asScala.toList
-
-  def subnetId = raw.getString("tasks.elastic.aws.subnetId")
-
-  def keyName = raw.getString("tasks.elastic.aws.keyName")
+  
 
   def additionalJavaCommandline =
     raw.getString("tasks.elastic.javaCommandLine")
 
-  def iamRole = {
-    val s = raw.getString("tasks.elastic.aws.iamRole")
-    if (s == "" || s == "-") None
-    else Some(s)
-  }
-
-  def placementGroup: Option[String] =
-    raw.getString("tasks.elastic.aws.placementGroup") match {
-      case x if x == "" => None
-      case x            => Some(x)
-    }
+ 
 
   val s3RegionProfileName =
     if (raw.hasPath("tasks.s3.regionProfileName"))
@@ -230,15 +192,7 @@ class TasksConfig(load: () => Config) {
   val httpRemoteEnabled = raw.getBoolean("tasks.fileservice.remote.http")
   val s3RemoteEnabled = raw.getBoolean("tasks.fileservice.remote.s3")
 
-  def instanceTags =
-    raw
-      .getStringList("tasks.elastic.aws.tags")
-      .asScala
-      .grouped(2)
-      .map(x => x(0) -> x(1))
-      .toList
-
-  val terminateMaster = raw.getBoolean("tasks.elastic.aws.terminateMaster")
+  
 
   val addShutdownHook = raw.getBoolean("tasks.addShutdownHook")
 
@@ -250,51 +204,9 @@ class TasksConfig(load: () => Config) {
 
   val appUIServerHost = raw.getString("tasks.ui.app.host")
 
-  val appUIServerPort = raw.getInt("tasks.ui.app.port")
+  val appUIServerPort = raw.getInt("tasks.ui.app.port") 
 
-  val dockerImageName = raw.getString("tasks.docker.image")
-
-  val dockerEnvVars =
-    raw.getStringList("tasks.docker.env").asScala.grouped(2).map { g =>
-      (g(0), g(1))
-    }
-  def dockerContexts = raw.getConfigList("tasks.docker.contexts").asScala
-  val dockerNetwork = raw.getString("tasks.docker.network")
-
-  def kubernetesImageName = raw.getString("tasks.kubernetes.image")
-  val kubernetesImageApplicationSubPath =
-    raw.getString("tasks.kubernetes.imageApplicationSubPath")
-
-  def kubernetesHostNameOrIPEnvVar =
-    raw.getString("tasks.kubernetes.hostnameOrIPEnvVar")
-  def kubernetesCpuLimitEnvVar =
-    raw.getString("tasks.kubernetes.cpuLimitEnvVar")
-  def kubernetesRamLimitEnvVar =
-    raw.getString("tasks.kubernetes.ramLimitEnvVar")
-  def kubernetesScratchLimitEnvVar =
-    raw.getString("tasks.kubernetes.scratchLimitEnvVar")
-
-  def kubernetesCpuExtra = raw.getInt("tasks.kubernetes.extralimits.cpu")
-  def kubernetesCpuMin = raw.getInt("tasks.kubernetes.minimumlimits.cpu")
-  def kubernetesRamExtra = raw.getInt("tasks.kubernetes.extralimits.ram")
-  def kubernetesRamMin = raw.getInt("tasks.kubernetes.minimumlimits.ram")
-
-  def kubernetesPodSpec = {
-
-    if (raw.hasPath("tasks.kubernetes.podSpec"))
-      Some(
-        raw
-          .getConfig("tasks.kubernetes.podSpec")
-          .root()
-          .render(ConfigRenderOptions.concise())
-      )
-    else None
-  }
-
-  def kubernetesNamespace = raw.getString("tasks.kubernetes.namespace")
-
-  def kubernetesImagePullPolicy =
-    raw.getString("tasks.kubernetes.image-pull-policy")
+  
 
   val workerMainClass = raw.getString("tasks.worker-main-class")
 

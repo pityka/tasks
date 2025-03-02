@@ -32,6 +32,8 @@ import tasks.elastic._
 import tasks.shared._
 import tasks.util._
 import tasks.util.config._
+import cats.effect.kernel.Resource
+import cats.effect.IO
 
 object SHShutdown extends ShutdownNode {
 
@@ -46,9 +48,6 @@ object SHShutdown extends ShutdownNode {
 class SHCreateNode(
     masterAddress: SimpleSocketAddress,
     codeAddress: CodeAddress
-)(implicit
-    config: TasksConfig,
-    elasticSupport: ElasticSupportFqcn
 ) extends CreateNode {
 
   /** Execute command with user function to process each line of output.
@@ -103,13 +102,12 @@ class SHCreateNode(
 
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest
-  ): Try[Tuple2[PendingJobId, ResourceAvailable]] = {
+  )(implicit config: TasksConfig): Try[Tuple2[PendingJobId, ResourceAvailable]] = {
     val script = Deployment.script(
       memory = requestSize.memory,
       cpu = requestSize.cpu._2,
       scratch = requestSize.scratch,
       gpus = 0 until requestSize.gpu toList,
-      elasticSupport = elasticSupport,
       masterAddress = masterAddress,
       download = Uri(
         scheme = "http",
@@ -157,10 +155,7 @@ class SHCreateNode(
 
 }
 
-class SHCreateNodeFactory(implicit
-    config: TasksConfig,
-    fqcn: ElasticSupportFqcn
-) extends CreateNodeFactory {
+class SHCreateNodeFactory extends CreateNodeFactory {
   def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
     new SHCreateNode(master, codeAddress)
 }
@@ -176,13 +171,11 @@ object SHGetNodeName extends GetNodeName {
   }
 }
 
-class SHElasticSupport extends ElasticSupportFromConfig {
-  implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
-    "tasks.elastic.sh.SHElasticSupport"
-  )
-  def apply(implicit config: TasksConfig) = cats.effect.Resource.pure(
+
+
+object SHElasticSupport {
+  def make : Resource[IO,ElasticSupport] = cats.effect.Resource.pure(
     SimpleElasticSupport(
-      fqcn = fqcn,
       hostConfig = None,
       shutdown = SHShutdown,
       createNodeFactory = new SHCreateNodeFactory,

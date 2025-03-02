@@ -34,6 +34,7 @@ import tasks.util.SimpleSocketAddress
 import scala.concurrent.Future
 import cats.effect.IO
 import tasks.deploy.HostConfiguration
+import cats.effect.kernel.Resource
 
 object JvmElasticSupport {
 
@@ -72,13 +73,11 @@ object JvmElasticSupport {
 
   }
 
-  class JvmCreateNode(masterAddress: SimpleSocketAddress)(implicit
-      config: TasksConfig
-  ) extends CreateNode {
+  class JvmCreateNode(masterAddress: SimpleSocketAddress) extends CreateNode {
 
     def requestOneNewJobFromJobScheduler(
         requestSize: tasks.shared.ResourceRequest
-    ): Try[(PendingJobId, ResourceAvailable)] = {
+    )(implicit config: TasksConfig): Try[(PendingJobId, ResourceAvailable)] = {
       val jobid =
         java.util.UUID.randomUUID.toString.replace("-", "")
 
@@ -90,11 +89,14 @@ object JvmElasticSupport {
     hosts.master = "${masterAddress.getHostName}:${masterAddress.getPort}"
     hosts.app = false
     tasks.disableRemoting = false
-    tasks.elastic.engine= "tasks.JvmElasticSupport$$JvmGrid$$"
     jobid = $jobid
     tasks.addShutdownHook = false 
     tasks.fileservice.storageURI="${config.storageURI.toString}"
-    """).allocated.unsafeRunSync()
+    """,
+    Resource.pure(None),
+    JvmGrid.make.map(Some(_))
+
+    ).allocated.unsafeRunSync()
       }(scala.concurrent.ExecutionContext.Implicits.global)
       import scala.concurrent.ExecutionContext.Implicits.global
       ts.map(_ => ()).recover { case e =>
@@ -120,7 +122,7 @@ object JvmElasticSupport {
 
   }
 
-  class JvmCreateNodeFactory(implicit config: TasksConfig)
+  class JvmCreateNodeFactory
       extends CreateNodeFactory {
     def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
       new JvmCreateNode(master)
@@ -130,13 +132,10 @@ object JvmElasticSupport {
     def getNodeName = synchronized { taskSystems.last._1 }
   }
 
-  object JvmGrid extends ElasticSupportFromConfig {
-    implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
-      "tasks.JvmElasticSupport$JvmGrid$"
-    )
-    def apply(implicit config: TasksConfig) = cats.effect.Resource.pure(
+  object JvmGrid {
+    
+    def make  : Resource[IO,ElasticSupport] = cats.effect.Resource.pure(
       SimpleElasticSupport(
-        fqcn = fqcn,
         hostConfig = None,
         shutdown = Shutdown,
         createNodeFactory = new JvmCreateNodeFactory,

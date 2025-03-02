@@ -36,6 +36,8 @@ import tasks.shared._
 import tasks.util.config._
 import tasks.util.SimpleSocketAddress
 import tasks.util.Uri
+import cats.effect.kernel.Resource
+import cats.effect.IO
 
 object SSHSettings {
   case class Host(
@@ -64,12 +66,11 @@ object SSHSettings {
     }
   }
 
-  implicit def fromConfig(implicit config: TasksConfig): SSHSettings =
-    new SSHSettings
+  
 
 }
 
-class SSHSettings(implicit config: TasksConfig) {
+class SSHSettings( config: SSHConfig) {
   import SSHSettings._
 
   val hosts: collection.mutable.Map[String, (Host, Boolean)] =
@@ -137,9 +138,9 @@ object SSHOperations {
 
 }
 
-class SSHShutdown(implicit config: TasksConfig) extends ShutdownNode {
+class SSHShutdown(config: SSHConfig) extends ShutdownNode {
 
-  val settings = SSHSettings.fromConfig
+  val settings = new SSHSettings(config)
 
   def shutdownRunningNode(nodeName: RunningJobId): Unit = {
     val hostname = nodeName.value.split(":")(0)
@@ -154,17 +155,15 @@ class SSHShutdown(implicit config: TasksConfig) extends ShutdownNode {
 
 class SSHCreateNode(
     masterAddress: SimpleSocketAddress,
-    codeAddress: CodeAddress
-)(implicit
-    config: TasksConfig,
-    elasticSupport: ElasticSupportFqcn
+    codeAddress: CodeAddress,
+    config: SSHConfig
 ) extends CreateNode {
 
-  val settings = SSHSettings.fromConfig
+  val settings = new SSHSettings(config)
 
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest
-  ): Try[(PendingJobId, ResourceAvailable)] =
+  )(implicit config: TasksConfig): Try[(PendingJobId, ResourceAvailable)] =
     settings.hosts
       .filter(x => x._2._2 == true)
       .filter(x =>
@@ -177,7 +176,6 @@ class SSHCreateNode(
           cpu = host.cpu,
           scratch = host.scratch,
           gpus = host.gpu,
-          elasticSupport = elasticSupport,
           masterAddress = masterAddress,
           download = Uri(
             scheme = "http",
@@ -230,12 +228,9 @@ class SSHCreateNode(
 
 }
 
-class SSHCreateNodeFactory(implicit
-    config: TasksConfig,
-    elasticSupport: ElasticSupportFqcn
-) extends CreateNodeFactory {
+class SSHCreateNodeFactory(config: SSHConfig) extends CreateNodeFactory {
   def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
-    new SSHCreateNode(master, codeAddress)
+    new SSHCreateNode(master, codeAddress, config)
 }
 
 object SSHGetNodeName extends GetNodeName {
@@ -249,17 +244,21 @@ object SSHGetNodeName extends GetNodeName {
   }
 }
 
-class SSHElasticSupport extends ElasticSupportFromConfig {
-  implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
-    "tasks.elastic.sh.SSHElasticSupport"
-  )
-  def apply(implicit config: TasksConfig) = cats.effect.Resource.pure(
+class SSHConfig(raw: Config) {
+    val sshHosts = raw.getObject("tasks.elastic.ssh.hosts")
+}
+
+object SSHElasticSupport {
+  
+  def make( config: Option[Config]) : Resource[IO,ElasticSupport] = {
+    val sshConfig = new SSHConfig(tasks.util.loadConfig(config))
+    cats.effect.Resource.pure(
     SimpleElasticSupport(
-      fqcn = fqcn,
       hostConfig = None,
-      shutdown = new SSHShutdown,
-      createNodeFactory = new SSHCreateNodeFactory,
+      shutdown = new SSHShutdown(sshConfig),
+      createNodeFactory = new SSHCreateNodeFactory(sshConfig),
       getNodeName = SSHGetNodeName
     )
   )
+  }
 }

@@ -28,6 +28,7 @@ import com.google.cloud.tools.jib.api.LogEvent.Level.DEBUG
 import com.google.cloud.tools.jib.api.LogEvent.Level.INFO
 import cats.effect.kernel.Resource
 import tasks.deploy.HostConfiguration
+import tasks.fileservice.s3.S3Client
 
 object Bootstrap {
 
@@ -59,6 +60,7 @@ object Bootstrap {
       containerizer: Containerizer,
       k8sClientResource: Resource[IO, KubernetesClient[IO]],
       mainClassName: String,
+      s3Resource: Resource[IO, Option[S3Client]] = Resource.pure(None),
       config: Option[Config] = None,
       k8sRequestCpu: Double = 0.2,
       k8sRequestRamMB: Int = 500,
@@ -71,12 +73,7 @@ object Bootstrap {
       val configuration = () => {
         ConfigFactory.invalidateCaches
 
-        val loaded = (config.map { extraConf =>
-          ConfigFactory.defaultOverrides
-            .withFallback(extraConf)
-            .withFallback(ConfigFactory.load)
-        } getOrElse
-          ConfigFactory.load)
+        val loaded = tasks.util.loadConfig(config)
 
         ConfigFactory.invalidateCaches
 
@@ -84,13 +81,14 @@ object Bootstrap {
       }
       tasks.util.config.parse(configuration)
     }
+    val k8sConfig = new K8SConfig(tasks.util.loadConfig(config))
 
-    val hostname = System.getenv(tconfig.kubernetesHostNameOrIPEnvVar)
+    val hostname = System.getenv(k8sConfig.kubernetesHostNameOrIPEnvVar)
 
     if (hostname != null) {
 
       scribe.info(
-        s" ${tconfig.kubernetesHostNameOrIPEnvVar} env found ($hostname). Create task system."
+        s" ${k8sConfig.kubernetesHostNameOrIPEnvVar} env found ($hostname). Create task system."
       )
 
       val cfg0 = ConfigFactory.parseString(
@@ -98,12 +96,15 @@ object Bootstrap {
       hosts.hostname="$hostname" 
       hosts.numCPU = 0  
       tasks.worker-main-class = "$mainClassName"  
-      tasks.elastic.engine = "tasks.elastic.kubernetes.K8SElasticSupport"
       """
       )
 
-      val cfg = config.map(c => cfg0.withFallback(c)).getOrElse(cfg0)
-      defaultTaskSystem(Some(cfg)).use { case (ts, hostConfig) =>
+      val cfg = cfg0.withFallback(tasks.util.loadConfig(config))
+      defaultTaskSystem(
+        Some(cfg),
+        s3Resource,
+        K8SElasticSupport.make(Some(cfg)).map(Some(_))
+      ).use { case (ts, hostConfig) =>
         if (hostConfig.myRoles.contains(tasks.deploy.App))
           useTs(ts)
             .map(Some(_))
@@ -118,7 +119,7 @@ object Bootstrap {
       k8sClientResource
         .flatMap { k8s =>
           val pathOfEntrypointInBootstrapContainer =
-            tconfig.kubernetesImageApplicationSubPath
+            k8sConfig.kubernetesImageApplicationSubPath
           val container = selfpackage.jib.containerize(
             out = addScribe(containerizer),
             mainClassNameArg = Some(mainClassName),
@@ -130,17 +131,17 @@ object Bootstrap {
           )
 
           val userCPURequest =
-            math.max(k8sRequestCpu, tconfig.kubernetesCpuMin)
+            math.max(k8sRequestCpu, k8sConfig.kubernetesCpuMin)
           val userRamRequest =
-            math.max(k8sRequestRamMB, tconfig.kubernetesRamMin)
+            math.max(k8sRequestRamMB, k8sConfig.kubernetesRamMin)
 
-          val kubeCPURequest = userCPURequest + tconfig.kubernetesCpuExtra
-          val kubeRamRequest = userRamRequest + tconfig.kubernetesRamExtra
+          val kubeCPURequest = userCPURequest + k8sConfig.kubernetesCpuExtra
+          val kubeRamRequest = userRamRequest + k8sConfig.kubernetesRamExtra
           val podName = ("tasks-app-" + KubernetesHelpers.newName).take(47)
 
           val imageName = container.getTargetImage().toString
 
-          val podSpecFromConfig: PodSpec = tconfig.kubernetesPodSpec
+          val podSpecFromConfig: PodSpec = k8sConfig.kubernetesPodSpec
             .map { jsonString =>
               val either = io.circe.parser.decode[PodSpec](jsonString)
               either.left.foreach(error => scribe.error(error))
@@ -155,7 +156,7 @@ object Bootstrap {
           val resource = Pod(
             metadata = Some(
               ObjectMeta(
-                namespace = Some(tconfig.kubernetesNamespace),
+                namespace = Some(k8sConfig.kubernetesNamespace),
                 name = Some(podName)
               )
             ),
@@ -174,12 +175,12 @@ object Bootstrap {
                       )
                     ),
                     name = containerName,
-                    imagePullPolicy = Some(tconfig.kubernetesImagePullPolicy),
+                    imagePullPolicy = Some(k8sConfig.kubernetesImagePullPolicy),
                     env = Some(
                       containerFromConfig.env.getOrElse(Nil) ++
                         List(
                           EnvVar(
-                            name = tconfig.kubernetesHostNameOrIPEnvVar,
+                            name = k8sConfig.kubernetesHostNameOrIPEnvVar,
                             valueFrom = Some(
                               EnvVarSource(
                                 fieldRef = Some(
@@ -225,26 +226,26 @@ object Bootstrap {
 
           val t =
             k8s.pods
-              .namespace(tconfig.kubernetesNamespace)
+              .namespace(k8sConfig.kubernetesNamespace)
               .create(resource)
 
           val logStream = fs2.Stream.eval(t).flatMap { status =>
             if (status.isSuccess) {
               scribe.info(
-                s"Created pod resource $podName . \n\n kubectl -n ${tconfig.kubernetesNamespace} delete pod $podName \n\nWaiting for Running state, then trailing its log.."
+                s"Created pod resource $podName . \n\n kubectl -n ${k8sConfig.kubernetesNamespace} delete pod $podName \n\nWaiting for Running state, then trailing its log.."
               )
 
               val phaseStream = fs2.Stream
                 .eval(
                   k8s.pods
-                    .namespace(tconfig.kubernetesNamespace)
+                    .namespace(k8sConfig.kubernetesNamespace)
                     .get(podName)
                 )
                 .flatMap { pod =>
                   val labels = pod.metadata.get.labels
                   val resourceVersion = pod.metadata.get.resourceVersion
                   k8s.pods
-                    .namespace(tconfig.kubernetesNamespace)
+                    .namespace(k8sConfig.kubernetesNamespace)
                     .watch(labels.getOrElse(Map.empty), resourceVersion)
                     .map(_.map(_.`object`.status.get.phase))
                 }
@@ -276,7 +277,7 @@ object Bootstrap {
                 .flatMap(podIsRunning =>
                   if (podIsRunning)
                     k8s.pods
-                      .namespace(tconfig.kubernetesNamespace)
+                      .namespace(k8sConfig.kubernetesNamespace)
                       .log(podName, Some(containerName), follow = true)
                       .flatMap(response => response.bodyText)
                   else fs2.Stream.empty
@@ -304,7 +305,9 @@ object Bootstrap {
                 }
               )
               .flatMap(_ =>
-                k8s.pods.namespace(tconfig.kubernetesNamespace).delete(podName)
+                k8s.pods
+                  .namespace(k8sConfig.kubernetesNamespace)
+                  .delete(podName)
               )
               .map(deletionStatus => {
                 scribe.info(s"Deletion status $deletionStatus")

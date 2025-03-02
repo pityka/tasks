@@ -52,6 +52,9 @@ import io.k8s.api.core.v1.ResourceFieldSelector
 import io.k8s.api.core.v1.ResourceRequirements
 import io.k8s.apimachinery.pkg.api.resource.Quantity
 import io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta
+import com.typesafe.config.Config
+import com.typesafe.config.ConfigFactory
+import com.typesafe.config.ConfigRenderOptions
 
 class K8SShutdown(k8s: Option[KubernetesClient[IO]]) extends ShutdownNode {
   def shutdownRunningNode(nodeName: RunningJobId): Unit = k8s match {
@@ -91,13 +94,14 @@ object KubernetesHelpers {
 class K8SCreateNode(
     masterAddress: SimpleSocketAddress,
     codeAddress: CodeAddress,
-    k8s: Option[KubernetesClient[IO]]
-)(implicit config: TasksConfig, elasticSupport: ElasticSupportFqcn)
+    k8s: Option[KubernetesClient[IO]],
+    k8sConfig: K8SConfig
+)
     extends CreateNode {
 
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest
-  ): Try[(PendingJobId, ResourceAvailable)] =
+  )(implicit config: TasksConfig): Try[(PendingJobId, ResourceAvailable)] =
     k8s match {
       case None =>
         scribe.warn(
@@ -106,19 +110,18 @@ class K8SCreateNode(
         scala.util.Failure(new RuntimeException("k8s client empty"))
       case Some(k8s) =>
         val userCPURequest =
-          math.max(requestSize.cpu._2, config.kubernetesCpuMin)
+          math.max(requestSize.cpu._2, k8sConfig.kubernetesCpuMin)
         val userRamRequest =
-          math.max(requestSize.memory, config.kubernetesRamMin)
+          math.max(requestSize.memory, k8sConfig.kubernetesRamMin)
 
-        val kubeCPURequest = userCPURequest + config.kubernetesCpuExtra
-        val kubeRamRequest = userRamRequest + config.kubernetesRamExtra
-        val imageName = requestSize.image.getOrElse(config.kubernetesImageName)
+        val kubeCPURequest = userCPURequest + k8sConfig.kubernetesCpuExtra
+        val kubeRamRequest = userRamRequest + k8sConfig.kubernetesRamExtra
+        val imageName = requestSize.image.getOrElse(k8sConfig.kubernetesImageName)
         val script = Deployment.script(
           memory = userRamRequest,
           cpu = userCPURequest,
           scratch = requestSize.scratch,
           gpus = 0 until requestSize.gpu toList,
-          elasticSupport = elasticSupport,
           masterAddress = masterAddress,
           download = Uri(
             scheme = "http",
@@ -137,9 +140,9 @@ class K8SCreateNode(
         val command = Seq("/bin/bash", "-c", script)
 
         val podName = KubernetesHelpers.newName
-        val jobName = config.kubernetesNamespace + "/" + podName
+        val jobName = k8sConfig.kubernetesNamespace + "/" + podName
 
-        val podSpecFromConfig: PodSpec = config.kubernetesPodSpec
+        val podSpecFromConfig: PodSpec = k8sConfig.kubernetesPodSpec
           .map { jsonString =>
             val either = io.circe.parser.decode[PodSpec](jsonString)
             either.left.foreach(error => scribe.error(error))
@@ -153,7 +156,7 @@ class K8SCreateNode(
         val resource = Pod(
           metadata = Some(
             ObjectMeta(
-              namespace = Some(config.kubernetesNamespace),
+              namespace = Some(k8sConfig.kubernetesNamespace),
               name = Some(podName)
             )
           ),
@@ -165,12 +168,12 @@ class K8SCreateNode(
                   image = Some(imageName),
                   command = Some(command),
                   name = "tasks-worker",
-                  imagePullPolicy = Some(config.kubernetesImagePullPolicy),
+                  imagePullPolicy = Some(k8sConfig.kubernetesImagePullPolicy),
                   env = Some(
                     containerFromConfig.env.getOrElse(Nil) ++
                       List(
                         EnvVar(
-                          name = config.kubernetesHostNameOrIPEnvVar,
+                          name = k8sConfig.kubernetesHostNameOrIPEnvVar,
                           valueFrom = Some(
                             EnvVarSource(
                               fieldRef = Some(
@@ -182,7 +185,7 @@ class K8SCreateNode(
                           )
                         ),
                         EnvVar(
-                          name = config.kubernetesCpuLimitEnvVar,
+                          name = k8sConfig.kubernetesCpuLimitEnvVar,
                           valueFrom = Some(
                             EnvVarSource(
                               resourceFieldRef = Some(
@@ -195,7 +198,7 @@ class K8SCreateNode(
                           )
                         ),
                         EnvVar(
-                          name = config.kubernetesRamLimitEnvVar,
+                          name = k8sConfig.kubernetesRamLimitEnvVar,
                           valueFrom = Some(
                             EnvVarSource(
                               resourceFieldRef = Some(
@@ -208,7 +211,7 @@ class K8SCreateNode(
                           )
                         ),
                         EnvVar(
-                          name = config.kubernetesScratchLimitEnvVar,
+                          name = k8sConfig.kubernetesScratchLimitEnvVar,
                           valueFrom = Some(
                             EnvVarSource(
                               resourceFieldRef = Some(
@@ -262,7 +265,7 @@ class K8SCreateNode(
 
         val t = Try {
           val status = k8s.pods
-            .namespace(config.kubernetesNamespace)
+            .namespace(k8sConfig.kubernetesNamespace)
             .create(resource)
             .unsafeRunSync()
           scribe.info(s"Pod create status = $status of node $jobName")
@@ -283,25 +286,57 @@ class K8SCreateNode(
 
 }
 
-class K8SCreateNodeFactory(k8s: Option[KubernetesClient[IO]])(implicit
-    config: TasksConfig,
-    fqcn: ElasticSupportFqcn
-) extends CreateNodeFactory {
+class K8SCreateNodeFactory(k8s: Option[KubernetesClient[IO]], config: K8SConfig) extends CreateNodeFactory {
   def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
-    new K8SCreateNode(master, codeAddress, k8s)
+    new K8SCreateNode(master, codeAddress, k8s,config)
 }
 
 object K8SGetNodeName extends GetNodeName {
   def getNodeName = System.getenv("TASKS_JOB_NAME")
 }
 
-class K8SElasticSupport extends ElasticSupportFromConfig {
-  implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
-    "tasks.elastic.kubernetes.K8SElasticSupport"
-  )
-  def apply(implicit config: TasksConfig) = {
-    implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
+ class K8SConfig(val raw: Config) extends ConfigValuesForHostConfiguration  {
+def kubernetesImageName = raw.getString("tasks.kubernetes.image")
+  val kubernetesImageApplicationSubPath =
+    raw.getString("tasks.kubernetes.imageApplicationSubPath")
 
+  def kubernetesHostNameOrIPEnvVar =
+    raw.getString("tasks.kubernetes.hostnameOrIPEnvVar")
+  def kubernetesCpuLimitEnvVar =
+    raw.getString("tasks.kubernetes.cpuLimitEnvVar")
+  def kubernetesRamLimitEnvVar =
+    raw.getString("tasks.kubernetes.ramLimitEnvVar")
+  def kubernetesScratchLimitEnvVar =
+    raw.getString("tasks.kubernetes.scratchLimitEnvVar")
+
+  def kubernetesCpuExtra = raw.getInt("tasks.kubernetes.extralimits.cpu")
+  def kubernetesCpuMin = raw.getInt("tasks.kubernetes.minimumlimits.cpu")
+  def kubernetesRamExtra = raw.getInt("tasks.kubernetes.extralimits.ram")
+  def kubernetesRamMin = raw.getInt("tasks.kubernetes.minimumlimits.ram")
+
+  def kubernetesPodSpec = {
+
+    if (raw.hasPath("tasks.kubernetes.podSpec"))
+      Some(
+        raw
+          .getConfig("tasks.kubernetes.podSpec")
+          .root()
+          .render(ConfigRenderOptions.concise())
+      )
+    else None
+  }
+
+  def kubernetesNamespace = raw.getString("tasks.kubernetes.namespace")
+
+  def kubernetesImagePullPolicy =
+    raw.getString("tasks.kubernetes.image-pull-policy")
+}
+
+object K8SElasticSupport{
+  
+  def make(config: Option[Config]) : Resource[IO,ElasticSupport] = {
+    implicit val logger: Logger[IO] = Slf4jLogger.getLogger[IO]
+    val k8sConfig = new K8SConfig(tasks.util.loadConfig(config))
     val kubernetesClient =
       KubernetesClient[IO](
         KubeConfig.standard[IO].map(_.withDefaultAuthorizationCache(5.minutes))
@@ -314,19 +349,20 @@ class K8SElasticSupport extends ElasticSupportFromConfig {
         )
       }
       SimpleElasticSupport(
-        fqcn = fqcn,
-        hostConfig = Some(new K8SHostConfig()),
+        hostConfig = Some(new K8SHostConfig(k8sConfig)),
         shutdown = new K8SShutdown(k8s.toOption),
-        createNodeFactory = new K8SCreateNodeFactory(k8s.toOption),
+        createNodeFactory = new K8SCreateNodeFactory(k8s.toOption, k8sConfig),
         getNodeName = K8SGetNodeName
       )
     }
   }
 }
 
-trait K8SHostConfigurationImpl extends HostConfigurationFromConfig {
 
-  implicit def config: TasksConfig
+class K8SHostConfig(val config: K8SConfig)
+    extends HostConfigurationFromConfig {
+
+  
 
   private lazy val myhostname =
     Option(System.getenv(config.kubernetesHostNameOrIPEnvVar))
@@ -348,6 +384,3 @@ trait K8SHostConfigurationImpl extends HostConfigurationFromConfig {
       .getOrElse(config.hostNumCPU)
 
 }
-
-class K8SHostConfig(implicit val config: TasksConfig)
-    extends K8SHostConfigurationImpl

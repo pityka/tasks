@@ -32,6 +32,8 @@ import org.scalatest.matchers.should.Matchers
 import tasks.jsonitersupport._
 import com.typesafe.config.ConfigFactory
 import cats.effect.IO
+import tasks.JvmElasticSupport.JvmGrid
+import cats.effect.kernel.Resource
 
 object NodeAllocationTest extends TestHelpers {
 
@@ -47,7 +49,6 @@ object NodeAllocationTest extends TestHelpers {
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=0
       tasks.disableRemoting = false
-      tasks.elastic.engine = "tasks.JvmElasticSupport$$JvmGrid$$"
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
@@ -57,7 +58,7 @@ object NodeAllocationTest extends TestHelpers {
   }
 
   def run = {
-    withTaskSystem(testConfig2) { implicit ts =>
+    withTaskSystem(testConfig2, Resource.pure(None), JvmGrid.make.map(Some(_))) { implicit ts =>
       import scala.concurrent.ExecutionContext.Implicits.global
 
       val f1 = testTask(Input(1))(ResourceRequest(1, 500))

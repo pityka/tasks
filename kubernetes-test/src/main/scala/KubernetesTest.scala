@@ -41,12 +41,6 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
 import scala.concurrent.duration._
 import com.google.cloud.tools.jib.api.LogEvent
 
-// object KubernetesTestFollower extends App {
-//   withTaskSystem { _ =>
-//     Thread.sleep(100000)
-//   }
-// }
-
 object KubernetesTest extends IOApp {
 
   val hostname = System.getenv("MY_POD_IP")
@@ -64,7 +58,6 @@ object KubernetesTest extends IOApp {
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=0
       hosts.hostname="$hostname"
-      tasks.elastic.engine = "tasks.elastic.kubernetes.K8SElasticSupport"
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s

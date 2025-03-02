@@ -69,7 +69,7 @@ trait HostConfiguration {
 
 trait HostConfigurationFromConfig extends HostConfiguration {
 
-  implicit def config: TasksConfig
+  implicit def config: ConfigValuesForHostConfiguration
 
   lazy val myPort = chooseNetworkPort
 

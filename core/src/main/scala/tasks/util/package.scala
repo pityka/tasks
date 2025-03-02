@@ -44,6 +44,8 @@ import tasks.util.config._
 import cats.effect.IO
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
+import com.typesafe.config.ConfigFactory
+import com.typesafe.config.Config
 
 package object util {
 
@@ -68,7 +70,17 @@ package object util {
     }
   }
 
-  def chooseNetworkPort(implicit config: TasksConfig): Int =
+  def loadConfig(config: Option[Config]): Config = config
+    .map { extraConf =>
+      ConfigFactory.defaultOverrides
+        .withFallback(extraConf)
+        .withFallback(ConfigFactory.load)
+    }
+    .getOrElse(ConfigFactory.load)
+
+  def chooseNetworkPort(implicit
+      config: ConfigValuesForHostConfiguration
+  ): Int =
     Try(config.hostPort)
       .flatMap { p =>
         if (available(p)) Success(p) else Failure(new RuntimeException)
@@ -205,15 +217,6 @@ package object util {
         )
     }
     else f
-
-  def reflectivelyInstantiateObject[A](fqcn: String): A = {
-    java.lang.Class
-      .forName(fqcn)
-      .getDeclaredConstructor()
-      .newInstance()
-      .asInstanceOf[A]
-
-  }
 
   def rightOrThrow[A, E](e: Either[E, A]): A = e match {
     case Right(a)           => a

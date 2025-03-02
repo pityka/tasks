@@ -45,7 +45,6 @@ object Deployment {
       cpu: Int,
       scratch: Int,
       gpus: List[Int],
-      elasticSupport: ElasticSupportFqcn,
       masterAddress: SimpleSocketAddress,
       download: Uri,
       followerHostname: Option[String],
@@ -85,7 +84,7 @@ object Deployment {
       if (image.isDefined) s"-Dhosts.image=${image.get}" else ""
 
     val edited =
-      s"./$packageFileName -J-Xmx{RAM}M -Dtasks.elastic.engine={GRID} {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString $hostImageString $externalHostnameString  $mayUseArbitraryPortString $followerNodeNameString"
+      s"./$packageFileName -J-Xmx{RAM}M {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString $hostImageString $externalHostnameString  $mayUseArbitraryPortString $followerNodeNameString"
         .replace(
           "{RAM}",
           math
@@ -97,7 +96,6 @@ object Deployment {
           "{MASTER}",
           masterAddress.getHostName + ":" + masterAddress.getPort
         )
-        .replace("{GRID}", elasticSupport.fqcn)
         .replace("{STORAGE}", config.storageURI.toString)
 
     val runPackage =

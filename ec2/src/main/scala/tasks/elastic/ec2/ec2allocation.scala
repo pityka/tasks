@@ -49,6 +49,8 @@ import com.amazonaws.services.ec2.model.CreateTagsRequest
 import scala.jdk.CollectionConverters._
 import com.amazonaws.services.ec2.AmazonEC2ClientBuilder
 import com.amazonaws.services.ec2.AmazonEC2
+import com.typesafe.config.Config
+import com.typesafe.config.ConfigFactory
 
 class EC2Shutdown(ec2: AmazonEC2) extends ShutdownNode {
 
@@ -68,9 +70,8 @@ class EC2CreateNode(
     masterAddress: SimpleSocketAddress,
     codeAddress: CodeAddress,
     ec2: AmazonEC2,
-    elasticSupport: ElasticSupportFqcn
-)(implicit config: TasksConfig)
-    extends CreateNode {
+    ec2Config: EC2Config
+) extends CreateNode {
 
   private def gzipBase64(str: String): String = {
 
@@ -84,9 +85,9 @@ class EC2CreateNode(
 
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest
-  ): Try[(PendingJobId, ResourceAvailable)] =
+  )(implicit config: TasksConfig): Try[(PendingJobId, ResourceAvailable)] =
     Try {
-      val (requestid, instancetype) = requestSpotInstance(requestSize)
+      val (requestid, instancetype) = requestSpotInstance(requestSize,config)
       val jobid = PendingJobId(requestid)
       val size = instancetype._2
       (jobid, size)
@@ -97,7 +98,7 @@ class EC2CreateNode(
     ec2.createTags(
       new CreateTagsRequest(
         List(node.name.value).asJava,
-        config.instanceTags.map(t => new Tag(t._1, t._2)).asJava
+        ec2Config.instanceTags.map(t => new Tag(t._1, t._2)).asJava
       )
     )
 
@@ -118,10 +119,10 @@ class EC2CreateNode(
 
   }
 
-  private def requestSpotInstance(requestSize: ResourceRequest) = {
+  private def requestSpotInstance(requestSize: ResourceRequest,config: TasksConfig) = {
     // size is ignored, instance specification is set in configuration
     val selectedInstanceType = EC2Operations
-      .workerInstanceType(requestSize)
+      .workerInstanceType(requestSize)(ec2Config)
       .getOrElse(
         throw new RuntimeException("No instance type could fullfill request")
       )
@@ -129,17 +130,17 @@ class EC2CreateNode(
     // Initializes a Spot Instance Request
     val requestRequest = new RequestSpotInstancesRequest();
 
-    if (config.spotPrice > 2.5)
-      throw new RuntimeException("Spotprice too high:" + config.spotPrice)
+    if (ec2Config.spotPrice > 2.5)
+      throw new RuntimeException("Spotprice too high:" + ec2Config.spotPrice)
 
-    requestRequest.setSpotPrice(config.spotPrice.toString);
+    requestRequest.setSpotPrice(ec2Config.spotPrice.toString);
     requestRequest.setInstanceCount(1);
     requestRequest.setType(SpotInstanceType.OneTime)
 
     val launchSpecification = new LaunchSpecification();
-    launchSpecification.setImageId(config.amiID);
+    launchSpecification.setImageId(ec2Config.amiID);
     launchSpecification.setInstanceType(selectedInstanceType._1);
-    launchSpecification.setKeyName(config.keyName)
+    launchSpecification.setKeyName(ec2Config.keyName)
 
     val blockDeviceMappingSDB = new BlockDeviceMapping();
     blockDeviceMappingSDB.setDeviceName("/dev/sdb");
@@ -152,13 +153,13 @@ class EC2CreateNode(
       List(blockDeviceMappingSDB, blockDeviceMappingSDC).asJava
     )
 
-    config.iamRole.foreach { iamRole =>
+    ec2Config.iamRole.foreach { iamRole =>
       val iamprofile = new IamInstanceProfileSpecification()
       iamprofile.setName(iamRole)
       launchSpecification.setIamInstanceProfile(iamprofile)
     }
 
-    config.placementGroup.foreach { string =>
+    ec2Config.placementGroup.foreach { string =>
       val placement = new SpotPlacement();
       placement.setGroupName(string);
       launchSpecification.setPlacement(placement);
@@ -169,7 +170,6 @@ class EC2CreateNode(
       cpu = selectedInstanceType._2.cpu,
       scratch = selectedInstanceType._2.scratch,
       gpus = selectedInstanceType._2.gpu,
-      elasticSupport = elasticSupport,
       masterAddress = masterAddress,
       download = Uri(
         scheme = "http",
@@ -183,12 +183,12 @@ class EC2CreateNode(
       followerMayUseArbitraryPort = true,
       background = true,
       image = None
-    )
+    )(config)
 
     launchSpecification.setUserData(gzipBase64(userdata))
 
     val securitygroups =
-      (config.securityGroup +: config.securityGroups).distinct
+      (ec2Config.securityGroup +: ec2Config.securityGroups).distinct
         .filter(_.size > 0)
 
     launchSpecification.setAllSecurityGroups(securitygroups.map { x =>
@@ -197,7 +197,7 @@ class EC2CreateNode(
       g
     }.asJava)
 
-    val subnetId = config.subnetId
+    val subnetId = ec2Config.subnetId
 
     launchSpecification.setSubnetId(subnetId)
 
@@ -218,55 +218,101 @@ class EC2CreateNode(
 
 }
 
-// class EC2Reaper(terminateSelf: Boolean)(implicit val config: TasksConfig)
-//     extends Reaper {
-
-//     context.system.terminate()
-//   }
-// }
-
-class EC2CreateNodeFactory(implicit
-    config: TasksConfig,
+class EC2CreateNodeFactory(
+    config: EC2Config,
     ec2: AmazonEC2,
-    elasticSupport: ElasticSupportFqcn
 ) extends CreateNodeFactory {
   def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
-    new EC2CreateNode(master, codeAddress, ec2, elasticSupport)
+    new EC2CreateNode(master, codeAddress, ec2,  config)
 }
 
 object EC2GetNodeName extends GetNodeName {
   def getNodeName = EC2Operations.readMetadata("instance-id").head
 }
 
-class EC2ElasticSupport extends ElasticSupportFromConfig {
+class EC2Config(val raw:Config) extends ConfigValuesForHostConfiguration {
+  val awsRegion: String = raw.getString("tasks.elastic.aws.region")
 
-  implicit val fqcn: ElasticSupportFqcn = ElasticSupportFqcn(
-    "tasks.elastic.ec2.EC2ElasticSupport"
-  )
+  def spotPrice: Double = raw.getDouble("tasks.elastic.aws.spotPrice")
+
+  def amiID: String = raw.getString("tasks.elastic.aws.ami")
+
+  def securityGroup: String = raw.getString("tasks.elastic.aws.securityGroup")
+
+  def ec2InstanceTypes =
+    raw.getConfigList("tasks.elastic.aws.instances").asScala.toList.map {
+      conf =>
+        val name = conf.getString("name")
+        val cpu = conf.getInt("cpu")
+        val ram = conf.getInt("ram")
+        val gpu = conf.getInt("gpu")
+        name -> ResourceAvailable(
+          cpu,
+          ram,
+          Int.MaxValue,
+          0 until gpu toList,
+          None
+        )
+    }
+
+  def securityGroups: List[String] =
+    raw.getStringList("tasks.elastic.aws.securityGroups").asScala.toList
+
+  def subnetId = raw.getString("tasks.elastic.aws.subnetId")
+
+  def keyName = raw.getString("tasks.elastic.aws.keyName")
+
+  def instanceTags =
+    raw
+      .getStringList("tasks.elastic.aws.tags")
+      .asScala
+      .grouped(2)
+      .map(x => x(0) -> x(1))
+      .toList
+
+  val terminateMaster = raw.getBoolean("tasks.elastic.aws.terminateMaster")
+
+   def iamRole = {
+    val s = raw.getString("tasks.elastic.aws.iamRole")
+    if (s == "" || s == "-") None
+    else Some(s)
+  }
+
+  def placementGroup: Option[String] =
+    raw.getString("tasks.elastic.aws.placementGroup") match {
+      case x if x == "" => None
+      case x            => Some(x)
+    }
+}
+
+object EC2ElasticSupport {
+
   import cats.effect.IO
-  def apply(implicit config: TasksConfig) = cats.effect.Resource.make {
+  def apply(config: Option[Config]) = {
+    val ec2Config = new EC2Config(tasks.util.loadConfig(config))
+    cats.effect.Resource.make {
     IO {
+      
       implicit val ec2 =
-        if (config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
-        else AmazonEC2ClientBuilder.standard.withRegion(config.awsRegion).build
+        if (ec2Config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
+        else AmazonEC2ClientBuilder.standard.withRegion(ec2Config.awsRegion).build
       SimpleElasticSupport(
-        fqcn = fqcn,
-        hostConfig = Some(new EC2MasterSlave),
+        hostConfig = Some(new EC2MasterSlave(ec2Config)),
         shutdown = new EC2Shutdown(ec2),
-        createNodeFactory = new EC2CreateNodeFactory,
+        createNodeFactory = new EC2CreateNodeFactory(ec2Config, ec2),
         getNodeName = EC2GetNodeName
       )
     }
   } { release =>
-    if (config.terminateMaster) cats.effect.IO {
+    if (ec2Config.terminateMaster) cats.effect.IO {
       val ec2 =
-        if (config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
-        else AmazonEC2ClientBuilder.standard.withRegion(config.awsRegion).build
+        if (ec2Config.awsRegion.isEmpty) AmazonEC2ClientBuilder.defaultClient
+        else AmazonEC2ClientBuilder.standard.withRegion(ec2Config.awsRegion).build
 
       val nodename = EC2Operations.readMetadata("instance-id").head
       EC2Operations.terminateInstance(ec2, nodename)
 
     }
     else IO.unit
-  }
+  }}
 }

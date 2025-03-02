@@ -56,7 +56,7 @@ trait ShutdownNode extends ShutdownRunningNode {
 trait CreateNode {
   def requestOneNewJobFromJobScheduler(
       k: ResourceRequest
-  ): Try[(PendingJobId, ResourceAvailable)]
+  )(implicit taskConfig: TasksConfig): Try[(PendingJobId, ResourceAvailable)]
 
   def convertRunningToPending(p: RunningJobId): Option[PendingJobId] =
     Some(PendingJobId(p.value))

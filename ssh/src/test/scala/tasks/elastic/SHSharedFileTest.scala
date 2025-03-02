@@ -37,6 +37,8 @@ import tasks.queue.UntypedResult
 import tasks._
 import com.typesafe.config.ConfigFactory
 import cats.effect.IO
+import tasks.elastic.sh.SHElasticSupport
+import cats.effect.kernel.Resource
 
 object SHResultWithSharedFilesTest extends TestHelpers {
 
@@ -156,7 +158,6 @@ object SHResultWithSharedFilesTest extends TestHelpers {
         tasks.fileservice.proxyStorage=true
       hosts.numCPU=0
       tasks.disableRemoting = false
-      tasks.elastic.engine = "tasks.elastic.sh.SHElasticSupport"
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 5 s
@@ -166,7 +167,11 @@ object SHResultWithSharedFilesTest extends TestHelpers {
       """
       )
 
-    withTaskSystem(testConfig2.withFallback(testConfig)) { implicit ts =>
+    withTaskSystem(
+      testConfig2.withFallback(testConfig),
+      Resource.pure(None),
+      SHElasticSupport.make.map(Some(_))
+    ) { implicit ts =>
       val tmpfile = java.io.File.createTempFile("dsfsdf", "dfs")
       tasks.util.writeBinaryToFile(
         tmpfile.getAbsolutePath,
