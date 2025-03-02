@@ -394,51 +394,54 @@ class FolderFileStorage(val basePath: File)(implicit
               scribe.debug(
                 s"Found a file already in storage with the same name ($finalFile). Check for equality."
               )
-              checkContentEquality(finalFile, file).flatMap { contentEquals =>
-                if (finalFile === file || contentEquals)
-                  IO.pure((size, hash, managed))
-                else
-                  IO {
-                    scribe.info(
-                      s"Equality check failed for a file at the same path. Importing file. $file to $finalFile"
-                    )
+              if (finalFile === file) IO.pure((size, hash, managed))
+              else
+                checkContentEquality(finalFile, file).flatMap { contentEquals =>
+                  if (contentEquals)
+                    IO.pure((size, hash, managed))
+                  else
+                    IO {
+                      scribe.info(
+                        s"Equality check failed for a file at the same path. Importing file. $file to $finalFile"
+                      )
 
-                    if (!config.allowOverwrite) {
-                      def candidates(i: Int, past: List[File]): List[File] = {
-                        val candidate = assemblePath(managed, ".old." + i)
-                        if (candidate.canRead)
-                          candidates(i + 1, candidate :: past)
-                        else past
-                      }
-
-                      def parseVersion(f: File): Int =
-                        f.getName.split("\\.").last.toInt
-
-                      val oldFiles = candidates(0, Nil)
-
-                      scribe.debug(s"Moving $oldFiles away.")
-
-                      oldFiles
-                        .map(f => (parseVersion(f) + 1, f))
-                        .sortBy(_._1)
-                        .reverse
-                        .foreach { case (newversion, f) =>
-                          java.nio.file.Files.move(
-                            f.toPath(),
-                            assemblePath(managed, ".old." + newversion).toPath()
-                          )
+                      if (!config.allowOverwrite) {
+                        def candidates(i: Int, past: List[File]): List[File] = {
+                          val candidate = assemblePath(managed, ".old." + i)
+                          if (candidate.canRead)
+                            candidates(i + 1, candidate :: past)
+                          else past
                         }
 
-                      java.nio.file.Files.move(
-                        finalFile.toPath(),
-                        assemblePath(managed, ".old.0").toPath()
-                      )
-                    }
+                        def parseVersion(f: File): Int =
+                          f.getName.split("\\.").last.toInt
 
-                    copy(finalFile)
-                    (size, hash, managed)
-                  }
-              }
+                        val oldFiles = candidates(0, Nil)
+
+                        scribe.debug(s"Moving $oldFiles away.")
+
+                        oldFiles
+                          .map(f => (parseVersion(f) + 1, f))
+                          .sortBy(_._1)
+                          .reverse
+                          .foreach { case (newversion, f) =>
+                            java.nio.file.Files.move(
+                              f.toPath(),
+                              assemblePath(managed, ".old." + newversion)
+                                .toPath()
+                            )
+                          }
+
+                        java.nio.file.Files.move(
+                          finalFile.toPath(),
+                          assemblePath(managed, ".old.0").toPath()
+                        )
+                      }
+
+                      copy(finalFile)
+                      (size, hash, managed)
+                    }
+                }
             } else
               IO.blocking {
                 copy(assemblePath(managed))
