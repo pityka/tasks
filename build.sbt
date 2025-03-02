@@ -142,7 +142,6 @@ lazy val core = project
       "org.http4s" %% "http4s-ember-client" % http4sVersion,
       "org.http4s" %% "http4s-ember-server" % http4sVersion,
       "org.http4s" %% "http4s-dsl" % http4sVersion,
-      "com.google.guava" % "guava" % "33.0.0-jre", // scala-steward:off
       "com.typesafe" % "config" % "1.4.2",
       "org.typelevel" %% "cats-effect" % "3.5.3",
       "io.github.pityka" %% "selfpackage" % "2.1.6",
