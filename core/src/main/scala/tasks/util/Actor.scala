@@ -6,7 +6,7 @@ import cats.effect.FiberIO
 import cats.effect.kernel.Resource
 import cats.effect.std.Queue
 import tasks.util.message._
-object Actor {
+private[tasks] object Actor {
 
   abstract class ActorBehavior[State, K](messenger: Messenger) {
     type ReceiveIO =

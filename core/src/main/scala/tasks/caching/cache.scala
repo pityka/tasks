@@ -32,7 +32,7 @@ import tasks.queue._
 import tasks.fileservice.FileServicePrefix
 import cats.effect.IO
 
-abstract class Cache {
+private[tasks] abstract class Cache {
 
   def get(x: HashedTaskDescription)(implicit
       p: FileServicePrefix
@@ -46,7 +46,7 @@ abstract class Cache {
 
 }
 
-class DisabledCache extends Cache {
+private[tasks] class DisabledCache extends Cache {
 
   def get(x: HashedTaskDescription)(implicit p: FileServicePrefix) =
     IO.pure(None)

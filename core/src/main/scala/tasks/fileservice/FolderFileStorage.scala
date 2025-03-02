@@ -37,7 +37,7 @@ import fs2.Stream
 import fs2.Pipe
 import java.nio.file.StandardCopyOption
 
-object FolderFileStorage {
+private[tasks] object FolderFileStorage {
 
   private[tasks] def getContentHashOfFile(file: File, skip: Boolean): IO[Int] =
     if (skip) IO.pure(0)
@@ -52,7 +52,7 @@ object FolderFileStorage {
 
 }
 
-class FolderFileStorage(val basePath: File)(implicit
+private[tasks] class FolderFileStorage(val basePath: File)(implicit
     config: TasksConfig
 ) extends ManagedFileStorage {
 

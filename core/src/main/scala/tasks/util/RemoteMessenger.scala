@@ -16,7 +16,7 @@ import tasks.fileservice.FileServicePrefix
 
 import cats.instances.list
 import tasks.util.message._
-class RemoteMessenger(
+private[tasks] class RemoteMessenger(
     client: Client[IO],
     listeningUri: org.http4s.Uri,
     peerUri: org.http4s.Uri,
@@ -44,7 +44,7 @@ class RemoteMessenger(
     )
 }
 
-object RemoteMessenger {
+private[tasks] object RemoteMessenger {
 
   def addUri(message: Message, listeningUri: org.http4s.Uri) = {
     message.copy(from =

@@ -30,7 +30,7 @@ import java.io.File
 
 object Deployment {
 
-  def pack(implicit config: TasksConfig): File = {
+  private[tasks] def pack(implicit config: TasksConfig): File = {
     val tmp = TempFile.createTempFile("package")
     val mainClassName = config.workerMainClass match {
       case ""    => None

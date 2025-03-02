@@ -30,7 +30,7 @@ import cats.effect.kernel.Resource
 import cats.effect.IO
 
 object NodeLocalCache {
-  type State = tasks.util.concurrent.NodeLocalCache.StateR[Any]
+  private[tasks] type State = tasks.util.concurrent.NodeLocalCache.StateR[Any]
   private[tasks] def start =
     tasks.util.concurrent.NodeLocalCache.make[Any]
 

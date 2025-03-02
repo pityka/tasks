@@ -29,7 +29,7 @@ import java.io.File
 import org.http4s._
 import cats.effect.IO
 
-class PackageServer(pack: File) {
+private[tasks] class PackageServer(pack: File) {
 
   val route = HttpRoutes.of[IO] {
     case request if request.method == Method.GET =>

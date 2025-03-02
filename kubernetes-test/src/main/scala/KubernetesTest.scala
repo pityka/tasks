@@ -22,10 +22,8 @@
  * SOFTWARE.
  */
 
-package tasks
-
 import cats.effect.unsafe.implicits.global
-
+import tasks._
 import tasks.jsonitersupport._
 import com.typesafe.config.ConfigFactory
 import cats.effect.IO

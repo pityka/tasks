@@ -177,7 +177,7 @@ class ComputationEnvironment(
 
 }
 
-class Task(
+private[tasks] class Task(
     inputDeserializer: Spore[AnyRef, AnyRef],
     outputSerializer: Spore[AnyRef, AnyRef],
     function: Spore[AnyRef, AnyRef],
@@ -265,13 +265,12 @@ class Task(
       )
 
       IO.unit.flatMap { _ =>
-        val untyped =
-          UntypedTaskDefinition[AnyRef, AnyRef](
-            inputDeserializer.as[Unit, Deserializer[AnyRef]],
-            outputSerializer.as[Unit, Serializer[AnyRef]],
-            function.as[AnyRef, ComputationEnvironment => IO[AnyRef]]
-          )
-        untyped.apply(input)(ce)
+        runUntypedTask[AnyRef, AnyRef](
+          inputDeserializer.as[Unit, Deserializer[AnyRef]],
+          outputSerializer.as[Unit, Serializer[AnyRef]],
+          function.as[AnyRef, ComputationEnvironment => IO[AnyRef]],
+          input
+        )(ce)
       }
     } catch {
       case exception: Exception =>
@@ -291,4 +290,34 @@ class Task(
     )
 
   }
+
+  private def runUntypedTask[A, C](
+      rs: Spore[Unit, Deserializer[A]],
+      ws: Spore[Unit, Serializer[C]],
+      fs: Spore[A, ComputationEnvironment => IO[C]],
+      j: Base64Data
+  ) =
+    (ce: ComputationEnvironment) =>
+      IO.interruptible {
+        val r = rs(())
+        val w = ws(())
+
+        val deserialized = r(Base64DataHelpers.toBytes(j)) match {
+          case Right(value) => value
+          case Left(error) =>
+            val logMessage =
+              s"Could not deserialize input. Error: $error. Raw data (as utf8): ${new String(Base64DataHelpers.toBytes(j))}"
+            scribe.error(logMessage)
+            throw new RuntimeException(logMessage)
+        }
+        (w, deserialized)
+      }.flatMap { case (w, deserializedInputData) =>
+        fs(deserializedInputData)(ce).flatMap { result =>
+          tasks.queue
+            .extractDataDependencies(deserializedInputData)(ce)
+            .map { meta =>
+              (UntypedResult.make(result)(w), meta)
+            }
+        }
+      }
 }

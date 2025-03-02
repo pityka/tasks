@@ -4,7 +4,7 @@ import cats.effect.kernel.Ref
 import cats.effect.kernel.Resource
 import fs2.concurrent.Channel
 import tasks.util.message._
-object LocalMessenger {
+private[tasks] object LocalMessenger {
   def make = Resource.make(
     Ref
       .of[IO, Map[Address, Channel[IO, Message]]](Map.empty)
@@ -15,7 +15,7 @@ object LocalMessenger {
     }
   )
 }
-class LocalMessenger(
+private[tasks] class LocalMessenger(
     private[util] val channels: Ref[IO, Map[Address, Channel[IO, Message]]]
 ) extends Messenger {
 

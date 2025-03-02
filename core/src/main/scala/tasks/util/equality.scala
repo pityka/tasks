@@ -22,7 +22,7 @@ package tasks.util
 /** Type safe equality
   * http://hseeberger.github.io/blog/2013/05/31/implicits-unchained-type-safe-equality-part2/
   */
-object eq {
+private[tasks] object eq {
 
   implicit class Equal[L](val left: L) extends AnyVal {
     def ===[R](right: R)(implicit equality: Equality[L, R]): Boolean =

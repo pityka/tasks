@@ -81,7 +81,7 @@ case class TaskSystemComponents private[tasks] (
 }
 
 object TaskSystemComponents {
-  def make(
+  private[tasks] def make(
       hostConfig: Resource[IO, HostConfiguration],
       elasticSupport: Resource[IO, Option[ElasticSupport]],
       s3ClientResource: Resource[IO, Option[tasks.fileservice.s3.S3Client]],
@@ -663,15 +663,6 @@ object TaskSystemComponents {
 
             Resource.eval(delayed).flatMap(identity)
           }
-
-          // def awaitReaper(reaperActor: ActorRef) = IO.interruptible {
-          //   val latch = new java.util.concurrent.CountDownLatch(1)
-          //   reaperActor ! Latch(latch)
-          //   scribe.info(
-          //     "Shutting down tasksystem. Blocking until all watched actors have terminated."
-          //   )
-          //   latch.await
-          // }
 
           for {
             _ <- Resource.make(

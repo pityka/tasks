@@ -27,7 +27,7 @@
 
 package tasks.fileservice
 
-case class FileServiceComponent(
+private[tasks] case class FileServiceComponent(
     storage: ManagedFileStorage,
     remote: RemoteFileStorage
 )

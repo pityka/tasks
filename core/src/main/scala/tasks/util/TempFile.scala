@@ -47,12 +47,12 @@ object TempFile {
 
   }
 
-  val id: String = {
+  private val id: String = {
     val f = new java.text.SimpleDateFormat("yyyy_MM_dd_HH_mm_ss");
     f.format(new java.util.Date)
   }
 
-  val prefix = "tasks" + id
+  private val prefix = "tasks" + id
 
   lazy val folder = synchronized {
     createTempDir(prefix)

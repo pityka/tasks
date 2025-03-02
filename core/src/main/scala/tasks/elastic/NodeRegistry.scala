@@ -43,9 +43,9 @@ import tasks.util.SimpleSocketAddress
 import cats.effect.kernel.Resource
 import tasks.util.Ask
 
-case class RemoteNodeRegistry(address: Address)
+private[tasks] case class RemoteNodeRegistry(address: Address)
 
-object NodeRegistry {
+private[tasks] object NodeRegistry {
 
   def makeReference(
       masterAddress: SimpleSocketAddress,
@@ -113,7 +113,7 @@ object NodeRegistry {
   val address: Address = Address("NodeRegistry")
 }
 
-class NodeRegistry(
+private[tasks] class NodeRegistry(
     unmanagedResource: ResourceAvailable,
     createNode: CreateNode,
     decideNewNode: DecideNewNode,

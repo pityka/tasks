@@ -50,8 +50,4 @@ object SerDe {
   val ns: Spore[Unit, Serializer[Nothing]] =
     spore((_: Unit) => Serializer.nothing)
 
-  // val nothing = SerDe[Nothing](
-  //   ser = ns,
-  //   deser = spore((_:Unit) => Deserializer.nothing)
-  // )
 }

@@ -25,7 +25,7 @@
 package tasks.queue
 import cats.effect.IO
 
-object TaskDefinitionMacros {
+private[tasks] object TaskDefinitionMacros {
   import scala.reflect.macros.blackbox.Context
 
   def taskDefinitionFromTree[A: cxt.WeakTypeTag, C: cxt.WeakTypeTag](
@@ -47,7 +47,7 @@ object TaskDefinitionMacros {
       val $name1 = _root_.tasks.spore{() => implicitly[_root_.tasks.queue.Deserializer[$a]]}
       val $name2 = _root_.tasks.spore{() => implicitly[_root_.tasks.queue.Serializer[$c]]}
       val $name3 = _root_.tasks.spore{$comp}
-      _root_.tasks.TaskDefinition[$a,$c]($name1,$name2,$name3,_root_.tasks.queue.TaskId($taskID,$taskVersion))
+      new _root_.tasks.TaskDefinition[$a,$c]($name1,$name2,$name3,_root_.tasks.queue.TaskId($taskID,$taskVersion))
     """
     r
   }

@@ -40,7 +40,7 @@ import fs2.{Stream, Pipe}
 import tasks.fileservice._
 import cats.effect.std.SecureRandom
 
-class EncryptedManagedFileStorage(
+private[tasks] class EncryptedManagedFileStorage(
     parent: ManagedFileStorage,
     keyHex: String
 ) extends ManagedFileStorage {

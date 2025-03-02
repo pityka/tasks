@@ -72,8 +72,8 @@ class FileServiceSpec
 
   def tempFolder() = {
     val t = TempFile.createTempFile("fileservicespec")
-    t.delete 
-    assert(t.mkdir) 
+    t.delete
+    assert(t.mkdir)
     t
   }
 
@@ -86,8 +86,6 @@ class FileServiceSpec
       writeBinaryToFile(input, data)
 
       val folder = tempFolder()
-      
-     
 
       val fs = new FolderFileStorage(folder)
 
@@ -114,7 +112,6 @@ class FileServiceSpec
       writeBinaryToFile(input, data)
 
       val folder = tempFolder()
-      
 
       val fs = new FolderFileStorage(folder)
 
@@ -124,9 +121,11 @@ class FileServiceSpec
 
       SharedFileHelper.createFromFile(input, "proba", false).unsafeRunSync()
 
-      println(readBinaryFile(
-        new java.io.File(folder, "proba").getCanonicalPath
-      ).toVector)
+      println(
+        readBinaryFile(
+          new java.io.File(folder, "proba").getCanonicalPath
+        ).toVector
+      )
       readBinaryFile(
         new java.io.File(folder, "proba").getCanonicalPath
       ).toVector should equal(
@@ -139,7 +138,6 @@ class FileServiceSpec
       writeBinaryToFile(input, data)
 
       val folder = tempFolder()
-      
 
       val fs = new EncryptedManagedFileStorage(
         new FolderFileStorage(folder),
@@ -182,7 +180,6 @@ class FileServiceSpec
       writeBinaryToFile(input, data)
 
       val folder = tempFolder()
-      
 
       val fs = new FolderFileStorage(folder)
 
@@ -204,7 +201,6 @@ class FileServiceSpec
       writeBinaryToFile(input, data)
 
       val folder = tempFolder()
-     
 
       val fs = new FolderFileStorage(folder)
 
@@ -269,10 +265,8 @@ class FileServiceSpec
       writeBinaryToFile(input, data)
 
       val folder = tempFolder()
-  
 
       val fs = new FolderFileStorage(folder)
-  
 
       implicit val serviceimpl: FileServiceComponent =
         FileServiceComponent(fs, remoteStore)
@@ -335,7 +329,7 @@ class FileServiceSpec
       val input = TempFile.createTempFile(".in")
       writeBinaryToFile(input, data)
 
-     val folder = tempFolder()
+      val folder = tempFolder()
       val fs = new FolderFileStorage(folder)
 
       implicit val serviceimpl: FileServiceComponent =
@@ -382,7 +376,6 @@ class FileServiceSpec
 
       val folder = tempFolder()
       val fs = new FolderFileStorage(folder)
-    
 
       implicit val serviceimpl: FileServiceComponent =
         FileServiceComponent(fs, remoteStore)

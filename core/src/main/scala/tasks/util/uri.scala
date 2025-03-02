@@ -25,7 +25,7 @@
 
 package tasks.util
 
-case class Uri(uri: String) {
+private[tasks] case class Uri(uri: String) {
   def jUri = new java.net.URI(uri)
   def http4s = org.http4s.Uri.fromString(uri).toOption.get
   override def toString = uri
@@ -34,7 +34,7 @@ case class Uri(uri: String) {
   def path = jUri.getPath
 }
 
-object Uri {
+private[tasks] object Uri {
 
   def apply(scheme: String, hostname: String, port: Int, path: String): Uri =
     Uri(s"${scheme}://${hostname}:${port}$path")

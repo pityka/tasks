@@ -49,7 +49,7 @@ import com.typesafe.config.Config
 
 package object util {
 
-  def base64(b: Array[Byte]): String =
+  private[tasks] def base64(b: Array[Byte]): String =
     java.util.Base64.getEncoder.encodeToString(b)
   def base64(s: String): Array[Byte] = java.util.Base64.getDecoder.decode(s)
 
@@ -78,7 +78,7 @@ package object util {
     }
     .getOrElse(ConfigFactory.load)
 
-  def chooseNetworkPort(implicit
+  private[tasks] def chooseNetworkPort(implicit
       config: ConfigValuesForHostConfiguration
   ): Int =
     Try(config.hostPort)
@@ -97,7 +97,7 @@ package object util {
           )
       }
 
-  def stackTraceAsString(t: Any): String = {
+  private[tasks] def stackTraceAsString(t: Any): String = {
     if (t.isInstanceOf[Throwable]) {
       val sw = new StringWriter();
       val pw = new PrintWriter(sw);
@@ -106,7 +106,7 @@ package object util {
     } else t.toString
   }
 
-  def rethrow[T](
+  private[tasks] def rethrow[T](
       messageOnError: => String,
       exceptionFactory: (=> String, Throwable) => Throwable
   )(block: => T): T =
@@ -116,12 +116,12 @@ package object util {
       case e: Throwable => throw (exceptionFactory(messageOnError, e))
     }
 
-  def rethrow[T](messageOnError: => String)(block: => T): T =
+  private[tasks] def rethrow[T](messageOnError: => String)(block: => T): T =
     rethrow(messageOnError, new RuntimeException(_, _))(block)
 
   /** Retry the given block n times. */
   @annotation.tailrec
-  def retry[T](n: Int)(fn: => T): Try[T] =
+  private[tasks] def retry[T](n: Int)(fn: => T): Try[T] =
     Try(fn) match {
       case x: Success[T] => x
       case _ if n > 1    => retry(n - 1)(fn)
@@ -135,7 +135,9 @@ package object util {
     * @param f
     *   block using the resource
     */
-  def useResource[A <: { def close(): Unit }, B](param: A)(f: A => B): B =
+  private[tasks] def useResource[A <: { def close(): Unit }, B](
+      param: A
+  )(f: A => B): B =
     try {
       f(param)
     } finally {
@@ -144,7 +146,10 @@ package object util {
     }
 
   /** Writes binary data to file. */
-  def writeBinaryToFile(fileName: String, data: Array[Byte]): Unit =
+  private[tasks] def writeBinaryToFile(
+      fileName: String,
+      data: Array[Byte]
+  ): Unit =
     useResource(new BufferedOutputStream(new FileOutputStream(fileName))) {
       writer =>
         writer.write(data)
@@ -154,30 +159,35 @@ package object util {
     *
     * Closes the stream when read through.
     */
-  def readStreamAndClose(is: java.io.InputStream) = new Iterator[Byte] {
-    var s = is.read
+  private[tasks] def readStreamAndClose(is: java.io.InputStream) =
+    new Iterator[Byte] {
+      var s = is.read
 
-    def hasNext = s != -1
+      def hasNext = s != -1
 
-    def next() = {
-      val x = s.toByte; s = is.read;
-      if (!hasNext) {
-        is.close()
-      }; x
+      def next() = {
+        val x = s.toByte; s = is.read;
+        if (!hasNext) {
+          is.close()
+        }; x
+      }
     }
-  }
 
   /** Opens a buffered java.io.BufferedInputStream on the file. Closes it after
     * the block is executed.
     */
-  def openFileInputStream[T](fileName: File)(func: BufferedInputStream => T) =
+  private[tasks] def openFileInputStream[T](fileName: File)(
+      func: BufferedInputStream => T
+  ) =
     useResource(new BufferedInputStream(new FileInputStream(fileName)))(func)
 
   /** Merge maps with key collision
     * @param fun
     *   Handles key collision
     */
-  def addMaps[K, V](a: Map[K, V], b: Map[K, V])(fun: (V, V) => V): Map[K, V] = {
+  private[tasks] def addMaps[K, V](a: Map[K, V], b: Map[K, V])(
+      fun: (V, V) => V
+  ): Map[K, V] = {
     a ++ b.map { case (key, bval) =>
       val aval = a.get(key)
       val cval = aval match {
@@ -192,7 +202,10 @@ package object util {
     * @param fun
     *   Handles key collision
     */
-  def addMaps[K, V](a: collection.Map[K, V], b: collection.Map[K, V])(
+  private[tasks] def addMaps[K, V](
+      a: collection.Map[K, V],
+      b: collection.Map[K, V]
+  )(
       fun: (V, V) => V
   ): collection.Map[K, V] = {
     a ++ b.map { case (key, bval) =>
@@ -205,7 +218,7 @@ package object util {
     }
   }
 
-  def retryIO[A](tag: String)(f: => IO[A], c: Int)(implicit
+  private[tasks] def retryIO[A](tag: String)(f: => IO[A], c: Int)(implicit
       log: scribe.Logger
   ): IO[A] =
     if (c > 0) f.handleErrorWith { case e =>
@@ -218,7 +231,7 @@ package object util {
     }
     else f
 
-  def rightOrThrow[A, E](e: Either[E, A]): A = e match {
+  private[tasks] def rightOrThrow[A, E](e: Either[E, A]): A = e match {
     case Right(a)           => a
     case Left(e: Throwable) => throw e
     case Left(e)            => throw new RuntimeException(e.toString)

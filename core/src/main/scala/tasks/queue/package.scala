@@ -28,7 +28,7 @@ import cats.effect.IO
 
 package object queue {
 
-  def extractDataDependencies[T](
+  private[tasks] def extractDataDependencies[T](
       deserializedInputData: T
   )(implicit
       ce: ComputationEnvironment

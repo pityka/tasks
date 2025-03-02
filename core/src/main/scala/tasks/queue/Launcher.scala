@@ -46,7 +46,7 @@ import cats.effect.IO
 import cats.effect.kernel.Ref
 import cats.effect.FiberIO
 
-object Base64DataHelpers {
+private[tasks] object Base64DataHelpers {
   def toBytes(b64: Base64Data): Array[Byte] = base64(b64.value)
   def apply(b: Array[Byte]): Base64Data = Base64Data(base64(b))
 }
@@ -118,7 +118,7 @@ private[tasks] object Launcher {
 
 private[tasks] case class LauncherActor(address: tasks.util.message.Address)
 
-case class LauncherHandle(
+final class LauncherHandle(
     address: tasks.util.message.Address,
     ref: Ref[IO, Launcher.State],
     queueActor: QueueActor,
@@ -289,7 +289,7 @@ case class LauncherHandle(
   }
 }
 
-class LauncherBehavior(
+private[tasks] class LauncherBehavior(
     queueActor: QueueActor,
     nodeLocalCache: NodeLocalCache.State,
     slots: VersionedResourceAvailable,
@@ -307,7 +307,7 @@ class LauncherBehavior(
       ref: Ref[IO, Launcher.State]
   ): LauncherHandle = {
 
-    LauncherHandle(address, ref, queueActor, cache, messenger, config)
+    new LauncherHandle(address, ref, queueActor, cache, messenger, config)
   }
   val init: Launcher.State =
     Launcher.State(maxResources = slots, availableResources = slots)

@@ -46,7 +46,7 @@ import tasks.elastic.RemoteNodeRegistry
 import tasks.util.message._
 import tasks.util.message.MessageData.ScheduleTask
 
-object TaskQueue {
+private[tasks] object TaskQueue {
   case class ScheduleTaskEqualityProjection(
       description: HashedTaskDescription
   )
@@ -178,11 +178,11 @@ object TaskQueue {
 
 }
 
-case class QueueActor(
+private[tasks] case class QueueActor(
     val address: Address
 )
 
-object QueueActor {
+private[tasks] object QueueActor {
   val singletonAddress = Address("TasksQueue")
   val referenceByAddress = QueueActor(singletonAddress)
   def makeReference(
@@ -211,7 +211,7 @@ object QueueActor {
   }
 }
 
-final class TaskQueue(
+private[tasks] final class TaskQueue(
     messenger: Messenger,
     cache: TaskResultCache
 )(implicit config: TasksConfig)

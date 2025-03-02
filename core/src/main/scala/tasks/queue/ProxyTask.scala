@@ -45,7 +45,7 @@ import tasks.util.message._
 case class Proxy(address: tasks.util.message.Address)
 
 /* Local proxy of the remotely executed task */
-class ProxyTask[Input, Output](
+private[tasks] class ProxyTask[Input, Output](
     taskId: TaskId,
     inputDeserializer: Spore[Unit, Deserializer[Input]],
     outputSerializer: Spore[Unit, Serializer[Output]],

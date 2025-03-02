@@ -34,7 +34,7 @@ import cats.effect.IO
 import tasks.util.Messenger
 import cats.effect.kernel.Resource
 
-object SelfShutdown {
+private[tasks] object SelfShutdown {
   def make(
       shutdownRunningNode: ShutdownRunningNode,
       id: RunningJobId,

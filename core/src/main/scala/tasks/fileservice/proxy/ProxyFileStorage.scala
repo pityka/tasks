@@ -11,7 +11,7 @@ import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import org.http4s.client.Client
 import org.http4s.ember.client.EmberClientBuilder
 
-object ProxyFileStorage {
+private[tasks] object ProxyFileStorage {
   implicit private def jsonDec[T](implicit
       t: JsonValueCodec[T]
   ): EntityDecoder[IO, T] =

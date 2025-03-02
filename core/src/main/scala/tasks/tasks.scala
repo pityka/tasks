@@ -92,44 +92,11 @@ trait HasPersistent[+A] { self: A =>
   def persistent: A
 }
 
-case class UntypedTaskDefinition[A, C](
-    rs: Spore[Unit, Deserializer[A]],
-    ws: Spore[Unit, Serializer[C]],
-    fs: Spore[A, ComputationEnvironment => IO[C]]
-) {
-
-  def apply(j: Base64Data) =
-    (ce: ComputationEnvironment) =>
-      IO.interruptible {
-        val r = rs(())
-        val w = ws(())
-
-        val deserialized = r(Base64DataHelpers.toBytes(j)) match {
-          case Right(value) => value
-          case Left(error) =>
-            val logMessage =
-              s"Could not deserialize input. Error: $error. Raw data (as utf8): ${new String(Base64DataHelpers.toBytes(j))}"
-            scribe.error(logMessage)
-            throw new RuntimeException(logMessage)
-        }
-        (w, deserialized)
-      }.flatMap { case (w, deserializedInputData) =>
-        fs(deserializedInputData)(ce).flatMap { result =>
-          tasks.queue
-            .extractDataDependencies(deserializedInputData)(ce)
-            .map { meta =>
-              (UntypedResult.make(result)(w), meta)
-            }
-        }
-      }
-
-}
-
-case class TaskDefinition[A: Serializer, B: Deserializer](
-    rs: Spore[Unit, Deserializer[A]],
-    ws: Spore[Unit, Serializer[B]],
-    fs: Spore[A, ComputationEnvironment => IO[B]],
-    taskId: TaskId
+final class TaskDefinition[A: Serializer, B: Deserializer](
+    private[tasks] val rs: Spore[Unit, Deserializer[A]],
+    private[tasks] val ws: Spore[Unit, Serializer[B]],
+    private[tasks] val fs: Spore[A, ComputationEnvironment => IO[B]],
+    private[tasks] val taskId: TaskId
 ) {
 
   def writer1 = implicitly[Serializer[A]]

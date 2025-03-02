@@ -36,7 +36,7 @@ import cats.effect.IO
 import cats.effect.FiberIO
 import cats.effect.kernel.Ref
 
-object NodeKiller {
+private[tasks] object NodeKiller {
   case class State(
       lastIdleSessionStart: Long = System.nanoTime(),
       lastIdleState: Long = 0L,
@@ -45,7 +45,7 @@ object NodeKiller {
   )
 }
 
-class NodeKiller(
+private[tasks] class NodeKiller(
     shutdownNode: ShutdownNode,
     targetLauncherActor: LauncherActor,
     targetNode: Node,

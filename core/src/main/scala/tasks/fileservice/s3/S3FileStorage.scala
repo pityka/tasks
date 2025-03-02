@@ -40,7 +40,7 @@ import fs2.{Stream, Pipe}
 import tasks.fileservice._
 import tasks.fileservice.s3.S3Client.ObjectMetaData
 
-class S3Storage(
+private[tasks] class S3Storage(
     bucketName: String,
     folderPrefix: String,
     sse: String,

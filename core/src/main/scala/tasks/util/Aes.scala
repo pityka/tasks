@@ -41,7 +41,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-object Aes {
+private[tasks] object Aes {
 
   private val IntSizeInBytes = 4
   private val IvLengthBytes = 12

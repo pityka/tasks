@@ -11,14 +11,14 @@ import tasks.deploy.LocalConfiguration
 import tasks.util.message._
 import tasks.wire._
 
-trait Messenger {
+private[tasks] trait Messenger {
   def listeningAddress: Option[String]
   def submit(message: Message): IO[Unit]
   def subscribe(address: Address): IO[fs2.Stream[IO, Message]]
 
 }
 
-object Messenger {
+private[tasks] object Messenger {
   def make(hostConfig: HostConfiguration): Resource[IO, Messenger] = {
     hostConfig match {
       case _: LocalConfiguration => LocalMessenger.make

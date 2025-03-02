@@ -70,29 +70,16 @@ trait CreateNode {
 trait CreateNodeFactory {
   def apply(
       masterAddress: SimpleSocketAddress,
-      codeAddres: CodeAddress
+      codeAddress: CodeAddress
   ): CreateNode
 }
 
-// trait ReaperFactory {
-//   def apply(implicit system: ActorSystem, config: TasksConfig): ActorRef
-// }
-
-trait DecideNewNode {
+private[tasks] trait DecideNewNode {
   def needNewNode(
       q: MessageData.QueueStat,
       registeredNodes: Seq[ResourceAvailable],
       pendingNodes: Seq[ResourceAvailable]
   ): Map[ResourceRequest, Int]
 }
-
-// class ShutdownReaper(id: RunningJobId, shutdown: ShutdownRunningNode)
-//     extends Reaper {
-
-//   def allSoulsReaped(): Unit = {
-//     log.info(s"All souls reaped. Call shutdown node on $id.")
-//     shutdown.shutdownRunningNode(id)
-//   }
-// }
 
 case class CodeAddress(address: SimpleSocketAddress, codeVersion: CodeVersion)

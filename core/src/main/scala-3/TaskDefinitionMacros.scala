@@ -28,11 +28,7 @@ import cats.effect.IO
 import scala.quoted.*
 
 @scala.annotation.experimental
-object TaskDefinitionMacros {
-
-  //  def sporeImpl[A: Type, B: Type](
-  //     value: Expr[A => B]
-  // )(using Quotes): Expr[Spore[A, B]] = {
+private[tasks] object TaskDefinitionMacros {
 
   def taskDefinitionFromTree[A: Type, C: Type](
       serA: Expr[Serializer[A]],
@@ -66,7 +62,7 @@ object TaskDefinitionMacros {
     val (d3, i3) = valdef(tasks.queue.SporeMacros.sporeImpl(comp))
 
     val td = '{
-      _root_.tasks.TaskDefinition[A, C](
+      new _root_.tasks.TaskDefinition[A, C](
         ${ i1 },
         $i2,
         $i3,

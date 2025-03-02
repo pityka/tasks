@@ -29,7 +29,7 @@ import tasks.queue._
 
 import com.github.plokhotnyuk.jsoniter_scala.core._
 
-trait TaskSerializer {
+private[tasks] trait TaskSerializer {
 
   def serializeResult(original: UntypedResult): Array[Byte] = {
     writeToArray(original)

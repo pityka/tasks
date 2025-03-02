@@ -31,7 +31,7 @@ import tasks.util._
 import tasks.util.eq._
 import tasks.util.config._
 
-class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
+private[tasks] class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
     config: TasksConfig
 ) extends DecideNewNode {
 

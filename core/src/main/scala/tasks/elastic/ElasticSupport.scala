@@ -34,7 +34,7 @@ import tasks.util.Messenger
 import cats.effect.kernel.Resource
 import cats.effect.IO
 
-trait ElasticSupport {
+private[tasks] sealed trait ElasticSupport {
 
   def hostConfig: Option[HostConfiguration]
 
@@ -47,7 +47,7 @@ trait ElasticSupport {
   }
   def getNodeName: GetNodeName
 
-  def apply(
+  private[tasks] def apply(
       masterAddress: SimpleSocketAddress,
       queueActor: QueueActor,
       resource: ResourceAvailable,
@@ -67,7 +67,7 @@ case class SimpleElasticSupport(
   def selfShutdownNow() =
     shutdown.shutdownRunningNode(RunningJobId(getNodeName.getNodeName))
 
-  def apply(
+  private[tasks] def apply(
       masterAddress: SimpleSocketAddress,
       queueActor: QueueActor,
       resource: ResourceAvailable,
@@ -98,5 +98,3 @@ case class SimpleElasticSupport(
     }
 
 }
-
-case class ElasticSupportFqcn(fqcn: String)

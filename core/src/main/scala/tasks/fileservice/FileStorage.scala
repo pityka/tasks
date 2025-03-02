@@ -36,7 +36,7 @@ import cats.effect.kernel.Resource
 import cats.effect.IO
 import fs2.Stream
 
-object FileStorage {
+private[tasks] object FileStorage {
   def getContentHash(is: fs2.Stream[IO, Byte]): IO[Int] = {
     val checkedSize = 1024 * 256
     is.take(checkedSize)
@@ -47,7 +47,7 @@ object FileStorage {
   }
 }
 
-class RemoteFileStorage(implicit
+private[tasks] class RemoteFileStorage(implicit
     streamHelper: StreamHelper,
     config: TasksConfig
 ) {
@@ -125,7 +125,7 @@ class RemoteFileStorage(implicit
 
 }
 
-trait ManagedFileStorage {
+private[tasks] trait ManagedFileStorage {
 
   def uri(mp: ManagedFilePath): IO[Uri]
 

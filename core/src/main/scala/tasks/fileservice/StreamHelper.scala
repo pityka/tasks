@@ -34,7 +34,7 @@ import org.http4s.RangeUnit
 import org.http4s
 import fs2.Chunk
 import s3.S3Client
-class StreamHelper(
+private[tasks] class StreamHelper(
     s3Client: Option[S3Client],
     httpClient: Option[Client[IO]]
 ) {
