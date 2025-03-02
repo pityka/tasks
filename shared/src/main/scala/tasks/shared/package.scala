@@ -6,7 +6,7 @@ package object shared {
 
   case class CodeVersion(s: String)
 
-  case class Priority(s:Int)
+  case class Priority(s: Int)
 
   case class ElapsedTimeNanoSeconds(s: Long)
 

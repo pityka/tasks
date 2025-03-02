@@ -81,11 +81,21 @@ object Actor {
           }
 
         val releaseIO =
-          IO(scribe.debug(s"Will run release side effect of actor with address $address")) *> stateRef.get.flatMap(release).void
+          IO(
+            scribe.debug(
+              s"Will run release side effect of actor with address $address"
+            )
+          ) *> stateRef.get.flatMap(release).void
 
-        Resource.make(streamFiber)(fiber => releaseIO *> fiber.cancel *> IO(scribe.debug(s"Streams of actor $address canceled."))).map {
-          _ => stateRef
-        }
+        Resource
+          .make(streamFiber)(fiber =>
+            releaseIO *> fiber.cancel *> IO(
+              scribe.debug(s"Streams of actor $address canceled.")
+            )
+          )
+          .map { _ =>
+            stateRef
+          }
       }
     }
   }

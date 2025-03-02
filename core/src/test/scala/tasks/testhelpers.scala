@@ -35,14 +35,14 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 trait TestHelpers {
 
-  def writeBinaryToFile(fileName: java.io.File, d: Array[Byte]) = 
-    java.nio.file.Files.write(fileName.toPath,d)
+  def writeBinaryToFile(fileName: java.io.File, d: Array[Byte]) =
+    java.nio.file.Files.write(fileName.toPath, d)
+
   /** Reads file contents into a bytearray. */
   def readBinaryFile(fileName: String): Array[Byte] = {
     java.nio.file.Files.readAllBytes(new java.io.File(fileName).toPath)
   }
 
-  
   def await[T](f: Future[T]) = Await.result(f, atMost = 60 seconds)
   def await[T](f: IO[T]) = f
     .unsafeRunTimed(60 seconds)

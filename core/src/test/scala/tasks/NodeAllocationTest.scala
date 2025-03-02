@@ -93,10 +93,10 @@ object NodeAllocationTest extends TestHelpers {
 class NodeAllocationTestSuite extends FunSuite with Matchers {
 
   scribe.Logger.root
-  .clearHandlers()
-  .clearModifiers()
-  .withHandler(minimumLevel = Some(scribe.Level.Debug))
-  .replace()
+    .clearHandlers()
+    .clearModifiers()
+    .withHandler(minimumLevel = Some(scribe.Level.Debug))
+    .replace()
 
   test("elastic node allocation should spawn nodes") {
     NodeAllocationTest.run.unsafeRunSync().get should equal(3)

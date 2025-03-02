@@ -17,18 +17,17 @@ object S3Client {
 
   case class S3UploadResponse(etag: String, contentLength: Long)
 
-      
 }
 
 trait S3Client {
   import S3Client._
-  def getObjectMetadata(bucket : String, key: String) : IO[Option[ObjectMetaData]]
+  def getObjectMetadata(bucket: String, key: String): IO[Option[ObjectMetaData]]
 
   def readFileMultipart(
       bucket: String,
       key: String,
       partSize: Int
-  ): fs2.Stream[IO, Byte] 
+  ): fs2.Stream[IO, Byte]
 
   def readFile(bucket: String, key: String): fs2.Stream[IO, Byte]
 

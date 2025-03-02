@@ -183,7 +183,10 @@ package object tasks extends MacroCalls {
   def defaultTaskSystem(
       string: String
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
-    defaultTaskSystem(Some(ConfigFactory.parseString(string)), Resource.pure(None))
+    defaultTaskSystem(
+      Some(ConfigFactory.parseString(string)),
+      Resource.pure(None)
+    )
 
   def defaultTaskSystem(
       extraConf: Option[Config]

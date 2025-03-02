@@ -189,13 +189,20 @@ object QueueActor {
       masterAddress: SimpleSocketAddress,
       messenger: Messenger,
       remoteNodeRegistry: Option[RemoteNodeRegistry]
-  )(implicit config: TasksConfig): IO[Either[Throwable,QueueActor]] = Ask.ask(
-    target = singletonAddress, data = MessageData.Ping, timeout = config.pendingNodeTimeout,messenger = messenger
-  ).map{
-    case Right(Some(_)) => (Right(referenceByAddress ))
-    case Right(None) => (Left(new RuntimeException(s"QueueActor not reachable")))
-    case Left(e) => Left(e)
-  }
+  )(implicit config: TasksConfig): IO[Either[Throwable, QueueActor]] = Ask
+    .ask(
+      target = singletonAddress,
+      data = MessageData.Ping,
+      timeout = config.pendingNodeTimeout,
+      messenger = messenger
+    )
+    .map {
+      case Right(Some(_)) => (Right(referenceByAddress))
+      case Right(None) => (
+        Left(new RuntimeException(s"QueueActor not reachable"))
+      )
+      case Left(e) => Left(e)
+    }
 
   def makeWithRunloop(cache: TaskResultCache, messenger: Messenger)(implicit
       config: TasksConfig
@@ -212,7 +219,11 @@ final class TaskQueue(
   val address: Address = QueueActor.singletonAddress
   val init: TaskQueue.State = TaskQueue.State.empty
   override def release(st: TaskQueue.State) =
-    IO(scribe.debug(s"Releasing resources held by TasksQueue: ${st.fibers} fibers")) *> IO.parSequenceN(1)(st.fibers.map(_.cancel)).void
+    IO(
+      scribe.debug(
+        s"Releasing resources held by TasksQueue: ${st.fibers} fibers"
+      )
+    ) *> IO.parSequenceN(1)(st.fibers.map(_.cancel)).void
   def derive(
       ref: Ref[IO, TaskQueue.State]
   ): QueueActor = QueueActor(address)
@@ -319,9 +330,7 @@ final class TaskQueue(
         state.queuedTasks.valuesIterator
           .foreach { case (sch, _) =>
             val ret = availableResource.canFulfillRequest(sch.resource)
-            if (
-              !ret && (maxPrio == Int.MinValue || sch.priority.s > maxPrio)
-            ) {
+            if (!ret && (maxPrio == Int.MinValue || sch.priority.s > maxPrio)) {
               scribe.debug(
                 s"Can't fulfill request ${sch.resource} with available resources $availableResource or lower priority than an already selected task"
               )

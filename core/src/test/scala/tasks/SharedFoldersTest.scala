@@ -75,7 +75,7 @@ object SharedFoldersTest extends TestHelpers {
 }
 
 class SharedFoldersTestSuite extends FunSuite with Matchers {
-import cats.effect.unsafe.implicits.global
+  import cats.effect.unsafe.implicits.global
 
   test("SharedFile.fromFolder should import intermediate folders ") {
     val sf = SharedFoldersTest.run.unsafeRunSync().get

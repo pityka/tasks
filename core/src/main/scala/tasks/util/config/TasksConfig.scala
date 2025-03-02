@@ -254,16 +254,16 @@ class TasksConfig(load: () => Config) {
 
   val dockerImageName = raw.getString("tasks.docker.image")
 
-  val dockerEnvVars = raw.getStringList("tasks.docker.env").asScala.grouped(2).map{ g =>
-    (g(0),g(1))  
-  }
+  val dockerEnvVars =
+    raw.getStringList("tasks.docker.env").asScala.grouped(2).map { g =>
+      (g(0), g(1))
+    }
   def dockerContexts = raw.getConfigList("tasks.docker.contexts").asScala
   val dockerNetwork = raw.getString("tasks.docker.network")
 
-
   def kubernetesImageName = raw.getString("tasks.kubernetes.image")
   val kubernetesImageApplicationSubPath =
-    raw.getString("tasks.kubernetes.imageApplicationSubPath") 
+    raw.getString("tasks.kubernetes.imageApplicationSubPath")
 
   def kubernetesHostNameOrIPEnvVar =
     raw.getString("tasks.kubernetes.hostnameOrIPEnvVar")

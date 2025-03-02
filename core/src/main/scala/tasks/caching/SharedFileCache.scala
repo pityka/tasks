@@ -99,7 +99,11 @@ private[tasks] class SharedFileCache(implicit
             fs2.Stream.chunk(Chunk.array(value)),
             name = fname
           )
-        _ <- IO(scribe.debug(s"Saved ${hashedTaskDescription.taskId} ${hashedTaskDescription.dataHash} to ${p.list.mkString("/")}/$fname"))
+        _ <- IO(
+          scribe.debug(
+            s"Saved ${hashedTaskDescription.taskId} ${hashedTaskDescription.dataHash} to ${p.list.mkString("/")}/$fname"
+          )
+        )
 
       } yield ()
 

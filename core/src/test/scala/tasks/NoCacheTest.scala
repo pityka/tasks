@@ -75,7 +75,8 @@ object NoCacheTest extends TestHelpers with Matchers {
 class NoCacheTestSuite extends FunSuite with Matchers {
 
   test("not caching tasks if marked so") {
-    (1 to 10 map (_ => NoCacheTest.run.unsafeRunSync().get)) shouldBe (1 to 10).map(_ => 1)
+    (1 to 10 map (_ => NoCacheTest.run.unsafeRunSync().get)) shouldBe (1 to 10)
+      .map(_ => 1)
     NoCacheTest.sideEffect.size shouldBe 10
   }
 

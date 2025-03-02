@@ -96,7 +96,9 @@ class FailingTasksTestSuite extends FunSuite with Matchers {
   test(
     "a failing task should propagate its exception and not interfere with other tasks"
   ) {
-    FailingTasksTest.run.unsafeRunSync().get shouldBe (("recovered", "succeeded", "recovered"))
+    FailingTasksTest.run
+      .unsafeRunSync()
+      .get shouldBe (("recovered", "succeeded", "recovered"))
   }
 
 }

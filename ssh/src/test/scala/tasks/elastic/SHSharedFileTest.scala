@@ -94,9 +94,12 @@ object SHResultWithSharedFilesTest extends TestHelpers {
             .unsafeRunSync()(cats.effect.unsafe.implicits.global)
           val source = fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes()))
           val tmpfile = {
-            val tmp = java.io.File.createTempFile("dsfsdf","dfs")
-            tasks.util.writeBinaryToFile(tmp.getAbsolutePath,Array[Byte](1, 2, 3))
-            tmp 
+            val tmp = java.io.File.createTempFile("dsfsdf", "dfs")
+            tasks.util.writeBinaryToFile(
+              tmp.getAbsolutePath,
+              Array[Byte](1, 2, 3)
+            )
+            tmp
           }
           val fs = List(
             SharedFile(tmpfile, "f1"),
@@ -164,8 +167,11 @@ object SHResultWithSharedFilesTest extends TestHelpers {
       )
 
     withTaskSystem(testConfig2.withFallback(testConfig)) { implicit ts =>
-      val tmpfile =  java.io.File.createTempFile("dsfsdf","dfs")
-        tasks.util.writeBinaryToFile(tmpfile.getAbsolutePath,Array[Byte](1, 2, 3))
+      val tmpfile = java.io.File.createTempFile("dsfsdf", "dfs")
+      tasks.util.writeBinaryToFile(
+        tmpfile.getAbsolutePath,
+        Array[Byte](1, 2, 3)
+      )
       val sf = await(SharedFile(tmpfile, "input.txt"))
       val f1 = testTask(Input(1) -> sf)(ResourceRequest(1, 500))
       val f2 = testTask(Input(1) -> sf)(ResourceRequest(1, 500))

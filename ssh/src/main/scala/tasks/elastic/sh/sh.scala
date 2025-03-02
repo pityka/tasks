@@ -61,8 +61,10 @@ class SHCreateNode(
     * @return
     *   Exit code of the process.
     */
-  private def exec(pb: ProcessBuilder)(stdOutFunc: String => Unit = { (_: String) => })(
-      implicit stdErrFunc: String => Unit = (_: String) => ()
+  private def exec(
+      pb: ProcessBuilder
+  )(stdOutFunc: String => Unit = { (_: String) => })(implicit
+      stdErrFunc: String => Unit = (_: String) => ()
   ): Int =
     pb.run(ProcessLogger(stdOutFunc, stdErrFunc)).exitValue()
 
@@ -99,7 +101,6 @@ class SHCreateNode(
     (ls.reverse, lse.reverse, boolean && (exitvalue == 0))
   }
 
-
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest
   ): Try[Tuple2[PendingJobId, ResourceAvailable]] = {
@@ -135,7 +136,7 @@ class SHCreateNode(
         ),
         cwd = wd
       )
-    )    
+    )
 
     val pid = stdout.mkString("").trim.toInt
 

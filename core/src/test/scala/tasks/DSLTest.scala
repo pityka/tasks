@@ -63,9 +63,9 @@ object DSLTest extends TestHelpers with Matchers {
         )
       )
     ) { implicit ts =>
-      ((increment(Input(0))(ResourceRequest(1, 500)))).flatMap{i =>
-        IO(scribe.info(s"Incremented $i")  ).map(_ => i)
-        
+      ((increment(Input(0))(ResourceRequest(1, 500)))).flatMap { i =>
+        IO(scribe.info(s"Incremented $i")).map(_ => i)
+
       }
 
     }

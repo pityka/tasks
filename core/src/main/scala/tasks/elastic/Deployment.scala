@@ -69,11 +69,12 @@ object Deployment {
       case Some(host) => s"-Dhosts.hostnameExternal=$host"
     }
     val followerNodeNameString = followerNodeName match {
-      case None       => ""
+      case None        => ""
       case Some(value) => s"-Dtasks.elastic.nodename=$value"
     }
 
-    val mayUseArbitraryPortString = s"-Dhosts.mayUseArbitraryPort=${followerMayUseArbitraryPort}"
+    val mayUseArbitraryPortString =
+      s"-Dhosts.mayUseArbitraryPort=${followerMayUseArbitraryPort}"
 
     val gpuString =
       if (gpus.size > 0)

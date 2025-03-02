@@ -47,7 +47,6 @@ case class RemoteNodeRegistry(address: Address)
 
 object NodeRegistry {
 
-  
   def makeReference(
       masterAddress: SimpleSocketAddress,
       messenger: Messenger,

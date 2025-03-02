@@ -1,5 +1,5 @@
 package tasks.util
-import org.http4s.{ Message => _ ,_}
+import org.http4s.{Message => _, _}
 import org.http4s.dsl.io._
 import cats.effect.IO
 import cats.effect.kernel.Ref
@@ -28,7 +28,13 @@ class RemoteMessenger(
     localMessenger.channels.get.flatMap { channel =>
       channel.get(message.to.withoutUri) match {
         case None =>
-          RemoteMessenger.submit0(RemoteMessenger.addUri(message,listeningUri), client,peerUri).void
+          RemoteMessenger
+            .submit0(
+              RemoteMessenger.addUri(message, listeningUri),
+              client,
+              peerUri
+            )
+            .void
         case _ => localMessenger.submit(message)
       }
     }
@@ -41,7 +47,9 @@ class RemoteMessenger(
 object RemoteMessenger {
 
   def addUri(message: Message, listeningUri: org.http4s.Uri) = {
-    message.copy(from = message.from.copy(listeningUri = Some(listeningUri.toString)))
+    message.copy(from =
+      message.from.copy(listeningUri = Some(listeningUri.toString))
+    )
 
   }
 
@@ -82,14 +90,18 @@ object RemoteMessenger {
 
     case request if request.method == Method.POST =>
       request.decode[Message] { message =>
-        IO(scribe.debug(s"HTTP server received message ${message.from} ${message.to} ${message.data.getClass}")) *>
-        localMessenger
-          .submit(message)
-          .flatMap(_ =>
-            Ok(
-              s"submitted ${message.from} ${message.to} ${message.data.getClass()}"
-            )
+        IO(
+          scribe.debug(
+            s"HTTP server received message ${message.from} ${message.to} ${message.data.getClass}"
           )
+        ) *>
+          localMessenger
+            .submit(message)
+            .flatMap(_ =>
+              Ok(
+                s"submitted ${message.from} ${message.to} ${message.data.getClass()}"
+              )
+            )
       }
   }
   private def submit0(
@@ -100,7 +112,14 @@ object RemoteMessenger {
     val request =
       Request[IO](
         method = Method.POST,
-        uri = message.to.listeningUri.map(s => org.http4s.Uri.fromString(s).toOption.getOrElse(throw new RuntimeException(s"Can't parse $s"))).getOrElse(peerUri)
+        uri = message.to.listeningUri
+          .map(s =>
+            org.http4s.Uri
+              .fromString(s)
+              .toOption
+              .getOrElse(throw new RuntimeException(s"Can't parse $s"))
+          )
+          .getOrElse(peerUri)
       ).withEntity(
         message
       )
@@ -120,7 +139,10 @@ object RemoteMessenger {
       val r = route(localMessenger)
       val listeningUri = {
         val u = s"http://$bindHost:$bindPort/"
-        org.http4s.Uri.fromString(u).toOption.getOrElse(throw new RuntimeException(s"Can't parse $u"))
+        org.http4s.Uri
+          .fromString(u)
+          .toOption
+          .getOrElse(throw new RuntimeException(s"Can't parse $u"))
       }
       val server = EmberServerBuilder
         .default[IO]
@@ -140,7 +162,12 @@ object RemoteMessenger {
       client.flatMap { client =>
         server.map { server =>
           scribe.info(s"Remote messenger with ${server.address} built")
-          new RemoteMessenger(client = client, peerUri = peerUri, listeningUri = listeningUri  , localMessenger = localMessenger)
+          new RemoteMessenger(
+            client = client,
+            peerUri = peerUri,
+            listeningUri = listeningUri,
+            localMessenger = localMessenger
+          )
         }
       }
     }

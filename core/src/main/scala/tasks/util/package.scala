@@ -75,11 +75,14 @@ package object util {
       }
       .getOrElse {
         if (config.mayUseArbitraryPort) {
-        val s = new java.net.ServerSocket(0);
-        val p = s.getLocalPort()
-        s.close
-        p
-        } else throw new RuntimeException(s"Configured port ${config.hostPort} already taken. ")
+          val s = new java.net.ServerSocket(0);
+          val p = s.getLocalPort()
+          s.close
+          p
+        } else
+          throw new RuntimeException(
+            s"Configured port ${config.hostPort} already taken. "
+          )
       }
 
   def stackTraceAsString(t: Any): String = {
@@ -128,15 +131,12 @@ package object util {
       param.close()
     }
 
- 
-
   /** Writes binary data to file. */
   def writeBinaryToFile(fileName: String, data: Array[Byte]): Unit =
     useResource(new BufferedOutputStream(new FileOutputStream(fileName))) {
       writer =>
         writer.write(data)
     }
-
 
   /** Returns an iterator on the InputStream's data.
     *
@@ -212,7 +212,6 @@ package object util {
       .getDeclaredConstructor()
       .newInstance()
       .asInstanceOf[A]
-   
 
   }
 

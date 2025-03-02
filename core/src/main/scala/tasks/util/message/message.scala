@@ -1,6 +1,5 @@
 package tasks.util.message
 
-
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
@@ -8,24 +7,25 @@ import com.github.plokhotnyuk.jsoniter_scala.core.JsonReader
 
 case class Address(value: String, listeningUri: Option[String]) {
   private[util] def withoutUri = Address(value, None)
-  def withAddress(s: Option[String]) = copy(listeningUri = listeningUri.orElse(s))
+  def withAddress(s: Option[String]) =
+    copy(listeningUri = listeningUri.orElse(s))
   override def equals(that: Any): Boolean = {
     that match {
-      case Address(v,_) => value == v
-      case _ => false
+      case Address(v, _) => value == v
+      case _             => false
     }
   }
 
-  override def hashCode(): Int =value.hashCode()
+  override def hashCode(): Int = value.hashCode()
 }
 object Address {
-  def apply(value: String) : Address = Address(value, None)
+  def apply(value: String): Address = Address(value, None)
 }
 
 case class Message(data: MessageData, from: Address, to: Address)
 object Message {
 
-   implicit val throwableCodec: JsonValueCodec[Throwable] = {
+  implicit val throwableCodec: JsonValueCodec[Throwable] = {
     type DTO = (String, List[(String, String, String, Int)])
     val codec0: JsonValueCodec[DTO] = JsonCodecMaker.make
 
@@ -60,8 +60,8 @@ object Message {
       }
     }
   }
-  
-  implicit val codec: JsonValueCodec[Message] =  
+
+  implicit val codec: JsonValueCodec[Message] =
     com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker.make
 }
 

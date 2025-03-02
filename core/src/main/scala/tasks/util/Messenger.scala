@@ -1,6 +1,6 @@
 package tasks.util
 
-import org.http4s.{Message  => _, _}
+import org.http4s.{Message => _, _}
 import org.http4s.dsl.io._
 import cats.effect.IO
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
@@ -12,7 +12,7 @@ import tasks.util.message._
 import tasks.wire._
 
 trait Messenger {
-  def listeningAddress : Option[String]
+  def listeningAddress: Option[String]
   def submit(message: Message): IO[Unit]
   def subscribe(address: Address): IO[fs2.Stream[IO, Message]]
 
@@ -27,13 +27,12 @@ object Messenger {
           hostConfig.myAddressExternal.getOrElse(hostConfig.myAddressBind)
         val internalAddress = hostConfig.myAddressBind
 
-        
         val peerUri = {
           val str =
-          s"http://${hostConfig.master.hostName}:${hostConfig.master.port}"
+            s"http://${hostConfig.master.hostName}:${hostConfig.master.port}"
           org.http4s.Uri
-          .fromString(str)
-          .getOrElse(throw new RuntimeException(s"Can't parse $str"))
+            .fromString(str)
+            .getOrElse(throw new RuntimeException(s"Can't parse $str"))
         }
         RemoteMessenger.make(
           bindHost = internalAddress.hostName,

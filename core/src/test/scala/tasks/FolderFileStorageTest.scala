@@ -44,7 +44,7 @@ object FolderFileStorageTest extends TestHelpers with Matchers {
         local <- sf.file.allocated.map(_._1)
         sf2 <- {
           val newPath = new File(local.getParentFile.getParentFile, "uncle")
-          writeBinaryToFile(newPath,"boo".getBytes)
+          writeBinaryToFile(newPath, "boo".getBytes)
           SharedFile(newPath, "something")
 
         }

@@ -39,7 +39,9 @@ private[tasks] object HeartBeatIO {
       clock: Clock[IO]
   ) = {
 
-    val address: Address = Address(s"HeartBeatIO-target=$target-${scala.util.Random.nextString(64)}")
+    val address: Address = Address(
+      s"HeartBeatIO-target=$target-${scala.util.Random.nextString(64)}"
+    )
     val subscriber = messenger.subscribe(address)
     val pingMsg = Message(from = address, to = target, data = MessageData.Ping)
 

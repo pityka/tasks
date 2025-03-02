@@ -63,7 +63,6 @@ object RercursiveTasksTest {
     Task[FibInput, FibOut]("fib", 1) {
 
       case FibInput(Some(n), Some(tag)) => { implicit ce =>
-        
         val prg = n match {
           case 0 => IO.pure(FibOut(0))
           case 1 => IO.pure(FibOut(1))
@@ -76,8 +75,8 @@ object RercursiveTasksTest {
             )
             for {
               _ <- releaseResourcesEarly
-              r <- IO.both(f1,f2)
-              
+              r <- IO.both(f1, f2)
+
             } yield FibOut(r._1.n + r._2.n)
           }
 
@@ -112,7 +111,6 @@ hosts.numCPU=4
     )
   }
 
-  
   val pair = defaultTaskSystem(Some(testConfig)).allocated.unsafeRunSync()
   implicit val system: TaskSystemComponents = pair._1._1
   import RercursiveTasksTest._

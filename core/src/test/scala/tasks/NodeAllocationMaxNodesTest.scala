@@ -66,7 +66,7 @@ object NodeAllocationMaxNodesTest extends TestHelpers {
         t2 <- f2
         t3 <- f3
       } yield t1 + t2 + t3
-import scala.concurrent.duration._
+      import scala.concurrent.duration._
       (future).timeout(30 seconds).attempt.map(_.toOption)
 
     }

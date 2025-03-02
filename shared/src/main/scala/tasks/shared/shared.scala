@@ -110,7 +110,7 @@ case class ResourceAvailable(
       image
     )
 
-  def minimum(r:ResourceRequest) = 
+  def minimum(r: ResourceRequest) =
     ResourceAllocated(
       r.cpu._1,
       r.memory,

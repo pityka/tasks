@@ -102,11 +102,11 @@ object SchemaEvolutionViaOptionsTest extends TestHelpers {
     }
 
     for {
-      run1 <- run1 
-      run2 <- run2 
+      run1 <- run1
+      run2 <- run2
       run3 <- run3
     } yield (run1.get + run2.get + run3.get)
-    
+
   }
 
 }

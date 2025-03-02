@@ -37,7 +37,6 @@ import cats.effect.unsafe.implicits.global
 
 trait TestHelpers {
 
-
   case class Input(i: Int)
   object Input {
     implicit val enc: Encoder[Input] = deriveEncoder[Input]

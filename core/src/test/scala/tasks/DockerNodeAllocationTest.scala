@@ -34,9 +34,11 @@ import com.typesafe.config.ConfigFactory
 import cats.effect.IO
 
 object DockerTestWorker extends App {
-  withTaskSystem(ConfigFactory.parseString(
-    "tasks.disableRemoting = false"
-  )) { _ =>
+  withTaskSystem(
+    ConfigFactory.parseString(
+      "tasks.disableRemoting = false"
+    )
+  ) { _ =>
     IO.never
   }.unsafeRunSync()
 }

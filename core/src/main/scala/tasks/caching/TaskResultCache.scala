@@ -43,7 +43,8 @@ private[tasks] class TaskResultCache(
     fileService: FileServiceComponent,
     config: TasksConfig
 ) {
-  override def toString = s"TaskResultCache(cacheMap=$cacheMap,filService=$fileService)"
+  override def toString =
+    s"TaskResultCache(cacheMap=$cacheMap,filService=$fileService)"
   def checkResult(
       scheduleTask: ScheduleTask,
       originalSender: Proxy
@@ -68,7 +69,9 @@ private[tasks] class TaskResultCache(
       cacheLookup <- lookup
       answer <- cacheLookup match {
         case None =>
-          scribe.debug(s"Checking: $taskId ${scheduleTask.description.dataHash}. Not found in cache.")
+          scribe.debug(
+            s"Checking: $taskId ${scheduleTask.description.dataHash}. Not found in cache."
+          )
           IO.pure(
             AnswerFromCache(
               Left("TaskNotFoundInCache"),
@@ -77,7 +80,9 @@ private[tasks] class TaskResultCache(
             )
           )
         case _ if !config.verifySharedFileInCache =>
-          scribe.debug(s"Checking: $taskId ${scheduleTask.description.dataHash}. Got something (not verified).")
+          scribe.debug(
+            s"Checking: $taskId ${scheduleTask.description.dataHash}. Got something (not verified)."
+          )
           IO.pure(
             AnswerFromCache(Right(cacheLookup), originalSender, scheduleTask)
           )
@@ -115,7 +120,9 @@ private[tasks] class TaskResultCache(
                   scheduleTask
                 )
               case (_, true) =>
-                scribe.debug(s"Checking: $taskId ${scheduleTask.description.dataHash}d. Got something (verified).")
+                scribe.debug(
+                  s"Checking: $taskId ${scheduleTask.description.dataHash}d. Got something (verified)."
+                )
                 AnswerFromCache(
                   Right(Some(cacheLookup)),
                   originalSender,

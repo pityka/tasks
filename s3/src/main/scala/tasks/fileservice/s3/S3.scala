@@ -294,7 +294,8 @@ class S3(val s3: S3AsyncClient) extends tasks.fileservice.s3.S3Client {
           .key(key)
           .build()
       )
-    ).map(response => ObjectMetaData(response.contentLength(),response.eTag())).map(Option(_))
+    ).map(response => ObjectMetaData(response.contentLength(), response.eTag()))
+      .map(Option(_))
       .handleErrorWith(_ match {
         case _: NoSuchKeyException => IO.pure(Option.empty[ObjectMetaData])
         case e: Throwable          => IO.raiseError(e)
