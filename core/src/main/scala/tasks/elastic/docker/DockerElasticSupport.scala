@@ -198,9 +198,8 @@ class DockerCreateNode(
     val nodeName = NodeName(spl(1))
     nodeNamesToContainerIds.get
       .map(
-        _.get(nodeName).map(containerId =>
-          PendingJobId(s"$contextName:${containerId.s}")
-        )
+        _.get(nodeName)
+          .map(containerId => PendingJobId(s"$contextName:${containerId.s}"))
       )
       .unsafeRunSync()
   }

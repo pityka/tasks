@@ -29,7 +29,8 @@ final case class Uri(uri: String) {
   private[tasks] def jUri = new java.net.URI(uri)
   private[tasks] def http4s = org.http4s.Uri.fromString(uri).toOption.get
   override def toString = uri
-  private[tasks] def scheme = if (jUri.getScheme == null) "file" else jUri.getScheme
+  private[tasks] def scheme =
+    if (jUri.getScheme == null) "file" else jUri.getScheme
   private[tasks] def authority = jUri.getAuthority
   private[tasks] def path = jUri.getPath
 }
