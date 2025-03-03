@@ -25,16 +25,16 @@
 
 package tasks.util
 
-private[tasks] case class Uri(uri: String) {
-  def jUri = new java.net.URI(uri)
-  def http4s = org.http4s.Uri.fromString(uri).toOption.get
+final case class Uri(uri: String) {
+  private[tasks] def jUri = new java.net.URI(uri)
+  private[tasks] def http4s = org.http4s.Uri.fromString(uri).toOption.get
   override def toString = uri
-  def scheme = if (jUri.getScheme == null) "file" else jUri.getScheme
-  def authority = jUri.getAuthority
-  def path = jUri.getPath
+  private[tasks] def scheme = if (jUri.getScheme == null) "file" else jUri.getScheme
+  private[tasks] def authority = jUri.getAuthority
+  private[tasks] def path = jUri.getPath
 }
 
-private[tasks] object Uri {
+object Uri {
 
   def apply(scheme: String, hostname: String, port: Int, path: String): Uri =
     Uri(s"${scheme}://${hostname}:${port}$path")
