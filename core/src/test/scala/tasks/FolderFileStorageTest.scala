@@ -68,7 +68,7 @@ object FolderFileStorageTest extends TestHelpers with Matchers {
 class FolderFileStorageTestSuite extends FunSuite with Matchers {
 
   test("importing a file relative to the base folder should work correctly") {
-    FolderFileStorageTest.run.unsafeRunSync().get shouldBe true
+    FolderFileStorageTest.run.unsafeRunSync().toOption.get shouldBe true
   }
 
 }

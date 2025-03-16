@@ -1,8 +1,8 @@
 package tasks.elastic.kubernetes
 
-import com.typesafe.config.Config
+import org.ekrich.config.Config
 import tasks.defaultTaskSystem
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 import com.google.cloud.tools.jib.api.Containerizer
 import tasks.util.config.TasksConfig
 import io.k8s.api.core.v1.PodSpec
@@ -29,6 +29,8 @@ import com.google.cloud.tools.jib.api.LogEvent.Level.INFO
 import cats.effect.kernel.Resource
 import tasks.deploy.HostConfiguration
 import tasks.fileservice.s3.S3Client
+import tasks.withTaskSystem
+import cats.effect.ExitCode
 
 object Bootstrap {
 
@@ -67,15 +69,15 @@ object Bootstrap {
       k8sRequestEphemeralMB: Int = 0
   )(
       useTs: TaskSystemComponents => IO[T]
-  ): IO[Option[T]] = {
+  ): IO[Either[ExitCode, T]] = {
 
     val tconfig = {
       val configuration = () => {
-        ConfigFactory.invalidateCaches
+        ConfigFactory.invalidateCaches()
 
         val loaded = tasks.util.loadConfig(config)
 
-        ConfigFactory.invalidateCaches
+        ConfigFactory.invalidateCaches()
 
         loaded
       }
@@ -100,20 +102,11 @@ object Bootstrap {
       )
 
       val cfg = cfg0.withFallback(tasks.util.loadConfig(config))
-      defaultTaskSystem(
+      withTaskSystem(
         Some(cfg),
         s3Resource,
         K8SElasticSupport.make(Some(cfg)).map(Some(_))
-      ).use { case (ts, hostConfig) =>
-        if (hostConfig.myRoles.contains(tasks.deploy.App))
-          useTs(ts)
-            .map(Some(_))
-            .flatTap(_ => IO { scribe.info("use TS completed.") })
-        else
-          IO { scribe.info("Fiber-blocking indefinitely.") } *> IO.never.as(
-            None
-          )
-      }
+      )(useTs)
     } else {
       scribe.info("No MY_POD_IP env found. Create pod of master.")
       k8sClientResource
@@ -316,7 +309,7 @@ object Bootstrap {
           )
 
         }
-        .use(IO.pure(_))
+        .use(_ => IO.pure(Left(ExitCode(0))))
     }
 
   }

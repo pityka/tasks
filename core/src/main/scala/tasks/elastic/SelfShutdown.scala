@@ -33,25 +33,30 @@ import cats.effect.kernel.Clock
 import cats.effect.IO
 import tasks.util.Messenger
 import cats.effect.kernel.Resource
+import cats.effect.FiberIO
+import cats.effect.kernel.Deferred
+import cats.effect.ExitCode
 
 private[tasks] object SelfShutdown {
   def make(
-      shutdownRunningNode: ShutdownRunningNode,
+      shutdownRunningNode: ShutdownSelfNode,
       id: RunningJobId,
       queueActor: QueueActor,
-      messenger: Messenger
-  )(implicit config: TasksConfig, clock: Clock[IO]) = {
-    val shutdown = IO.delay {
-      shutdownRunningNode.shutdownRunningNode(id)
-    }
+      messenger: Messenger,
+      exitCode: Deferred[IO, ExitCode]
+  )(implicit
+      config: TasksConfig,
+      clock: Clock[IO]
+  ): Resource[IO, FiberIO[Unit]] = {
+
     Resource.make(
       HeartBeatIO
         .make(
           target = queueActor.address,
-          sideEffect = shutdown,
+          sideEffect = shutdownRunningNode.shutdownRunningNode(exitCode, id),
           messenger = messenger
         )
         .start
-    )(_.cancel)
+    )(_.cancel *> IO(scribe.info("Canceled self shutdown heartbeat fiber")))
   }
 }

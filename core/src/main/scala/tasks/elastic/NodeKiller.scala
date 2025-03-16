@@ -118,11 +118,11 @@ private[tasks] class NodeKiller(
     scribe.info(
       "Shutting down target node: name= " + targetNode.name + " , actor= " + targetLauncherActor
     )
-    shutdownNode.shutdownRunningNode(targetNode.name)
-    sendTo(
+    shutdownNode.shutdownRunningNode(targetNode.name) *> sendTo(
       listener,
       MessageData.RemoveNode(targetNode)
     ) *> stopProcessingMessages
+
   }
 
   def receive = (state, ref) => {

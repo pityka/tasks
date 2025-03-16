@@ -76,7 +76,7 @@ object NodeLocalCache {
 
     val runAllocator =
       orElse.allocated.flatMap { case a @ (value, _) =>
-        stateR.modify { case State(map) =>
+        stateR.flatModify { case State(map) =>
           val (newState, list) = map.get(id) match {
             case None =>
               throw new IllegalStateException(
@@ -97,7 +97,7 @@ object NodeLocalCache {
           val action: IO[Unit] =
             list.traverse(_.complete((value, decrement))).void
           (newState, action)
-        }.flatten
+        }
       }
 
     val allocator = Deferred[IO, (A, IO[Unit])].flatMap { offerer =>

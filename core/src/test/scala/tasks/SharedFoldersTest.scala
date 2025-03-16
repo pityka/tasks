@@ -36,7 +36,7 @@ import tasks.util._
 import tasks.jsonitersupport._
 import tasks.fileservice.ManagedFilePath
 
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 import java.io.File
 
 object SharedFoldersTest extends TestHelpers {
@@ -78,7 +78,7 @@ class SharedFoldersTestSuite extends FunSuite with Matchers {
   import cats.effect.unsafe.implicits.global
 
   test("SharedFile.fromFolder should import intermediate folders ") {
-    val sf = SharedFoldersTest.run.unsafeRunSync().get
+    val sf = SharedFoldersTest.run.unsafeRunSync().toOption.get
     val expectedFile = new File(
       SharedFoldersTest.tmp.getAbsolutePath + "/sharedFolders/intermediate/fileName"
     )

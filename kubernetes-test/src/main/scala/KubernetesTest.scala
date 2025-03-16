@@ -25,7 +25,7 @@
 import cats.effect.unsafe.implicits.global
 import tasks._
 import tasks.jsonitersupport._
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 import cats.effect.IO
 import cats.effect.IOApp
 import tasks.elastic.kubernetes.Bootstrap

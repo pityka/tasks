@@ -42,6 +42,8 @@ import cats.effect.kernel.Ref
 import tasks.util.SimpleSocketAddress
 import cats.effect.kernel.Resource
 import tasks.util.Ask
+import cats.effect.ExitCode
+import cats.effect.kernel.Deferred
 
 private[tasks] case class RemoteNodeRegistry(address: Address)
 
@@ -50,7 +52,8 @@ private[tasks] object NodeRegistry {
   def makeReference(
       masterAddress: SimpleSocketAddress,
       messenger: Messenger,
-      elasticSupport: Option[ElasticSupport]
+      elasticSupport: Option[ElasticSupport],
+      exitCode: Deferred[IO, ExitCode]
   )(implicit config: TasksConfig): IO[RemoteNodeRegistry] =
     Ask
       .ask(
@@ -69,9 +72,14 @@ private[tasks] object NodeRegistry {
       .flatMap {
         case Right(v) => IO.pure(v)
         case Left(e) =>
-          IO(elasticSupport.get.selfShutdownNow()) *> IO.raiseError(
-            new RuntimeException("Remote node registry not found", e)
-          )
+          IO(
+            scribe.error(
+              s"Remote node registry did not respond. ${NodeRegistry.address} ${messenger}"
+            )
+          ) *> IO(elasticSupport.get.selfShutdownNow(exitCode, config)) *> IO
+            .raiseError(
+              new RuntimeException("Remote node registry not found", e)
+            )
       }
 
   sealed trait Event
@@ -148,17 +156,15 @@ private[tasks] class NodeRegistry(
   override def release(st: State): IO[Unit] = {
     IO.parSequenceN(1)(
       (st.running.map { case (node, _) =>
-        IO {
-          scribe.info("Shutting down node " + node)
-          shutdownNode.shutdownRunningNode(node)
-        }
+        scribe.info("Shutting down node " + node)
+        shutdownNode.shutdownRunningNode(node)
+
       } ++
         st.pending.map { case (node, _) =>
-          IO {
-            shutdownNode.shutdownPendingNode(node)
-          }
+          shutdownNode.shutdownPendingNode(node)
+
         }).toList
-    ).void
+    ).map((a: List[Unit]) => ())
   }
 
   def receive = (state, ref) => {
@@ -208,16 +214,17 @@ private[tasks] class NodeRegistry(
               ) *> IO
                 .parSequenceN(1)(requestedNodes.toList.map {
                   case (request, _) =>
-                    IO(createNode.requestOneNewJobFromJobScheduler(request))
+                    createNode
+                      .requestOneNewJobFromJobScheduler(request)
                       .flatMap {
-                        case Failure(e) =>
+                        case Left(e) =>
                           IO(
                             scribe.warn(
-                              "Request failed: " + e.getMessage + " " + e
+                              "Request failed: " + e + " " + e
                             )
                           ) *>
                             ref.update(_.update(NodeRequested))
-                        case Success((jobId, size)) =>
+                        case Right((jobId, size)) =>
                           IO(
                             scribe.info(
                               s"Request succeeded. Job id: $jobId, size: $size"
@@ -225,21 +232,19 @@ private[tasks] class NodeRegistry(
                           ) *> ref.update(
                             _.update(NodeRequested)
                               .update(NodeIsPending(jobId, size))
-                          ) *> fs2.Stream
-                            .sleep[IO](config.pendingNodeTimeout)
-                            .evalMap { initFailed =>
+                          ) *> IO
+                            .sleep(config.pendingNodeTimeout)
+                            .flatMap { initFailed =>
                               ref.flatModify { state =>
                                 if (state.pending.contains(jobId)) {
                                   scribe.warn("Node init failed: " + jobId)
 
                                   state.update(InitFailed(jobId)) ->
-                                    IO(shutdownNode.shutdownPendingNode(jobId))
+                                    shutdownNode.shutdownPendingNode(jobId)
 
                                 } else (state, IO.unit)
                               }
                             }
-                            .compile
-                            .drain
                             .start
                             .void
 
@@ -261,35 +266,39 @@ private[tasks] class NodeRegistry(
 
     case Message(MessageData.NodeComingUp(node), from, _) =>
       val Node(jobId, _, _) = node
-
-      createNode.convertRunningToPending(jobId) match {
+      scribe.info(s"NodeComingUp: $node")
+      val io = createNode.convertRunningToPending(jobId).flatMap {
         case Some(convertedRunningId) =>
-          val newState = state.update(NodeIsUp(node, convertedRunningId))
+          ref.flatModify { state =>
+            val newState = state.update(NodeIsUp(node, convertedRunningId))
 
-          val io = IO(createNode.initializeNode(node)) *>
-            tasks.util.Actor
-              .makeFromBehavior(
-                new NodeKiller(
-                  shutdownNode = shutdownNode,
-                  targetLauncherActor = node.launcherActor,
-                  targetNode = node,
-                  listener = address,
-                  messenger = messenger
-                ),
-                messenger
-              )
-              .allocated
-              .void
+            val io = createNode.initializeNode(node) *>
+              tasks.util.Actor
+                .makeFromBehavior(
+                  new NodeKiller(
+                    shutdownNode = shutdownNode,
+                    targetLauncherActor = node.launcherActor,
+                    targetNode = node,
+                    listener = address,
+                    messenger = messenger
+                  ),
+                  messenger
+                )
+                .allocated
+                .void
 
-          (newState -> io)
+            (newState -> io)
+          }
 
         case None =>
-          state -> IO(
+          IO(
             scribe.error(
               s"Failed to find running job id from pending job id. $node"
             )
           )
+
       }
+      (state -> io)
 
     case Message(MessageData.RemoveNode(node), from, _) =>
       state.update(NodeIsDown(node)) -> IO.unit

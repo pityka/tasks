@@ -32,7 +32,7 @@ import org.scalatest.matchers.should.Matchers
 import tasks.jsonitersupport._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 import cats.effect.IO
 import cats.Applicative
 
@@ -105,7 +105,7 @@ object SchemaEvolutionViaOptionsTest extends TestHelpers {
       run1 <- run1
       run2 <- run2
       run3 <- run3
-    } yield (run1.get + run2.get + run3.get)
+    } yield (run1.toOption.get + run2.toOption.get + run3.toOption.get)
 
   }
 

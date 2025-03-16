@@ -37,7 +37,7 @@ import tasks.jsonitersupport._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 import cats.effect.IO
 
 object SporeTest extends TestHelpers with Matchers {
@@ -161,7 +161,7 @@ class SporeTestSuite extends FunSuite with Matchers {
   test("spores should work in tasks") {
     import cats.effect.unsafe.implicits.global
 
-    SporeTest.run.unsafeRunSync().get should equal("Some(3)")
+    SporeTest.run.unsafeRunSync().toOption.get should equal("Some(3)")
   }
   test("primitive return type") {
     MySpore.prim(1L) shouldBe 3

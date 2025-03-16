@@ -30,7 +30,7 @@
 // import com.github.plokhotnyuk.jsoniter_scala.core._
 // import com.github.plokhotnyuk.jsoniter_scala.macros._
 
-// import com.typesafe.config.ConfigFactory
+// import org.ekrich.config.ConfigFactory
 
 // trait TestHelpers {
 

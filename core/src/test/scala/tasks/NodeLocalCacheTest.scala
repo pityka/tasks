@@ -84,7 +84,7 @@ class NodeLocalCacheTestSuite extends FunSuite with Matchers {
   test(
     "node local cache should not execute the same key twice, unless dropped"
   ) {
-    NodeLocalCacheTest.run.unsafeRunSync().get should equal(4)
+    NodeLocalCacheTest.run.unsafeRunSync().toOption.get should equal(4)
     NodeLocalCacheTest.sideEffect.count(_ == "execution of task") shouldBe 4
     NodeLocalCacheTest.sideEffect.count(
       _ == "execution of nodelocalcache factory 1"

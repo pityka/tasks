@@ -30,7 +30,7 @@ import cats.effect.unsafe.implicits.global
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 import cats.effect.IO
 
 object ReloadConfigTest extends TestHelpers with Matchers {
@@ -80,7 +80,7 @@ object ReloadConfigTest extends TestHelpers with Matchers {
 class ReloadConfigTestSuite extends FunSuite with Matchers {
 
   ignore("should reload configuration") {
-    ReloadConfigTest.run.unsafeRunSync().get should equal(2)
+    ReloadConfigTest.run.unsafeRunSync().toOption.get should equal(2)
 
   }
 

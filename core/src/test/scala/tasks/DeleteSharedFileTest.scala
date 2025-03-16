@@ -58,7 +58,7 @@ object DeleteSharedFileTest extends TestHelpers {
 class DeleteSharedFileTestSuite extends FunSuite with Matchers {
 
   test("SharedFile.delete should not delete a file unless config flag is set") {
-    DeleteSharedFileTest.run.unsafeRunSync().get.canRead shouldBe true
+    DeleteSharedFileTest.run.unsafeRunSync().toOption.get.canRead shouldBe true
 
   }
 

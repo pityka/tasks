@@ -30,9 +30,9 @@ private[tasks] class RemoteMessenger(
         case None =>
           RemoteMessenger
             .submit0(
-              RemoteMessenger.addUri(message, listeningUri),
-              client,
-              peerUri
+              message = RemoteMessenger.addUri(message, listeningUri),
+              client = client,
+              peerUri = peerUri
             )
             .void
         case _ => localMessenger.submit(message)
@@ -128,8 +128,15 @@ private[tasks] object RemoteMessenger {
         s"Submit via http $peerUri ${message.from} ${message.to} ${message.data.getClass()}"
       )
     ) *>
-      client.expect[String](request).flatMap { result =>
-        IO(scribe.debug(s"Http response: $result")).map(_ => result)
+      client.expect[String](request).attempt.flatMap {
+        case Right(result) =>
+          IO(scribe.debug(s"Http response: $result")).map(_ => result)
+        case Left(e) =>
+          IO(
+            scribe.error(
+              s"Http request failed. $request. ${e.getMessage} ${message.from} ${message.to} ${message.data.getClass()}"
+            )
+          ) *> IO.pure("")
       }
   }
   def make(bindHost: String, bindPort: Int, peerUri: org.http4s.Uri) = {
@@ -161,7 +168,9 @@ private[tasks] object RemoteMessenger {
         .build
       client.flatMap { client =>
         server.map { server =>
-          scribe.info(s"Remote messenger with ${server.address} built")
+          scribe.info(
+            s"Remote messenger with ${listeningUri} built. Peer: $peerUri"
+          )
           new RemoteMessenger(
             client = client,
             peerUri = peerUri,

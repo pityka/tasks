@@ -36,7 +36,7 @@ import tasks.util._
 import cats.effect.IO
 import tasks.jsonitersupport._
 
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 
 object ExecOnceTest extends TestHelpers with Matchers {
 
@@ -76,7 +76,9 @@ class ExecOnceTestSute extends FunSuite with Matchers {
 
   test("same task sent multiple times should execute exactly once") {
 
-    ExecOnceTest.run.unsafeRunSync().get shouldBe (1 to 10000).map(_ => 1)
+    ExecOnceTest.run.unsafeRunSync().toOption.get shouldBe (1 to 10000).map(_ =>
+      1
+    )
     ExecOnceTest.sideEffect.size shouldBe 1
   }
 

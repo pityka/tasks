@@ -30,7 +30,7 @@ import cats.effect.unsafe.implicits.global
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 import cats.effect.IO
 import tasks.JvmElasticSupport.JvmGrid
 import cats.effect.kernel.Resource
@@ -75,19 +75,6 @@ object NodeAllocationTest extends TestHelpers {
         t3 <- f3
       } yield t1 + t2 + t3
 
-      f1.flatTap { case _ =>
-        IO {
-          synchronized {
-            tasks.JvmElasticSupport.taskSystems.head._2.foreach {
-              case (_, release) =>
-                import cats.effect.unsafe.implicits.global
-
-                release.unsafeRunSync()
-            }
-          }
-        }
-      }
-
       (future)
 
     }
@@ -100,11 +87,11 @@ class NodeAllocationTestSuite extends FunSuite with Matchers {
   scribe.Logger.root
     .clearHandlers()
     .clearModifiers()
-    .withHandler(minimumLevel = Some(scribe.Level.Debug))
+    .withHandler(minimumLevel = Some(scribe.Level.Info))
     .replace()
 
   test("elastic node allocation should spawn nodes") {
-    NodeAllocationTest.run.unsafeRunSync().get should equal(3)
+    NodeAllocationTest.run.unsafeRunSync().toOption.get should equal(3)
 
   }
 

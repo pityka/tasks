@@ -27,7 +27,7 @@ package tasks
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should._
 import org.scalatest._
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 
 import tasks.jsonitersupport._
 

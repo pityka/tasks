@@ -34,7 +34,7 @@ import org.scalatest.matchers.should.Matchers
 
 import tasks.util._
 
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 import cats.effect.IO
 import tasks.circesupport._
 
@@ -73,7 +73,7 @@ object DSLTest extends TestHelpers with Matchers {
 class TaskDSLTestSuite extends FunSuite with Matchers {
 
   test("task execution should work") {
-    DSLTest.run.unsafeRunSync().get should equal(1)
+    DSLTest.run.unsafeRunSync().toOption.get should equal(1)
   }
 
 }

@@ -25,7 +25,7 @@
 
 package tasks.util
 
-import com.typesafe.config.Config
+import org.ekrich.config.Config
 import scala.concurrent.duration._
 
 package object config {

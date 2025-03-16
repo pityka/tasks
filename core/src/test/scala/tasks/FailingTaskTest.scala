@@ -28,7 +28,7 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import cats.effect.unsafe.implicits.global
 
 import org.scalatest.matchers.should.Matchers
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 
 import tasks.jsonitersupport._
 import cats.effect.IO
@@ -65,7 +65,7 @@ object FailingTasksTest extends TestHelpers {
     IO("succeeded")
   }
 
-  def run: IO[Option[(String, String, String)]] = {
+  def run = {
     withTaskSystem(testConfig) { implicit ts =>
       // import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -96,9 +96,11 @@ class FailingTasksTestSuite extends FunSuite with Matchers {
   test(
     "a failing task should propagate its exception and not interfere with other tasks"
   ) {
-    FailingTasksTest.run
-      .unsafeRunSync()
-      .get shouldBe (("recovered", "succeeded", "recovered"))
+    FailingTasksTest.run.unsafeRunSync().toOption.get shouldBe ((
+      "recovered",
+      "succeeded",
+      "recovered"
+    ))
   }
 
 }

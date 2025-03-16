@@ -77,7 +77,9 @@ case class ResourceAvailable(
         .forall(g => gpuWithMultiplicities.contains(g))
 
   def canFulfillRequest(r: ResourceRequest) =
-    cpu >= r.cpu._1 && memory >= r.memory && scratch >= r.scratch && numGpu >= r.gpu
+    cpu >= r.cpu._1 && memory >= r.memory && scratch >= r.scratch && numGpu >= r.gpu && r.image
+      .map(requestedImage => image.exists(_ == requestedImage))
+      .getOrElse(true)
 
   def substract(r: ResourceRequest) = {
     val remainingCPU = math.max((cpu - r.cpu._2), 0)
@@ -101,6 +103,14 @@ case class ResourceAvailable(
       image
     )
 
+  def substractAll = ResourceAvailable(
+    cpu = 0,
+    memory = 0,
+    scratch = 0,
+    gpu = Nil,
+    image
+  )
+
   def addBack(r: ResourceAllocated) =
     ResourceAvailable(
       cpu + r.cpu,
@@ -110,13 +120,21 @@ case class ResourceAvailable(
       image
     )
 
+  def all =
+    ResourceAllocated(
+      cpu,
+      memory,
+      scratch,
+      gpu,
+      image
+    )
   def minimum(r: ResourceRequest) =
     ResourceAllocated(
       r.cpu._1,
       r.memory,
       r.scratch,
       gpu.take(r.gpu),
-      None
+      r.image
     )
 
   def maximum(r: ResourceRequest) = {
@@ -132,9 +150,6 @@ case class ResourceAvailable(
       if (r.image.isEmpty || r.image == image) r.image else None
     )
   }
-
-  def empty = cpu == 0 || memory == 0 || scratch == 0
-  def isEmpty = empty
 
 }
 
@@ -224,8 +239,6 @@ case class VersionedResourceAvailable(
       codeVersion,
       cpuMemoryAvailable.maximum(r.cpuMemoryRequest)
     )
-
-  def empty = cpuMemoryAvailable.empty
 
 }
 

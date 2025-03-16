@@ -35,7 +35,7 @@ import org.scalatest.matchers.should.Matchers
 import tasks.util._
 import tasks.jsonitersupport._
 import cats.effect.IO
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 
 object NoCacheTest extends TestHelpers with Matchers {
 
@@ -75,7 +75,9 @@ object NoCacheTest extends TestHelpers with Matchers {
 class NoCacheTestSuite extends FunSuite with Matchers {
 
   test("not caching tasks if marked so") {
-    (1 to 10 map (_ => NoCacheTest.run.unsafeRunSync().get)) shouldBe (1 to 10)
+    (1 to 10 map (_ =>
+      NoCacheTest.run.unsafeRunSync().toOption.get
+    )) shouldBe (1 to 10)
       .map(_ => 1)
     NoCacheTest.sideEffect.size shouldBe 10
   }

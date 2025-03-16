@@ -33,68 +33,66 @@ import tasks.util.SimpleSocketAddress
 import tasks.util.Messenger
 import cats.effect.kernel.Resource
 import cats.effect.IO
+import cats.effect.kernel.Deferred
+import cats.effect.ExitCode
 
-private[tasks] sealed trait ElasticSupport {
-
-  def hostConfig: Option[HostConfiguration]
-
-  def selfShutdownNow(): Unit
-
-  trait Inner {
-    def createRegistry: Option[NodeRegistry]
-    def createSelfShutdown: Resource[IO, Unit]
-    def getNodeName: String
-  }
-  def getNodeName: GetNodeName
-
-  private[tasks] def apply(
-      masterAddress: SimpleSocketAddress,
-      queueActor: QueueActor,
-      resource: ResourceAvailable,
-      codeAddress: Option[CodeAddress],
-      messenger: Messenger
-  )(implicit config: TasksConfig): Inner
-
+private[tasks] trait ElasticSupportInnerFactories {
+  def registry: Option[NodeRegistry]
+  def createSelfShutdown: Resource[IO, Unit]
+  def getNodeName: IO[String]
 }
 
-case class SimpleElasticSupport(
+final class ElasticSupport(
     val hostConfig: Option[HostConfiguration],
-    shutdown: ShutdownNode,
+    shutdownFromNodeRegistry: ShutdownNode,
+    shutdownFromWorker: ShutdownSelfNode,
     createNodeFactory: CreateNodeFactory,
     val getNodeName: GetNodeName
-) extends ElasticSupport { self =>
+) { self =>
 
-  def selfShutdownNow() =
-    shutdown.shutdownRunningNode(RunningJobId(getNodeName.getNodeName))
+  def selfShutdownNow(
+      exitCode: Deferred[IO, ExitCode],
+      config: TasksConfig
+  ): IO[Unit] =
+    getNodeName
+      .getNodeName(config)
+      .flatMap(nodeName =>
+        shutdownFromWorker.shutdownRunningNode(exitCode, RunningJobId(nodeName))
+      )
 
   private[tasks] def apply(
       masterAddress: SimpleSocketAddress,
       queueActor: QueueActor,
       resource: ResourceAvailable,
       codeAddress: Option[CodeAddress],
-      messenger: Messenger
+      messenger: Messenger,
+      exitCode: Deferred[IO, ExitCode]
   )(implicit config: TasksConfig) =
-    new Inner {
-      def getNodeName = self.getNodeName.getNodeName
-      def createRegistry =
+    new ElasticSupportInnerFactories {
+      def getNodeName = self.getNodeName.getNodeName(config)
+      def registry =
         codeAddress.map(codeAddress =>
           new NodeRegistry(
             unmanagedResource = resource,
             createNode = createNodeFactory.apply(masterAddress, codeAddress),
             decideNewNode = new SimpleDecideNewNode(codeAddress.codeVersion),
-            shutdownNode = shutdown,
+            shutdownNode = shutdownFromNodeRegistry,
             targetQueue = queueActor,
             messenger = messenger
           )
         )
-      def createSelfShutdown = SelfShutdown
-        .make(
-          shutdownRunningNode = shutdown,
-          id = RunningJobId(this.getNodeName),
-          queueActor = queueActor,
-          messenger = messenger
-        )
-        .map(_ => ())
+      def createSelfShutdown =
+        Resource.eval(this.getNodeName).flatMap { nodeName =>
+          SelfShutdown
+            .make(
+              shutdownRunningNode = shutdownFromWorker,
+              id = RunningJobId(nodeName),
+              queueActor = queueActor,
+              messenger = messenger,
+              exitCode = exitCode
+            )
+            .map(_ => ())
+        }
     }
 
 }
