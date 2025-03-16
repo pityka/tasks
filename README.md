@@ -101,7 +101,7 @@ In the latter case the classpath must contain the `tasks-s3` and an S3 client mu
 
 ```scala
 withTaskSystem(
-  s= "tasks.fileservice.storageURI=s3://my-bucket/prefix",
+  config = "tasks.fileservice.storageURI=s3://my-bucket/prefix",
   s3Client = tasks.fileservice.s3.S3.makeS3ClientResource("my-aws-region"),
   elasticSupport = Resource.pure(None)
 )(system => ???)
