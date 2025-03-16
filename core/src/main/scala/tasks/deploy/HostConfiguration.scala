@@ -138,5 +138,5 @@ class LocalConfigurationFromConfig(implicit config: TasksConfig)
       config.hostGPU
     )
 
-class MasterSlaveFromConfig(implicit val config: TasksConfig)
+class DefaultHostConfigurationFromConfig(implicit val config: TasksConfig)
     extends HostConfigurationFromConfig

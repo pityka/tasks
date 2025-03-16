@@ -25,7 +25,7 @@
  * SOFTWARE.
  */
 
-import com.typesafe.config.{Config, ConfigFactory}
+import org.ekrich.config.{Config, ConfigFactory}
 
 import tasks.wire._
 import tasks.queue._
@@ -38,6 +38,8 @@ import cats.effect.IO
 import tasks.shared.ResourceAllocated
 import cats.effect.kernel.Resource
 import tasks.fileservice.s3.S3Client
+import cats.effect.kernel.Deferred
+import cats.effect.ExitCode
 
 package object tasks extends MacroCalls {
 
@@ -70,7 +72,7 @@ package object tasks extends MacroCalls {
   ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.ResourceRequest(cpu, memory, 1, 0, None)
+      tasks.shared.ResourceRequest(cpu, memory, 0, 0, None)
     )
 
   def ResourceRequest(cpu: Int, memory: Int)(implicit
@@ -78,7 +80,7 @@ package object tasks extends MacroCalls {
   ) =
     tasks.shared.VersionedResourceRequest(
       codeVersion,
-      tasks.shared.ResourceRequest((cpu, cpu), memory, 1, 0, None)
+      tasks.shared.ResourceRequest((cpu, cpu), memory, 0, 0, None)
     )
 
   def ResourceRequest(cpu: Int, memory: Int, scratch: Int)(implicit
@@ -124,7 +126,9 @@ package object tasks extends MacroCalls {
   def audit(data: String)(implicit component: ComputationEnvironment): Boolean =
     component.appendLog(LogRecord(data, java.time.Instant.now))
 
-  def withTaskSystem[T](f: TaskSystemComponents => IO[T]): IO[Option[T]] =
+  def withTaskSystem[T](
+      f: TaskSystemComponents => IO[T]
+  ): IO[Either[ExitCode, T]] =
     withTaskSystem(None, Resource.pure(None), Resource.pure(None))(f)
 
   def withTaskSystem[T](
@@ -133,17 +137,17 @@ package object tasks extends MacroCalls {
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]]
   )(
       f: TaskSystemComponents => IO[T]
-  ): IO[Option[T]] =
+  ): IO[Either[ExitCode, T]] =
     withTaskSystem(Some(c), s3Client, elasticSupport)(f)
 
   def withTaskSystem[T](c: Config)(
       f: TaskSystemComponents => IO[T]
-  ): IO[Option[T]] =
+  ): IO[Either[ExitCode, T]] =
     withTaskSystem(Some(c), Resource.pure(None), Resource.pure(None))(f)
 
   def withTaskSystem[T](c: Option[Config])(
       f: TaskSystemComponents => IO[T]
-  ): IO[Option[T]] =
+  ): IO[Either[ExitCode, T]] =
     withTaskSystem(c, Resource.pure(None), Resource.pure(None))(f)
 
   def withTaskSystem[T](
@@ -152,7 +156,7 @@ package object tasks extends MacroCalls {
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]]
   )(
       f: TaskSystemComponents => IO[T]
-  ): IO[Option[T]] =
+  ): IO[Either[ExitCode, T]] =
     withTaskSystem(
       Some(ConfigFactory.parseString(s)),
       s3Client,
@@ -163,20 +167,24 @@ package object tasks extends MacroCalls {
       c: Option[Config],
       s3Client: Resource[IO, Option[S3Client]],
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]]
-  )(f: TaskSystemComponents => IO[T]): IO[Option[T]] = {
+  )(f: TaskSystemComponents => IO[T]): IO[Either[ExitCode, T]] = {
 
-    val resource = defaultTaskSystem(c, s3Client, elasticSupport)
+    val resource = Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
+      defaultTaskSystem(c, s3Client, elasticSupport, exitCode).map(tsc =>
+        (tsc, exitCode)
+      )
+    }
 
-    resource.allocated.flatMap { case ((tsc, hostConfig), shutdown) =>
+    resource.use { case ((tsc, hostConfig), exitCode) =>
       if (hostConfig.myRoles.contains(App)) {
 
-        f(tsc).attempt.map(_.toOption) <* shutdown.start
+        f(tsc).map(Right(_))
       } else {
         scribe.info(
-          "Leaving withTaskSystem lambda without closing taskystem. This is only meaningful for forever running worker node."
+          "Waiting for exit.."
         )
-        // Queue and Worker roles are never stopped
-        IO.never[Option[T]]
+        // Queue and Worker roles are stopped wthen the exitCode deferred gets filled
+        exitCode.get.map(Left(_))
 
       }
     }
@@ -185,32 +193,51 @@ package object tasks extends MacroCalls {
 
   def defaultTaskSystem
       : Resource[IO, (TaskSystemComponents, HostConfiguration)] =
-    defaultTaskSystem(None, Resource.pure(None), Resource.pure(None))
+    Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
+      defaultTaskSystem(
+        None,
+        Resource.pure(None),
+        Resource.pure(None),
+        exitCode
+      )
+    }
 
   def defaultTaskSystem(
       string: String,
       s3Client: Resource[IO, Option[S3Client]],
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]]
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
-    defaultTaskSystem(
-      Some(ConfigFactory.parseString(string)),
-      s3Client,
-      elasticSupport
-    )
-
+    Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
+      defaultTaskSystem(
+        Some(ConfigFactory.parseString(string)),
+        s3Client,
+        elasticSupport,
+        exitCode
+      )
+    }
   def defaultTaskSystem(
       string: String
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
-    defaultTaskSystem(
-      Some(ConfigFactory.parseString(string)),
-      Resource.pure(None),
-      Resource.pure(None)
-    )
+    Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
+      defaultTaskSystem(
+        Some(ConfigFactory.parseString(string)),
+        Resource.pure(None),
+        Resource.pure(None),
+        exitCode
+      )
+    }
 
   def defaultTaskSystem(
       extraConf: Option[Config]
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
-    defaultTaskSystem(extraConf, Resource.pure(None), Resource.pure(None))
+    Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
+      defaultTaskSystem(
+        extraConf,
+        Resource.pure(None),
+        Resource.pure(None),
+        exitCode
+      )
+    }
 
   /** The user of this resource should check the role of the returned
     * HostConfiguration If it is not an App, then it is very likely that the
@@ -222,15 +249,16 @@ package object tasks extends MacroCalls {
   def defaultTaskSystem(
       extraConf: Option[Config],
       s3Client: Resource[IO, Option[S3Client]],
-      elasticSupport: Resource[IO, Option[elastic.ElasticSupport]]
+      elasticSupport: Resource[IO, Option[elastic.ElasticSupport]],
+      exitCode: Deferred[IO, ExitCode]
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] = {
 
     val configuration = () => {
-      ConfigFactory.invalidateCaches
+      ConfigFactory.invalidateCaches()
 
       val loaded = tasks.util.loadConfig(extraConf)
 
-      ConfigFactory.invalidateCaches
+      ConfigFactory.invalidateCaches()
 
       loaded
     }
@@ -238,10 +266,16 @@ package object tasks extends MacroCalls {
 
     val hostConfig = elasticSupport
       .map(
-        _.flatMap(_.hostConfig).getOrElse(MasterSlaveGridEngineChosenFromConfig)
+        _.flatMap(_.hostConfig).getOrElse(hostConfigChosenFromConfig)
       )
 
-    TaskSystemComponents.make(hostConfig, elasticSupport, s3Client, tconfig)
+    TaskSystemComponents.make(
+      hostConfig,
+      elasticSupport,
+      s3Client,
+      tconfig,
+      exitCode
+    )
   }
 
   type SSerializer[T] = Spore[Unit, Serializer[T]]
@@ -250,11 +284,11 @@ package object tasks extends MacroCalls {
   implicit def serde2ser[A](a: SerDe[A]): SSerializer[A] = a.ser
   implicit def serde2deser[A](a: SerDe[A]): SDeserializer[A] = a.deser
 
-  def MasterSlaveGridEngineChosenFromConfig(implicit
+  def hostConfigChosenFromConfig(implicit
       config: TasksConfig
   ): HostConfiguration =
     if (config.disableRemoting) new LocalConfigurationFromConfig
-    else new MasterSlaveFromConfig
+    else new DefaultHostConfigurationFromConfig
 
   def appendToFilePrefix[T](
       elements: Seq[String]

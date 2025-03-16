@@ -28,10 +28,10 @@
 package tasks.util.config
 
 import tasks.util.SimpleSocketAddress
-import com.typesafe.config.Config
+import org.ekrich.config.Config
 import scala.jdk.CollectionConverters._
 import tasks.shared.ResourceAvailable
-import com.typesafe.config.ConfigRenderOptions
+import org.ekrich.config.ConfigRenderOptions
 
 trait ConfigValuesForHostConfiguration {
   def raw: Config
@@ -141,6 +141,8 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   val parallelismOfCacheAccessibilityCheck =
     raw.getInt("tasks.cache.accessibility-check-parallelism")
 
+  val nodeName = raw.getString("tasks.elastic.nodename")
+
   def idleNodeTimeout: FD = raw.getDuration("tasks.elastic.idleNodeTimeout")
 
   def cacheTimeout: FD = raw.getDuration("tasks.cache.timeout")
@@ -212,7 +214,7 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   def pendingNodeTimeout = raw.getDuration("tasks.elastic.pendingNodeTimeout")
 
-  val checkTempFolderOnSlaveInitialization =
+  val checkTempFolderOnWorkerInitialization =
     raw.getBoolean("tasks.elastic.checktempfolder")
 
   val trackerFqcn = raw.getString("tasks.tracker.fqcn")

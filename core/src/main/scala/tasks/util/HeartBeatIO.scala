@@ -39,17 +39,20 @@ private[tasks] object HeartBeatIO {
       clock: Clock[IO]
   ) = {
 
-    val address: Address = Address(
-      s"HeartBeatIO-target=$target-${scala.util.Random.nextString(64)}"
-    )
-    val subscriber = messenger.subscribe(address)
-    val pingMsg = Message(from = address, to = target, data = MessageData.Ping)
-
-    val deadline = Deadline.make(config.acceptableHeartbeatPause * 2)
-
     IO {
-      scribe.info(s"HeartbeatIO start for $target")
+      scribe.info(
+        s"HeartbeatIO start for $target with deadline ${config.acceptableHeartbeatPause * 2}"
+      )
     }.flatMap { _ =>
+      val address: Address = Address(
+        s"HeartBeatIO-target=$target-${scala.util.Random.nextString(64)}"
+      )
+      val subscriber = messenger.subscribe(address)
+      val pingMsg =
+        Message(from = address, to = target, data = MessageData.Ping)
+
+      val deadline = Deadline.make(config.acceptableHeartbeatPause * 2)
+
       deadline.flatMap { deadline =>
         subscriber.flatMap { messageStream =>
           val responseStream = messageStream.evalMap {
@@ -63,8 +66,12 @@ private[tasks] object HeartBeatIO {
             .fixedRate[IO](config.launcherActorHeartBeatInterval)
             .evalMap { _ =>
               deadline.isAvailable().flatMap { isAvailable =>
-                if (!isAvailable) sideEffect.map(_ => false)
-                else
+                if (!isAvailable) {
+                  IO(
+                    scribe.warn("Heartbeat deadline fail. Call side effect")
+                  ) *>
+                    sideEffect.map(_ => false)
+                } else
                   messenger
                     .submit(pingMsg)
                     .map(_ => true)
@@ -74,7 +81,7 @@ private[tasks] object HeartBeatIO {
             .takeWhile(identity)
 
           responseStream
-            .mergeHaltBoth(pingStream.map(_ => ()))
+            .mergeHaltR(pingStream.map(_ => ()))
             .compile
             .drain
             .flatMap { _ =>

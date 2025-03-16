@@ -81,7 +81,7 @@ class InputWithHasPersistentTestSuite extends FunSuite with Matchers {
   test(
     "a failing task should propagate its exception and not interfere with other tasks"
   ) {
-    InputWithHasPersistentTest.run.unsafeRunSync().get shouldBe 3
+    InputWithHasPersistentTest.run.unsafeRunSync().toOption.get shouldBe 3
     InputWithHasPersistentTest.sideEffect.count(
       _ == "execution of task"
     ) shouldBe 2

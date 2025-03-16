@@ -49,15 +49,23 @@ import com.amazonaws.services.ec2.model.CreateTagsRequest
 import scala.jdk.CollectionConverters._
 import com.amazonaws.services.ec2.AmazonEC2ClientBuilder
 import com.amazonaws.services.ec2.AmazonEC2
-import com.typesafe.config.Config
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.Config
+import org.ekrich.config.ConfigFactory
+import cats.effect.IO
+import cats.effect.kernel.Deferred
+import cats.effect.ExitCode
 
-class EC2Shutdown(ec2: AmazonEC2) extends ShutdownNode {
+class EC2Shutdown(ec2: AmazonEC2) extends ShutdownNode with ShutdownSelfNode {
 
-  def shutdownRunningNode(nodeName: RunningJobId): Unit =
-    EC2Operations.terminateInstance(ec2, nodeName.value)
+  def shutdownRunningNode(nodeName: RunningJobId): IO[Unit] =
+    IO.interruptible { EC2Operations.terminateInstance(ec2, nodeName.value) }
+  def shutdownRunningNode(
+      exitCode: Deferred[IO, ExitCode],
+      nodeName: RunningJobId
+  ): IO[Unit] =
+    IO.interruptible { EC2Operations.terminateInstance(ec2, nodeName.value) }
 
-  def shutdownPendingNode(nodeName: PendingJobId): Unit = {
+  def shutdownPendingNode(nodeName: PendingJobId): IO[Unit] = IO.interruptible {
     val request = new CancelSpotInstanceRequestsRequest(
       List(nodeName.value).asJava
     )
@@ -85,15 +93,19 @@ class EC2CreateNode(
 
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest
-  )(implicit config: TasksConfig): Try[(PendingJobId, ResourceAvailable)] =
-    Try {
-      val (requestid, instancetype) = requestSpotInstance(requestSize, config)
-      val jobid = PendingJobId(requestid)
-      val size = instancetype._2
-      (jobid, size)
+  )(implicit
+      config: TasksConfig
+  ): IO[Either[String, (PendingJobId, ResourceAvailable)]] =
+    IO.interruptible {
+      Try {
+        val (requestid, instancetype) = requestSpotInstance(requestSize, config)
+        val jobid = PendingJobId(requestid)
+        val size = instancetype._2
+        (jobid, size)
+      }.toEither.left.map(_.getMessage)
     }
 
-  override def initializeNode(node: Node): Unit = {
+  override def initializeNode(node: Node): IO[Unit] = IO.interruptible {
 
     ec2.createTags(
       new CreateTagsRequest(
@@ -106,7 +118,7 @@ class EC2CreateNode(
 
   override def convertRunningToPending(
       p: RunningJobId
-  ): Option[PendingJobId] = {
+  ): IO[Option[PendingJobId]] = IO.interruptible {
     val describeResult = ec2.describeSpotInstanceRequests();
     val spotInstanceRequests = describeResult.getSpotInstanceRequests();
 
@@ -230,7 +242,8 @@ class EC2CreateNodeFactory(
 }
 
 object EC2GetNodeName extends GetNodeName {
-  def getNodeName = EC2Operations.readMetadata("instance-id").head
+  def getNodeName(config: TasksConfig) =
+    IO.interruptible(EC2Operations.readMetadata("instance-id").head)
 }
 
 class EC2Config(val raw: Config) extends ConfigValuesForHostConfiguration {
@@ -302,9 +315,10 @@ object EC2ElasticSupport {
             AmazonEC2ClientBuilder.standard
               .withRegion(ec2Config.awsRegion)
               .build
-        SimpleElasticSupport(
+        new ElasticSupport(
           hostConfig = Some(new EC2MasterSlave(ec2Config)),
-          shutdown = new EC2Shutdown(ec2),
+          shutdownFromNodeRegistry = new EC2Shutdown(ec2),
+          shutdownFromWorker = new EC2Shutdown(ec2),
           createNodeFactory = new EC2CreateNodeFactory(ec2Config, ec2),
           getNodeName = EC2GetNodeName
         )

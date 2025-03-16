@@ -35,7 +35,7 @@
 // import tasks.util._
 // import tasks.jsonitersupport._
 
-// import com.typesafe.config.ConfigFactory
+// import org.ekrich.config.ConfigFactory
 
 // object DSLTest extends TestHelpers with Matchers {
 

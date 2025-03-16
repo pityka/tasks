@@ -52,37 +52,57 @@ import io.k8s.api.core.v1.ResourceFieldSelector
 import io.k8s.api.core.v1.ResourceRequirements
 import io.k8s.apimachinery.pkg.api.resource.Quantity
 import io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta
-import com.typesafe.config.Config
-import com.typesafe.config.ConfigFactory
-import com.typesafe.config.ConfigRenderOptions
+import org.ekrich.config.Config
+import org.ekrich.config.ConfigFactory
+import org.ekrich.config.ConfigRenderOptions
 
-class K8SShutdown(k8s: Option[KubernetesClient[IO]]) extends ShutdownNode {
-  def shutdownRunningNode(nodeName: RunningJobId): Unit = k8s match {
+class K8SShutdown(k8s: Option[KubernetesClient[IO]])
+    extends ShutdownNode
+    with ShutdownSelfNode {
+  def shutdownRunningNode(
+      exitCode: Deferred[IO, ExitCode],
+      nodeName: RunningJobId
+  ): IO[Unit] =
+    exitCode.complete(ExitCode(0)).void
+
+  def shutdownRunningNode(nodeName: RunningJobId): IO[Unit] = k8s match {
     case None =>
-      scribe.error(
-        s"Shut down $nodeName not happening because k8s client is empty. "
+      IO(
+        scribe.error(
+          s"Shut down $nodeName not happening because k8s client is empty. "
+        )
       )
     case Some(k8s) =>
       scribe.info(s"Shut down $nodeName")
       val spl = nodeName.value.split("/")
       val ns = spl(0)
       val podName = spl(1)
-      val status = k8s.pods.namespace(ns).delete(name = podName).unsafeRunSync()
-      scribe.info(s"Shutdown status of $podName pod: $status")
+      val status = k8s.pods.namespace(ns).delete(name = podName)
+      status
+        .flatTap(status =>
+          IO(scribe.info(s"Shutdown status of $podName pod: $status"))
+        )
+        .void
   }
 
-  def shutdownPendingNode(nodeName: PendingJobId): Unit = k8s match {
+  def shutdownPendingNode(nodeName: PendingJobId): IO[Unit] = k8s match {
     case None =>
-      scribe.error(
-        s"Shut down $nodeName not happening because k8s client is empty. "
+      IO(
+        scribe.error(
+          s"Shut down $nodeName not happening because k8s client is empty. "
+        )
       )
     case Some(k8s) =>
       scribe.info(s"Shut down $nodeName")
       val spl = nodeName.value.split("/")
       val ns = spl(0)
       val podName = spl(1)
-      val status = k8s.pods.namespace(ns).delete(name = podName).unsafeRunSync()
-      scribe.info(s"Shutdown status of $podName pod: $status")
+      val status = k8s.pods.namespace(ns).delete(name = podName)
+      status
+        .flatTap(status =>
+          IO(scribe.info(s"Shutdown status of $podName pod: $status"))
+        )
+        .void
   }
 
 }
@@ -100,13 +120,15 @@ class K8SCreateNode(
 
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest
-  )(implicit config: TasksConfig): Try[(PendingJobId, ResourceAvailable)] =
+  )(implicit
+      config: TasksConfig
+  ): IO[Either[String, (PendingJobId, ResourceAvailable)]] =
     k8s match {
       case None =>
         scribe.warn(
           "Spawning new node not happening because k8s client empty. "
         )
-        scala.util.Failure(new RuntimeException("k8s client empty"))
+        IO.pure(Left("k8s client empty"))
       case Some(k8s) =>
         val userCPURequest =
           math.max(requestSize.cpu._2, k8sConfig.kubernetesCpuMin)
@@ -117,6 +139,9 @@ class K8SCreateNode(
         val kubeRamRequest = userRamRequest + k8sConfig.kubernetesRamExtra
         val imageName =
           requestSize.image.getOrElse(k8sConfig.kubernetesImageName)
+
+        val podName = KubernetesHelpers.newName
+        val jobName = k8sConfig.kubernetesNamespace + "/" + podName
         val script = Deployment.script(
           memory = userRamRequest,
           cpu = userCPURequest,
@@ -132,15 +157,12 @@ class K8SCreateNode(
           followerHostname = None,
           followerExternalHostname = None,
           followerMayUseArbitraryPort = true,
-          followerNodeName = None,
+          followerNodeName = Some(jobName),
           background = false,
           image = Some(imageName)
         )
 
         val command = Seq("/bin/bash", "-c", script)
-
-        val podName = KubernetesHelpers.newName
-        val jobName = k8sConfig.kubernetesNamespace + "/" + podName
 
         val podSpecFromConfig: PodSpec = k8sConfig.kubernetesPodSpec
           .map { jsonString =>
@@ -222,10 +244,6 @@ class K8SCreateNode(
                               )
                             )
                           )
-                        ),
-                        EnvVar(
-                          name = "TASKS_JOB_NAME",
-                          value = Some(jobName)
                         )
                       )
                   ),
@@ -263,24 +281,22 @@ class K8SCreateNode(
         )
         scribe.info(resource.toString)
 
-        val t = Try {
-          val status = k8s.pods
-            .namespace(k8sConfig.kubernetesNamespace)
-            .create(resource)
-            .unsafeRunSync()
-          scribe.info(s"Pod create status = $status of node $jobName")
+        k8s.pods
+          .namespace(k8sConfig.kubernetesNamespace)
+          .create(resource)
+          .map { status =>
+            scribe.info(s"Pod create status = $status of node $jobName")
 
-          val available = ResourceAvailable(
-            cpu = userCPURequest,
-            memory = userRamRequest,
-            scratch = requestSize.scratch,
-            gpu = 0 until requestSize.gpu toList,
-            image = Some(imageName)
-          )
+            val available = ResourceAvailable(
+              cpu = userCPURequest,
+              memory = userRamRequest,
+              scratch = requestSize.scratch,
+              gpu = 0 until requestSize.gpu toList,
+              image = Some(imageName)
+            )
 
-          (PendingJobId(jobName), available)
-        }
-        t
+            Right((PendingJobId(jobName), available))
+          }
 
     }
 
@@ -293,7 +309,7 @@ class K8SCreateNodeFactory(k8s: Option[KubernetesClient[IO]], config: K8SConfig)
 }
 
 object K8SGetNodeName extends GetNodeName {
-  def getNodeName = System.getenv("TASKS_JOB_NAME")
+  def getNodeName(config: TasksConfig) = IO(config.nodeName)
 }
 
 class K8SConfig(val raw: Config) extends ConfigValuesForHostConfiguration {
@@ -321,8 +337,8 @@ class K8SConfig(val raw: Config) extends ConfigValuesForHostConfiguration {
       Some(
         raw
           .getConfig("tasks.kubernetes.podSpec")
-          .root()
-          .render(ConfigRenderOptions.concise())
+          .root
+          .render(ConfigRenderOptions.concise)
       )
     else None
   }
@@ -349,9 +365,10 @@ object K8SElasticSupport {
           "K8S client failed to create. Shutdown and nodefactory won't work"
         )
       }
-      SimpleElasticSupport(
+      new ElasticSupport(
         hostConfig = Some(new K8SHostConfig(k8sConfig)),
-        shutdown = new K8SShutdown(k8s.toOption),
+        shutdownFromNodeRegistry = new K8SShutdown(k8s.toOption),
+        shutdownFromWorker = new K8SShutdown(k8s.toOption),
         createNodeFactory = new K8SCreateNodeFactory(k8s.toOption, k8sConfig),
         getNodeName = K8SGetNodeName
       )

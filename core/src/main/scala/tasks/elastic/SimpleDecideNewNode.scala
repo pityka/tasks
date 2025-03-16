@@ -63,7 +63,6 @@ private[tasks] class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
           val transformed = chosen.map(_.substract(runningJob))
           if (transformed.isDefined)
             (prefix ::: (transformed.get :: suffix.tail))
-              .filterNot(_.isEmpty)
           else {
             scribe.debug(
               "More resources running than available??"
@@ -82,8 +81,7 @@ private[tasks] class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
 
         val transformed = chosen.map(_.substract(request))
         if (chosen.isDefined)
-          (prefix ::: (transformed.get :: suffix.tail))
-            .filterNot(_.isEmpty) -> (request :: allocated)
+          (prefix ::: (transformed.get :: suffix.tail)) -> (request :: allocated)
         else (available, allocated)
       }
 
@@ -94,7 +92,7 @@ private[tasks] class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
       val fulfilled =
         allocatedRequests.groupBy(x => x).map(x => x._1 -> x._2.size)
       scribe.info(
-        s"Queued resource requests: $need. Requests allocable with current running or pending nodes: $fulfilled. Current nodes: $availableResources"
+        s"Queued resource requests: $need. Requests allocable with current running or pending nodes: $fulfilled. Current nodes: $registeredNodes , pending: $pendingNodes"
       )
       (addMaps(need, fulfilled)(_ - _)).filter(x => x._2 > 0)
 

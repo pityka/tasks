@@ -30,7 +30,7 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 import cats.effect.IO
 
 object CacheWithoutFilePrefixTest extends TestHelpers {
@@ -76,7 +76,7 @@ class CacheWithoutFilePrefixTestSuite extends FunSuite with Matchers {
   test(
     "caching should work even if with  tasks.createFilePrefixForTaskId = false"
   ) {
-    CacheWithoutFilePrefixTest.run.unsafeRunSync().get shouldBe 3
+    CacheWithoutFilePrefixTest.run.unsafeRunSync().toOption.get shouldBe 3
     CacheWithoutFilePrefixTest.sideEffect.count(
       _ == "execution of task"
     ) shouldBe 2

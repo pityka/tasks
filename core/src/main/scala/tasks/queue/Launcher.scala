@@ -100,7 +100,7 @@ private[tasks] object Launcher {
       address: Address,
       queueActor: QueueActor
   ) = {
-    if (!state.availableResources.empty && !state.denyWorkBeforeShutdown) {
+    if (!state.denyWorkBeforeShutdown) {
 
       val effect =
         messenger.submit(
@@ -112,7 +112,12 @@ private[tasks] object Launcher {
         )
 
       (state.copy(waitingForWork = true), effect)
-    } else (state, IO.unit)
+    } else {
+      scribe.debug(
+        "Not asking for work because no available resources or preparing for shut down."
+      )
+      (state, IO.unit)
+    }
   }
 }
 
@@ -334,7 +339,10 @@ private[tasks] class LauncherBehavior(
               val (newState, effect) =
                 Launcher.askForWork(state, messenger, address, queueActor)
               (newState, effect)
-            } else (state, IO.unit)
+            } else {
+              scribe.debug("Not asking for work.")
+              (state, IO.unit)
+            }
           }
         }
 

@@ -30,7 +30,7 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 import scala.concurrent.duration._
 import akka.stream.scaladsl.Source
 import akka.util.ByteString

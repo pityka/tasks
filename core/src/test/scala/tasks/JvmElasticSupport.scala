@@ -35,54 +35,65 @@ import scala.concurrent.Future
 import cats.effect.IO
 import tasks.deploy.HostConfiguration
 import cats.effect.kernel.Resource
+import scala.collection.mutable.ArrayBuffer
+import cats.effect.kernel.Ref
+import cats.effect.FiberIO
+import cats.effect.unsafe.implicits.global
+import cats.effect.ExitCode
+import cats.effect.kernel.Deferred
 
 object JvmElasticSupport {
 
-  val taskSystems =
-    scala.collection.mutable
-      .ArrayBuffer[
-        (String, Future[((TaskSystemComponents, HostConfiguration), IO[Unit])])
-      ]()
+  case class State(
+      taskSystems: List[
+        (String, FiberIO[((TaskSystemComponents, HostConfiguration), IO[Unit])])
+      ],
+      nodesShutdown: List[String]
+  )
+  // val state =
+  //   Ref.of[IO,State](State(Nil,Nil)).unsafeRunSync()
 
-  val nodesShutdown = scala.collection.mutable.ArrayBuffer[String]()
+  class Shutdown(state: Ref[IO, State]) extends ShutdownNode {
 
-  object Shutdown extends ShutdownNode {
-    import scala.concurrent.ExecutionContext.Implicits.global
+    def shutdownRunningNode(nodeName: RunningJobId): IO[Unit] =
+      state.flatModify { state =>
+        val ts = state.taskSystems.filter(_._1 == nodeName.value)
+        val newState = state.copy(
+          nodesShutdown = state.nodesShutdown :+ nodeName.value,
+          taskSystems = state.taskSystems.filterNot(_._1 == nodeName.value)
+        )
+        val release: IO[List[Unit]] = IO.parSequenceN(1)(
+          ts.map(_._2.join.flatMap(_.embedNever).flatMap(_._2))
+        )
+        (newState, release.void)
+      }
 
-    def shutdownRunningNode(nodeName: RunningJobId): Unit = synchronized {
-      nodesShutdown += nodeName.value
-      taskSystems
-        .filter(_._1 == nodeName.value)
-        .foreach(_._2.foreach { case (_, release) =>
-          import cats.effect.unsafe.implicits.global
+    def shutdownPendingNode(nodeName: PendingJobId): IO[Unit] =
+      shutdownRunningNode(RunningJobId(nodeName.value))
 
-          release.unsafeRunSync()
-        })
-    }
+  }
+  class ShutdownSelf(state: Ref[IO, State]) extends ShutdownSelfNode {
 
-    def shutdownPendingNode(nodeName: PendingJobId): Unit = synchronized {
-      nodesShutdown += nodeName.value
-      taskSystems
-        .filter(_._1 == nodeName.value)
-        .foreach(_._2.foreach { case (_, release) =>
-          import cats.effect.unsafe.implicits.global
-
-          release.unsafeRunSync()
-        })
-    }
+    def shutdownRunningNode(
+        exitCode: Deferred[IO, ExitCode],
+        nodeName: RunningJobId
+    ): IO[Unit] =
+      (new Shutdown(state)).shutdownRunningNode(nodeName)
 
   }
 
-  class JvmCreateNode(masterAddress: SimpleSocketAddress) extends CreateNode {
+  class JvmCreateNode(state: Ref[IO, State], masterAddress: SimpleSocketAddress)
+      extends CreateNode {
 
     def requestOneNewJobFromJobScheduler(
         requestSize: tasks.shared.ResourceRequest
-    )(implicit config: TasksConfig): Try[(PendingJobId, ResourceAvailable)] = {
+    )(implicit
+        config: TasksConfig
+    ): IO[Either[String, (PendingJobId, ResourceAvailable)]] = {
       val jobid =
         java.util.UUID.randomUUID.toString.replace("-", "")
 
-      val ts = Future {
-        import cats.effect.unsafe.implicits.global
+      val ts = {
 
         defaultTaskSystem(
           s"""
@@ -90,56 +101,69 @@ object JvmElasticSupport {
     hosts.master = "${masterAddress.getHostName}:${masterAddress.getPort}"
     hosts.app = false
     tasks.disableRemoting = false
-    jobid = $jobid
+    tasks.elastic.nodename = $jobid
     tasks.addShutdownHook = false 
     tasks.fileservice.storageURI="${config.storageURI.toString}"
     """,
           Resource.pure(None),
           JvmGrid.make.map(Some(_))
-        ).allocated.unsafeRunSync()
-      }(scala.concurrent.ExecutionContext.Implicits.global)
-      import scala.concurrent.ExecutionContext.Implicits.global
-      ts.map(_ => ()).recover { case e =>
-        println(e)
+        ).allocated.start
       }
-      synchronized {
-        taskSystems += ((jobid, ts))
-      }
-      Try(
-        (
-          PendingJobId(jobid),
-          ResourceAvailable(
-            cpu = requestSize.cpu._1,
-            memory = requestSize.memory,
-            scratch = requestSize.scratch,
-            gpu = 0 until requestSize.gpu toList,
-            image = None
+      ts.flatMap { ts =>
+        state.update(state =>
+          state.copy(taskSystems = state.taskSystems :+ ((jobid, ts)))
+        )
+      }.map { _ =>
+        Right(
+          (
+            PendingJobId(jobid),
+            ResourceAvailable(
+              cpu = requestSize.cpu._1,
+              memory = requestSize.memory,
+              scratch = requestSize.scratch,
+              gpu = 0 until requestSize.gpu toList,
+              image = None
+            )
           )
         )
-      )
+      }
 
     }
 
   }
 
-  class JvmCreateNodeFactory extends CreateNodeFactory {
+  class JvmCreateNodeFactory(ref: Ref[IO, State]) extends CreateNodeFactory {
     def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
-      new JvmCreateNode(master)
+      new JvmCreateNode(ref, master)
   }
 
   object JvmGetNodeName extends GetNodeName {
-    def getNodeName = synchronized { taskSystems.last._1 }
+    def getNodeName(config: TasksConfig) = IO.pure(config.nodeName)
   }
 
   object JvmGrid {
 
-    def make: Resource[IO, ElasticSupport] = cats.effect.Resource.pure(
-      SimpleElasticSupport(
-        hostConfig = None,
-        shutdown = Shutdown,
-        createNodeFactory = new JvmCreateNodeFactory,
-        getNodeName = JvmGetNodeName
-      )
-    )
+    val stateResource = Resource.make(
+      Ref.of[IO, State](State(Nil, Nil))
+    ) { state =>
+      state.get.flatMap { state =>
+        IO.parSequenceN(1)(
+          state.taskSystems.map(_._2.join.flatMap(_.embedNever.flatMap(_._2)))
+        ).void
+      }
+    }
+
+    def make: Resource[IO, ElasticSupport] =
+      stateResource.flatMap { state =>
+        cats.effect.Resource.pure(
+          new ElasticSupport(
+            hostConfig = None,
+            shutdownFromNodeRegistry = new Shutdown(state),
+            shutdownFromWorker = new ShutdownSelf(state),
+            createNodeFactory = new JvmCreateNodeFactory(state),
+            getNodeName = JvmGetNodeName
+          )
+        )
+      }
   }
 }

@@ -30,7 +30,7 @@ import cats.effect.unsafe.implicits.global
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 import scala.util._
 import cats.effect.IO
 import cats.effect.kernel.Resource
@@ -82,7 +82,7 @@ object NodeAllocationMaxNodesTest extends TestHelpers {
 class NodeAllocationMaxNodesTestSuite extends FunSuite with Matchers {
 
   test("elastic node allocation should respect max node configuration") {
-    NodeAllocationMaxNodesTest.run.unsafeRunSync().get shouldBe None
+    NodeAllocationMaxNodesTest.run.unsafeRunSync().toOption.get shouldBe None
 
   }
 

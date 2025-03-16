@@ -170,7 +170,7 @@ class WithSharedFilesTestSuite extends FunSuite with Matchers {
 
   test("task output <: ResultWithSharedFiles should be cached ") {
     val (t1Files, t2Files, t1MutablesFiles, t1ImmutablesFiles) =
-      ResultWithSharedFilesTest.run.unsafeRunSync().get
+      ResultWithSharedFilesTest.run.unsafeRunSync().toOption.get
     t1Files.distinct.size shouldBe 18
     (t1Files zip t2Files) foreach { case (f1, f2) =>
       f1 shouldBe f2

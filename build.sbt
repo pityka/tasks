@@ -84,10 +84,10 @@ lazy val commonSettings = Seq(
 lazy val circeVersion = "0.14.9"
 lazy val jsoniterVersion = "2.33.2"
 lazy val http4sVersion = "0.23.27"
-lazy val scribeVersion = "3.13.3"
+lazy val scribeVersion = "3.16.0"
 lazy val fs2Version = "3.11.0"
 
-lazy val shared = crossProject(JSPlatform, JVMPlatform)
+lazy val shared = crossProject(JVMPlatform)
   .crossType(sbtcrossproject.CrossPlugin.autoImport.CrossType.Pure)
   .in(file("shared"))
   .settings(
@@ -98,19 +98,10 @@ lazy val shared = crossProject(JSPlatform, JVMPlatform)
     )
   )
   .settings(commonSettings: _*)
-  .jsSettings(
-    fork := false,
-    libraryDependencies ++= Seq(
-      "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % jsoniterVersion,
-      "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
-    )
-  )
 
 lazy val sharedJVM = shared.jvm
 
-lazy val sharedJS = shared.js
-
-resolvers += Resolver.jcenterRepo
+// lazy val sharedJS = shared.js
 
 lazy val spores = project
   .in(file("spores"))
@@ -138,11 +129,10 @@ lazy val core = project
     name := "tasks-core",
     libraryDependencies ++= Seq(
       "co.fs2" %% "fs2-io" % fs2Version,
-      "co.fs2" %% "fs2-reactive-streams" % fs2Version,
       "org.http4s" %% "http4s-ember-client" % http4sVersion,
       "org.http4s" %% "http4s-ember-server" % http4sVersion,
       "org.http4s" %% "http4s-dsl" % http4sVersion,
-      "com.typesafe" % "config" % "1.4.2",
+      "org.ekrich" %% "sconfig" % "1.8.1",
       "org.typelevel" %% "cats-effect" % "3.5.3",
       "io.github.pityka" %% "selfpackage" % "2.1.6",
       "org.scalatest" %% "scalatest" % "3.2.19" % "test",
@@ -183,17 +173,6 @@ lazy val s3 = project
   )
   .dependsOn(core)
 
-lazy val ssh = project
-  .in(file("ssh"))
-  .settings(commonSettings: _*)
-  .settings(
-    name := "tasks-ssh",
-    libraryDependencies ++= Seq(
-      "ch.ethz.ganymed" % "ganymed-ssh2" % "262"
-    )
-  )
-  .dependsOn(core % "compile->compile;test->test")
-
 lazy val kubernetes = project
   .in(file("kubernetes"))
   .settings(commonSettings: _*)
@@ -219,7 +198,7 @@ lazy val kubernetesTest = project
 lazy val example = project
   .in(file("example"))
   .settings(commonSettings: _*)
-  .dependsOn(core, ssh)
+  .dependsOn(core)
   .enablePlugins(JavaAppPackaging)
   .settings(
     executableScriptName := "entrypoint",
@@ -269,13 +248,11 @@ lazy val root = (project in file("."))
     upicklesupport,
     circe,
     sharedJVM,
-    sharedJS,
+    // sharedJS,
     ec2,
     s3,
-    ssh,
     kubernetes,
     kubernetesTest,
-    // tracker,
     example
   )
 
@@ -291,5 +268,4 @@ lazy val testables = (project in file("testables"))
     upicklesupport,
     circe,
     sharedJVM
-    // ssh
   )

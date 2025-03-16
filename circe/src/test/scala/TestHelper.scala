@@ -31,7 +31,7 @@ import io.circe._
 import io.circe.generic.semiauto._
 import circesupport._
 
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 

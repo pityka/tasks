@@ -34,6 +34,12 @@ import tasks.util.message._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import tasks.queue.LauncherActor
+import cats.effect.kernel.Resource
+import tasks.deploy.HostConfiguration
+import cats.effect.IO
+import tasks.queue.QueueActor
+import cats.effect.kernel.Deferred
+import cats.effect.ExitCode
 
 case class Node(
     name: RunningJobId,
@@ -42,28 +48,36 @@ case class Node(
 )
 
 trait GetNodeName {
-  def getNodeName: String
+  def getNodeName(config: TasksConfig): IO[String]
 }
 
+trait ShutdownSelfNode {
+  def shutdownRunningNode(
+      exitCode: Deferred[IO, ExitCode],
+      nodeName: RunningJobId
+  ): IO[Unit]
+}
 trait ShutdownRunningNode {
-  def shutdownRunningNode(nodeName: RunningJobId): Unit
+  def shutdownRunningNode(nodeName: RunningJobId): IO[Unit]
 }
 
 trait ShutdownNode extends ShutdownRunningNode {
-  def shutdownPendingNode(nodeName: PendingJobId): Unit
+  def shutdownPendingNode(nodeName: PendingJobId): IO[Unit]
 }
 
 trait CreateNode {
   def requestOneNewJobFromJobScheduler(
       k: ResourceRequest
-  )(implicit taskConfig: TasksConfig): Try[(PendingJobId, ResourceAvailable)]
+  )(implicit
+      taskConfig: TasksConfig
+  ): IO[Either[String, (PendingJobId, ResourceAvailable)]]
 
-  def convertRunningToPending(p: RunningJobId): Option[PendingJobId] =
-    Some(PendingJobId(p.value))
+  def convertRunningToPending(p: RunningJobId): IO[Option[PendingJobId]] =
+    IO.pure(Some(PendingJobId(p.value)))
 
-  def initializeNode(node: Node): Unit = {
+  def initializeNode(node: Node): IO[Unit] = {
     val _ = node // suppress warning
-    ()
+    IO.unit
   }
 }
 

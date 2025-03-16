@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package tasks.elastic
+package tasks
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
@@ -35,10 +35,35 @@ import com.github.plokhotnyuk.jsoniter_scala.core._
 
 import tasks.queue.UntypedResult
 import tasks._
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 import cats.effect.IO
-import tasks.elastic.sh.SHElasticSupport
+import tasks.elastic.process.LocalShellElasticSupport
 import cats.effect.kernel.Resource
+
+object TestWorker {
+  scribe.Logger.root
+    .clearHandlers()
+    .clearModifiers()
+    .withHandler(minimumLevel = Some(scribe.Level.Info))
+    .replace()
+
+  def main(args: Array[String]): Unit = {
+    println("AAA")
+
+    println("A")
+    scribe.debug("A")
+    scribe.Logger.root.debug("B")
+    scribe.info("A")
+
+    withTaskSystem(
+      ConfigFactory.empty(),
+      Resource.pure(None),
+      Resource.eval(LocalShellElasticSupport.make(None).map(Some(_)))
+    ) { _ =>
+      IO.unit
+    }.unsafeRunSync()
+  }
+}
 
 object SHResultWithSharedFilesTest extends TestHelpers {
 
@@ -150,6 +175,8 @@ object SHResultWithSharedFilesTest extends TestHelpers {
     val tmp = tasks.util.TempFile.createTempFile(".temp")
     tmp.delete
     println(tmp)
+    import scala.sys.process._
+    println("pwd".!!)
     val testConfig2 =
       ConfigFactory.parseString(
         s"""tasks.fileservice.connectToProxy = true
@@ -162,15 +189,22 @@ object SHResultWithSharedFilesTest extends TestHelpers {
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 5 s
       tasks.worker-main-class = "tasks.TestWorker"
-      tasks.elastic.sh.workdir = ${tmp.getAbsolutePath}
-      tasks.elastic.javaCommandLine = "-Dtasks.fileservice.connectToProxy=true"
+
+      tasks.sh.contexts = [
+       {
+        context = c1 
+        hostname = localhost
+        }  
+      ]
       """
       )
 
     withTaskSystem(
       testConfig2.withFallback(testConfig),
       Resource.pure(None),
-      SHElasticSupport.make.map(Some(_))
+      Resource
+        .eval(LocalShellElasticSupport.make(Some(testConfig2)))
+        .map(Some(_))
     ) { implicit ts =>
       val tmpfile = java.io.File.createTempFile("dsfsdf", "dfs")
       tasks.util.writeBinaryToFile(
@@ -207,9 +241,15 @@ object SHResultWithSharedFilesTest extends TestHelpers {
 
 class SHWithSharedFilesTestSuite extends FunSuite with Matchers {
 
+  scribe.Logger.root
+    .clearHandlers()
+    .clearModifiers()
+    .withHandler(minimumLevel = Some(scribe.Level.Info))
+    .replace()
+
   test("task output <: ResultWithSharedFiles should be cached ") {
     val (t1Files, t2Files, t1MutablesFiles, t1ImmutablesFiles) =
-      SHResultWithSharedFilesTest.run.unsafeRunSync().get
+      SHResultWithSharedFilesTest.run.unsafeRunSync().toOption.get
     t1Files.distinct.size shouldBe 18
     (t1Files zip t2Files) foreach { case (f1, f2) =>
       f1 shouldBe f2

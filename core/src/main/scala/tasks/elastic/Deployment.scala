@@ -83,8 +83,13 @@ object Deployment {
     val hostImageString =
       if (image.isDefined) s"-Dhosts.image=${image.get}" else ""
 
+    val connectToProxyFileService =
+      if (config.connectToProxyFileServiceOnMain)
+        s"-Dtasks.fileservice.connectToProxy=true"
+      else ""
+
     val edited =
-      s"./$packageFileName -J-Xmx{RAM}M {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString $hostImageString $externalHostnameString  $mayUseArbitraryPortString $followerNodeNameString"
+      s"./$packageFileName -J-Xmx{RAM}M {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString $hostImageString $externalHostnameString  $mayUseArbitraryPortString $followerNodeNameString $connectToProxyFileService -Dtasks.disableRemoting=false"
         .replace(
           "{RAM}",
           math

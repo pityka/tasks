@@ -186,9 +186,7 @@ private[tasks] object QueueActor {
   val singletonAddress = Address("TasksQueue")
   val referenceByAddress = QueueActor(singletonAddress)
   def makeReference(
-      masterAddress: SimpleSocketAddress,
-      messenger: Messenger,
-      remoteNodeRegistry: Option[RemoteNodeRegistry]
+      messenger: Messenger
   )(implicit config: TasksConfig): IO[Either[Throwable, QueueActor]] = Ask
     .ask(
       target = singletonAddress,

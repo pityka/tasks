@@ -29,7 +29,7 @@
 // import org.scalatest.matchers.should.Matchers
 
 // import tasks.jsonitersupport._
-// import com.typesafe.config.ConfigFactory
+// import org.ekrich.config.ConfigFactory
 // import cats.effect.IO
 
 // object SlaveShutdownTest extends TestHelpers {

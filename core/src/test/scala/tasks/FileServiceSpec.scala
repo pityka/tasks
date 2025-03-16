@@ -31,7 +31,7 @@ import org.scalatest._
 import org.scalatest.funspec.{AnyFunSpecLike => FunSpecLike}
 import scala.concurrent.duration._
 import scala.concurrent._
-import com.typesafe.config.ConfigFactory
+import org.ekrich.config.ConfigFactory
 
 import java.io._
 
