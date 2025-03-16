@@ -26,10 +26,11 @@ private[tasks] object Messenger {
         val externalAddress =
           hostConfig.myAddressExternal.getOrElse(hostConfig.myAddressBind)
         val internalAddress = hostConfig.myAddressBind
+        val bindPrefix = hostConfig.bindPrefix
 
         val peerUri = {
           val str =
-            s"http://${hostConfig.master.hostName}:${hostConfig.master.port}"
+            s"http://${hostConfig.master.hostName}:${hostConfig.master.port}/${hostConfig.masterPrefix}"
           org.http4s.Uri
             .fromString(str)
             .getOrElse(throw new RuntimeException(s"Can't parse $str"))
@@ -37,6 +38,7 @@ private[tasks] object Messenger {
         RemoteMessenger.make(
           bindHost = internalAddress.hostName,
           bindPort = internalAddress.port,
+          bindPrefix = bindPrefix,
           peerUri
         )
     }

@@ -84,6 +84,7 @@ trait CreateNode {
 trait CreateNodeFactory {
   def apply(
       masterAddress: SimpleSocketAddress,
+      masterPrefix: String,
       codeAddress: CodeAddress
   ): CreateNode
 }

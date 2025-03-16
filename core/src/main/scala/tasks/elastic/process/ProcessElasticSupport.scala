@@ -273,6 +273,7 @@ trait SpawnProcessCommand {
 
 private final class ProcessCreateNode(
     masterAddress: SimpleSocketAddress,
+    masterPrefix: String,
     codeAddress: CodeAddress,
     nodeNamesToContainerIds: Ref[IO, Map[RunningJobId, ProcessId]],
     config: ProcessConfig,
@@ -322,6 +323,7 @@ private final class ProcessCreateNode(
             scratch = allocated.scratch,
             gpus = allocated.gpu.zipWithIndex.map(_._2),
             masterAddress = masterAddress,
+            masterPrefix = masterPrefix,
             download = Uri(
               scheme = "http",
               hostname = codeAddress.address.getHostName,
@@ -385,14 +387,15 @@ private final class ProcessCreateNodeFactory(
     settings: ProcessSettings,
     spawnProcessCommand: SpawnProcessCommand
 ) extends CreateNodeFactory {
-  def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
+  def apply(master: SimpleSocketAddress, masterPrefix: String, codeAddress: CodeAddress) =
     new ProcessCreateNode(
-      master,
-      codeAddress,
-      nodeNamesToContainerIds,
-      config,
-      settings,
-      spawnProcessCommand
+      masterAddress = master,
+      masterPrefix = masterPrefix,
+      codeAddress = codeAddress,
+      nodeNamesToContainerIds = nodeNamesToContainerIds,
+      config = config,
+      settings = settings,
+      spawnProcessCommand = spawnProcessCommand
     )
 }
 

@@ -46,6 +46,7 @@ object Deployment {
       scratch: Int,
       gpus: List[Int],
       masterAddress: SimpleSocketAddress,
+      masterPrefix: String,
       download: Uri,
       followerHostname: Option[String],
       followerExternalHostname: Option[String],
@@ -89,7 +90,7 @@ object Deployment {
       else ""
 
     val edited =
-      s"./$packageFileName -J-Xmx{RAM}M {EXTRA} -Dhosts.master={MASTER} -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString $hostImageString $externalHostnameString  $mayUseArbitraryPortString $followerNodeNameString $connectToProxyFileService -Dtasks.disableRemoting=false"
+      s"./$packageFileName -J-Xmx{RAM}M {EXTRA} -Dhosts.master={MASTER} -Dhosts.masterprefix=$masterPrefix  -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString $hostImageString $externalHostnameString  $mayUseArbitraryPortString $followerNodeNameString $connectToProxyFileService -Dtasks.disableRemoting=false"
         .replace(
           "{RAM}",
           math
