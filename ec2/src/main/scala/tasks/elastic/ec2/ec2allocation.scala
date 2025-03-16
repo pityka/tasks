@@ -328,7 +328,7 @@ object EC2ElasticSupport {
               .withRegion(ec2Config.awsRegion)
               .build
         new ElasticSupport(
-          hostConfig = Some(new EC2MasterSlave(ec2Config)),
+          hostConfig = Some(new EC2MasterFollower(ec2Config)),
           shutdownFromNodeRegistry = new EC2Shutdown(ec2),
           shutdownFromWorker = new EC2Shutdown(ec2),
           createNodeFactory = new EC2CreateNodeFactory(ec2Config, ec2),

@@ -132,45 +132,45 @@ package object tasks extends MacroCalls {
     withTaskSystem(None, Resource.pure(None), Resource.pure(None))(f)
 
   def withTaskSystem[T](
-      c: Config,
+      config: Config,
       s3Client: Resource[IO, Option[S3Client]],
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]]
   )(
       f: TaskSystemComponents => IO[T]
   ): IO[Either[ExitCode, T]] =
-    withTaskSystem(Some(c), s3Client, elasticSupport)(f)
+    withTaskSystem(Some(config), s3Client, elasticSupport)(f)
 
   def withTaskSystem[T](c: Config)(
       f: TaskSystemComponents => IO[T]
   ): IO[Either[ExitCode, T]] =
     withTaskSystem(Some(c), Resource.pure(None), Resource.pure(None))(f)
 
-  def withTaskSystem[T](c: Option[Config])(
+  def withTaskSystem[T](config: Option[Config])(
       f: TaskSystemComponents => IO[T]
   ): IO[Either[ExitCode, T]] =
-    withTaskSystem(c, Resource.pure(None), Resource.pure(None))(f)
+    withTaskSystem(config, Resource.pure(None), Resource.pure(None))(f)
 
   def withTaskSystem[T](
-      s: String,
+      config: String,
       s3Client: Resource[IO, Option[S3Client]],
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]]
   )(
       f: TaskSystemComponents => IO[T]
   ): IO[Either[ExitCode, T]] =
     withTaskSystem(
-      Some(ConfigFactory.parseString(s)),
+      Some(ConfigFactory.parseString(config)),
       s3Client,
       elasticSupport
     )(f)
 
   def withTaskSystem[T](
-      c: Option[Config],
+      config: Option[Config],
       s3Client: Resource[IO, Option[S3Client]],
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]]
   )(f: TaskSystemComponents => IO[T]): IO[Either[ExitCode, T]] = {
 
     val resource = Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
-      defaultTaskSystem(c, s3Client, elasticSupport, exitCode).map(tsc =>
+      defaultTaskSystem(config, s3Client, elasticSupport, exitCode).map(tsc =>
         (tsc, exitCode)
       )
     }
@@ -203,24 +203,24 @@ package object tasks extends MacroCalls {
     }
 
   def defaultTaskSystem(
-      string: String,
+      config: String,
       s3Client: Resource[IO, Option[S3Client]],
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]]
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
     Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
       defaultTaskSystem(
-        Some(ConfigFactory.parseString(string)),
+        Some(ConfigFactory.parseString(config)),
         s3Client,
         elasticSupport,
         exitCode
       )
     }
   def defaultTaskSystem(
-      string: String
+      config: String
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
     Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
       defaultTaskSystem(
-        Some(ConfigFactory.parseString(string)),
+        Some(ConfigFactory.parseString(config)),
         Resource.pure(None),
         Resource.pure(None),
         exitCode
@@ -228,11 +228,11 @@ package object tasks extends MacroCalls {
     }
 
   def defaultTaskSystem(
-      extraConf: Option[Config]
+      config: Option[Config]
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
     Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
       defaultTaskSystem(
-        extraConf,
+        config,
         Resource.pure(None),
         Resource.pure(None),
         exitCode
@@ -247,7 +247,7 @@ package object tasks extends MacroCalls {
     * @return
     */
   def defaultTaskSystem(
-      extraConf: Option[Config],
+      config: Option[Config],
       s3Client: Resource[IO, Option[S3Client]],
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]],
       exitCode: Deferred[IO, ExitCode]
@@ -256,7 +256,7 @@ package object tasks extends MacroCalls {
     val configuration = () => {
       ConfigFactory.invalidateCaches()
 
-      val loaded = tasks.util.loadConfig(extraConf)
+      val loaded = tasks.util.loadConfig(config)
 
       ConfigFactory.invalidateCaches()
 
@@ -270,11 +270,11 @@ package object tasks extends MacroCalls {
       )
 
     TaskSystemComponents.make(
-      hostConfig,
-      elasticSupport,
-      s3Client,
-      tconfig,
-      exitCode
+      hostConfig = hostConfig,
+      elasticSupport = elasticSupport,
+      s3ClientResource = s3Client,
+      config = tconfig,
+      exitCode = exitCode
     )
   }
 

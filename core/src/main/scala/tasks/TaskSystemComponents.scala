@@ -637,7 +637,7 @@ object TaskSystemComponents {
 
                   if (!tempFolderWriteable) {
                     scribe.error(
-                      s"Temp folder is not writeable (${System.getProperty("java.io.tmpdir")}). Failing slave init."
+                      s"Temp folder is not writeable (${System.getProperty("java.io.tmpdir")}). Failing worker init."
                     )
                     Resource.eval(initFailed(remoteNodeRegistry, messenger))
                   } else {

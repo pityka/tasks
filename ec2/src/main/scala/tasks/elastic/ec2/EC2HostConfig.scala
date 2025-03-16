@@ -5,7 +5,7 @@ import tasks.util.config.TasksConfig
 import tasks.util.EC2Operations
 import tasks.util.SimpleSocketAddress
 
-class EC2MasterSlave(val config: EC2Config)
+class EC2MasterFollower(val config: EC2Config)
     extends HostConfigurationFromConfig {
 
   private lazy val myhostname =

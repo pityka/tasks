@@ -166,8 +166,10 @@ object PiApp extends App {
   import PiTasks._
   import Fib._
 
-  /** Opens and closes a TaskSystem with default configuration On a slave node,
-    * the block is not executed, but it starts pulling jobs from the queue
+  /** Opens and closes a TaskSystem with default configuration
+    *
+    * On a worker node, the block is not executed, but it starts pulling jobs
+    * from the queue
     */
   withTaskSystem { implicit ts =>
     val numTasks = 100
