@@ -125,7 +125,7 @@ object KubernetesTest extends IOApp {
         config = Some(testConfig2),
         containerizer = containerizer,
         k8sClientResource = kubernetesClient,
-        mainClassName = "tasks.KubernetesTest"
+        mainClassName = "KubernetesTest"
       )(ts => useTs(ts))
 
     resultOrBlock.flatMap { x =>

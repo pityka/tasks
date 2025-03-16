@@ -48,6 +48,8 @@ trait HostConfiguration {
    */
   def myAddressExternal: Option[SimpleSocketAddress]
 
+  def bindPrefix : String
+
   def availableCPU: Int
 
   def availableGPU: List[Int]
@@ -59,6 +61,8 @@ trait HostConfiguration {
   def image: Option[String]
 
   def master: SimpleSocketAddress
+
+  def masterPrefix : String
 
   def myRoles: Set[Role]
 
@@ -79,6 +83,8 @@ trait HostConfigurationFromConfig extends HostConfiguration {
 
   def myAddressBind: SimpleSocketAddress = myAddress
 
+  lazy val bindPrefix = scala.util.Random.alphanumeric.take(16).mkString
+
   def myAddressExternal: Option[SimpleSocketAddress] =
     config.hostNameExternal.map { v =>
       val spl = v.split(':')
@@ -97,6 +103,8 @@ trait HostConfigurationFromConfig extends HostConfiguration {
 
   lazy val master =
     config.masterAddress.getOrElse(myAddressExternal.getOrElse(myAddress))
+
+  lazy val masterPrefix = config.masterPrefix.getOrElse(bindPrefix)
 
   private def startApp = config.startApp
 
@@ -123,6 +131,10 @@ class LocalConfiguration(
   override val myRoles = Set(App, Queue, Worker)
 
   override val master = SimpleSocketAddress("localhost", 0)
+
+  val masterPrefix = "prefix"
+
+  val bindPrefix = "prefix"
 
   def myAddress = master
   def myAddressBind: SimpleSocketAddress = master

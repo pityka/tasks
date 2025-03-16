@@ -113,6 +113,7 @@ object KubernetesHelpers {
 
 class K8SCreateNode(
     masterAddress: SimpleSocketAddress,
+    masterPrefix: String,
     codeAddress: CodeAddress,
     k8s: Option[KubernetesClient[IO]],
     k8sConfig: K8SConfig
@@ -148,6 +149,7 @@ class K8SCreateNode(
           scratch = requestSize.scratch,
           gpus = 0 until requestSize.gpu toList,
           masterAddress = masterAddress,
+          masterPrefix = masterPrefix,
           download = Uri(
             scheme = "http",
             hostname = codeAddress.address.getHostName,
@@ -304,8 +306,18 @@ class K8SCreateNode(
 
 class K8SCreateNodeFactory(k8s: Option[KubernetesClient[IO]], config: K8SConfig)
     extends CreateNodeFactory {
-  def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
-    new K8SCreateNode(master, codeAddress, k8s, config)
+  def apply(
+      master: SimpleSocketAddress,
+      masterPrefix: String,
+      codeAddress: CodeAddress
+  ) =
+    new K8SCreateNode(
+      masterAddress = master,
+      masterPrefix = masterPrefix,
+      codeAddress = codeAddress,
+      k8s = k8s,
+      k8sConfig = config
+    )
 }
 
 object K8SGetNodeName extends GetNodeName {

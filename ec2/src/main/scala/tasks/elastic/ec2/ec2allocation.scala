@@ -76,6 +76,7 @@ class EC2Shutdown(ec2: AmazonEC2) extends ShutdownNode with ShutdownSelfNode {
 
 class EC2CreateNode(
     masterAddress: SimpleSocketAddress,
+    masterPrefix: String,
     codeAddress: CodeAddress,
     ec2: AmazonEC2,
     ec2Config: EC2Config
@@ -186,6 +187,7 @@ class EC2CreateNode(
       scratch = selectedInstanceType._2.scratch,
       gpus = selectedInstanceType._2.gpu,
       masterAddress = masterAddress,
+      masterPrefix = masterPrefix,
       download = Uri(
         scheme = "http",
         hostname = codeAddress.address.getHostName,
@@ -237,8 +239,18 @@ class EC2CreateNodeFactory(
     config: EC2Config,
     ec2: AmazonEC2
 ) extends CreateNodeFactory {
-  def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
-    new EC2CreateNode(master, codeAddress, ec2, config)
+  def apply(
+      master: SimpleSocketAddress,
+      masterPrefix: String,
+      codeAddress: CodeAddress
+  ) =
+    new EC2CreateNode(
+      masterAddress = master,
+      masterPrefix = masterPrefix,
+      codeAddress = codeAddress,
+      ec2 = ec2,
+      ec2Config = config
+    )
 }
 
 object EC2GetNodeName extends GetNodeName {

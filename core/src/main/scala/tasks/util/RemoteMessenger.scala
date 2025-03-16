@@ -86,9 +86,9 @@ private[tasks] object RemoteMessenger {
     }
   }
 
-  private def route(localMessenger: LocalMessenger) = HttpRoutes.of[IO] {
+  private def route(localMessenger: LocalMessenger, prefix: String) = HttpRoutes.of[IO] {
 
-    case request if request.method == Method.POST =>
+    case request @ POST -> Root / prefix  =>
       request.decode[Message] { message =>
         IO(
           scribe.debug(
@@ -139,13 +139,22 @@ private[tasks] object RemoteMessenger {
           ) *> IO.pure("")
       }
   }
-  def make(bindHost: String, bindPort: Int, peerUri: org.http4s.Uri) = {
+  /**
+    * Will receive http POST messages on http://$bindHost:$bindPort/$bindPrefix
+    *
+    * @param bindHost The host name or IP to which this service will bind
+    * @param bindPort The port to which this service will bind
+    * @param bindPrefix An http path prefix 
+    * @param peerUri The http uri to which this messenger will submit
+    * @return
+    */
+  def make(bindHost: String, bindPort: Int, bindPrefix: String, peerUri: org.http4s.Uri) = {
     import com.comcast.ip4s._
 
     LocalMessenger.make.flatMap { localMessenger =>
-      val r = route(localMessenger)
+      val r = route(localMessenger, bindPrefix)
       val listeningUri = {
-        val u = s"http://$bindHost:$bindPort/"
+        val u = s"http://$bindHost:$bindPort/$bindPrefix"
         org.http4s.Uri
           .fromString(u)
           .toOption

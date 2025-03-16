@@ -82,7 +82,7 @@ object JvmElasticSupport {
 
   }
 
-  class JvmCreateNode(state: Ref[IO, State], masterAddress: SimpleSocketAddress)
+  class JvmCreateNode(state: Ref[IO, State], masterAddress: SimpleSocketAddress, masterPrefix: String)
       extends CreateNode {
 
     def requestOneNewJobFromJobScheduler(
@@ -99,6 +99,7 @@ object JvmElasticSupport {
           s"""
     
     hosts.master = "${masterAddress.getHostName}:${masterAddress.getPort}"
+    hosts.masterprefix = ${masterPrefix}
     hosts.app = false
     tasks.disableRemoting = false
     tasks.elastic.nodename = $jobid
@@ -133,8 +134,8 @@ object JvmElasticSupport {
   }
 
   class JvmCreateNodeFactory(ref: Ref[IO, State]) extends CreateNodeFactory {
-    def apply(master: SimpleSocketAddress, codeAddress: CodeAddress) =
-      new JvmCreateNode(ref, master)
+    def apply(master: SimpleSocketAddress, masterPrefix: String, codeAddress: CodeAddress) =
+      new JvmCreateNode(ref, master, masterPrefix)
   }
 
   object JvmGetNodeName extends GetNodeName {

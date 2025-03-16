@@ -62,6 +62,7 @@ final class ElasticSupport(
 
   private[tasks] def apply(
       masterAddress: SimpleSocketAddress,
+      masterPrefix: String,
       queueActor: QueueActor,
       resource: ResourceAvailable,
       codeAddress: Option[CodeAddress],
@@ -74,7 +75,11 @@ final class ElasticSupport(
         codeAddress.map(codeAddress =>
           new NodeRegistry(
             unmanagedResource = resource,
-            createNode = createNodeFactory.apply(masterAddress, codeAddress),
+            createNode = createNodeFactory.apply(
+              masterAddress = masterAddress,
+              masterPrefix = masterPrefix,
+              codeAddress = codeAddress
+            ),
             decideNewNode = new SimpleDecideNewNode(codeAddress.codeVersion),
             shutdownNode = shutdownFromNodeRegistry,
             targetQueue = queueActor,
