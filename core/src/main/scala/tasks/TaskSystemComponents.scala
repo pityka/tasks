@@ -141,7 +141,9 @@ object TaskSystemComponents {
                 scribe.info("Remoting disabled.")
               case _ =>
                 scribe
-                  .info("Listening on: " + hostConfig.myAddressBind.toString+s" prefix: ${hostConfig.bindPrefix}")
+                  .info(
+                    "Listening on: " + hostConfig.myAddressBind.toString + s" prefix: ${hostConfig.bindPrefix}"
+                  )
                 scribe.info(
                   "External address: " + hostConfig.myAddressExternal.toString
                 )
@@ -166,7 +168,9 @@ object TaskSystemComponents {
               )
             }
 
-            scribe.info("Master node address is: " + hostConfig.master.toString +s" prefix: ${hostConfig.masterPrefix}")
+            scribe.info(
+              "Master node address is: " + hostConfig.master.toString + s" prefix: ${hostConfig.masterPrefix}"
+            )
           })
 
           val proxyStorageClient: Resource[IO, ManagedFileStorage] = Resource

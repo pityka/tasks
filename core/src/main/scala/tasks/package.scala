@@ -170,9 +170,8 @@ package object tasks extends MacroCalls {
   )(f: TaskSystemComponents => IO[T]): IO[Either[ExitCode, T]] = {
 
     val resource = Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
-      defaultTaskSystem(config, s3Client, elasticSupport, exitCode).map(tsc =>
-        (tsc, exitCode)
-      )
+      defaultTaskSystem(config, s3Client, elasticSupport, exitCode)
+        .map(tsc => (tsc, exitCode))
     }
 
     resource.use { case ((tsc, hostConfig), exitCode) =>
