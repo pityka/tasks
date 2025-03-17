@@ -48,7 +48,7 @@ trait HostConfiguration {
    */
   def myAddressExternal: Option[SimpleSocketAddress]
 
-  def bindPrefix : String
+  def bindPrefix: String
 
   def availableCPU: Int
 
@@ -62,7 +62,7 @@ trait HostConfiguration {
 
   def master: SimpleSocketAddress
 
-  def masterPrefix : String
+  def masterPrefix: String
 
   def myRoles: Set[Role]
 

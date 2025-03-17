@@ -316,8 +316,9 @@ private[tasks] final class TaskQueue(
     case Message(MessageData.AskForWork(availableResource), from, to) =>
       if (state.negotiation.isEmpty) {
         scribe.debug(
-          s"AskForWork ${from} $availableResource ${state.negotiation} ${state.queuedTasks.map { case (_, (sch, _)) =>
-              (sch.description.taskId, sch.resource)
+          s"AskForWork ${from} $availableResource ${state.negotiation} ${state.queuedTasks.map {
+              case (_, (sch, _)) =>
+                (sch.description.taskId, sch.resource)
             }.toSeq}"
         )
 

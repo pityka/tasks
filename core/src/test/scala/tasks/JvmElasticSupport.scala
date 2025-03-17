@@ -82,8 +82,11 @@ object JvmElasticSupport {
 
   }
 
-  class JvmCreateNode(state: Ref[IO, State], masterAddress: SimpleSocketAddress, masterPrefix: String)
-      extends CreateNode {
+  class JvmCreateNode(
+      state: Ref[IO, State],
+      masterAddress: SimpleSocketAddress,
+      masterPrefix: String
+  ) extends CreateNode {
 
     def requestOneNewJobFromJobScheduler(
         requestSize: tasks.shared.ResourceRequest
@@ -134,7 +137,11 @@ object JvmElasticSupport {
   }
 
   class JvmCreateNodeFactory(ref: Ref[IO, State]) extends CreateNodeFactory {
-    def apply(master: SimpleSocketAddress, masterPrefix: String, codeAddress: CodeAddress) =
+    def apply(
+        master: SimpleSocketAddress,
+        masterPrefix: String,
+        codeAddress: CodeAddress
+    ) =
       new JvmCreateNode(ref, master, masterPrefix)
   }
 
