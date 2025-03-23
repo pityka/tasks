@@ -138,37 +138,36 @@ private[tasks] object Launcher {
 
         val task: Task =
           new Task(
-            scheduleTask.inputDeserializer,
-            scheduleTask.outputSerializer,
-            scheduleTask.function,
-            handle,
-            queue,
-            FileServiceComponent(
+            inputDeserializer = scheduleTask.inputDeserializer,
+            outputSerializer = scheduleTask.outputSerializer,
+            function = scheduleTask.function,
+            launcherActor = handle,
+            queue = queue,
+            fileServiceComponent = FileServiceComponent(
               managedStorage,
               remoteStorage
             ),
-            cache,
-            nodeLocalCache,
-            allocatedResource.cpuMemoryAllocated,
-            filePrefix,
-            config,
-            scheduleTask.priority,
-            scheduleTask.labels,
-            scheduleTask.description.taskId,
-            scheduleTask.lineage.inherit(scheduleTask.description),
-            scheduleTask.description,
-            scheduleTask.proxy,
-            messenger
+            cache = cache,
+            nodeLocalCache = nodeLocalCache,
+            resourceAllocated = allocatedResource.cpuMemoryAllocated,
+            fileServicePrefix = filePrefix,
+            tasksConfig = config,
+            priority = scheduleTask.priority,
+            labels = scheduleTask.labels,
+            taskId = scheduleTask.description.taskId,
+            lineage = scheduleTask.lineage.inherit(scheduleTask.description),
+            taskHash = scheduleTask.description,
+            proxy = scheduleTask.proxy,
+            messenger = messenger
           )
 
-        val sideEffect =
-          messenger.submit(
-            Message(
-              MessageData.NeedInput,
-              from = address,
-              to = scheduleTask.proxy
-            )
-          )
+           val sideEffect = task.start(scheduleTask.input)
+          .start
+          .flatMap { fiber =>
+            ref.update(state => state.copy(fibers = fiber :: state.fibers))
+          }
+
+       
         val newState2 = newState.copy(
           runningTasks = (
             task,
@@ -427,16 +426,7 @@ private[tasks] object Launcher {
     )
 
     def receive = (state, stateRef) => {
-      case Message(t: MessageData.InputData, from, _) =>
-        state -> state.runningTasks
-          .find(_._1.proxy == from)
-          .get
-          ._1
-          .start(t)
-          .start
-          .flatMap { fiber =>
-            stateRef.update(state => state.copy(fibers = fiber :: state.fibers))
-          }
+   
 
       case Message(MessageData.Ping, from, _) =>
         state -> sendTo(from, MessageData.Ping)
