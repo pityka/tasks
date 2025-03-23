@@ -175,7 +175,7 @@ package object tasks extends MacroCalls {
       config: String,
       s3Client: Resource[IO, Option[S3Client]],
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]],
-      externalQueueState: Resource[IO, Option[Transaction[TaskQueue.State]]]
+      externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]]
   )(
       f: TaskSystemComponents => IO[T]
   ): IO[Either[ExitCode, T]] =
@@ -190,7 +190,7 @@ package object tasks extends MacroCalls {
       config: Option[Config],
       s3Client: Resource[IO, Option[S3Client]],
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]],
-      externalQueueState: Resource[IO, Option[Transaction[TaskQueue.State]]]
+      externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]]
   )(f: TaskSystemComponents => IO[T]): IO[Either[ExitCode, T]] = {
 
     val resource = Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
@@ -249,7 +249,7 @@ package object tasks extends MacroCalls {
       config: String,
       s3Client: Resource[IO, Option[S3Client]],
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]],
-      externalQueueState: Resource[IO, Option[Transaction[TaskQueue.State]]]
+      externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]]
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
     Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
       defaultTaskSystem(
@@ -297,7 +297,7 @@ package object tasks extends MacroCalls {
       config: Option[Config],
       s3Client: Resource[IO, Option[S3Client]],
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]],
-      externalQueueState: Resource[IO, Option[Transaction[TaskQueue.State]]],
+      externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]],
       exitCode: Deferred[IO, ExitCode]
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] = {
 

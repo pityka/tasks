@@ -60,7 +60,7 @@ object ExternalQueueTest extends TestHelpers {
   }
 
   def run = Ref
-    .of[IO, tasks.queue.TaskQueue.State](tasks.queue.TaskQueue.State.empty)
+    .of[IO, tasks.queue.QueueImpl.State](tasks.queue.QueueImpl.State.empty)
     .flatMap { queueStateRef =>
       val io1 = withTaskSystem(
         config = Some(testConfig2),

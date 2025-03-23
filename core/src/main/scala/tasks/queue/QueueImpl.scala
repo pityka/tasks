@@ -13,33 +13,167 @@ import tasks.util.config.TasksConfig
 import tasks.queue.Launcher.LauncherActor
 import tasks.shared.VersionedResourceAvailable
 import tasks.util.HeartBeatIO
+import tasks.util.eq._
 import tasks.shared.VersionedResourceAllocated
 import cats.effect.kernel.Ref
+import cats.effect.FiberIO
 import tasks.util.Transaction
 
 object QueueImpl {
-  def fromTransaction(
-      transaction: Transaction[TaskQueue.State],
-      cache: TaskResultCache,
-      messenger: Messenger
-  )(implicit config: TasksConfig) : IO[QueueImpl] = {
-    val q = new QueueImpl(transaction, cache, messenger)
-    q.start.map(_ => q)
+
+  case class ScheduleTaskEqualityProjection(
+      description: HashedTaskDescription
+  )
+
+  sealed trait Event
+  case class Enqueued(sch: ScheduleTask, proxies: List[Proxy]) extends Event
+  case class ProxyAddedToScheduledMessage(
+      sch: ScheduleTask,
+      proxies: List[Proxy]
+  ) extends Event
+  case class Negotiating(launcher: LauncherActor, sch: ScheduleTask)
+      extends Event
+  case class LauncherJoined(launcher: LauncherActor) extends Event
+  case object NegotiationDone extends Event
+  case class TaskScheduled(
+      sch: ScheduleTask,
+      launcher: LauncherActor,
+      allocated: VersionedResourceAllocated
+  ) extends Event
+  case class TaskDone(
+      sch: ScheduleTask,
+      result: UntypedResultWithMetadata,
+      elapsedTime: ElapsedTimeNanoSeconds,
+      resourceAllocated: ResourceAllocated
+  ) extends Event
+  case class TaskFailed(sch: ScheduleTask) extends Event
+  case class TaskLauncherStoppedFor(sch: ScheduleTask) extends Event
+  case class LauncherCrashed(crashedLauncher: LauncherActor) extends Event
+  case class CacheHit(sch: ScheduleTask, result: UntypedResult) extends Event
+
+  def project(sch: ScheduleTask) =
+    ScheduleTaskEqualityProjection(sch.description)
+
+  case class State(
+      queuedTasks: Map[
+        ScheduleTaskEqualityProjection,
+        (ScheduleTask, List[Proxy])
+      ],
+      scheduledTasks: Map[
+        ScheduleTaskEqualityProjection,
+        (LauncherActor, VersionedResourceAllocated, List[Proxy], ScheduleTask)
+      ],
+      knownLaunchers: Set[LauncherActor],
+      /*This is non empty while waiting for response from the tasklauncher
+       *during that, no other tasks are started*/
+      negotiation: Option[(LauncherActor, ScheduleTask)]
+  ) {
+
+    def update(e: Event): State = {
+      e match {
+        
+        case Enqueued(sch, proxies) =>
+          if (!scheduledTasks.contains(project(sch))) {
+            queuedTasks.get(project(sch)) match {
+              case None =>
+                copy(
+                  queuedTasks =
+                    queuedTasks.updated(project(sch), (sch, proxies))
+                )
+              case Some((_, existingProxies)) =>
+                copy(
+                  queuedTasks.updated(
+                    project(sch),
+                    (sch, (proxies ::: existingProxies).distinct)
+                  )
+                )
+            }
+          } else update(ProxyAddedToScheduledMessage(sch, proxies))
+
+        case ProxyAddedToScheduledMessage(sch, newProxies) =>
+          val (launcher, allocation, proxies, _) = scheduledTasks(project(sch))
+          copy(
+            scheduledTasks = scheduledTasks
+              .updated(
+                project(sch),
+                (launcher, allocation, (newProxies ::: proxies).distinct, sch)
+              )
+          )
+        case Negotiating(launcher, sch) =>
+          copy(negotiation = Some((launcher, sch)))
+        case LauncherJoined(launcher) =>
+          copy(knownLaunchers = knownLaunchers + launcher)
+        case NegotiationDone => copy(negotiation = None)
+        case TaskScheduled(sch, launcher, allocated) =>
+          val (_, proxies) = queuedTasks(project(sch))
+          copy(
+            queuedTasks = queuedTasks - project(sch),
+            scheduledTasks = scheduledTasks
+              .updated(project(sch), (launcher, allocated, proxies, sch))
+          )
+
+        case TaskDone(sch, _, _, _) =>
+          copy(scheduledTasks = scheduledTasks - project(sch))
+        case TaskFailed(sch) =>
+          copy(scheduledTasks = scheduledTasks - project(sch))
+        case TaskLauncherStoppedFor(sch) =>
+          copy(scheduledTasks = scheduledTasks - project(sch))
+        case LauncherCrashed(launcher) =>
+          copy(knownLaunchers = knownLaunchers - launcher)
+        case CacheHit(sch, _) =>
+          copy(scheduledTasks = scheduledTasks - project(sch))
+
+      }
+    }
+
+    def queuedButSentByADifferentProxy(sch: ScheduleTask, proxy: Proxy) =
+      (queuedTasks.contains(project(sch)) && (!queuedTasks(project(sch))._2
+        .has(proxy)))
+
+    def scheduledButSentByADifferentProxy(sch: ScheduleTask, proxy: Proxy) =
+      scheduledTasks
+        .get(project(sch))
+        .map { case (_, _, proxies, _) =>
+          !proxies.isEmpty && !proxies.contains(proxy)
+        }
+        .getOrElse(false)
+
+    def negotiatingWithCurrentSender(sender: Address) =
+      negotiation.map(_._1.address === sender).getOrElse(false)
   }
 
-  def initRef(cache: TaskResultCache, messenger: Messenger)(implicit
+  object State {
+    def empty = State(Map(), Map(), Set(), None)
+   
+  }
+
+  private[tasks] def fromTransaction(
+      transaction: Transaction[QueueImpl.State],
+      cache: TaskResultCache,
+      messenger: Messenger
+  )(implicit config: TasksConfig): IO[QueueImpl] = {
+    Ref.of[IO,List[FiberIO[Unit]]](Nil).flatMap{ ref =>
+    val q = new QueueImpl(transaction, ref, cache, messenger)
+    q.start.map(_ => q)
+    }
+  }
+
+  private[tasks] def initRef(cache: TaskResultCache, messenger: Messenger)(implicit
       config: TasksConfig
-  ) = Ref.of[IO, TaskQueue.State](TaskQueue.State.empty).map { ref =>
-    new QueueImpl(Transaction.fromRef(ref), cache, messenger)
+  ) = Ref.of[IO, QueueImpl.State](QueueImpl.State.empty).flatMap { ref =>
+    Ref.of[IO,List[FiberIO[Unit]]](Nil).map{ ref2 =>
+    new QueueImpl(Transaction.fromRef(ref),ref2, cache, messenger)
+    }
   }
 }
 
-class QueueImpl(
-    ref: Transaction[TaskQueue.State],
+private[tasks] class QueueImpl(
+    ref: Transaction[QueueImpl.State],
+    fiberList: Ref[IO,List[FiberIO[Unit]]],
     cache: TaskResultCache,
     messenger: Messenger
 )(implicit config: TasksConfig) {
-  import TaskQueue._
+  import QueueImpl._
 
   private def start = ref.get.flatMap { state =>
     IO.parSequenceN(16)(state.knownLaunchers.toList.map { launcher =>
@@ -52,18 +186,18 @@ class QueueImpl(
         )
         .start
         .flatMap { heartBeatFiber =>
-          ref.update(_.update(FiberCreated(heartBeatFiber)))
+          fiberList.update(list => heartBeatFiber :: list)
 
         }
     })
   }
 
-  def release = ref.get.flatMap { st =>
+  def release = fiberList.get.flatMap { fibers =>
     IO(
       scribe.debug(
-        s"Releasing resources held by TasksQueue: ${st.fibers} fibers"
+        s"Releasing resources held by TasksQueue: ${fibers.size} fibers"
       )
-    ) *> IO.parSequenceN(1)(st.fibers.map(_.cancel)).void
+    ) *> IO.parSequenceN(1)(fibers.map(_.cancel)).void
   }
 
   private def handleCacheAnwser(
@@ -202,7 +336,7 @@ class QueueImpl(
                   )
                   .start
                   .flatMap { heartBeatFiber =>
-                    ref.update(_.update(FiberCreated(heartBeatFiber)))
+                    fiberList.update(list => heartBeatFiber :: list)
 
                   }
               } else withNegotiation -> IO.unit

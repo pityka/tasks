@@ -89,7 +89,7 @@ object TaskSystemComponents {
       hostConfig: Resource[IO, HostConfiguration],
       elasticSupport: Resource[IO, Option[ElasticSupport]],
       s3ClientResource: Resource[IO, Option[tasks.fileservice.s3.S3Client]],
-      externalQueueState: Resource[IO, Option[Transaction[TaskQueue.State]]],
+      externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]],
       config: TasksConfig,
       exitCode: Deferred[IO, ExitCode]
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
@@ -395,7 +395,7 @@ object TaskSystemComponents {
               cache: TaskResultCache,
               messenger: Messenger,
               remoteNodeRegistry: Option[RemoteNodeRegistry],
-              externalQueueState: Option[Transaction[TaskQueue.State]]
+              externalQueueState: Option[Transaction[QueueImpl.State]]
           ): Resource[IO, Queue] = {
 
             Resource

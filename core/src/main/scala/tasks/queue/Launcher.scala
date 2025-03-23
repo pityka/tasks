@@ -385,20 +385,19 @@ private[tasks] object Launcher {
       IO.parSequenceN(1)(st.fibers.map(_.cancel)).void
     def derive(
         ref: Ref[IO, Launcher.State]
-    ): LauncherHandle = {
-
+    ): LauncherHandle =
       new LauncherHandle(
-        address,
-        ref,
-        queue,
-        cache,
-        messenger,
-        config,
-        nodeLocalCache,
-        remoteStorage,
-        managedStorage
+        address = address,
+        ref = ref,
+        queue = queue,
+        cache = cache,
+        messenger = messenger,
+        config = config,
+        nodeLocalCache = nodeLocalCache,
+        remoteStorage = remoteStorage,
+        managedStorage = managedStorage
       )
-    }
+
     val init: Launcher.State =
       Launcher.State(maxResources = slots, availableResources = slots)
 
@@ -438,10 +437,10 @@ private[tasks] object Launcher {
           .flatMap { fiber =>
             stateRef.update(state => state.copy(fibers = fiber :: state.fibers))
           }
-      
 
       case Message(MessageData.Ping, from, _) =>
         state -> sendTo(from, MessageData.Ping)
+
       case Message(MessageData.PrepareForShutdown, from, _) =>
         val (newState, sideEffect) = if (state.isIdle) {
 
@@ -459,7 +458,6 @@ private[tasks] object Launcher {
         )
         if (idle) {
           state -> sendTo(from, MessageData.Idling(state.idleState))
-
         } else {
           state -> sendTo(from, MessageData.Working)
         }

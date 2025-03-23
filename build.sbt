@@ -173,6 +173,19 @@ lazy val s3 = project
   )
   .dependsOn(core)
 
+lazy val postgres = project
+  .in(file("postgres"))
+  .settings(commonSettings: _*)
+  .settings(
+    name := "tasks-postgres",
+    libraryDependencies ++= Seq(
+      "org.tpolecat" %% "skunk-core" % "0.6.4",
+      "org.scalatest" %% "scalatest" % "3.2.19" % "test",
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
+    )
+  )
+  .dependsOn(core)
+
 lazy val kubernetes = project
   .in(file("kubernetes"))
   .settings(commonSettings: _*)
