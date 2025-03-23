@@ -101,7 +101,7 @@ private[tasks] class ProxyTask[Input, Output](
         outputSerializer = outputSerializer.as[AnyRef, AnyRef],
         function = function.as[AnyRef, AnyRef],
         resource = resourceConsumed,
-        // queueActor = queue,
+        input = MessageData.InputData(Base64DataHelpers(writer(input)), noCache),
         fileServicePrefix = fileServicePrefix,
         tryCache = cache,
         priority = priority,
@@ -128,12 +128,7 @@ private[tasks] class ProxyTask[Input, Output](
   })
 
   def receive = (state, stateRef) => {
-    case Message(MessageData.NeedInput, from, _) =>
-      () -> sendTo(
-        from,
-        MessageData.InputData(Base64DataHelpers(writer(input)), noCache)
-      )
-
+  
     case Message(
           MessageData.MessageFromTask(untypedOutput, retrievedFromCache),
           from,

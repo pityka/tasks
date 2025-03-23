@@ -92,13 +92,14 @@ private[tasks] object MessageData {
   ) extends MessageData
   case object PrepareForShutdown extends MessageData
   case object WhatAreYouDoing extends MessageData
+  case class InputData(b64: Base64Data, noCache: Boolean) 
   case class ScheduleTask(
       description: HashedTaskDescription,
       inputDeserializer: Spore[AnyRef, AnyRef],
       outputSerializer: Spore[AnyRef, AnyRef],
       function: Spore[AnyRef, AnyRef],
       resource: VersionedResourceRequest,
-      // queueActor: QueueActor,
+      input: InputData,
       fileServicePrefix: FileServicePrefix,
       tryCache: Boolean,
       priority: Priority,
@@ -114,13 +115,11 @@ private[tasks] object MessageData {
   case class Schedule(sch: ScheduleTask) extends MessageData
   case class QueueAck(allocated: VersionedResourceAllocated, launcher: Address) extends MessageData
   case object NothingForSchedule extends MessageData
-  case object NeedInput extends MessageData
   case object Working extends MessageData
   case class Idling(idleState: Long) extends MessageData
   case class RemoveNode(node: tasks.elastic.Node) extends MessageData
   case class NodeComingUp(node: tasks.elastic.Node) extends MessageData
-  case object ReadyForShutdown extends MessageData
-  case class InputData(b64: Base64Data, noCache: Boolean) extends MessageData
+  case object ReadyForShutdown extends MessageData  
 
   case class MessageFromTask(result: UntypedResult, retrievedFromCache: Boolean)
       extends MessageData
