@@ -398,72 +398,71 @@ object TaskSystemComponents {
               externalQueueState: Option[Transaction[QueueImpl.State]]
           ): Resource[IO, Queue] = {
 
-            Resource
-              .eval(IO {
-                if (externalQueueState.isDefined) {
-                  scribe.info(
-                    s"Using direct connection to external queue: ${externalQueueState.get}"
-                  )
-                  Resource.eval(
-                    QueueImpl
-                      .fromTransaction(
-                        externalQueueState.get,
-                        cache,
-                        messenger
-                      )(config)
-                      .map { queueImpl =>
-                        new QueueFromQueueImpl(
-                          queueImpl
-                        )
-                      }
-                  )
-                } else if (hostConfig.isQueue) {
-                  scribe.info(
-                    s"Using in memory proxied queue state. Spawning central queue state."
-                  )
-                  Resource
-                    .eval(QueueImpl.initRef(cache, messenger)(config))
-                    .flatMap { impl =>
-                      QueueActor
-                        .makeWithQueueImpl(impl, cache, messenger)(config)
-                        .map { qa =>
-                          new QueueWithActor(qa, messenger)
-                        }
+            val io: IO[Resource[IO, Queue]] = IO {
+              if (externalQueueState.isDefined) {
+                scribe.info(
+                  s"Using direct connection to external queue: ${externalQueueState.get}"
+                )
+                Resource.eval(
+                  QueueImpl
+                    .fromTransaction(
+                      externalQueueState.get,
+                      cache,
+                      messenger
+                    )(config)
+                    .map { queueImpl =>
+                      (new QueueFromQueueImpl(
+                        queueImpl
+                      ) : Queue)
                     }
-
-                } else {
-                  scribe.info(
-                    s"Using in memory proxied queue state from remote queue."
-                  )
-                  Resource.eval(
+                )
+              } else if (hostConfig.isQueue) {
+                scribe.info(
+                  s"Using in memory proxied queue state. Spawning central queue state."
+                )
+                Resource
+                  .eval(QueueImpl.initRef(cache, messenger)(config))
+                  .flatMap { impl =>
                     QueueActor
-                      .makeReference(
-                        messenger
-                      )(config)
-                      .flatMap {
-                        case Right(value) =>
-                          IO {
-                            scribe.info(s"Got remote queue: $value")
-                            new tasks.queue.QueueWithActor(value, messenger)
-                          }
-                        case Left(e) =>
-                          initFailed(remoteNodeRegistry, messenger) *> IO
-                            .raiseError(
-                              new RuntimeException("Remote queue failed", e)
-                            )
+                      .makeWithQueueImpl(impl, cache, messenger)(config)
+                      .map { qa =>
+                        (new QueueWithActor(qa, messenger): Queue)
                       }
-                  )
-                }
-              })
-              .flatMap(identity)
-              .attempt
-              .evalMap {
+                  }
+
+              } else {
+                scribe.info(
+                  s"Using in memory proxied queue state from remote queue."
+                )
+                Resource.eval(
+                  QueueActor
+                    .makeReference(
+                      messenger
+                    )(config)
+                    .flatMap {
+                      case Right(value) =>
+                        IO {
+                          scribe.info(s"Got remote queue: $value")
+                          (new tasks.queue.QueueWithActor(value, messenger):Queue)
+                        }
+                      case Left(e) =>
+                        initFailed(remoteNodeRegistry, messenger) *> IO
+                          .raiseError(
+                            new RuntimeException("Remote queue failed", e)
+                          )
+                    }
+                )
+              }
+            }.attempt
+              .flatMap {
                 case Right(value) => IO.pure(value)
                 case Left(e) =>
                   initFailed(remoteNodeRegistry, messenger) *> IO.raiseError(
                     new RuntimeException("Remote queue failed", e)
                   )
               }
+
+            Resource.eval(io).flatMap(identity)
 
           }
 
