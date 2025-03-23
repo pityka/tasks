@@ -71,7 +71,7 @@ object QueueImpl {
 
     def update(e: Event): State = {
       e match {
-        
+
         case Enqueued(sch, proxies) =>
           if (!scheduledTasks.contains(project(sch))) {
             queuedTasks.get(project(sch)) match {
@@ -144,7 +144,7 @@ object QueueImpl {
 
   object State {
     def empty = State(Map(), Map(), Set(), None)
-   
+
   }
 
   private[tasks] def fromTransaction(
@@ -152,24 +152,24 @@ object QueueImpl {
       cache: TaskResultCache,
       messenger: Messenger
   )(implicit config: TasksConfig): IO[QueueImpl] = {
-    Ref.of[IO,List[FiberIO[Unit]]](Nil).flatMap{ ref =>
-    val q = new QueueImpl(transaction, ref, cache, messenger)
-    q.start.map(_ => q)
+    Ref.of[IO, List[FiberIO[Unit]]](Nil).flatMap { ref =>
+      val q = new QueueImpl(transaction, ref, cache, messenger)
+      q.start.map(_ => q)
     }
   }
 
-  private[tasks] def initRef(cache: TaskResultCache, messenger: Messenger)(implicit
-      config: TasksConfig
+  private[tasks] def initRef(cache: TaskResultCache, messenger: Messenger)(
+      implicit config: TasksConfig
   ) = Ref.of[IO, QueueImpl.State](QueueImpl.State.empty).flatMap { ref =>
-    Ref.of[IO,List[FiberIO[Unit]]](Nil).map{ ref2 =>
-    new QueueImpl(Transaction.fromRef(ref),ref2, cache, messenger)
+    Ref.of[IO, List[FiberIO[Unit]]](Nil).map { ref2 =>
+      new QueueImpl(Transaction.fromRef(ref), ref2, cache, messenger)
     }
   }
 }
 
 private[tasks] class QueueImpl(
     ref: Transaction[QueueImpl.State],
-    fiberList: Ref[IO,List[FiberIO[Unit]]],
+    fiberList: Ref[IO, List[FiberIO[Unit]]],
     cache: TaskResultCache,
     messenger: Messenger
 )(implicit config: TasksConfig) {
@@ -294,8 +294,9 @@ private[tasks] class QueueImpl(
     ref.flatModify { state =>
       if (state.negotiation.isEmpty) {
         scribe.debug(
-          s"AskForWork $availableResource ${state.negotiation} ${state.queuedTasks.map { case (_, (sch, _)) =>
-              (sch.description.taskId, sch.resource)
+          s"AskForWork $availableResource ${state.negotiation} ${state.queuedTasks.map {
+              case (_, (sch, _)) =>
+                (sch.description.taskId, sch.resource)
             }.toSeq}"
         )
 

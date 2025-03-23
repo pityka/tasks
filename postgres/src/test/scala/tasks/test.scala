@@ -52,16 +52,19 @@ class PostgresSuite extends FunSuite with Matchers {
         password = Some("mysecretpassword")
       )
       .use { tx =>
-        Ref.of[IO,Boolean](false).flatMap{ ref =>
-        tx.get *>
-          tx.flatModify(old =>
-            old.update(
-              QueueImpl.LauncherJoined(LauncherActor(Address("sdfa")))
-            ) -> ref.set(true)) *> tx.get.map(state =>
-            assert(state == State.empty.update(
-              QueueImpl.LauncherJoined(LauncherActor(Address("sdfa")))
-            ))
-          ) *> ref.get.map(a => assert(a))
+        Ref.of[IO, Boolean](false).flatMap { ref =>
+          tx.get *>
+            tx.flatModify(old =>
+              old.update(
+                QueueImpl.LauncherJoined(LauncherActor(Address("sdfa")))
+              ) -> ref.set(true)
+            ) *> tx.get.map(state =>
+              assert(
+                state == State.empty.update(
+                  QueueImpl.LauncherJoined(LauncherActor(Address("sdfa")))
+                )
+              )
+            ) *> ref.get.map(a => assert(a))
         }
       }
       .unsafeRunSync()
