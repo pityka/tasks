@@ -42,7 +42,7 @@ private[tasks] object HeartBeatIO {
     val deadline = Deadline.make(config.acceptableHeartbeatPause * 2)
 
     deadline.flatMap { deadline =>
-      val beat : IO[Unit] = target.flatMap { _ =>
+      val beat: IO[Unit] = target.flatMap { _ =>
         deadline.heartbeat()
       }
 
@@ -52,7 +52,7 @@ private[tasks] object HeartBeatIO {
             IO(
               scribe.warn("Heartbeat deadline fail. Call side effect")
             ) *>
-              sideEffect.map((_:Unit) => false)
+              sideEffect.map((_: Unit) => false)
           } else
             beat.start.map(_ => true)
 

@@ -110,8 +110,8 @@ object JvmElasticSupport {
     tasks.addShutdownHook = false 
     tasks.fileservice.storageURI="${config.storageURI.toString}"
     """,
-         s3Client =  Resource.pure(None),
-         elasticSupport=  JvmGrid.make(externalQueueState).map(Some(_)),
+          s3Client = Resource.pure(None),
+          elasticSupport = JvmGrid.make(externalQueueState).map(Some(_)),
           externalQueueState = Resource.pure(
             externalQueueState.map(ref => tasks.util.Transaction.fromRef(ref))
           )
