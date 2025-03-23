@@ -25,7 +25,8 @@
 
 package tasks.elastic
 
-import tasks.queue.{QueueActor, LauncherActor}
+import tasks.queue.{QueueActor}
+import tasks.queue.Launcher.LauncherActor
 import tasks.shared.monitor._
 import tasks.shared._
 import tasks.util.config._
@@ -44,6 +45,7 @@ import cats.effect.kernel.Resource
 import tasks.util.Ask
 import cats.effect.ExitCode
 import cats.effect.kernel.Deferred
+import tasks.queue.Queue
 
 private[tasks] case class RemoteNodeRegistry(address: Address)
 
@@ -126,7 +128,7 @@ private[tasks] class NodeRegistry(
     createNode: CreateNode,
     decideNewNode: DecideNewNode,
     shutdownNode: ShutdownNode,
-    targetQueue: QueueActor,
+    targetQueue: Queue,
     messenger: Messenger
 )(implicit config: TasksConfig)
     extends Actor.ActorBehavior[NodeRegistry.State, Unit](messenger) {
@@ -142,13 +144,11 @@ private[tasks] class NodeRegistry(
       (fs2.Stream.sleep[IO](config.queueCheckInitialDelay) ++ fs2.Stream
         .fixedRate[IO](config.queueCheckInterval))
         .evalMap { _ =>
-          messenger.submit(
-            Message(
-              from = address,
-              to = targetQueue.address,
-              data = MessageData.HowLoadedAreYou
-            )
-          )
+          targetQueue.queryLoad.flatMap{
+            case None => IO.unit 
+            case Some(queueStat) => 
+              handleQueueStat(queueStat,ref)
+          }
         }
     )
   )
@@ -167,10 +167,8 @@ private[tasks] class NodeRegistry(
     ).map((a: List[Unit]) => ())
   }
 
-  def receive = (state, ref) => {
-
-    case Message(queueStat: MessageData.QueueStat, from, _) =>
-      val logIO = if (config.logQueueStatus) {
+  def handleQueueStat(queueStat: MessageData.QueueStat,ref: Ref[IO,State]) = ref.flatModify{ state =>
+    val logIO = if (config.logQueueStatus) {
         IO {
           scribe.info(
             s"Queued tasks: ${queueStat.queued.size}. Running tasks: ${queueStat.running.size}. Pending nodes: ${state.pending.size} . Running nodes: ${state.running.size}. Largest request: ${queueStat.queued
@@ -263,6 +261,11 @@ private[tasks] class NodeRegistry(
         }
 
       newState -> logIO *> io
+  }
+
+  def receive = (state, ref) => {
+
+      
 
     case Message(MessageData.NodeComingUp(node), from, _) =>
       val Node(jobId, _, _) = node

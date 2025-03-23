@@ -124,7 +124,7 @@ final class TaskDefinition[A: Serializer, B: Deserializer](
         writer = writer1,
         reader = reader2,
         resourceConsumed = resource,
-        queueActor = queue,
+        queue = queue,
         fileServicePrefix = prefix,
         cache = cache,
         priority = Priority(priorityBase.s + components.priority.s + 1),

@@ -34,10 +34,11 @@ import org.ekrich.config.ConfigFactory
 import cats.effect.IO
 import tasks.JvmElasticSupport.JvmGrid
 import cats.effect.kernel.Resource
+import cats.effect.kernel.Ref
 
-object NodeAllocationTest extends TestHelpers {
+object ExternalQueueTest extends TestHelpers {
 
-  val testTask = Task[Input, Int]("nodeallocationtest", 1) { _ => _ =>
+  val testTask = Task[Input, Int]("externalQueueStateTask", 1) { _ => _ =>
     scribe.info("Hello from task")
     IO(1)
   }
@@ -52,37 +53,72 @@ object NodeAllocationTest extends TestHelpers {
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
+      tasks.elastic.maxNodes = 3
       
       """
     )
   }
 
-  def run = {
-    withTaskSystem(
-      testConfig2,
-      Resource.pure(None),
-      JvmGrid.make(None).map(Some(_))
-    ) { implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
+  def run = Ref
+    .of[IO, tasks.queue.TaskQueue.State](tasks.queue.TaskQueue.State.empty)
+    .flatMap { queueStateRef =>
+      val io1 = withTaskSystem(
+        config = Some(testConfig2),
+        s3Client = Resource.pure(None),
+        elasticSupport = JvmGrid.make(Some(queueStateRef)).map(Some(_)),
+        externalQueueState = Resource.pure(
+          Some(tasks.util.Transaction.fromRef(queueStateRef))
+        )
+      ) { implicit ts =>
+        import scala.concurrent.ExecutionContext.Implicits.global
 
-      val f1 = testTask(Input(1))(ResourceRequest(1, 500))
+        val f1 = testTask(Input(1))(ResourceRequest(1, 500))
 
-      val f2 = f1.flatMap(_ => testTask(Input(2))(ResourceRequest(1, 500)))
-      val f3 = testTask(Input(3))(ResourceRequest(1, 500))
-      val future = for {
-        t1 <- f1
-        t2 <- f2
-        t3 <- f3
-      } yield t1 + t2 + t3
+        val f2 = f1.flatMap(_ => testTask(Input(2))(ResourceRequest(1, 500)))
+        val f3 = testTask(Input(3))(ResourceRequest(1, 500))
+        val f4 = IO.parSequenceN(4)(
+          (10 to 20).toList
+            .map(i => testTask(Input(i))(ResourceRequest(1, 500)))
+        )
+        val future = for {
+          t1 <- f1
+          t2 <- f2
+          t3 <- f3
+          t4 <- f4
+        } yield t1 + t2 + t3 + t4.sum
 
-      (future)
+        (future)
 
+      }
+      val io2 = withTaskSystem(
+        config = Some(testConfig2),
+        s3Client = Resource.pure(None),
+        elasticSupport = JvmGrid.make(Some(queueStateRef)).map(Some(_)),
+        externalQueueState = Resource.pure(
+          Some(tasks.util.Transaction.fromRef(queueStateRef))
+        )
+      ) { implicit ts =>
+        import scala.concurrent.ExecutionContext.Implicits.global
+
+        val f4 = IO.parSequenceN(4)(
+          (20 to 30).toList
+            .map(i => testTask(Input(i))(ResourceRequest(1, 500)))
+        )
+        val future = for {
+          t4 <- f4
+        } yield t4.sum
+
+        (future)
+
+      }
+      io1.flatMap(a => io2.map(b => (a, b))).map { case (a, b) =>
+        a.toOption.get + b.toOption.get
+      }
     }
-  }
 
 }
 
-class NodeAllocationTestSuite extends FunSuite with Matchers {
+class ExternalQueueTestSuite extends FunSuite with Matchers {
 
   scribe.Logger.root
     .clearHandlers()
@@ -91,7 +127,7 @@ class NodeAllocationTestSuite extends FunSuite with Matchers {
     .replace()
 
   test("elastic node allocation should spawn nodes") {
-    NodeAllocationTest.run.unsafeRunSync().toOption.get should equal(3)
+    ExternalQueueTest.run.unsafeRunSync() should equal(25)
 
   }
 

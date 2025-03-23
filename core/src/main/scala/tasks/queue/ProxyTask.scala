@@ -54,7 +54,7 @@ private[tasks] class ProxyTask[Input, Output](
     writer: Serializer[Input],
     reader: Deserializer[Output],
     resourceConsumed: VersionedResourceRequest,
-    queueActor: QueueActor,
+    queue: Queue,
     fileServicePrefix: FileServicePrefix,
     cache: TaskResultCache,
     priority: Priority,
@@ -101,7 +101,7 @@ private[tasks] class ProxyTask[Input, Output](
         outputSerializer = outputSerializer.as[AnyRef, AnyRef],
         function = function.as[AnyRef, AnyRef],
         resource = resourceConsumed,
-        queueActor = queueActor,
+        // queueActor = queue,
         fileServicePrefix = fileServicePrefix,
         tryCache = cache,
         priority = priority,
@@ -114,9 +114,7 @@ private[tasks] class ProxyTask[Input, Output](
     scribe.debug("proxy submitting ScheduleTask object to queue.")
 
     scheduleTask.flatMap { scheduleTask =>
-      messenger.submit(
-        Message(from = address, to = queueActor.address, data = scheduleTask)
-      )
+      queue.scheduleTask(scheduleTask)
     }
 
   }
@@ -162,7 +160,7 @@ private[tasks] class ProxyTask[Input, Output](
           ) *> stopProcessingMessages
       }
 
-    case Message(MessageData.TaskFailedMessageToProxy(_, cause), from, _) =>
+    case Message(MessageData.TaskFailedMessageToProxy(_, cause), _, _) =>
       scribe.error(cause, "Execution failed. ")
       () -> notifyListenersOnFailure(cause) *> stopProcessingMessages
   }

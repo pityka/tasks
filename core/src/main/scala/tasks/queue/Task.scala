@@ -42,6 +42,7 @@ import cats.effect.IO
 import tasks.TaskSystemComponents
 import tasks.caching.TaskResultCache
 import tasks.util.Messenger
+import tasks.queue.Launcher.LauncherHandle
 
 case class UntypedResult(
     files: Set[SharedFile],
@@ -95,13 +96,13 @@ private[tasks] object ResultMetadata {
   implicit val codec: JsonValueCodec[ResultMetadata] = JsonCodecMaker.make
 }
 
-private[tasks] case class UntypedResultWithMetadata(
-    untypedResult: UntypedResult,
-    metadata: ResultMetadata,
-    noCache: Boolean
+final case class UntypedResultWithMetadata(
+    private[tasks] untypedResult: UntypedResult,
+    private[tasks] metadata: ResultMetadata,
+    private[tasks] noCache: Boolean
 )
 
-private[tasks] object UntypedResultWithMetadata {
+object UntypedResultWithMetadata {
   implicit val codec: JsonValueCodec[UntypedResultWithMetadata] =
     JsonCodecMaker.make(
       CodecMakerConfig
@@ -168,7 +169,7 @@ class ComputationEnvironment(
 
   implicit def filePrefix: FileServicePrefix = components.filePrefix
 
-  implicit def queue: QueueActor = components.queue
+  implicit def queue: Queue = components.queue
 
   implicit def cache: TaskResultCache = components.cache
 
@@ -182,7 +183,7 @@ private[tasks] class Task(
     outputSerializer: Spore[AnyRef, AnyRef],
     function: Spore[AnyRef, AnyRef],
     launcherActor: LauncherHandle,
-    queueActor: QueueActor,
+    queue: Queue,
     fileServiceComponent: FileServiceComponent,
     cache: TaskResultCache,
     nodeLocalCache: NodeLocalCache.State,
@@ -243,7 +244,7 @@ private[tasks] class Task(
       val ce = new ComputationEnvironment(
         resourceAllocated = resourceAllocated,
         components = new TaskSystemComponents(
-          queue = queueActor,
+          queue = queue,
           fs = fileServiceComponent,
           cache = cache,
           nodeLocalCache = nodeLocalCache,

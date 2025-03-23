@@ -19,6 +19,7 @@ case class Address(value: String, listeningUri: Option[String]) {
   override def hashCode(): Int = value.hashCode()
 }
 object Address {
+  val unknown = Address("unknown",None)
   def apply(value: String): Address = Address(value, None)
 }
 
@@ -73,7 +74,7 @@ private[tasks] object MessageData {
   import tasks.queue._
   case object Ping extends MessageData
   case object HowLoadedAreYou extends MessageData
-  case class AskForWork(resources: VersionedResourceAvailable)
+  case class AskForWork(resources: VersionedResourceAvailable, launcher: Address)
       extends MessageData
   case class TaskDone(
       sch: ScheduleTask,
@@ -97,7 +98,7 @@ private[tasks] object MessageData {
       outputSerializer: Spore[AnyRef, AnyRef],
       function: Spore[AnyRef, AnyRef],
       resource: VersionedResourceRequest,
-      queueActor: QueueActor,
+      // queueActor: QueueActor,
       fileServicePrefix: FileServicePrefix,
       tryCache: Boolean,
       priority: Priority,
@@ -111,7 +112,7 @@ private[tasks] object MessageData {
       cause: Throwable
   ) extends MessageData
   case class Schedule(sch: ScheduleTask) extends MessageData
-  case class QueueAck(allocated: VersionedResourceAllocated) extends MessageData
+  case class QueueAck(allocated: VersionedResourceAllocated, launcher: Address) extends MessageData
   case object NothingForSchedule extends MessageData
   case object NeedInput extends MessageData
   case object Working extends MessageData

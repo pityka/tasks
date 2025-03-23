@@ -28,7 +28,7 @@ package tasks.elastic
 import tasks.shared._
 import tasks.util._
 import tasks.util.config._
-import tasks.queue.QueueActor
+import tasks.queue.Queue
 import cats.effect.kernel.Clock
 import cats.effect.IO
 import tasks.util.Messenger
@@ -41,7 +41,7 @@ private[tasks] object SelfShutdown {
   def make(
       shutdownRunningNode: ShutdownSelfNode,
       id: RunningJobId,
-      queueActor: QueueActor,
+      queue: Queue,
       messenger: Messenger,
       exitCode: Deferred[IO, ExitCode]
   )(implicit
@@ -51,10 +51,10 @@ private[tasks] object SelfShutdown {
 
     Resource.make(
       HeartBeatIO
-        .make(
-          target = queueActor.address,
+        .makeNonActor(
+          target = queue.ping,
           sideEffect = shutdownRunningNode.shutdownRunningNode(exitCode, id),
-          messenger = messenger
+          
         )
         .start
     )(_.cancel *> IO(scribe.info("Canceled self shutdown heartbeat fiber")))

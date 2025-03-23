@@ -61,7 +61,7 @@ object NodeAllocationMaxNodesTest extends TestHelpers {
     withTaskSystem(
       testConfig2,
       Resource.pure(None),
-      JvmGrid.make.map(Some(_))
+      JvmGrid.make(None).map(Some(_))
     ) { implicit ts =>
       val f1 = testTask(Input(1))(ResourceRequest(1, 500))
       val f2 = testTask(Input(2))(ResourceRequest(1, 500))

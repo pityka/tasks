@@ -34,6 +34,45 @@ private[tasks] object HeartBeatIO {
     } yield Deadline(acceptableHeartbeatPause, ref)
   }
 
+  def makeNonActor(target: IO[Unit], sideEffect: IO[Unit])(implicit
+      config: TasksConfig,
+      clock: Clock[IO]
+  ) = {
+
+    val deadline = Deadline.make(config.acceptableHeartbeatPause * 2)
+
+    deadline.flatMap { deadline =>
+      val beat : IO[Unit] = target.flatMap { _ =>
+        deadline.heartbeat()
+      }
+
+      val check: IO[Boolean] =
+        deadline.isAvailable().flatMap { isAvailable =>
+          if (!isAvailable) {
+            IO(
+              scribe.warn("Heartbeat deadline fail. Call side effect")
+            ) *>
+              sideEffect.map((_:Unit) => false)
+          } else
+            beat.start.map(_ => true)
+
+        }
+
+      fs2.Stream
+        .fixedRate[IO](config.launcherActorHeartBeatInterval)
+        .evalMap(_ => check)
+        .takeWhile(identity)
+        .compile
+        .drain
+        .flatMap { _ =>
+          IO {
+            scribe.info(s"HeartBeatIO stopped. Target was $target.")
+          }
+        }
+
+    }
+
+  }
   def make(target: Address, sideEffect: IO[Unit], messenger: Messenger)(implicit
       config: TasksConfig,
       clock: Clock[IO]

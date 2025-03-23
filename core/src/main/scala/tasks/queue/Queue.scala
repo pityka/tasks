@@ -30,7 +30,6 @@ package tasks.queue
 
 import tasks.util.eq._
 import tasks.shared._
-import tasks.shared.monitor._
 import tasks.util._
 import tasks.util.config._
 import tasks.wire._
@@ -45,6 +44,178 @@ import tasks.util.Actor.ActorBehavior
 import tasks.elastic.RemoteNodeRegistry
 import tasks.util.message._
 import tasks.util.message.MessageData.ScheduleTask
+import tasks.util.message.MessageData.Schedule
+import tasks.util.message.MessageData.NothingForSchedule
+import tasks.queue.Launcher.LauncherActor
+
+trait Queue {
+  def queryLoad: IO[Option[MessageData.QueueStat]]
+  def ping: IO[Unit]
+  def scheduleTask(sch: ScheduleTask): IO[Unit]
+
+  def ack(allocated: VersionedResourceAllocated, launcher: Address): IO[Unit]
+
+  def askForWork(
+      launcherAsking: LauncherActor,
+      availableResources: VersionedResourceAvailable
+  ): IO[Either[NothingForSchedule.type, MessageData.Schedule]]
+
+  def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit]
+  def taskSuccess(
+      scheduleTask: ScheduleTask,
+      receivedResult: UntypedResultWithMetadata,
+      elapsedTime: ElapsedTimeNanoSeconds,
+      resourceAllocated: ResourceAllocated
+  ): IO[Unit]
+}
+
+class QueueFromQueueImpl(
+  queueImpl: QueueImpl
+) extends Queue {
+   def queryLoad: IO[Option[MessageData.QueueStat]] = queueImpl.queryLoad.map(Some(_))
+  def ping: IO[Unit] = IO.unit
+  def scheduleTask(sch: ScheduleTask): IO[Unit] = queueImpl.scheduleTask(sch)
+
+  def ack(allocated: VersionedResourceAllocated, launcher: Address): IO[Unit] = 
+      queueImpl.ack(allocated,launcher)
+
+  def askForWork(
+      launcherAsking: LauncherActor,
+      availableResources: VersionedResourceAvailable
+  ): IO[Either[NothingForSchedule.type, MessageData.Schedule]] = 
+      queueImpl.askForWork(launcherAsking,availableResources)
+
+  def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit] = 
+      queueImpl.taskFailed(sch,cause)
+  def taskSuccess(
+      scheduleTask: ScheduleTask,
+      receivedResult: UntypedResultWithMetadata,
+      elapsedTime: ElapsedTimeNanoSeconds,
+      resourceAllocated: ResourceAllocated
+  ): IO[Unit] = queueImpl.taskSuccess(scheduleTask,receivedResult,elapsedTime,resourceAllocated)
+}
+
+class QueueWithActor(
+    queueActor: QueueActor,
+    messenger: Messenger
+) extends Queue {
+  def ack(allocated: VersionedResourceAllocated, launcher: Address): IO[Unit] =
+    messenger.submit(
+      Message(
+        MessageData.QueueAck(allocated, launcher),
+        from = Address.unknown,
+        to = queueActor.address0
+      )
+    )
+  def queryLoad: IO[Option[tasks.util.message.MessageData.QueueStat]] = {
+    import scala.concurrent.duration._
+    tasks.util.Ask
+      .ask(
+        target = queueActor.address0,
+        data = MessageData.HowLoadedAreYou,
+        timeout = 1 minutes,
+        messenger = messenger
+      )
+      .flatMap {
+        case Left(e) =>
+          scribe.warn("HowLoadedAreYou timed out")
+          IO.pure(None)
+        case Right(None) =>
+          scribe.warn("HowLoadedAreYou timed out")
+          IO.pure(None)
+        case Right(Some(Message(q @ MessageData.QueueStat(_, _), _, _))) =>
+          IO.pure(Some(q))
+        case x =>
+          scribe.error(s"HowLoadedAreYou got unexpected response $x")
+          IO.pure(None)
+      }
+  }
+  def ping: IO[Unit] = {
+    import scala.concurrent.duration._
+    tasks.util.Ask
+      .ask(
+        target = queueActor.address0,
+        data = MessageData.Ping,
+        timeout = 1 minutes,
+        messenger = messenger
+      )
+      .flatMap {
+        case Left(e) => IO.raiseError(e)
+        case Right(None) =>
+          IO.raiseError(new RuntimeException("Ping got no response"))
+        case Right(Some(Message(MessageData.Ping, _, _))) => IO.unit
+        case x =>
+          scribe.error(s"Ping got unexpected response $x")
+          IO.raiseError(new RuntimeException(s"Ping got unexpeced response $x"))
+      }
+  }
+  def scheduleTask(sch: ScheduleTask): IO[Unit] =
+    messenger
+      .submit(
+        Message(
+          from = Address.unknown,
+          to = queueActor.address0,
+          data = sch
+        )
+      )
+  def askForWork(
+      launcherAsking: LauncherActor,
+      availableResources: VersionedResourceAvailable
+  ): IO[Either[NothingForSchedule.type, MessageData.Schedule]] = {
+    import scala.concurrent.duration._
+    tasks.util.Ask
+      .ask(
+        target = queueActor.address0,
+        data =
+          MessageData.AskForWork(availableResources, launcherAsking.address),
+        timeout = 1 minutes,
+        messenger = messenger
+      )
+      .map {
+        case Left(e) =>
+          scribe.warn("timeout from queue", e)
+          Left(NothingForSchedule)
+        case Right(None) =>
+          Left(NothingForSchedule)
+        case Right(Some(Message(NothingForSchedule, _, _))) =>
+          Left(NothingForSchedule)
+        case Right(Some(Message(sch @ Schedule(_), _, _))) =>
+          Right(sch)
+        case Right(Some(Message(data, _, _))) =>
+          scribe.warn(s"Unexpected answer from queue: $data")
+          Left(NothingForSchedule)
+      }
+
+  }
+  def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit] =
+    messenger
+      .submit(
+        Message(
+          from = Address.unknown,
+          to = queueActor.address0,
+          data = MessageData.TaskFailedMessageToQueue(sch, cause)
+        )
+      )
+  def taskSuccess(
+      scheduleTask: ScheduleTask,
+      receivedResult: UntypedResultWithMetadata,
+      elapsedTime: ElapsedTimeNanoSeconds,
+      resourceAllocated: ResourceAllocated
+  ): IO[Unit] =
+    messenger
+      .submit(
+        Message(
+          from = Address.unknown,
+          to = queueActor.address0,
+          data = MessageData.TaskDone(
+            scheduleTask,
+            receivedResult,
+            elapsedTime,
+            resourceAllocated
+          )
+        )
+      )
+}
 
 private[tasks] object TaskQueue {
   case class ScheduleTaskEqualityProjection(
@@ -179,7 +350,7 @@ private[tasks] object TaskQueue {
 }
 
 private[tasks] case class QueueActor(
-    val address: Address
+    val address0: Address
 )
 
 private[tasks] object QueueActor {
@@ -202,207 +373,67 @@ private[tasks] object QueueActor {
       case Left(e) => Left(e)
     }
 
-  def makeWithRunloop(cache: TaskResultCache, messenger: Messenger)(implicit
+  def makeWithQueueImpl(
+      impl: QueueImpl,
+      cache: TaskResultCache,
+      messenger: Messenger
+  )(implicit
       config: TasksConfig
   ): Resource[IO, QueueActor] = {
-    util.Actor.makeFromBehavior(new TaskQueue(messenger, cache), messenger)
+    util.Actor.makeFromBehavior(
+      new TaskQueue(impl, messenger, cache),
+      messenger
+    )
   }
 }
 
 private[tasks] final class TaskQueue(
+    impl: QueueImpl,
     messenger: Messenger,
     cache: TaskResultCache
 )(implicit config: TasksConfig)
-    extends ActorBehavior[TaskQueue.State, QueueActor](messenger) {
+    extends ActorBehavior[Unit, QueueActor](messenger) {
   val address: Address = QueueActor.singletonAddress
-  val init: TaskQueue.State = TaskQueue.State.empty
-  override def release(st: TaskQueue.State) =
-    IO(
-      scribe.debug(
-        s"Releasing resources held by TasksQueue: ${st.fibers} fibers"
-      )
-    ) *> IO.parSequenceN(1)(st.fibers.map(_.cancel)).void
+  val init: Unit = ()
+  override def release(st: Unit) =
+    impl.release
   def derive(
-      ref: Ref[IO, TaskQueue.State]
+      ref: Ref[IO, Unit]
   ): QueueActor = QueueActor(address)
   import TaskQueue._
 
-  private def handleCacheAnwser(
-      ref: Ref[IO, State],
-      a: tasks.caching.AnswerFromCache
-  ): IO[Unit] = {
-    val message = a.message
-    val proxy = a.sender
-    val sch = a.sch
-    scribe.debug("Cache answered.")
-    message match {
-      case Right(Some(result)) => {
-        scribe.debug("Replying with a Result found in cache.")
-        ref.flatModify { state =>
-          state.update(CacheHit(sch, result)) ->
+  def receive = (state, stateRef) => {
+    case Message(sch: ScheduleTask, _, _) =>
+      state -> impl.scheduleTask(sch)
+
+    case Message(
+          MessageData.AskForWork(availableResource, launcherAddress),
+          from,
+          _
+        ) =>
+      state -> impl
+        .askForWork(LauncherActor(launcherAddress), availableResource)
+        .flatMap {
+          case Left(t) =>
             messenger.submit(
               Message(
-                MessageData.MessageFromTask(result, retrievedFromCache = true),
+                t,
                 from = address,
-                to = proxy.address
+                to = from
               )
             )
-
-        }
-      }
-      case Right(None) => {
-        scribe.debug("Task is not found in cache. Enqueue. ")
-        ref.update(_.update(Enqueued(sch, List(proxy))))
-      }
-      case Left(_) => {
-        scribe.debug("Task is not found in cache. Enqueue. ")
-        ref.update(_.update(Enqueued(sch, List(proxy))))
-      }
-
-    }
-  }
-  private def handleLauncherStopped(
-      launcher: LauncherActor,
-      stateRef: Ref[IO, State]
-  ) = stateRef.update { state =>
-    scribe.info(s"LauncherStopped: $launcher")
-    val msgs =
-      state.scheduledTasks.toSeq.filter(_._2._1 === launcher).map(_._1)
-    val updated = msgs.foldLeft(state) { (state, schProjection) =>
-      val (_, _, proxies, sch) = state.scheduledTasks(schProjection)
-      state.update(TaskLauncherStoppedFor(sch)).update(Enqueued(sch, proxies))
-    }
-
-    val negotiatingWithStoppedLauncher = state.negotiation.exists {
-      case (negotiatingLauncher, _) =>
-        (negotiatingLauncher: LauncherActor) == (launcher: LauncherActor)
-    }
-    if (negotiatingWithStoppedLauncher) {
-      scribe.error(
-        "Launcher stopped during negotiation phase. Automatic recovery from this is not implemented. The scheduler is deadlocked and it should be restarted."
-      )
-    }
-    updated.update(LauncherCrashed(launcher))
-  }
-  def receive = (state, stateRef) => {
-    case Message(sch: ScheduleTask, from, to) =>
-      scribe.debug("Received ScheduleTask.")
-      val proxy = Proxy(from)
-
-      if (state.queuedButSentByADifferentProxy(sch, proxy)) {
-        state.update(Enqueued(sch, List(proxy))) -> IO.unit
-      } else if (state.scheduledButSentByADifferentProxy(sch, proxy)) {
-        scribe.debug(
-          s"Scheduletask received multiple times from different proxies. Not queueing this one, but delivering result if ready. $sch"
-        )
-        state.update(ProxyAddedToScheduledMessage(sch, List(proxy))) -> IO.unit
-
-      } else {
-        if (sch.tryCache) {
-          state -> cache
-            .checkResult(sch, proxy)
-            .flatMap(r => handleCacheAnwser(stateRef, r))
-            .start
-            .void
-        } else {
-          scribe.debug(
-            "ScheduleTask should not be checked in the cache. Enqueue. "
-          )
-          state.update(Enqueued(sch, List(proxy))) -> IO.unit
-        }
-
-      }
-
-    case Message(MessageData.AskForWork(availableResource), from, to) =>
-      if (state.negotiation.isEmpty) {
-        scribe.debug(
-          s"AskForWork ${from} $availableResource ${state.negotiation} ${state.queuedTasks.map { case (_, (sch, _)) =>
-              (sch.description.taskId, sch.resource)
-            }.toSeq}"
-        )
-
-        val launcher = LauncherActor(from)
-
-        var maxPrio = Int.MinValue
-        var selected = Option.empty[ScheduleTask]
-        state.queuedTasks.valuesIterator
-          .foreach { case (sch, _) =>
-            val ret = availableResource.canFulfillRequest(sch.resource)
-            if (!ret && (maxPrio == Int.MinValue || sch.priority.s > maxPrio)) {
-              scribe.debug(
-                s"Can't fulfill request ${sch.resource} with available resources $availableResource or lower priority than an already selected task"
-              )
-            } else {
-              maxPrio = sch.priority.s
-              selected = Some(sch)
-            }
-
-          }
-
-        selected match {
-          case None =>
-            state -> messenger.submit(
+          case Right(t) =>
+            messenger.submit(
               Message(
-                MessageData.NothingForSchedule,
+                t,
                 from = address,
-                to = launcher.address
+                to = from
               )
             )
-
-          case Some(sch) =>
-            val withNegotiation = state.update(Negotiating(launcher, sch))
-            scribe.debug(
-              s"Dequeued task ${sch.description.taskId.id} ${sch.description.dataHash} with priority ${sch.priority}. Sending task to $launcher. (Negotation state of queue: ${state.negotiation})"
-            )
-
-            val (newState, io1) =
-              if (!state.knownLaunchers.contains(launcher)) {
-                val st2 = withNegotiation.update(LauncherJoined(launcher))
-                st2 -> HeartBeatIO
-                  .make(
-                    target = launcher.address,
-                    sideEffect = handleLauncherStopped(launcher, stateRef),
-                    messenger = messenger
-                  )
-                  .start
-                  .flatMap { heartBeatFiber =>
-                    stateRef.update(_.update(FiberCreated(heartBeatFiber)))
-
-                  }
-              } else withNegotiation -> IO.unit
-
-            val io2 = messenger.submit(
-              Message(
-                MessageData.Schedule(sch),
-                from = address,
-                to = launcher.address
-              )
-            )
-
-            newState -> (io1 *> io2)
-
         }
 
-      } else {
-        state -> IO(
-          scribe.debug(
-            "AskForWork received but currently in negotiation state."
-          )
-        )
-      }
-
-    case Message(MessageData.QueueAck(allocated), from, to)
-        if state.negotiatingWithCurrentSender(from) =>
-      val sch = state.negotiation.get._2
-      if (state.scheduledTasks.contains(project(sch))) {
-        scribe.error(
-          "Routed messages already contains task. This is unexpected and can lead to lost messages."
-        )
-      }
-
-      state
-        .update(NegotiationDone)
-        .update(TaskScheduled(sch, LauncherActor(from), allocated)) -> IO.unit
+    case Message(MessageData.QueueAck(allocated, launcher), _, _) =>
+      state -> impl.ack(allocated, launcher)
 
     case Message(
           MessageData.TaskDone(
@@ -411,91 +442,28 @@ private[tasks] final class TaskQueue(
             elapsedTime,
             resourceAllocated
           ),
-          from,
-          to
+          _,
+          _
         ) =>
-      scribe.debug(s"TaskDone $sch $resultWithMetadata")
-      if (state.queuedTasks.contains(project(sch))) {
-        scribe.error(
-          s"Should not be queued. ${state.queuedTasks(project(sch))}"
-        )
-      }
-      val io = IO
-        .parSequenceN(1)(
-          state.scheduledTasks
-            .get(project(sch))
-            .toList
-            .flatMap { case (_, _, proxies, _) =>
-              proxies.toList.map { pr =>
-                messenger.submit(
-                  Message(
-                    MessageData.MessageFromTask(
-                      resultWithMetadata.untypedResult,
-                      retrievedFromCache = false
-                    ),
-                    from = address,
-                    to = pr.address
-                  )
-                )
+      state -> impl.taskSuccess(
+        sch,
+        resultWithMetadata,
+        elapsedTime,
+        resourceAllocated
+      )
 
-              }
-
-            }
-            .toList
-        )
-        .void
-
-      state.update(
-        TaskDone(sch, resultWithMetadata, elapsedTime, resourceAllocated)
-      ) -> io
-
-    case Message(MessageData.TaskFailedMessageToQueue(sch, cause), from, to) =>
-      val (updated, sideEffects) = state.scheduledTasks
-        .get(project(sch))
-        .foldLeft((state, List.empty[IO[Unit]])) {
-          case ((state, sideEffectAcc), (_, _, proxies, _)) =>
-            val removed = state.update(TaskFailed(sch))
-            if (config.resubmitFailedTask) {
-              scribe.error(
-                cause,
-                "Task execution failed ( resubmitting infinite time until done): " + sch.toString
-              )
-              scribe.info(
-                "Requeued 1 message. Queue size: " + state.queuedTasks.keys.size
-              )
-              (removed.update(Enqueued(sch, proxies)), sideEffectAcc)
-            } else {
-              val sideEffects = proxies.map(pr =>
-                messenger.submit(
-                  Message(
-                    MessageData.TaskFailedMessageToProxy(sch, cause),
-                    from = address,
-                    to = pr.address
-                  )
-                )
-              )
-              scribe.error(cause, "Task execution failed: " + sch.toString)
-              (removed, sideEffectAcc ++ sideEffects)
-            }
-        }
-      updated -> IO.parSequenceN(1)(sideEffects).void
+    case Message(MessageData.TaskFailedMessageToQueue(sch, cause), _, _) =>
+      state -> impl.taskFailed(sch, cause)
 
     case Message(MessageData.Ping, from, to) =>
       state -> messenger.submit(
         Message(MessageData.Ping, from = address, to = from)
       )
 
-    case Message(MessageData.HowLoadedAreYou, from, to) =>
-      val qs = MessageData.QueueStat(
-        state.queuedTasks.toList.map { case (_, (sch, _)) =>
-          (sch.description.taskId.toString, sch.resource)
-        }.toList,
-        state.scheduledTasks.toSeq
-          .map(x => x._1.description.taskId.toString -> x._2._2)
-          .toList
-      )
-
-      state -> messenger.submit(Message(qs, from = address, to = from))
+    case Message(MessageData.HowLoadedAreYou, from, _) =>
+      state -> impl.queryLoad.flatMap { qs =>
+        messenger.submit(Message(qs, from = address, to = from))
+      }
 
   }
 

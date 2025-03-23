@@ -82,8 +82,12 @@ object JvmElasticSupport {
 
   }
 
-  class JvmCreateNode(state: Ref[IO, State], masterAddress: SimpleSocketAddress, masterPrefix: String)
-      extends CreateNode {
+  class JvmCreateNode(
+      state: Ref[IO, State],
+      externalQueueState: Option[Ref[IO, tasks.queue.TaskQueue.State]],
+      masterAddress: SimpleSocketAddress,
+      masterPrefix: String
+  ) extends CreateNode {
 
     def requestOneNewJobFromJobScheduler(
         requestSize: tasks.shared.ResourceRequest
@@ -96,7 +100,7 @@ object JvmElasticSupport {
       val ts = {
 
         defaultTaskSystem(
-          s"""
+          config = s"""
     
     hosts.master = "${masterAddress.getHostName}:${masterAddress.getPort}"
     hosts.masterprefix = ${masterPrefix}
@@ -106,8 +110,11 @@ object JvmElasticSupport {
     tasks.addShutdownHook = false 
     tasks.fileservice.storageURI="${config.storageURI.toString}"
     """,
-          Resource.pure(None),
-          JvmGrid.make.map(Some(_))
+         s3Client =  Resource.pure(None),
+         elasticSupport=  JvmGrid.make(externalQueueState).map(Some(_)),
+          externalQueueState = Resource.pure(
+            externalQueueState.map(ref => tasks.util.Transaction.fromRef(ref))
+          )
         ).allocated.start
       }
       ts.flatMap { ts =>
@@ -133,9 +140,16 @@ object JvmElasticSupport {
 
   }
 
-  class JvmCreateNodeFactory(ref: Ref[IO, State]) extends CreateNodeFactory {
-    def apply(master: SimpleSocketAddress, masterPrefix: String, codeAddress: CodeAddress) =
-      new JvmCreateNode(ref, master, masterPrefix)
+  class JvmCreateNodeFactory(
+      ref: Ref[IO, State],
+      externalQueueState: Option[Ref[IO, tasks.queue.TaskQueue.State]]
+  ) extends CreateNodeFactory {
+    def apply(
+        master: SimpleSocketAddress,
+        masterPrefix: String,
+        codeAddress: CodeAddress
+    ) =
+      new JvmCreateNode(ref, externalQueueState, master, masterPrefix)
   }
 
   object JvmGetNodeName extends GetNodeName {
@@ -154,14 +168,17 @@ object JvmElasticSupport {
       }
     }
 
-    def make: Resource[IO, ElasticSupport] =
+    def make(
+        externalQueueState: Option[Ref[IO, tasks.queue.TaskQueue.State]]
+    ): Resource[IO, ElasticSupport] =
       stateResource.flatMap { state =>
         cats.effect.Resource.pure(
           new ElasticSupport(
             hostConfig = None,
             shutdownFromNodeRegistry = new Shutdown(state),
             shutdownFromWorker = new ShutdownSelf(state),
-            createNodeFactory = new JvmCreateNodeFactory(state),
+            createNodeFactory =
+              new JvmCreateNodeFactory(state, externalQueueState),
             getNodeName = JvmGetNodeName
           )
         )
