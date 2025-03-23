@@ -161,13 +161,13 @@ private[tasks] object Launcher {
             messenger = messenger
           )
 
-           val sideEffect = task.start(scheduleTask.input)
+        val sideEffect = task
+          .start(scheduleTask.input)
           .start
           .flatMap { fiber =>
             ref.update(state => state.copy(fibers = fiber :: state.fibers))
           }
 
-       
         val newState2 = newState.copy(
           runningTasks = (
             task,
@@ -426,7 +426,6 @@ private[tasks] object Launcher {
     )
 
     def receive = (state, stateRef) => {
-   
 
       case Message(MessageData.Ping, from, _) =>
         state -> sendTo(from, MessageData.Ping)
