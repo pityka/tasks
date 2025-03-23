@@ -8,6 +8,9 @@ import cats.effect._
 import skunk._
 import natchez.Trace.Implicits.noop
 import skunk.util.Origin
+import skunk.data.TransactionIsolationLevel
+import skunk.data.TransactionAccessMode
+import skunk.data.Completion
 
 object Postgres {
   private[tasks] case class SerializableState(
@@ -122,17 +125,34 @@ object Postgres {
     import com.github.plokhotnyuk.jsoniter_scala.core._
 
     override def flatModify[B](update: State => (State, IO[B])): IO[B] = {
-      val tx = session.transaction.use { _ =>
-        get.flatMap { state =>
-          val (updated, sideEffect) = update(state)
-          val str = writeToString(SerializableState.fromState(updated))
-          val command =
-            Command(s"UPDATE $table SET value = $$1", Origin.unknown, text)
-          session.prepare(command).flatMap(_.execute(str)).map(_ => sideEffect)
+      val tx = session
+        .transaction(
+          TransactionIsolationLevel.Serializable,
+          TransactionAccessMode.ReadWrite
+        )
+        .use { _ =>
+          val io = get.flatMap { state =>
+            val (updated, sideEffect) = update(state)
+            val str = writeToString(SerializableState.fromState(updated))
+            val command =
+              Command(s"UPDATE $table SET value = $$1", Origin.unknown, text)
+            session.prepare(command).flatMap(_.execute(str)).map { _ =>
+              sideEffect
+            }
+          }
+          io
         }
+      def loop: IO[IO[B]] = tx.recoverWith {
+        case SqlState.SerializationFailure(_) =>
+          IO(
+            scribe.info(
+              s"Transaction failed to commit due to serialization failure (an other transaction in process). Try again."
+            )
+          ) *> loop
       }
+
       IO.uncancelable { poll =>
-        poll(tx).flatten
+        poll(loop).flatten
       }
     }
 
