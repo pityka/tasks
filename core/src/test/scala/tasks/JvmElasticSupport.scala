@@ -84,7 +84,7 @@ object JvmElasticSupport {
 
   class JvmCreateNode(
       state: Ref[IO, State],
-      externalQueueState: Option[Ref[IO, tasks.queue.TaskQueue.State]],
+      externalQueueState: Option[Ref[IO, tasks.queue.QueueImpl.State]],
       masterAddress: SimpleSocketAddress,
       masterPrefix: String
   ) extends CreateNode {
@@ -142,7 +142,7 @@ object JvmElasticSupport {
 
   class JvmCreateNodeFactory(
       ref: Ref[IO, State],
-      externalQueueState: Option[Ref[IO, tasks.queue.TaskQueue.State]]
+      externalQueueState: Option[Ref[IO, tasks.queue.QueueImpl.State]]
   ) extends CreateNodeFactory {
     def apply(
         master: SimpleSocketAddress,
@@ -169,7 +169,7 @@ object JvmElasticSupport {
     }
 
     def make(
-        externalQueueState: Option[Ref[IO, tasks.queue.TaskQueue.State]]
+        externalQueueState: Option[Ref[IO, tasks.queue.QueueImpl.State]]
     ): Resource[IO, ElasticSupport] =
       stateResource.flatMap { state =>
         cats.effect.Resource.pure(
