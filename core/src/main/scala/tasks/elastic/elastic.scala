@@ -33,7 +33,7 @@ import scala.util.Try
 import tasks.util.message._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
-import tasks.queue.LauncherActor
+import tasks.queue.Launcher.LauncherActor
 import cats.effect.kernel.Resource
 import tasks.deploy.HostConfiguration
 import cats.effect.IO

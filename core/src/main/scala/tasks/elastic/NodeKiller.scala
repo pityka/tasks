@@ -30,7 +30,7 @@ import tasks.util.message._
 import tasks.util._
 import tasks.util.config._
 import tasks.wire._
-import tasks.queue.LauncherActor
+import tasks.queue.Launcher.LauncherActor
 import cats.effect.unsafe.implicits.global
 import cats.effect.IO
 import cats.effect.FiberIO

@@ -35,6 +35,7 @@ import cats.effect.kernel.Resource
 import cats.effect.IO
 import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
+import tasks.queue.Queue
 
 private[tasks] trait ElasticSupportInnerFactories {
   def registry: Option[NodeRegistry]
@@ -63,7 +64,7 @@ final class ElasticSupport(
   private[tasks] def apply(
       masterAddress: SimpleSocketAddress,
       masterPrefix: String,
-      queueActor: QueueActor,
+      queue: Queue,
       resource: ResourceAvailable,
       codeAddress: Option[CodeAddress],
       messenger: Messenger,
@@ -82,7 +83,7 @@ final class ElasticSupport(
             ),
             decideNewNode = new SimpleDecideNewNode(codeAddress.codeVersion),
             shutdownNode = shutdownFromNodeRegistry,
-            targetQueue = queueActor,
+            targetQueue = queue,
             messenger = messenger
           )
         )
@@ -92,7 +93,7 @@ final class ElasticSupport(
             .make(
               shutdownRunningNode = shutdownFromWorker,
               id = RunningJobId(nodeName),
-              queueActor = queueActor,
+              queue = queue,
               messenger = messenger,
               exitCode = exitCode
             )

@@ -29,6 +29,8 @@ package tasks
 
 import tasks.caching._
 import tasks.queue._
+import tasks.queue.Launcher.LauncherHandle
+import tasks.queue.Launcher.LauncherActor
 import tasks.deploy._
 import tasks.util._
 import tasks.util.config.TasksConfig
@@ -57,7 +59,7 @@ import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
 
 case class TaskSystemComponents private[tasks] (
-    private[tasks] val queue: QueueActor,
+    private[tasks] val queue: Queue,
     private[tasks] val fs: FileServiceComponent,
     private[tasks] val cache: TaskResultCache,
     private[tasks] val nodeLocalCache: NodeLocalCache.State,
@@ -87,6 +89,7 @@ object TaskSystemComponents {
       hostConfig: Resource[IO, HostConfiguration],
       elasticSupport: Resource[IO, Option[ElasticSupport]],
       s3ClientResource: Resource[IO, Option[tasks.fileservice.s3.S3Client]],
+      externalQueueState: Resource[IO, Option[Transaction[TaskQueue.State]]],
       config: TasksConfig,
       exitCode: Deferred[IO, ExitCode]
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
@@ -141,7 +144,9 @@ object TaskSystemComponents {
                 scribe.info("Remoting disabled.")
               case _ =>
                 scribe
-                  .info("Listening on: " + hostConfig.myAddressBind.toString+s" prefix: ${hostConfig.bindPrefix}")
+                  .info(
+                    "Listening on: " + hostConfig.myAddressBind.toString + s" prefix: ${hostConfig.bindPrefix}"
+                  )
                 scribe.info(
                   "External address: " + hostConfig.myAddressExternal.toString
                 )
@@ -166,7 +171,9 @@ object TaskSystemComponents {
               )
             }
 
-            scribe.info("Master node address is: " + hostConfig.master.toString +s" prefix: ${hostConfig.masterPrefix}")
+            scribe.info(
+              "Master node address is: " + hostConfig.master.toString + s" prefix: ${hostConfig.masterPrefix}"
+            )
           })
 
           val proxyStorageClient: Resource[IO, ManagedFileStorage] = Resource
@@ -387,16 +394,47 @@ object TaskSystemComponents {
           def makeQueue(
               cache: TaskResultCache,
               messenger: Messenger,
-              remoteNodeRegistry: Option[RemoteNodeRegistry]
-          ): Resource[IO, QueueActor] = {
+              remoteNodeRegistry: Option[RemoteNodeRegistry],
+              externalQueueState: Option[Transaction[TaskQueue.State]]
+          ): Resource[IO, Queue] = {
 
             Resource
               .eval(IO {
-                if (hostConfig.isQueue) {
-                  QueueActor.makeWithRunloop(cache, messenger)(config)
+                if (externalQueueState.isDefined) {
+                  scribe.info(
+                    s"Using direct connection to external queue: ${externalQueueState.get}"
+                  )
+                  Resource.eval(
+                    QueueImpl
+                      .fromTransaction(
+                        externalQueueState.get,
+                        cache,
+                        messenger
+                      )(config)
+                      .map { queueImpl =>
+                        new QueueFromQueueImpl(
+                          queueImpl
+                        )
+                      }
+                  )
+                } else if (hostConfig.isQueue) {
+                  scribe.info(
+                    s"Using in memory proxied queue state. Spawning central queue state."
+                  )
+                  Resource
+                    .eval(QueueImpl.initRef(cache, messenger)(config))
+                    .flatMap { impl =>
+                      QueueActor
+                        .makeWithQueueImpl(impl, cache, messenger)(config)
+                        .map { qa =>
+                          new QueueWithActor(qa, messenger)
+                        }
+                    }
 
                 } else {
-
+                  scribe.info(
+                    s"Using in memory proxied queue state from remote queue."
+                  )
                   Resource.eval(
                     QueueActor
                       .makeReference(
@@ -406,7 +444,7 @@ object TaskSystemComponents {
                         case Right(value) =>
                           IO {
                             scribe.info(s"Got remote queue: $value")
-                            value
+                            new tasks.queue.QueueWithActor(value, messenger)
                           }
                         case Left(e) =>
                           initFailed(remoteNodeRegistry, messenger) *> IO
@@ -457,7 +495,7 @@ object TaskSystemComponents {
           }
 
           def elasticSupportFactory(
-              queueActor: QueueActor,
+              queue: Queue,
               messenger: Messenger
           ): Resource[IO, Option[ElasticSupportInnerFactories]] =
             if (hostConfig.isApp || hostConfig.isWorker) {
@@ -480,7 +518,7 @@ object TaskSystemComponents {
                   es(
                     masterAddress = hostConfig.master,
                     masterPrefix = hostConfig.masterPrefix,
-                    queueActor = queueActor,
+                    queue = queue,
                     resource = ResourceAvailable(
                       cpu = hostConfig.availableCPU,
                       memory = hostConfig.availableMemory,
@@ -555,7 +593,7 @@ object TaskSystemComponents {
             } else Resource.unit
 
           def launcherActor(
-              queueActor: QueueActor,
+              queue: Queue,
               nodeLocalCache: NodeLocalCache.State,
               fs: FileServiceComponent,
               cache: TaskResultCache,
@@ -565,7 +603,7 @@ object TaskSystemComponents {
               val refreshInterval = config.askInterval
               Launcher
                 .makeHandle(
-                  queueActor,
+                  queue,
                   nodeLocalCache,
                   VersionedResourceAvailable(
                     config.codeVersion,
@@ -591,13 +629,13 @@ object TaskSystemComponents {
             } else Resource.pure[IO, Option[LauncherHandle]](None)
 
           def components(
-              queueActor: QueueActor,
+              queue: Queue,
               fileServiceComponent: FileServiceComponent,
               cache: TaskResultCache,
               nodeLocalCache: NodeLocalCache.State,
               messenger: Messenger
           ) = TaskSystemComponents(
-            queue = queueActor,
+            queue = queue,
             fs = fileServiceComponent,
             cache = cache,
             nodeLocalCache = nodeLocalCache,
@@ -693,10 +731,12 @@ object TaskSystemComponents {
             fileServiceComponent <- fileServiceComponent
             cache <- cache(fileServiceComponent)
             _ <- Resource.eval(IO(scribe.info(s"Cache: $cache")))
+            externalQueueState <- externalQueueState
             queue <- makeQueue(
               cache = cache,
               messenger = messenger,
-              remoteNodeRegistry = remoteNodeRegistry
+              remoteNodeRegistry = remoteNodeRegistry,
+              externalQueueState = externalQueueState
             )
 
             elasticSupportFactory <- elasticSupportFactory(
@@ -712,7 +752,7 @@ object TaskSystemComponents {
             )
             nodeLocalCache <- nodeLocalCache
             launcherHandle <- launcherActor(
-              queueActor = queue,
+              queue = queue,
               nodeLocalCache = nodeLocalCache,
               fs = fileServiceComponent,
               cache = cache,
@@ -730,7 +770,7 @@ object TaskSystemComponents {
 
           } yield (
             components(
-              queueActor = queue,
+              queue = queue,
               fileServiceComponent = fileServiceComponent,
               cache = cache,
               nodeLocalCache = nodeLocalCache,
