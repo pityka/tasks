@@ -41,9 +41,9 @@ import tasks.fileservice.s3.S3Client
 import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
 import tasks.util.Transaction
+import tasks.util.message.LauncherName
 
 package object tasks extends MacroCalls {
-  import tasks.queue.Launcher.LauncherActor
   val SharedFile = tasks.fileservice.SharedFile
 
   type SharedFile = tasks.fileservice.SharedFile
@@ -106,7 +106,7 @@ package object tasks extends MacroCalls {
   ): FileServiceComponent =
     component.fs
 
-  def releaseResourcesEarly(implicit comp: ComputationEnvironment) =
+  def releaseResourcesEarly(implicit comp: ComputationEnvironment) : IO[Unit] =
     comp.launcher.release(comp.taskActor)
 
   implicit def ts(implicit
@@ -114,10 +114,10 @@ package object tasks extends MacroCalls {
   ): TaskSystemComponents =
     component.components
 
-  implicit def launcherActor(implicit
+  implicit def launcherName(implicit
       component: ComputationEnvironment
-  ): LauncherActor =
-    component.launcher.launcherActor
+  ): LauncherName =
+    component.launcher.address
 
   implicit def resourceAllocated(implicit
       component: ComputationEnvironment

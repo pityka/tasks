@@ -5,6 +5,14 @@ import com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonReader
 
+case class Node(
+    name: tasks.shared.RunningJobId,
+    size: tasks.shared.ResourceAvailable,
+    launcherActor: LauncherName
+)
+
+case class LauncherName(name: String)
+
 case class Address(value: String, listeningUri: Option[String]) {
   private[util] def withoutUri = Address(value, None)
   def withAddress(s: Option[String]) =
@@ -19,7 +27,7 @@ case class Address(value: String, listeningUri: Option[String]) {
   override def hashCode(): Int = value.hashCode()
 }
 object Address {
-  val unknown = Address("unknown",None)
+  val unknown = Address("unknown", None)
   def apply(value: String): Address = Address(value, None)
 }
 
@@ -68,14 +76,21 @@ object Message {
 
 import tasks.fileservice.FileServicePrefix
 
+ case class QueueStat(
+      queued: List[(String, tasks.shared.VersionedResourceRequest)],
+      running: List[(String, tasks.shared.VersionedResourceAllocated)]
+  ) 
+
 sealed trait MessageData
 private[tasks] object MessageData {
   import tasks.shared._
   import tasks.queue._
   case object Ping extends MessageData
-  case object HowLoadedAreYou extends MessageData
-  case class AskForWork(resources: VersionedResourceAvailable, launcher: Address)
-      extends MessageData
+  case class AskForWork(
+      resources: VersionedResourceAvailable,
+      launcher: LauncherName,
+      node: Option[Node]
+  ) extends MessageData
   case class TaskDone(
       sch: ScheduleTask,
       result: UntypedResultWithMetadata,
@@ -86,13 +101,8 @@ private[tasks] object MessageData {
       sch: ScheduleTask,
       cause: Throwable
   ) extends MessageData
-  case class QueueStat(
-      queued: List[(String, VersionedResourceRequest)],
-      running: List[(String, VersionedResourceAllocated)]
-  ) extends MessageData
-  case object PrepareForShutdown extends MessageData
-  case object WhatAreYouDoing extends MessageData
-  case class InputData(b64: Base64Data, noCache: Boolean) 
+ 
+  case class InputData(b64: Base64Data, noCache: Boolean)
   case class ScheduleTask(
       description: HashedTaskDescription,
       inputDeserializer: Spore[AnyRef, AnyRef],
@@ -107,20 +117,17 @@ private[tasks] object MessageData {
       lineage: TaskLineage,
       proxy: Address
   ) extends MessageData
-  case class InitFailed(nodename: PendingJobId) extends MessageData
+  case class InitFailed(nodename: RunningJobId) extends MessageData
   case class TaskFailedMessageToQueue(
       sch: ScheduleTask,
       cause: Throwable
   ) extends MessageData
   case class Schedule(sch: ScheduleTask) extends MessageData
-  case class QueueAck(allocated: VersionedResourceAllocated, launcher: Address) extends MessageData
+  case class Increment(launcher: LauncherName) extends MessageData
+  case class QueueAck(allocated: VersionedResourceAllocated, launcher: LauncherName)
+      extends MessageData
   case object NothingForSchedule extends MessageData
-  case object Working extends MessageData
-  case class Idling(idleState: Long) extends MessageData
-  case class RemoveNode(node: tasks.elastic.Node) extends MessageData
-  case class NodeComingUp(node: tasks.elastic.Node) extends MessageData
-  case object ReadyForShutdown extends MessageData  
-
+  
   case class MessageFromTask(result: UntypedResult, retrievedFromCache: Boolean)
       extends MessageData
 }

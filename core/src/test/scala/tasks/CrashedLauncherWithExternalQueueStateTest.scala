@@ -34,13 +34,23 @@ import org.ekrich.config.ConfigFactory
 import cats.effect.IO
 import tasks.JvmElasticSupport.JvmGrid
 import cats.effect.kernel.Resource
+import cats.effect.kernel.Deferred
 import cats.effect.kernel.Ref
 
-object ExternalQueueTest extends TestHelpers {
+object CrashedLauncherWithExternalQueueStateTest extends TestHelpers {
 
-  val testTask = Task[Input, Int]("externalQueueStateTask", 1) { _ => _ =>
+  val launcher1Up = Deferred[IO, Boolean].unsafeRunSync()
+  val launcher1Stopped = Deferred[IO, Boolean].unsafeRunSync()
+
+  val testTask = Task[Input, Int]("CrashedLauncherTest", 1) { _ => _ =>
     scribe.info("Hello from task")
-    IO(1)
+    for {
+      _ <- IO { scribe.warn("Launcher 1 up") }
+      _ <- launcher1Up.complete(true)
+      _ <- IO { scribe.warn("Waiting for launcher 1 stopped") }
+      _ <- launcher1Stopped.get
+      _ <- IO { scribe.warn("Launcher1 stopped.") }
+    } yield (1)
   }
 
   val testConfig2 = {
@@ -48,77 +58,58 @@ object ExternalQueueTest extends TestHelpers {
     tmp.delete
     ConfigFactory.parseString(
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
+      tasks.cache.enabled = false
       hosts.numCPU=0
       tasks.disableRemoting = false
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
-      tasks.elastic.maxNodes = 3
       
       """
     )
   }
 
-  def run = Ref
-    .of[IO, tasks.queue.QueueImpl.State](tasks.queue.QueueImpl.State.empty)
-    .flatMap { queueStateRef =>
-      val io1 = withTaskSystem(
-        config = Some(testConfig2),
-        s3Client = Resource.pure(None),
-        elasticSupport = JvmGrid.make(Some(queueStateRef)).map(v => Some(v._2)),
-        externalQueueState = Resource.pure(
-          Some(tasks.util.Transaction.fromRef(queueStateRef))
-        )
-      ) { implicit ts =>
-        import scala.concurrent.ExecutionContext.Implicits.global
+  def run = {
+    Ref
+      .of[IO, tasks.queue.QueueImpl.State](tasks.queue.QueueImpl.State.empty)
+      .flatMap { queueStateRef =>
+        JvmGrid.make(Some(queueStateRef)).use {
+          case (nodeController, elasticSupport) =>
+            withTaskSystem(
+              config = Some(testConfig2),
+              s3Client = Resource.pure(None),
+              elasticSupport = Resource.pure(Some(elasticSupport)),
+              externalQueueState = Resource.pure(
+                Some(tasks.util.Transaction.fromRef(queueStateRef))
+              )
+            ) { implicit ts =>
+              import scala.concurrent.ExecutionContext.Implicits.global
 
-        val f1 = testTask(Input(1))(ResourceRequest(1, 500))
+              val stopFirstLauncher: IO[Boolean] =
+                launcher1Up.get.flatMap { _ =>
+                  nodeController.list.flatMap { list =>
+                    scribe.info(s"Found list of nodes: $list")
+                    nodeController
+                      .stop(list.head)
+                      .flatMap(_ => launcher1Stopped.complete(true))
+                  }
+                }
 
-        val f2 = f1.flatMap(_ => testTask(Input(2))(ResourceRequest(1, 500)))
-        val f3 = testTask(Input(3))(ResourceRequest(1, 500))
-        val f4 = IO.parSequenceN(4)(
-          (10 to 20).toList
-            .map(i => testTask(Input(i))(ResourceRequest(1, 500)))
-        )
-        val future = for {
-          t1 <- f1
-          t2 <- f2
-          t3 <- f3
-          t4 <- f4
-        } yield t1 + t2 + t3 + t4.sum
+              val f1 = stopFirstLauncher.start
+                .flatMap(_ => testTask(Input(1))(ResourceRequest(1, 500)))
 
-        (future)
+              (f1)
 
+            }
+        }
       }
-      val io2 = withTaskSystem(
-        config = Some(testConfig2),
-        s3Client = Resource.pure(None),
-        elasticSupport = JvmGrid.make(Some(queueStateRef)).map(v => Some(v._2)),
-        externalQueueState = Resource.pure(
-          Some(tasks.util.Transaction.fromRef(queueStateRef))
-        )
-      ) { implicit ts =>
-        import scala.concurrent.ExecutionContext.Implicits.global
-
-        val f4 = IO.parSequenceN(4)(
-          (20 to 30).toList
-            .map(i => testTask(Input(i))(ResourceRequest(1, 500)))
-        )
-        val future = for {
-          t4 <- f4
-        } yield t4.sum
-
-        (future)
-
-      }
-      io1.flatMap(a => io2.map(b => (a, b))).map { case (a, b) =>
-        a.toOption.get + b.toOption.get
-      }
-    }
+  }
 
 }
 
-class ExternalQueueTestSuite extends FunSuite with Matchers {
+class CrashedLauncherWithExternalQueueStateTestSuite
+    extends FunSuite
+    with Matchers {
 
   scribe.Logger.root
     .clearHandlers()
@@ -126,8 +117,11 @@ class ExternalQueueTestSuite extends FunSuite with Matchers {
     .withHandler(minimumLevel = Some(scribe.Level.Info))
     .replace()
 
-  test("elastic node allocation should spawn nodes") {
-    ExternalQueueTest.run.unsafeRunSync() should equal(25)
+  test("respawn node and requeue task after launcher is removed") {
+    CrashedLauncherWithExternalQueueStateTest.run
+      .unsafeRunSync()
+      .toOption
+      .get should equal(1)
 
   }
 

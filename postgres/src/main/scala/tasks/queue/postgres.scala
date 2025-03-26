@@ -1,7 +1,7 @@
 package tasks.queue
 import tasks.queue.QueueImpl._
 import tasks.util.message.MessageData.ScheduleTask
-import tasks.queue.Launcher.LauncherActor
+import tasks.util.message.LauncherName
 import tasks.shared.VersionedResourceAllocated
 
 import cats.effect._
@@ -11,6 +11,10 @@ import skunk.util.Origin
 import skunk.data.TransactionIsolationLevel
 import skunk.data.TransactionAccessMode
 import skunk.data.Completion
+import tasks.elastic.NodeRegistryState
+import tasks.util.message.Node
+import tasks.shared.PendingJobId
+import tasks.shared.RunningJobId
 
 object Postgres {
   private[tasks] case class SerializableState(
@@ -21,34 +25,54 @@ object Postgres {
         (
             ScheduleTaskEqualityProjection,
             (
-                LauncherActor,
+                LauncherName,
                 VersionedResourceAllocated,
                 List[Proxy],
                 ScheduleTask
             )
         )
       ],
-      knownLaunchers: Set[LauncherActor],
+      knownLaunchers: List[(LauncherName, Option[Node])],
       /*This is non empty while waiting for response from the tasklauncher
        *during that, no other tasks are started*/
-      negotiation: Option[(LauncherActor, ScheduleTask)]
+      negotiation: Option[(LauncherName, ScheduleTask)],
+      counters: List[(LauncherName, Long)],
+      nodes: NodeRegistryState.State
   ) {
     def toState = QueueImpl.State(
       queuedTasks = queuedTasks.toMap,
       scheduledTasks = scheduledTasks.toMap,
-      knownLaunchers = knownLaunchers,
-      negotiation = negotiation
+      knownLaunchers = knownLaunchers.toMap,
+      negotiation = negotiation,
+      counters = counters.toMap,
+      nodes = nodes
     )
   }
   private[tasks] object SerializableState {
     def fromState(state: QueueImpl.State) = SerializableState(
       queuedTasks = state.queuedTasks.toList,
       scheduledTasks = state.scheduledTasks.toList,
-      knownLaunchers = state.knownLaunchers,
-      negotiation = state.negotiation
+      knownLaunchers = state.knownLaunchers.toList,
+      negotiation = state.negotiation,
+      counters = state.counters.toList,
+      nodes = state.nodes
     )
     import com.github.plokhotnyuk.jsoniter_scala.core._
     import com.github.plokhotnyuk.jsoniter_scala.macros._
+    implicit val keyCodec1: JsonKeyCodec[PendingJobId] =
+      new JsonKeyCodec[PendingJobId] {
+        def decodeKey(in: JsonReader): PendingJobId = PendingJobId(
+          in.readKeyAsString()
+        )
+        def encodeKey(x: PendingJobId, out: JsonWriter): Unit = out.writeKey(x.value)
+      }
+    implicit val keyCodec2: JsonKeyCodec[RunningJobId] =
+      new JsonKeyCodec[RunningJobId] {
+        def decodeKey(in: JsonReader): RunningJobId = RunningJobId(
+          in.readKeyAsString()
+        )
+        def encodeKey(x: RunningJobId, out: JsonWriter): Unit = out.writeKey(x.value)
+      }
     implicit val codec: JsonValueCodec[SerializableState] = JsonCodecMaker.make
     val emptyStr = writeToString(fromState(State.empty))
   }

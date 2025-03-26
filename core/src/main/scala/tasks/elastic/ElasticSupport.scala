@@ -35,70 +35,14 @@ import cats.effect.kernel.Resource
 import cats.effect.IO
 import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
-import tasks.queue.Queue
-
-private[tasks] trait ElasticSupportInnerFactories {
-  def registry: Option[NodeRegistry]
-  def createSelfShutdown: Resource[IO, Unit]
-  def getNodeName: IO[String]
-}
 
 final class ElasticSupport(
     val hostConfig: Option[HostConfiguration],
-    shutdownFromNodeRegistry: ShutdownNode,
-    shutdownFromWorker: ShutdownSelfNode,
-    createNodeFactory: CreateNodeFactory,
+    val shutdownFromNodeRegistry: ShutdownNode,
+    val shutdownFromWorker: ShutdownSelfNode,
+    val createNodeFactory: CreateNodeFactory,
     val getNodeName: GetNodeName
 ) { self =>
 
-  def selfShutdownNow(
-      exitCode: Deferred[IO, ExitCode],
-      config: TasksConfig
-  ): IO[Unit] =
-    getNodeName
-      .getNodeName(config)
-      .flatMap(nodeName =>
-        shutdownFromWorker.shutdownRunningNode(exitCode, RunningJobId(nodeName))
-      )
-
-  private[tasks] def apply(
-      masterAddress: SimpleSocketAddress,
-      masterPrefix: String,
-      queue: Queue,
-      resource: ResourceAvailable,
-      codeAddress: Option[CodeAddress],
-      messenger: Messenger,
-      exitCode: Deferred[IO, ExitCode]
-  )(implicit config: TasksConfig) =
-    new ElasticSupportInnerFactories {
-      def getNodeName = self.getNodeName.getNodeName(config)
-      def registry =
-        codeAddress.map(codeAddress =>
-          new NodeRegistry(
-            unmanagedResource = resource,
-            createNode = createNodeFactory.apply(
-              masterAddress = masterAddress,
-              masterPrefix = masterPrefix,
-              codeAddress = codeAddress
-            ),
-            decideNewNode = new SimpleDecideNewNode(codeAddress.codeVersion),
-            shutdownNode = shutdownFromNodeRegistry,
-            targetQueue = queue,
-            messenger = messenger
-          )
-        )
-      def createSelfShutdown =
-        Resource.eval(this.getNodeName).flatMap { nodeName =>
-          SelfShutdown
-            .make(
-              shutdownRunningNode = shutdownFromWorker,
-              id = RunningJobId(nodeName),
-              queue = queue,
-              messenger = messenger,
-              exitCode = exitCode
-            )
-            .map(_ => ())
-        }
-    }
 
 }

@@ -7,96 +7,86 @@ import cats.effect.kernel.Resource
 import cats.effect.std.Queue
 import tasks.util.message._
 private[tasks] object Actor {
+  type StopQueue = Queue[IO, Option[Unit]]
 
-  abstract class ActorBehavior[State, K](messenger: Messenger) {
+  abstract class ActorBehavior[K](messenger: Messenger) {
     type ReceiveIO =
-      (State, Ref[IO, State]) => PartialFunction[Message, (State, IO[Unit])]
+      (
+          StopQueue
+      ) => PartialFunction[Message, (IO[Unit])]
     def receive: ReceiveIO
-    def release(st: State): IO[Unit] = IO.unit
 
     def sendTo(target: Address, msg: MessageData) =
       messenger.submit(Message(msg, from = address, to = target))
-    def schedulers(ref: Ref[IO, State]): Option[IO[fs2.Stream[IO, Unit]]] = None
-    val init: State
+    def schedulers(
+        stop: StopQueue
+    ): Option[IO[fs2.Stream[IO, Unit]]] = None
     val address: Address
-    def derive(ref: Ref[IO, State]): K
+    def derive(): K
 
-    val stopQueue = Queue.bounded[IO, Option[Unit]](1)
-
-    val stopProcessingMessages = stopQueue.flatMap(_.offer(None))
+    def stopProcessingMessages(stopQueue: StopQueue) = stopQueue.offer(None)
 
   }
 
-  def makeFromBehavior[S, K](
-      b: ActorBehavior[S, K],
+  def makeFromBehavior[K](
+      b: ActorBehavior[K],
       messenger: Messenger
   ): Resource[IO, K] = {
-    val i = b.init
     val a = b.address
     make(
-      init = i,
       address = a,
       schedulers = b.schedulers _,
       receive = b.receive,
-      release = b.release _,
-      messenger = messenger,
-      stopQueue = b.stopQueue
-    ).map { case stateRef => b.derive(stateRef) }
+      messenger = messenger
+    ).map { case stateRef => b.derive() }
   }
 
-  def make[State](
-      init: State,
-      stopQueue: IO[Queue[IO, Option[Unit]]],
-      schedulers: Ref[IO, State] => Option[IO[fs2.Stream[IO, Unit]]],
+  def make(
+      schedulers: (
+          StopQueue
+      ) => Option[IO[fs2.Stream[IO, Unit]]],
       receive: (
-          State,
-          Ref[IO, State]
-      ) => PartialFunction[Message, (State, IO[Unit])],
-      release: State => IO[Unit],
+          StopQueue
+      ) => PartialFunction[Message, IO[Unit]],
       address: Address,
       messenger: Messenger
-  ): Resource[IO, Ref[IO, State]] = {
-    Resource.eval(Ref.of[IO, State](init)).flatMap { stateRef =>
-      Resource.eval(stopQueue).flatMap { stopQueue =>
-        val messageStream = messenger.subscribe(address).map { stream =>
-          stream
-            .evalMap { message =>
-              stateRef.flatModify { state =>
-                val (newState, sideEffect) = receive(state, stateRef)
-                  .lift(message)
-                  .getOrElse((state, IO.unit))
-                (newState, sideEffect)
-              }
-            }
-        }
-        val stopStream = fs2.Stream
-          .fromQueueNoneTerminated[IO, Unit](stopQueue, 1)
-          .map(_ => ())
-        val schedulerStream =
-          schedulers(stateRef).getOrElse(IO.pure(fs2.Stream.never[IO]))
+  ): Resource[IO, Unit] = {
+    Resource.eval(Queue.bounded[IO, Option[Unit]](1)).flatMap { stopQueue =>
+      val messageStream = messenger.subscribe(address).map { stream =>
+        stream
+          .evalMap { message =>
+            receive(stopQueue)
+              .lift(message)
+              .getOrElse(IO.unit)
 
-        val streamFiber =
-          IO.both(messageStream, schedulerStream).flatMap { case (a, b) =>
-            (a.mergeHaltBoth(b)).mergeHaltBoth(stopStream).compile.drain.start
-          }
-
-        val releaseIO =
-          IO(
-            scribe.debug(
-              s"Will run release side effect of actor with address $address"
-            )
-          ) *> stateRef.get.flatMap(release).void
-
-        Resource
-          .make(streamFiber)(fiber =>
-            releaseIO *> fiber.cancel *> IO(
-              scribe.debug(s"Streams of actor $address canceled.")
-            )
-          )
-          .map { _ =>
-            stateRef
           }
       }
+      val stopStream = fs2.Stream
+        .fromQueueNoneTerminated[IO, Unit](stopQueue, 1)
+        .map(_ => ())
+      val schedulerStream =
+        schedulers(stopQueue)
+          .getOrElse(IO.pure(fs2.Stream.never[IO]))
+
+      val streamFiber =
+        IO.both(messageStream, schedulerStream).flatMap { case (a, b) =>
+          (a.mergeHaltBoth(b))
+            .mergeHaltBoth(stopStream)
+            .onFinalize(IO(scribe.debug(s"Stream terminated of $address")))
+            .compile
+            .drain
+            .start
+        }
+
+      Resource
+        .make(streamFiber)(fiber =>
+          fiber.cancel *> IO(
+            scribe.debug(s"Streams of actor $address canceled.")
+          )
+        )
+        .map { _ =>
+          ()
+        }
     }
   }
 

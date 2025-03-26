@@ -135,7 +135,7 @@ final class TaskDefinition[A: Serializer, B: Deserializer](
         messenger = components.messenger
       )
       val r = tasks.util.Actor
-        .makeFromBehavior[Unit, Proxy](behavior, components.messenger)
+        .makeFromBehavior[ Proxy](behavior, components.messenger)
       r.use { case proxy =>
         deferred.get.flatMap { value =>
           IO.fromEither(value)

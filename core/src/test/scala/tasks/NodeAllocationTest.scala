@@ -61,7 +61,7 @@ object NodeAllocationTest extends TestHelpers {
     withTaskSystem(
       testConfig2,
       Resource.pure(None),
-      JvmGrid.make(None).map(Some(_))
+      JvmGrid.make(None).map(v => Some(v._2))
     ) { implicit ts =>
       import scala.concurrent.ExecutionContext.Implicits.global
 

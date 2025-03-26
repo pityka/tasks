@@ -154,6 +154,7 @@ case class ResourceAvailable(
 }
 
 object ResourceAvailable {
+  val empty = ResourceAvailable(0,0,0,Nil,None)
   private[tasks] def zipMultiplicities(l: List[Int]) =
     l.sorted.foldLeft(List.empty[(Int, Int)]) { case (acc, next) =>
       acc match {

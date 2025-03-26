@@ -39,7 +39,7 @@ private[tasks] class RemoteMessenger(
       }
     }
   def subscribe(address: Address): IO[fs2.Stream[IO, Message]] =
-    IO(scribe.debug(s"Subscribing to $address")) *> localMessenger.subscribe(
+    IO(scribe.trace(s"Subscribing to $address")) *> localMessenger.subscribe(
       address
     )
 }
@@ -86,12 +86,11 @@ private[tasks] object RemoteMessenger {
     }
   }
 
-  private def route(localMessenger: LocalMessenger, prefix: String) = HttpRoutes.of[IO] {
-
-    case request @ POST -> Root / prefix  =>
+  private def route(localMessenger: LocalMessenger, prefix: String) =
+    HttpRoutes.of[IO] { case request @ POST -> Root / prefix =>
       request.decode[Message] { message =>
         IO(
-          scribe.debug(
+          scribe.trace(
             s"HTTP server received message ${message.from} ${message.to} ${message.data.getClass}"
           )
         ) *>
@@ -103,7 +102,7 @@ private[tasks] object RemoteMessenger {
               )
             )
       }
-  }
+    }
   private def submit0(
       message: Message,
       client: Client[IO],
@@ -124,13 +123,13 @@ private[tasks] object RemoteMessenger {
         message
       )
     IO(
-      scribe.debug(
+      scribe.trace(
         s"Submit via http $peerUri ${message.from} ${message.to} ${message.data.getClass()}"
       )
     ) *>
       client.expect[String](request).attempt.flatMap {
         case Right(result) =>
-          IO(scribe.debug(s"Http response: $result")).map(_ => result)
+          IO(scribe.trace(s"Http response: $result")).map(_ => result)
         case Left(e) =>
           IO(
             scribe.error(
@@ -139,16 +138,25 @@ private[tasks] object RemoteMessenger {
           ) *> IO.pure("")
       }
   }
-  /**
-    * Will receive http POST messages on http://$bindHost:$bindPort/$bindPrefix
+
+  /** Will receive http POST messages on http://$bindHost:$bindPort/$bindPrefix
     *
-    * @param bindHost The host name or IP to which this service will bind
-    * @param bindPort The port to which this service will bind
-    * @param bindPrefix An http path prefix 
-    * @param peerUri The http uri to which this messenger will submit
+    * @param bindHost
+    *   The host name or IP to which this service will bind
+    * @param bindPort
+    *   The port to which this service will bind
+    * @param bindPrefix
+    *   An http path prefix
+    * @param peerUri
+    *   The http uri to which this messenger will submit
     * @return
     */
-  def make(bindHost: String, bindPort: Int, bindPrefix: String, peerUri: org.http4s.Uri) = {
+  def make(
+      bindHost: String,
+      bindPort: Int,
+      bindPrefix: String,
+      peerUri: org.http4s.Uri
+  ) = {
     import com.comcast.ip4s._
 
     LocalMessenger.make.flatMap { localMessenger =>

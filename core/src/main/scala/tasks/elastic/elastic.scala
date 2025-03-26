@@ -33,7 +33,6 @@ import scala.util.Try
 import tasks.util.message._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
-import tasks.queue.Launcher.LauncherActor
 import cats.effect.kernel.Resource
 import tasks.deploy.HostConfiguration
 import cats.effect.IO
@@ -41,14 +40,10 @@ import tasks.queue.QueueActor
 import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
 
-case class Node(
-    name: RunningJobId,
-    size: ResourceAvailable,
-    launcherActor: LauncherActor
-)
+
 
 trait GetNodeName {
-  def getNodeName(config: TasksConfig): IO[String]
+  def getNodeName(config: TasksConfig): IO[RunningJobId]
 }
 
 trait ShutdownSelfNode {
@@ -91,7 +86,7 @@ trait CreateNodeFactory {
 
 private[tasks] trait DecideNewNode {
   def needNewNode(
-      q: MessageData.QueueStat,
+      q: QueueStat,
       registeredNodes: Seq[ResourceAvailable],
       pendingNodes: Seq[ResourceAvailable]
   ): Map[ResourceRequest, Int]

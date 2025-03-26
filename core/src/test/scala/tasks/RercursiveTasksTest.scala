@@ -103,7 +103,7 @@ class RecursiveTaskTestSuite
     ConfigFactory.parseString(
       s"""
       
-tasks.cacheEnabled = false
+tasks.cache.enabled = false
 tasks.disableRemoting = true
 hosts.numCPU=4
       tasks.fileservice.storageURI=${tmp.getAbsolutePath}

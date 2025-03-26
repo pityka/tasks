@@ -55,18 +55,20 @@ object JvmElasticSupport {
 
   class Shutdown(state: Ref[IO, State]) extends ShutdownNode {
 
-    def shutdownRunningNode(nodeName: RunningJobId): IO[Unit] =
-      state.flatModify { state =>
-        val ts = state.taskSystems.filter(_._1 == nodeName.value)
-        val newState = state.copy(
-          nodesShutdown = state.nodesShutdown :+ nodeName.value,
-          taskSystems = state.taskSystems.filterNot(_._1 == nodeName.value)
-        )
-        val release: IO[List[Unit]] = IO.parSequenceN(1)(
-          ts.map(_._2.join.flatMap(_.embedNever).flatMap(_._2))
-        )
-        (newState, release.void)
-      }
+    def shutdownRunningNode(nodeName: RunningJobId): IO[Unit] = {
+      IO(scribe.info(s"Shutdown $nodeName")) *>
+        state.flatModify { state =>
+          val ts = state.taskSystems.filter(_._1 == nodeName.value)
+          val newState = state.copy(
+            nodesShutdown = state.nodesShutdown :+ nodeName.value,
+            taskSystems = state.taskSystems.filterNot(_._1 == nodeName.value)
+          )
+          val release: IO[List[Unit]] = IO.parSequenceN(1)(
+            ts.map(_._2.join.flatMap(_.embedError).flatMap(_._2))
+          )
+          (newState, release.void)
+        }
+    }
 
     def shutdownPendingNode(nodeName: PendingJobId): IO[Unit] =
       shutdownRunningNode(RunningJobId(nodeName.value))
@@ -110,8 +112,9 @@ object JvmElasticSupport {
     tasks.addShutdownHook = false 
     tasks.fileservice.storageURI="${config.storageURI.toString}"
     """,
-         s3Client =  Resource.pure(None),
-         elasticSupport=  JvmGrid.make(externalQueueState).map(Some(_)),
+          s3Client = Resource.pure(None),
+          elasticSupport =
+            JvmGrid.make(externalQueueState).map(v => Some(v._2)),
           externalQueueState = Resource.pure(
             externalQueueState.map(ref => tasks.util.Transaction.fromRef(ref))
           )
@@ -153,7 +156,18 @@ object JvmElasticSupport {
   }
 
   object JvmGetNodeName extends GetNodeName {
-    def getNodeName(config: TasksConfig) = IO.pure(config.nodeName)
+    def getNodeName(config: TasksConfig) = IO.pure(RunningJobId(config.nodeName))
+  }
+
+  class JvmNodeControl(
+      state: Ref[IO, State]
+  ) {
+    def list = state.get.map(_.taskSystems.map(_._1))
+    def stop(a: String) = {
+      scribe.info(s"Stop called on $a")
+      (new Shutdown(state)).shutdownRunningNode(RunningJobId(a))
+    }
+
   }
 
   object JvmGrid {
@@ -163,16 +177,18 @@ object JvmElasticSupport {
     ) { state =>
       state.get.flatMap { state =>
         IO.parSequenceN(1)(
-          state.taskSystems.map(_._2.join.flatMap(_.embedNever.flatMap(_._2)))
+          state.taskSystems.map(_._2.join.flatMap(_.embedError.flatMap(_._2)))
         ).void
       }
     }
 
     def make(
         externalQueueState: Option[Ref[IO, tasks.queue.QueueImpl.State]]
-    ): Resource[IO, ElasticSupport] =
-      stateResource.flatMap { state =>
-        cats.effect.Resource.pure(
+    ): Resource[IO, (JvmNodeControl, ElasticSupport)] =
+      stateResource.map { state =>
+        val controller = new JvmNodeControl(state)
+
+        controller ->
           new ElasticSupport(
             hostConfig = None,
             shutdownFromNodeRegistry = new Shutdown(state),
@@ -181,7 +197,7 @@ object JvmElasticSupport {
               new JvmCreateNodeFactory(state, externalQueueState),
             getNodeName = JvmGetNodeName
           )
-        )
+
       }
   }
 }

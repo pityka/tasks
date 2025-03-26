@@ -162,10 +162,7 @@ Worker roles are configured with available resources of the same types.
 Resource allocations are enforced, i.e. a task may use more resources than asked for and the library will not do anything about this.
 
 ## Horizontal scaling
-Worker processes are always attached to a single master process. 
-A single master process may distribute work to multiple worker processes. 
-
-Multiple identical master processes can run aside each other if the `tasks-postgres` module is used to externalize the state and either:
+Multiple identical processes can run aside each other if the `tasks-postgres` module is used to externalize the state and either:
 - the persistent storage is globally accessible (object storage or a file system mounted on each node). If it is a network filesystem, it must provide atomic rename.
 - or the persistent caching is disabled.
 

@@ -85,7 +85,7 @@ lazy val circeVersion = "0.14.9"
 lazy val jsoniterVersion = "2.33.2"
 lazy val http4sVersion = "0.23.27"
 lazy val scribeVersion = "3.16.0"
-lazy val fs2Version = "3.11.0"
+lazy val fs2Version = "3.12.0"
 
 lazy val shared = crossProject(JVMPlatform)
   .crossType(sbtcrossproject.CrossPlugin.autoImport.CrossType.Pure)
@@ -133,7 +133,7 @@ lazy val core = project
       "org.http4s" %% "http4s-ember-server" % http4sVersion,
       "org.http4s" %% "http4s-dsl" % http4sVersion,
       "org.ekrich" %% "sconfig" % "1.8.1",
-      "org.typelevel" %% "cats-effect" % "3.5.3",
+      "org.typelevel" %% "cats-effect" % "3.6.0",
       "io.github.pityka" %% "selfpackage" % "2.1.6",
       "org.scalatest" %% "scalatest" % "3.2.19" % "test",
       "com.outr" %% "scribe" % scribeVersion,
