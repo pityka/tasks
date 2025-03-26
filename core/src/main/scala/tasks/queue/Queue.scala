@@ -40,25 +40,30 @@ import tasks.caching.AnswerFromCache
 import cats.effect.FiberIO
 import cats.effect.kernel.Ref
 import cats.effect.kernel.Resource
-import tasks.util.Actor.ActorBehavior
-import tasks.elastic.RemoteNodeRegistry
 import tasks.util.message._
 import tasks.util.message.MessageData.ScheduleTask
 import tasks.util.message.MessageData.Schedule
 import tasks.util.message.MessageData.NothingForSchedule
-import tasks.queue.Launcher.LauncherActor
+import tasks.util.message.LauncherName
 
 private[tasks] trait Queue {
-  def queryLoad: IO[Option[MessageData.QueueStat]]
-  def ping: IO[Unit]
+  def increment(launcher: LauncherName): IO[Unit]
   def scheduleTask(sch: ScheduleTask): IO[Unit]
 
-  def ack(allocated: VersionedResourceAllocated, launcher: Address): IO[Unit]
+  def initFailed(nodeName: RunningJobId): IO[Unit]
+
+  def ack(
+      allocated: VersionedResourceAllocated,
+      launcher: LauncherName
+  ): IO[Unit]
 
   def askForWork(
-      launcherAsking: LauncherActor,
-      availableResources: VersionedResourceAvailable
-  ): IO[Either[NothingForSchedule.type, MessageData.Schedule]]
+      launcherAsking: LauncherName,
+      availableResources: VersionedResourceAvailable,
+      node: Option[Node]
+  ): IO[
+    Either[Throwable, Either[NothingForSchedule.type, MessageData.Schedule]]
+  ]
 
   def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit]
   def taskSuccess(
@@ -69,37 +74,85 @@ private[tasks] trait Queue {
   ): IO[Unit]
 }
 
-private[tasks] class QueueFromQueueImpl(
-  queueImpl: QueueImpl
+private[tasks] final class QueueFromQueueImpl(
+    queueImpl: QueueImpl
 ) extends Queue {
-   def queryLoad: IO[Option[MessageData.QueueStat]] = queueImpl.queryLoad.map(Some(_))
-  def ping: IO[Unit] = IO.unit
+
+  def initFailed(nodeName: RunningJobId): IO[Unit] =
+    queueImpl.initFailed(nodeName)
+
+  def knownLaunchers = queueImpl.knownLaunchers.map(_.keySet)
+
+  def increment(launcher: LauncherName): IO[Unit] =
+    queueImpl.increment(launcher).attempt.map{
+      case Right(value) =>  ()
+      case Left(value) =>
+          scribe.error("Unexpected failure. Handle error.",value)
+          ()
+    }
   def scheduleTask(sch: ScheduleTask): IO[Unit] = queueImpl.scheduleTask(sch)
 
-  def ack(allocated: VersionedResourceAllocated, launcher: Address): IO[Unit] = 
-      queueImpl.ack(allocated,launcher)
+  def ack(
+      allocated: VersionedResourceAllocated,
+      launcher: LauncherName
+  ): IO[Unit] =
+    queueImpl.ack(allocated, launcher)
 
   def askForWork(
-      launcherAsking: LauncherActor,
-      availableResources: VersionedResourceAvailable
-  ): IO[Either[NothingForSchedule.type, MessageData.Schedule]] = 
-      queueImpl.askForWork(launcherAsking,availableResources)
+      launcherAsking: LauncherName,
+      availableResources: VersionedResourceAvailable,
+      node: Option[Node]
+  ): IO[
+    Either[Throwable, Either[NothingForSchedule.type, MessageData.Schedule]]
+  ] =
+    queueImpl.askForWork(launcherAsking, availableResources, node).attempt
 
-  def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit] = 
-      queueImpl.taskFailed(sch,cause)
+  def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit] =
+    queueImpl.taskFailed(sch, cause)
   def taskSuccess(
       scheduleTask: ScheduleTask,
       receivedResult: UntypedResultWithMetadata,
       elapsedTime: ElapsedTimeNanoSeconds,
       resourceAllocated: ResourceAllocated
-  ): IO[Unit] = queueImpl.taskSuccess(scheduleTask,receivedResult,elapsedTime,resourceAllocated)
+  ): IO[Unit] = queueImpl.taskSuccess(
+    scheduleTask,
+    receivedResult,
+    elapsedTime,
+    resourceAllocated
+  )
 }
 
 private[tasks] class QueueWithActor(
     queueActor: QueueActor,
     messenger: Messenger
 ) extends Queue {
-  def ack(allocated: VersionedResourceAllocated, launcher: Address): IO[Unit] =
+
+  def initFailed(nodeName: RunningJobId): IO[Unit] =
+    messenger.submit(
+      Message(
+        MessageData.InitFailed(nodeName),
+        from = Address.unknown,
+        to = queueActor.address0
+      )
+    )
+
+  def increment(launcher: LauncherName): IO[Unit] =
+    messenger.submit(
+      Message(
+        MessageData.Increment(launcher),
+        from = Address.unknown,
+        to = queueActor.address0
+      )
+    ).attempt.map{
+      case Right(value) =>  ()
+      case Left(value) =>
+          scribe.error("Unexpected failure. Handle error.",value)
+          ()
+    }
+  def ack(
+      allocated: VersionedResourceAllocated,
+      launcher: LauncherName
+  ): IO[Unit] =
     messenger.submit(
       Message(
         MessageData.QueueAck(allocated, launcher),
@@ -107,48 +160,7 @@ private[tasks] class QueueWithActor(
         to = queueActor.address0
       )
     )
-  def queryLoad: IO[Option[tasks.util.message.MessageData.QueueStat]] = {
-    import scala.concurrent.duration._
-    tasks.util.Ask
-      .ask(
-        target = queueActor.address0,
-        data = MessageData.HowLoadedAreYou,
-        timeout = 1 minutes,
-        messenger = messenger
-      )
-      .flatMap {
-        case Left(e) =>
-          scribe.warn("HowLoadedAreYou timed out")
-          IO.pure(None)
-        case Right(None) =>
-          scribe.warn("HowLoadedAreYou timed out")
-          IO.pure(None)
-        case Right(Some(Message(q @ MessageData.QueueStat(_, _), _, _))) =>
-          IO.pure(Some(q))
-        case x =>
-          scribe.error(s"HowLoadedAreYou got unexpected response $x")
-          IO.pure(None)
-      }
-  }
-  def ping: IO[Unit] = {
-    import scala.concurrent.duration._
-    tasks.util.Ask
-      .ask(
-        target = queueActor.address0,
-        data = MessageData.Ping,
-        timeout = 1 minutes,
-        messenger = messenger
-      )
-      .flatMap {
-        case Left(e) => IO.raiseError(e)
-        case Right(None) =>
-          IO.raiseError(new RuntimeException("Ping got no response"))
-        case Right(Some(Message(MessageData.Ping, _, _))) => IO.unit
-        case x =>
-          scribe.error(s"Ping got unexpected response $x")
-          IO.raiseError(new RuntimeException(s"Ping got unexpeced response $x"))
-      }
-  }
+
   def scheduleTask(sch: ScheduleTask): IO[Unit] =
     messenger
       .submit(
@@ -159,31 +171,33 @@ private[tasks] class QueueWithActor(
         )
       )
   def askForWork(
-      launcherAsking: LauncherActor,
-      availableResources: VersionedResourceAvailable
-  ): IO[Either[NothingForSchedule.type, MessageData.Schedule]] = {
+      launcherAsking: LauncherName,
+      availableResources: VersionedResourceAvailable,
+      node: Option[Node]
+  ): IO[
+    Either[Throwable, Either[NothingForSchedule.type, MessageData.Schedule]]
+  ] = {
     import scala.concurrent.duration._
     tasks.util.Ask
       .ask(
         target = queueActor.address0,
-        data =
-          MessageData.AskForWork(availableResources, launcherAsking.address),
+        data = MessageData.AskForWork(availableResources, launcherAsking, node),
         timeout = 1 minutes,
         messenger = messenger
       )
       .map {
         case Left(e) =>
           scribe.warn("timeout from queue", e)
-          Left(NothingForSchedule)
+          Left(e)
         case Right(None) =>
-          Left(NothingForSchedule)
+          Right(Left(NothingForSchedule))
         case Right(Some(Message(NothingForSchedule, _, _))) =>
-          Left(NothingForSchedule)
+          Right(Left(NothingForSchedule))
         case Right(Some(Message(sch @ Schedule(_), _, _))) =>
-          Right(sch)
+          Right(Right(sch))
         case Right(Some(Message(data, _, _))) =>
           scribe.warn(s"Unexpected answer from queue: $data")
-          Left(NothingForSchedule)
+          Right(Left(NothingForSchedule))
       }
 
   }
@@ -216,5 +230,3 @@ private[tasks] class QueueWithActor(
         )
       )
 }
-
-

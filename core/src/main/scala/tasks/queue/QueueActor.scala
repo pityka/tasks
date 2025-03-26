@@ -41,14 +41,12 @@ import cats.effect.FiberIO
 import cats.effect.kernel.Ref
 import cats.effect.kernel.Resource
 import tasks.util.Actor.ActorBehavior
-import tasks.elastic.RemoteNodeRegistry
+// import tasks.elastic.RemoteNodeRegistry
 import tasks.util.message._
 import tasks.util.message.MessageData.ScheduleTask
 import tasks.util.message.MessageData.Schedule
 import tasks.util.message.MessageData.NothingForSchedule
-import tasks.queue.Launcher.LauncherActor
-
-
+import tasks.util.message.LauncherName
 
 private[tasks] case class QueueActor(
     val address0: Address
@@ -93,26 +91,28 @@ private[tasks] final class QueueActorBehavior(
     messenger: Messenger,
     cache: TaskResultCache
 )(implicit config: TasksConfig)
-    extends ActorBehavior[Unit, QueueActor](messenger) {
+    extends ActorBehavior[ QueueActor](messenger) {
   val address: Address = QueueActor.singletonAddress
-  val init: Unit = ()
-  override def release(st: Unit) =
-    impl.release
-  def derive(
-      ref: Ref[IO, Unit]
-  ): QueueActor = QueueActor(address)
+  
+  def derive(): QueueActor = QueueActor(address)
 
-  def receive = (state, stateRef) => {
+  def receive = ( _) => {
     case Message(sch: ScheduleTask, _, _) =>
-      state -> impl.scheduleTask(sch)
+      impl.scheduleTask(sch)
+
+    case Message(MessageData.Increment(launcher), _, _) =>
+      impl.increment(launcher)
+   
+    case Message(MessageData.InitFailed(n), _, _) =>
+       impl.initFailed(n)
 
     case Message(
-          MessageData.AskForWork(availableResource, launcherAddress),
+          MessageData.AskForWork(availableResource, launcher, node),
           from,
           _
         ) =>
-      state -> impl
-        .askForWork(LauncherActor(launcherAddress), availableResource)
+      impl
+        .askForWork(launcher, availableResource, node)
         .flatMap {
           case Left(t) =>
             messenger.submit(
@@ -133,7 +133,7 @@ private[tasks] final class QueueActorBehavior(
         }
 
     case Message(MessageData.QueueAck(allocated, launcher), _, _) =>
-      state -> impl.ack(allocated, launcher)
+      impl.ack(allocated, launcher)
 
     case Message(
           MessageData.TaskDone(
@@ -145,7 +145,7 @@ private[tasks] final class QueueActorBehavior(
           _,
           _
         ) =>
-      state -> impl.taskSuccess(
+      impl.taskSuccess(
         sch,
         resultWithMetadata,
         elapsedTime,
@@ -153,17 +153,14 @@ private[tasks] final class QueueActorBehavior(
       )
 
     case Message(MessageData.TaskFailedMessageToQueue(sch, cause), _, _) =>
-      state -> impl.taskFailed(sch, cause)
+      impl.taskFailed(sch, cause)
 
     case Message(MessageData.Ping, from, to) =>
-      state -> messenger.submit(
+      messenger.submit(
         Message(MessageData.Ping, from = address, to = from)
       )
 
-    case Message(MessageData.HowLoadedAreYou, from, _) =>
-      state -> impl.queryLoad.flatMap { qs =>
-        messenger.submit(Message(qs, from = address, to = from))
-      }
+  
 
   }
 

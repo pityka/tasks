@@ -321,7 +321,7 @@ class K8SCreateNodeFactory(k8s: Option[KubernetesClient[IO]], config: K8SConfig)
 }
 
 object K8SGetNodeName extends GetNodeName {
-  def getNodeName(config: TasksConfig) = IO(config.nodeName)
+  def getNodeName(config: TasksConfig) = IO(RunningJobId(config.nodeName))
 }
 
 class K8SConfig(val raw: Config) extends ConfigValuesForHostConfiguration {

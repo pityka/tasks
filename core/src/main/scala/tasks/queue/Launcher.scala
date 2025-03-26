@@ -41,11 +41,14 @@ import com.github.plokhotnyuk.jsoniter_scala.core._
 import tasks.caching.TaskResultCache
 import cats.effect.unsafe.implicits.global
 import cats.effect.kernel.Ref
-import tasks.util.Actor.ActorBehavior
 import cats.effect.IO
 import cats.effect.kernel.Ref
 import cats.effect.FiberIO
 import tasks.util.message.MessageData.NothingForSchedule
+import cats.effect.kernel.Deferred
+import cats.effect.ExitCode
+import tasks.elastic.ShutdownSelfNode
+import cats.effect.kernel.Resource
 
 private[tasks] object Base64DataHelpers {
   def toBytes(b64: Base64Data): Array[Byte] = base64(b64.value)
@@ -63,26 +66,110 @@ private[tasks] object Launcher {
       managedStorage: ManagedFileStorage,
       cache: TaskResultCache,
       messenger: Messenger,
-      address: Address
-  )(implicit config: TasksConfig) = tasks.util.Actor.makeFromBehavior(
-    new LauncherBehavior(
-      queue,
-      nodeLocalCache,
-      slots,
-      refreshInterval,
-      remoteStorage,
-      managedStorage,
-      cache,
-      messenger,
-      address
-    ),
-    messenger
-  )
+      address: LauncherName,
+      node: Option[Node],
+      shutdown: Option[tasks.elastic.ShutdownSelfNode],
+      exitCode: Option[Deferred[IO, ExitCode]]
+  )(implicit config: TasksConfig) = {
+    def release(st: Launcher.State): IO[Unit] =
+      IO.parSequenceN(1)(st.fibers.map(_.cancel)).void
+    def derive(
+        ref: Ref[IO, Launcher.State]
+    ): LauncherHandle =
+      new LauncherHandle(
+        address = address,
+        ref = ref,
+        queue = queue,
+        cache = cache,
+        messenger = messenger,
+        config = config,
+        nodeLocalCache = nodeLocalCache,
+        remoteStorage = remoteStorage,
+        managedStorage = managedStorage,
+        node = node,
+        shutdown = shutdown,
+        exitCode = exitCode
+      )
+
+    val init: IO[Launcher.State] =
+      IO.pure(
+        Launcher.State(
+          maxResources = slots,
+          availableResources = slots,
+          lastTaskFinished = 0L
+        )
+      )
+
+    def schedulers(
+        ref: Ref[IO, Launcher.State]
+    ): IO[fs2.Stream[IO, Unit]] =
+      IO {
+        val scribeScheduler =
+          fs2.Stream.fixedRate[IO](20 seconds).evalMap { _ =>
+            ref.get.flatMap(state =>
+              IO(
+                scribe.info(
+                  s"Available resources: ${state.availableResources} on $address"
+                )
+              )
+            )
+          }
+        val askForWorkScheduler =
+          fs2.Stream
+            .fixedRate[IO](refreshInterval)
+            .evalMap(_ =>
+              derive(ref).askForWork(ref, messenger, address, queue)
+            )
+
+        val incrementStream =
+          fs2.Stream
+            .fixedRate[IO](config.launcherActorHeartBeatInterval)
+            .evalMap(_ => queue.increment(address))
+
+        scribeScheduler
+          .mergeHaltBoth(askForWorkScheduler)
+          .mergeHaltBoth(incrementStream)
+
+      }
+
+    Resource.eval(init.flatMap(s => Ref.of[IO, State](s))).flatMap { stateRef =>
+      val schedulerStream =
+        schedulers(stateRef)
+
+      val streamFiber = schedulerStream.flatMap { case stream =>
+        stream
+          .onFinalize(IO(scribe.debug(s"Stream terminated of $address")))
+          .compile
+          .drain
+          .start
+      }
+
+      val releaseIO =
+        IO(
+          scribe.debug(
+            s"Will cancel fibers of $address"
+          )
+        ) *> stateRef.get.flatMap(release).void *> IO(
+          scribe.debug(s"Canceled fibers of $address ")
+        )
+
+      Resource
+        .make(streamFiber)(fiber =>
+          releaseIO *> fiber.cancel *> IO(
+            scribe.debug(s"Streams of actor $address canceled.")
+          )
+        )
+        .map { _ =>
+          derive(stateRef)
+        }
+
+    }
+  }
 
   case class State(
       maxResources: VersionedResourceAvailable,
       availableResources: VersionedResourceAvailable,
-      idleState: Long = 0,
+      lastTaskFinished: Long,
       denyWorkBeforeShutdown: Boolean = false,
       waitingForWork: Boolean = false,
       runningTasks: List[
@@ -92,13 +179,12 @@ private[tasks] object Launcher {
       freed: Set[Task] = Set[Task](),
       fibers: List[FiberIO[Unit]] = Nil
   ) {
+
     def isIdle = runningTasks.isEmpty
   }
 
-  case class LauncherActor(address: tasks.util.message.Address)
-
   final class LauncherHandle(
-      address: tasks.util.message.Address,
+      val address: LauncherName,
       ref: Ref[IO, Launcher.State],
       queue: Queue,
       cache: TaskResultCache,
@@ -106,13 +192,16 @@ private[tasks] object Launcher {
       config: TasksConfig,
       nodeLocalCache: NodeLocalCache.State,
       remoteStorage: RemoteFileStorage,
-      managedStorage: ManagedFileStorage
+      managedStorage: ManagedFileStorage,
+      node: Option[Node],
+      shutdown: Option[tasks.elastic.ShutdownSelfNode],
+      exitCode: Option[Deferred[IO, ExitCode]]
   ) { handle =>
 
     def askForWork(
         ref: Ref[IO, State],
         messenger: Messenger,
-        address: Address,
+        address: LauncherName,
         queue: Queue
     ): IO[Unit] = {
       def launch(
@@ -163,6 +252,13 @@ private[tasks] object Launcher {
 
         val sideEffect = task
           .start(scheduleTask.input)
+          .attempt.map{
+            case Right(unit) => 
+              unit
+            case Left(value) =>
+              scribe.error("Unexpected failure during task execution.",value)
+              ()
+          }
           .start
           .flatMap { fiber =>
             ref.update(state => state.copy(fibers = fiber :: state.fibers))
@@ -180,28 +276,41 @@ private[tasks] object Launcher {
         (allocatedResource, newState2, sideEffect)
       }
 
-      ref.flatModify { state =>
+      ref.flatModifyFull { case (poll, state) =>
         if (!state.denyWorkBeforeShutdown && !state.waitingForWork) {
 
-          val effect: IO[Unit] = queue
-            .askForWork(LauncherActor(address), state.availableResources)
+          val effect: IO[Unit] = poll(
+            queue
+              .askForWork(address, state.availableResources, node)
+          )
+            .onCancel(ref.update { state =>
+              state.copy(waitingForWork = false)
+            })
             .flatMap {
-              case Left(MessageData.NothingForSchedule) =>
-                ref.flatModify { state =>
-                  state.copy(waitingForWork = false) -> IO.unit
+              case Left(throwable) =>
+                IO(
+                  scribe.error(
+                    s"Queue returned error on askForWork. Handling exception.",
+                    throwable
+                  )
+                ) *>
+                  ref.update { state =>
+                    state.copy(waitingForWork = false)
+                  }
+              case Right(Left(MessageData.NothingForSchedule)) =>
+                ref.update { state =>
+                  state.copy(waitingForWork = false)
                 }
-              case Right(MessageData.Schedule(scheduleTask)) =>
-                ref.flatModify { state =>
+              case Right(Right(MessageData.Schedule(scheduleTask))) =>
+                ref.flatModifyFull { case  (poll,state) =>
                   scribe.debug(s"Received ScheduleWithProxy ")
                   val st0 = state.copy(waitingForWork = false)
                   val (newState, sideEffects) =
                     if (!st0.denyWorkBeforeShutdown) {
 
-                      val st1 = if (st0.isIdle) {
-                        st0.copy(idleState = st0.idleState + 1)
-                      } else st0
+                      val st1 = st0
                       val (allocated, st2, io1) = launch(st1, scheduleTask, ref)
-                      val io2 = queue.ack(allocated, address)
+                      val io2 = poll(queue.ack(allocated, address))
                       val io3 =
                         askForWork(ref, messenger, address, queue)
                       (st2, io1 *> io2 *> io3)
@@ -211,6 +320,20 @@ private[tasks] object Launcher {
             }
 
           (state.copy(waitingForWork = true), effect)
+        } else if (!state.denyWorkBeforeShutdown) {
+          if (
+            state.isIdle && FiniteDuration(
+              System.nanoTime - state.lastTaskFinished,
+              scala.concurrent.duration.NANOSECONDS
+            ) > config.idleNodeTimeout && node.isDefined && exitCode.isDefined && shutdown.isDefined
+          )
+            state.copy(denyWorkBeforeShutdown = true) -> shutdown.get
+              .shutdownRunningNode(exitCode.get, node.get.name) *> IO.pure(
+              Left(NothingForSchedule)
+            )
+          else {
+            state -> IO.pure(Left(NothingForSchedule))
+          }
         } else {
           scribe.debug(
             "Not asking for work because no available resources or preparing for shut down."
@@ -220,7 +343,6 @@ private[tasks] object Launcher {
       }
     }
 
-    private[tasks] val launcherActor = LauncherActor(address)
     def release(task: Task) = {
       ref.update { state =>
         val allocated = state.runningTasks.find(_._1 == task).map(_._3)
@@ -331,7 +453,8 @@ private[tasks] object Launcher {
           resourceDeallocatedAt = st0.resourceDeallocatedAt - taskActor
         )
       }
-      (st1, sideEffect)
+      val st2 = st1.copy(lastTaskFinished = System.nanoTime)
+      (st2, sideEffect)
     }
 
     private def taskFailed(
@@ -361,99 +484,12 @@ private[tasks] object Launcher {
         )
       }
 
+      val st2 = st1.copy(lastTaskFinished = System.nanoTime)
       val sideEffect = queue.taskFailed(sch, cause)
 
-      (st1, sideEffect)
+      (st2, sideEffect)
 
     }
   }
 
-  private[tasks] class LauncherBehavior(
-      queue: Queue,
-      nodeLocalCache: NodeLocalCache.State,
-      slots: VersionedResourceAvailable,
-      refreshInterval: FiniteDuration,
-      remoteStorage: RemoteFileStorage,
-      managedStorage: ManagedFileStorage,
-      cache: TaskResultCache,
-      messenger: Messenger,
-      val address: Address
-  )(implicit config: TasksConfig)
-      extends ActorBehavior[Launcher.State, LauncherHandle](messenger) {
-    override def release(st: Launcher.State): IO[Unit] =
-      IO.parSequenceN(1)(st.fibers.map(_.cancel)).void
-    def derive(
-        ref: Ref[IO, Launcher.State]
-    ): LauncherHandle =
-      new LauncherHandle(
-        address = address,
-        ref = ref,
-        queue = queue,
-        cache = cache,
-        messenger = messenger,
-        config = config,
-        nodeLocalCache = nodeLocalCache,
-        remoteStorage = remoteStorage,
-        managedStorage = managedStorage
-      )
-
-    val init: Launcher.State =
-      Launcher.State(maxResources = slots, availableResources = slots)
-
-    override def schedulers(
-        ref: Ref[IO, Launcher.State]
-    ): Option[IO[fs2.Stream[IO, Unit]]] = Some(
-      IO {
-        val scribeScheduler =
-          fs2.Stream.fixedRate[IO](20 seconds).evalMap { _ =>
-            ref.get.flatMap(state =>
-              IO(
-                scribe.info(
-                  s"Available resources: ${state.availableResources} on $address"
-                )
-              )
-            )
-          }
-        val askForWorkScheduler =
-          fs2.Stream
-            .fixedRate[IO](refreshInterval)
-            .evalMap(_ =>
-              derive(ref).askForWork(ref, messenger, address, queue)
-            )
-
-        scribeScheduler.mergeHaltBoth(askForWorkScheduler)
-      }
-    )
-
-    def receive = (state, stateRef) => {
-
-      case Message(MessageData.Ping, from, _) =>
-        state -> sendTo(from, MessageData.Ping)
-
-      case Message(MessageData.PrepareForShutdown, from, _) =>
-        val (newState, sideEffect) = if (state.isIdle) {
-
-          (
-            state.copy(denyWorkBeforeShutdown = true),
-            sendTo(from, MessageData.ReadyForShutdown)
-          )
-        } else (state, IO.unit)
-        newState -> sideEffect
-
-      case Message(MessageData.WhatAreYouDoing, from, _) =>
-        val idle = state.isIdle
-        scribe.debug(
-          s"Received WhatAreYouDoing. idle:$idle, idleState:${state.idleState}"
-        )
-        if (idle) {
-          state -> sendTo(from, MessageData.Idling(state.idleState))
-        } else {
-          state -> sendTo(from, MessageData.Working)
-        }
-
-      case other => state -> IO(scribe.debug("unhandled" + other))
-
-    }
-
-  }
 }

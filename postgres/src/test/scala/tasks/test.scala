@@ -35,13 +35,13 @@ import org.scalatest.matchers.should.Matchers
 import cats.effect.IO
 import tasks.queue.QueueImpl.State
 import tasks.queue.QueueImpl
-import tasks.queue.Launcher.LauncherActor
 import tasks.util.message.Address
 import cats.effect.kernel.Ref
 import skunk.implicits._
 import skunk.codec.all._
 import skunk.data.TransactionIsolationLevel
 import skunk.data.TransactionAccessMode
+import tasks.util.message.LauncherName
 class PostgresSuite extends FunSuite with Matchers {
   import natchez.Trace.Implicits.noop
   test("skunk transaction") {
@@ -123,12 +123,12 @@ class PostgresSuite extends FunSuite with Matchers {
             tx.flatModify(old => State.empty -> IO.unit) *>
             tx.flatModify(old =>
               old.update(
-                QueueImpl.LauncherJoined(LauncherActor(Address("sdfa")))
+                QueueImpl.LauncherJoined(LauncherName("sdfa"), None)
               ) -> ref.set(true)
             ) *> tx.get.map(state =>
               assert(
                 state == State.empty.update(
-                  QueueImpl.LauncherJoined(LauncherActor(Address("sdfa")))
+                  QueueImpl.LauncherJoined(LauncherName("sdfa"), None)
                 )
               )
             ) *> ref.get.map(a => assert(a))
@@ -160,12 +160,12 @@ class PostgresSuite extends FunSuite with Matchers {
             Ref.of[IO, Int](0).flatMap { ref =>
               val io1 = tx1.flatModify(old =>
                 old.update(
-                  QueueImpl.LauncherJoined(LauncherActor(Address("AAA")))
+                  QueueImpl.LauncherJoined(LauncherName(("AAA")),None)
                 ) -> ref.update(_ + 1)
               )
               val io2 = tx2.flatModify(old =>
                 old.update(
-                  QueueImpl.LauncherJoined(LauncherActor(Address("BBB")))
+                  QueueImpl.LauncherJoined(LauncherName(("BBB")),None)
                 ) -> ref.update(_ + 1)
               )
               io1.both(io2) *> ref.get.map(a => assert(a == 2))

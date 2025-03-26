@@ -54,6 +54,7 @@ import org.ekrich.config.ConfigFactory
 import cats.effect.IO
 import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
+import tasks.util.message.Node
 
 class EC2Shutdown(ec2: AmazonEC2) extends ShutdownNode with ShutdownSelfNode {
 
@@ -255,7 +256,7 @@ class EC2CreateNodeFactory(
 
 object EC2GetNodeName extends GetNodeName {
   def getNodeName(config: TasksConfig) =
-    IO.interruptible(EC2Operations.readMetadata("instance-id").head)
+    IO.interruptible(RunningJobId(EC2Operations.readMetadata("instance-id").head))
 }
 
 class EC2Config(val raw: Config) extends ConfigValuesForHostConfiguration {

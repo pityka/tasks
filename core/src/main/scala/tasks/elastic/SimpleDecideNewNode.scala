@@ -25,7 +25,7 @@
 
 package tasks.elastic
 
-import tasks.util.message.MessageData.QueueStat
+import tasks.util.message.QueueStat
 import tasks.shared._
 import tasks.util._
 import tasks.util.eq._

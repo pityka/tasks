@@ -196,7 +196,7 @@ private[tasks] class Task(
     lineage: TaskLineage,
     taskHash: HashedTaskDescription,
     val proxy: tasks.util.message.Address,
-    messenger: Messenger,
+    messenger: Messenger
 ) {
 
   private def handleError(exception: Throwable) = {

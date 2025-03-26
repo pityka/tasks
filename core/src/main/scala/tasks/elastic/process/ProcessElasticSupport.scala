@@ -387,7 +387,11 @@ private final class ProcessCreateNodeFactory(
     settings: ProcessSettings,
     spawnProcessCommand: SpawnProcessCommand
 ) extends CreateNodeFactory {
-  def apply(master: SimpleSocketAddress, masterPrefix: String, codeAddress: CodeAddress) =
+  def apply(
+      master: SimpleSocketAddress,
+      masterPrefix: String,
+      codeAddress: CodeAddress
+  ) =
     new ProcessCreateNode(
       masterAddress = master,
       masterPrefix = masterPrefix,
@@ -401,6 +405,6 @@ private final class ProcessCreateNodeFactory(
 
 private object ProcessGetNodeName extends GetNodeName {
   def getNodeName(config: TasksConfig) = IO.pure {
-    config.nodeName
+    RunningJobId(config.nodeName)
   }
 }
