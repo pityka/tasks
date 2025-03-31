@@ -387,7 +387,11 @@ private final class ProcessCreateNodeFactory(
     settings: ProcessSettings,
     spawnProcessCommand: SpawnProcessCommand
 ) extends CreateNodeFactory {
-  def apply(master: SimpleSocketAddress, masterPrefix: String, codeAddress: CodeAddress) =
+  def apply(
+      master: SimpleSocketAddress,
+      masterPrefix: String,
+      codeAddress: CodeAddress
+  ) =
     new ProcessCreateNode(
       masterAddress = master,
       masterPrefix = masterPrefix,

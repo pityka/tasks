@@ -144,10 +144,10 @@ private[tasks] class NodeRegistry(
       (fs2.Stream.sleep[IO](config.queueCheckInitialDelay) ++ fs2.Stream
         .fixedRate[IO](config.queueCheckInterval))
         .evalMap { _ =>
-          targetQueue.queryLoad.flatMap{
-            case None => IO.unit 
-            case Some(queueStat) => 
-              handleQueueStat(queueStat,ref)
+          targetQueue.queryLoad.flatMap {
+            case None => IO.unit
+            case Some(queueStat) =>
+              handleQueueStat(queueStat, ref)
           }
         }
     )
@@ -167,8 +167,9 @@ private[tasks] class NodeRegistry(
     ).map((a: List[Unit]) => ())
   }
 
-  def handleQueueStat(queueStat: MessageData.QueueStat,ref: Ref[IO,State]) = ref.flatModify{ state =>
-    val logIO = if (config.logQueueStatus) {
+  def handleQueueStat(queueStat: MessageData.QueueStat, ref: Ref[IO, State]) =
+    ref.flatModify { state =>
+      val logIO = if (config.logQueueStatus) {
         IO {
           scribe.info(
             s"Queued tasks: ${queueStat.queued.size}. Running tasks: ${queueStat.running.size}. Pending nodes: ${state.pending.size} . Running nodes: ${state.running.size}. Largest request: ${queueStat.queued
@@ -261,11 +262,9 @@ private[tasks] class NodeRegistry(
         }
 
       newState -> logIO *> io
-  }
+    }
 
   def receive = (state, ref) => {
-
-      
 
     case Message(MessageData.NodeComingUp(node), from, _) =>
       val Node(jobId, _, _) = node

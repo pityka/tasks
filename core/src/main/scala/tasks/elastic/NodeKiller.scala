@@ -70,42 +70,41 @@ private[tasks] class NodeKiller(
         fs2.Stream.fixedRate[IO](config.nodeKillerMonitorInterval).evalMap {
           _ =>
             ref.get
-              .flatMap {
-                state =>
-                  if (
-                    state.targetIsIdle &&
-                    (System
-                      .nanoTime() - state.lastIdleSessionStart) >= config.idleNodeTimeout.toNanos
-                  ) {
+              .flatMap { state =>
+                if (
+                  state.targetIsIdle &&
+                  (System
+                    .nanoTime() - state.lastIdleSessionStart) >= config.idleNodeTimeout.toNanos
+                ) {
 
-                    IO(
+                  IO(
+                    scribe.info(
+                      "Target is idle. Start shutdown sequence. Send PrepareForShutdown to " + targetLauncherActor
+                    )
+                  ) *> messenger
+                    .submit(
+                      Message(
+                        MessageData.PrepareForShutdown,
+                        from = address,
+                        to = targetLauncherActor.address
+                      )
+                    )
+                    .map(_ =>
                       scribe.info(
-                        "Target is idle. Start shutdown sequence. Send PrepareForShutdown to " + targetLauncherActor
+                        "PrepareForShutdown sent to " + targetLauncherActor
                       )
-                    ) *> messenger
-                      .submit(
-                        Message(
-                          MessageData.PrepareForShutdown,
-                          from = address,
-                          to = targetLauncherActor.address
-                        )
-                      )
-                      .map(_ =>
-                        scribe.info(
-                          "PrepareForShutdown sent to " + targetLauncherActor
-                        )
-                      )
+                    )
 
-                  } else {
-                    messenger
-                      .submit(
-                        Message(
-                          MessageData.WhatAreYouDoing,
-                          from = address,
-                          to = targetLauncherActor.address
-                        )
+                } else {
+                  messenger
+                    .submit(
+                      Message(
+                        MessageData.WhatAreYouDoing,
+                        from = address,
+                        to = targetLauncherActor.address
                       )
-                  }
+                    )
+                }
               }
         }
       )

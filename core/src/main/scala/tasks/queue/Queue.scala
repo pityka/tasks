@@ -70,29 +70,35 @@ private[tasks] trait Queue {
 }
 
 private[tasks] class QueueFromQueueImpl(
-  queueImpl: QueueImpl
+    queueImpl: QueueImpl
 ) extends Queue {
-   def queryLoad: IO[Option[MessageData.QueueStat]] = queueImpl.queryLoad.map(Some(_))
+  def queryLoad: IO[Option[MessageData.QueueStat]] =
+    queueImpl.queryLoad.map(Some(_))
   def ping: IO[Unit] = IO.unit
   def scheduleTask(sch: ScheduleTask): IO[Unit] = queueImpl.scheduleTask(sch)
 
-  def ack(allocated: VersionedResourceAllocated, launcher: Address): IO[Unit] = 
-      queueImpl.ack(allocated,launcher)
+  def ack(allocated: VersionedResourceAllocated, launcher: Address): IO[Unit] =
+    queueImpl.ack(allocated, launcher)
 
   def askForWork(
       launcherAsking: LauncherActor,
       availableResources: VersionedResourceAvailable
-  ): IO[Either[NothingForSchedule.type, MessageData.Schedule]] = 
-      queueImpl.askForWork(launcherAsking,availableResources)
+  ): IO[Either[NothingForSchedule.type, MessageData.Schedule]] =
+    queueImpl.askForWork(launcherAsking, availableResources)
 
-  def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit] = 
-      queueImpl.taskFailed(sch,cause)
+  def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit] =
+    queueImpl.taskFailed(sch, cause)
   def taskSuccess(
       scheduleTask: ScheduleTask,
       receivedResult: UntypedResultWithMetadata,
       elapsedTime: ElapsedTimeNanoSeconds,
       resourceAllocated: ResourceAllocated
-  ): IO[Unit] = queueImpl.taskSuccess(scheduleTask,receivedResult,elapsedTime,resourceAllocated)
+  ): IO[Unit] = queueImpl.taskSuccess(
+    scheduleTask,
+    receivedResult,
+    elapsedTime,
+    resourceAllocated
+  )
 }
 
 private[tasks] class QueueWithActor(
@@ -216,5 +222,3 @@ private[tasks] class QueueWithActor(
         )
       )
 }
-
-

@@ -53,8 +53,7 @@ private[tasks] object SelfShutdown {
       HeartBeatIO
         .makeNonActor(
           target = queue.ping,
-          sideEffect = shutdownRunningNode.shutdownRunningNode(exitCode, id),
-          
+          sideEffect = shutdownRunningNode.shutdownRunningNode(exitCode, id)
         )
         .start
     )(_.cancel *> IO(scribe.info("Canceled self shutdown heartbeat fiber")))
