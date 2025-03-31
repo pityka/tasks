@@ -413,7 +413,7 @@ object TaskSystemComponents {
                     .map { queueImpl =>
                       (new QueueFromQueueImpl(
                         queueImpl
-                      ) : Queue)
+                      ): Queue)
                     }
                 )
               } else if (hostConfig.isQueue) {
@@ -443,7 +443,10 @@ object TaskSystemComponents {
                       case Right(value) =>
                         IO {
                           scribe.info(s"Got remote queue: $value")
-                          (new tasks.queue.QueueWithActor(value, messenger):Queue)
+                          (new tasks.queue.QueueWithActor(
+                            value,
+                            messenger
+                          ): Queue)
                         }
                       case Left(e) =>
                         initFailed(remoteNodeRegistry, messenger) *> IO

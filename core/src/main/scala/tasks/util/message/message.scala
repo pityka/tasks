@@ -19,7 +19,7 @@ case class Address(value: String, listeningUri: Option[String]) {
   override def hashCode(): Int = value.hashCode()
 }
 object Address {
-  val unknown = Address("unknown",None)
+  val unknown = Address("unknown", None)
   def apply(value: String): Address = Address(value, None)
 }
 
@@ -74,8 +74,10 @@ private[tasks] object MessageData {
   import tasks.queue._
   case object Ping extends MessageData
   case object HowLoadedAreYou extends MessageData
-  case class AskForWork(resources: VersionedResourceAvailable, launcher: Address)
-      extends MessageData
+  case class AskForWork(
+      resources: VersionedResourceAvailable,
+      launcher: Address
+  ) extends MessageData
   case class TaskDone(
       sch: ScheduleTask,
       result: UntypedResultWithMetadata,
@@ -92,7 +94,7 @@ private[tasks] object MessageData {
   ) extends MessageData
   case object PrepareForShutdown extends MessageData
   case object WhatAreYouDoing extends MessageData
-  case class InputData(b64: Base64Data, noCache: Boolean) 
+  case class InputData(b64: Base64Data, noCache: Boolean)
   case class ScheduleTask(
       description: HashedTaskDescription,
       inputDeserializer: Spore[AnyRef, AnyRef],
@@ -113,13 +115,14 @@ private[tasks] object MessageData {
       cause: Throwable
   ) extends MessageData
   case class Schedule(sch: ScheduleTask) extends MessageData
-  case class QueueAck(allocated: VersionedResourceAllocated, launcher: Address) extends MessageData
+  case class QueueAck(allocated: VersionedResourceAllocated, launcher: Address)
+      extends MessageData
   case object NothingForSchedule extends MessageData
   case object Working extends MessageData
   case class Idling(idleState: Long) extends MessageData
   case class RemoveNode(node: tasks.elastic.Node) extends MessageData
   case class NodeComingUp(node: tasks.elastic.Node) extends MessageData
-  case object ReadyForShutdown extends MessageData  
+  case object ReadyForShutdown extends MessageData
 
   case class MessageFromTask(result: UntypedResult, retrievedFromCache: Boolean)
       extends MessageData

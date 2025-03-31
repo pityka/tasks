@@ -68,8 +68,8 @@ trait ConfigValuesForHostConfiguration {
     } else None
 
   def masterPrefix = if (raw.hasPath("hosts.masterprefix")) {
-      Some(raw.getString("hosts.masterprefix")      )
-    } else None
+    Some(raw.getString("hosts.masterprefix"))
+  } else None
 
   def startApp = raw.getBoolean("hosts.app")
 }

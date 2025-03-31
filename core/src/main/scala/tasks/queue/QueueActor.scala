@@ -48,8 +48,6 @@ import tasks.util.message.MessageData.Schedule
 import tasks.util.message.MessageData.NothingForSchedule
 import tasks.queue.Launcher.LauncherActor
 
-
-
 private[tasks] case class QueueActor(
     val address0: Address
 )
