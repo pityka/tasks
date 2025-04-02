@@ -46,7 +46,7 @@ private[tasks] object Implicits {
 
   implicit def queueActor(implicit
       component: TaskSystemComponents
-  ): QueueActor = component.queue
+  ): Queue = component.queue
 
   implicit def historyContext(implicit
       component: TaskSystemComponents

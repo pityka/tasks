@@ -68,8 +68,8 @@ trait ConfigValuesForHostConfiguration {
     } else None
 
   def masterPrefix = if (raw.hasPath("hosts.masterprefix")) {
-      Some(raw.getString("hosts.masterprefix")      )
-    } else None
+    Some(raw.getString("hosts.masterprefix"))
+  } else None
 
   def startApp = raw.getBoolean("hosts.app")
 }
@@ -157,14 +157,7 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   def maxNodesCumulative = raw.getInt("tasks.elastic.maxNodesCumulative")
 
-  val queueCheckInterval: FD =
-    raw.getDuration("tasks.elastic.queueCheckInterval")
-
-  val queueCheckInitialDelay: FD =
-    raw.getDuration("tasks.elastic.queueCheckInitialDelay")
-
-  val nodeKillerMonitorInterval: FD =
-    raw.getDuration("tasks.elastic.nodeKillerMonitorInterval")
+  
 
   def jvmMaxHeapFactor = raw.getDouble("tasks.elastic.jvmMaxHeapFactor")
 
@@ -216,7 +209,7 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   def folderFileStorageCompleteFileCheck =
     raw.getBoolean("tasks.fileservice.folderFileStorageCompleteFileCheck")
 
-  def pendingNodeTimeout = raw.getDuration("tasks.elastic.pendingNodeTimeout")
+  def pendingNodeTimeout = scala.jdk.DurationConverters.JavaDurationOps(raw.getDuration("tasks.elastic.pendingNodeTimeout")).toScala
 
   val checkTempFolderOnWorkerInitialization =
     raw.getBoolean("tasks.elastic.checktempfolder")

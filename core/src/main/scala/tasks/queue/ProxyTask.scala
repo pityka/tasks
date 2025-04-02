@@ -42,6 +42,7 @@ import cats.effect.unsafe.implicits.global
 import cats.effect.kernel.Deferred
 import cats.effect.kernel.Ref
 import tasks.util.message._
+import tasks.util.Actor
 case class Proxy(address: tasks.util.message.Address)
 
 /* Local proxy of the remotely executed task */
@@ -54,7 +55,7 @@ private[tasks] class ProxyTask[Input, Output](
     writer: Serializer[Input],
     reader: Deserializer[Output],
     resourceConsumed: VersionedResourceRequest,
-    queueActor: QueueActor,
+    queue: Queue,
     fileServicePrefix: FileServicePrefix,
     cache: TaskResultCache,
     priority: Priority,
@@ -63,12 +64,11 @@ private[tasks] class ProxyTask[Input, Output](
     lineage: TaskLineage,
     noCache: Boolean,
     messenger: Messenger
-) extends tasks.util.Actor.ActorBehavior[Unit, Proxy](messenger) {
+) extends tasks.util.Actor.ActorBehavior[ Proxy](messenger) {
   val address: Address = Address(
-    s"ProxyTask-$taskId-${input.hashCode()}-${scala.util.Random.nextString(32)}"
+    s"ProxyTask-$taskId-${input.hashCode()}-${scala.util.Random.alphanumeric.take(256).mkString}"
   )
-  val init = ()
-  def derive(ref: Ref[IO, Unit]): Proxy = Proxy(address)
+  def derive(): Proxy = Proxy(address)
 
   private def distributeResult(result: Output) = {
     scribe.debug("Completing promise.")
@@ -101,7 +101,8 @@ private[tasks] class ProxyTask[Input, Output](
         outputSerializer = outputSerializer.as[AnyRef, AnyRef],
         function = function.as[AnyRef, AnyRef],
         resource = resourceConsumed,
-        queueActor = queueActor,
+        input =
+          MessageData.InputData(Base64DataHelpers(writer(input)), noCache),
         fileServicePrefix = fileServicePrefix,
         tryCache = cache,
         priority = priority,
@@ -114,27 +115,21 @@ private[tasks] class ProxyTask[Input, Output](
     scribe.debug("proxy submitting ScheduleTask object to queue.")
 
     scheduleTask.flatMap { scheduleTask =>
-      messenger.submit(
-        Message(from = address, to = queueActor.address, data = scheduleTask)
-      )
+      queue.scheduleTask(scheduleTask)
     }
 
   }
 
   override def schedulers(
-      ref: Ref[IO, Unit]
+      
+      stopQueue: Actor.StopQueue
   ): Option[IO[fs2.Stream[IO, Unit]]] = Some(IO {
     (fs2.Stream.unit ++ fs2.Stream.never[IO]).evalMap(_ =>
       startTask(cache = true)
     )
   })
 
-  def receive = (state, stateRef) => {
-    case Message(MessageData.NeedInput, from, _) =>
-      () -> sendTo(
-        from,
-        MessageData.InputData(Base64DataHelpers(writer(input)), noCache)
-      )
+  def receive = (stopQueue) => {
 
     case Message(
           MessageData.MessageFromTask(untypedOutput, retrievedFromCache),
@@ -146,25 +141,25 @@ private[tasks] class ProxyTask[Input, Output](
           scribe.debug(
             s"MessageFromTask received from: $from, $untypedOutput, $output"
           )
-          () -> distributeResult(output) *> stopProcessingMessages
+          distributeResult(output) *> stopProcessingMessages(stopQueue)
         case Left(error) if retrievedFromCache =>
           scribe.error(
             s"MessageFromTask received from cache and failed to decode: ${from}, $untypedOutput, $error. Task is rescheduled without caching."
           )
-          () -> startTask(cache = false)
+          startTask(cache = false)
         case Left(error) =>
           scribe.error(
             error,
             s"MessageFromTask received not from cache and failed to decode: ${from}, $untypedOutput, $error. Execution failed."
           )
-          () -> notifyListenersOnFailure(
+           notifyListenersOnFailure(
             new RuntimeException(error)
-          ) *> stopProcessingMessages
+          ) *> stopProcessingMessages(stopQueue)
       }
 
-    case Message(MessageData.TaskFailedMessageToProxy(_, cause), from, _) =>
+    case Message(MessageData.TaskFailedMessageToProxy(_, cause), _, _) =>
       scribe.error(cause, "Execution failed. ")
-      () -> notifyListenersOnFailure(cause) *> stopProcessingMessages
+      notifyListenersOnFailure(cause) *> stopProcessingMessages(stopQueue)
   }
 
 }

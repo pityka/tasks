@@ -102,7 +102,7 @@ class RecursiveCachedTaskTestSuite
     ConfigFactory.parseString(
       s"""
       
-tasks.cacheEnabled = true
+tasks.cache.enabled = true
 tasks.createFilePrefixForTaskId = false
 tasks.disableRemoting = true
 hosts.numCPU=4

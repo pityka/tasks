@@ -103,7 +103,7 @@ object Bootstrap {
 
       val cfg = cfg0.withFallback(tasks.util.loadConfig(config))
       withTaskSystem(
-        Some(cfg),
+        cfg,
         s3Resource,
         K8SElasticSupport.make(Some(cfg)).map(Some(_))
       )(useTs)

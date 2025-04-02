@@ -29,6 +29,7 @@ package tasks
 
 import tasks.caching._
 import tasks.queue._
+import tasks.queue.Launcher.LauncherHandle
 import tasks.deploy._
 import tasks.util._
 import tasks.util.config.TasksConfig
@@ -57,7 +58,7 @@ import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
 
 case class TaskSystemComponents private[tasks] (
-    private[tasks] val queue: QueueActor,
+    private[tasks] val queue: Queue,
     private[tasks] val fs: FileServiceComponent,
     private[tasks] val cache: TaskResultCache,
     private[tasks] val nodeLocalCache: NodeLocalCache.State,
@@ -87,6 +88,7 @@ object TaskSystemComponents {
       hostConfig: Resource[IO, HostConfiguration],
       elasticSupport: Resource[IO, Option[ElasticSupport]],
       s3ClientResource: Resource[IO, Option[tasks.fileservice.s3.S3Client]],
+      externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]],
       config: TasksConfig,
       exitCode: Deferred[IO, ExitCode]
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
@@ -141,7 +143,9 @@ object TaskSystemComponents {
                 scribe.info("Remoting disabled.")
               case _ =>
                 scribe
-                  .info("Listening on: " + hostConfig.myAddressBind.toString+s" prefix: ${hostConfig.bindPrefix}")
+                  .info(
+                    "Listening on: " + hostConfig.myAddressBind.toString + s" prefix: ${hostConfig.bindPrefix}"
+                  )
                 scribe.info(
                   "External address: " + hostConfig.myAddressExternal.toString
                 )
@@ -166,7 +170,9 @@ object TaskSystemComponents {
               )
             }
 
-            scribe.info("Master node address is: " + hostConfig.master.toString +s" prefix: ${hostConfig.masterPrefix}")
+            scribe.info(
+              "Master node address is: " + hostConfig.master.toString + s" prefix: ${hostConfig.masterPrefix}"
+            )
           })
 
           val proxyStorageClient: Resource[IO, ManagedFileStorage] = Resource
@@ -357,151 +363,145 @@ object TaskSystemComponents {
           val nodeLocalCache =
             Resource.eval(NodeLocalCache.start.timeout(60 seconds))
 
-          def initFailed(
-              remoteNodeRegistry: Option[RemoteNodeRegistry],
-              messenger: Messenger
-          ) = {
-            if (!hostConfig.isApp && hostConfig.isWorker) {
-              scribe.error(
-                "Initialization failed. This is a follower node, notifying remote node registry."
-              )
-              elasticSupport.get.getNodeName.getNodeName(config).flatMap {
-                nodeName =>
-                  messenger.submit(
-                    Message(
-                      MessageData.InitFailed(
-                        PendingJobId(nodeName)
-                      ),
-                      from = Address("_noaddress_"),
-                      to = remoteNodeRegistry.get.address
-                    )
-                  )
-              }
-            } else IO.unit
-          }
-
-          case class ActorSet1(
-              remoteNodeRegistry: Option[RemoteNodeRegistry]
-          )
-
           def makeQueue(
               cache: TaskResultCache,
               messenger: Messenger,
-              remoteNodeRegistry: Option[RemoteNodeRegistry]
-          ): Resource[IO, QueueActor] = {
+              externalQueueState: Option[Transaction[QueueImpl.State]],
+              shutdownNode: Option[tasks.elastic.ShutdownNode],
+              decideNewNode: Option[tasks.elastic.DecideNewNode],
+              createNode: Option[tasks.elastic.CreateNode],
+              unmanagedResource: tasks.shared.ResourceAvailable,
+              shutdownSelf: Option[tasks.elastic.ShutdownSelfNode],
+              exitCode: Deferred[IO, ExitCode],
+              nodeName: Option[RunningJobId]
+          ): Resource[IO, Queue] = {
 
-            Resource
-              .eval(IO {
-                if (hostConfig.isQueue) {
-                  QueueActor.makeWithRunloop(cache, messenger)(config)
+            val io: IO[Resource[IO, Queue]] = IO {
+              if (externalQueueState.isDefined) {
+                scribe.info(
+                  s"Using direct connection to external queue: ${externalQueueState.get}"
+                )
 
-                } else {
+                QueueImpl
+                  .fromTransaction(
+                    externalQueueState.get,
+                    cache,
+                    messenger,
+                    shutdownNode,
+                    decideNewNode,
+                    createNode,
+                    unmanagedResource
+                  )(config)
+                  .map { queueImpl =>
+                    (new QueueFromQueueImpl(
+                      queueImpl
+                    ): Queue)
+                  }
 
-                  Resource.eval(
+              } else if (hostConfig.isQueue) {
+                scribe.info(
+                  s"Using in memory proxied queue state. Spawning central queue state."
+                )
+
+                QueueImpl
+                  .initRef(
+                    cache,
+                    messenger,
+                    shutdownNode,
+                    decideNewNode,
+                    createNode,
+                    unmanagedResource
+                  )(config)
+                  .flatMap { impl =>
                     QueueActor
-                      .makeReference(
-                        messenger
-                      )(config)
-                      .flatMap {
-                        case Right(value) =>
-                          IO {
-                            scribe.info(s"Got remote queue: $value")
-                            value
-                          }
-                        case Left(e) =>
-                          initFailed(remoteNodeRegistry, messenger) *> IO
-                            .raiseError(
-                              new RuntimeException("Remote queue failed", e)
-                            )
+                      .makeWithQueueImpl(impl, cache, messenger)(config)
+                      .map { _ =>
+                        // queue actor is to serve as a remote endpoint
+                        // for local access use directly the impl
+                        (new QueueFromQueueImpl(impl): Queue)
                       }
-                  )
-                }
-              })
-              .flatMap(identity)
-              .attempt
-              .evalMap {
+                  }
+
+              } else {
+                scribe.info(
+                  s"Using in memory proxied queue state from remote queue."
+                )
+                Resource.eval(
+                  QueueActor
+                    .makeReference(
+                      messenger
+                    )(config)
+                    .flatMap {
+                      case Right(value) =>
+                        IO {
+                          scribe.info(s"Got remote queue: $value")
+                          (new tasks.queue.QueueWithActor(
+                            value,
+                            messenger
+                          ): Queue)
+                        }
+                      case Left(e) =>
+                        nodeName
+                          .flatMap(n =>
+                            shutdownSelf.map(_.shutdownRunningNode(exitCode, n))
+                          )
+                          .getOrElse(IO.unit) *> IO
+                          .raiseError(
+                            new RuntimeException("Remote queue failed", e)
+                          )
+                    }
+                )
+              }
+            }.attempt
+              .flatMap {
                 case Right(value) => IO.pure(value)
                 case Left(e) =>
-                  initFailed(remoteNodeRegistry, messenger) *> IO.raiseError(
+                  nodeName
+                    .flatMap(n =>
+                      shutdownSelf.map(_.shutdownRunningNode(exitCode, n))
+                    )
+                    .getOrElse(IO.unit) *> IO.raiseError(
                     new RuntimeException("Remote queue failed", e)
                   )
               }
 
-          }
-
-          def makeRemoteNodeRegistry(
-              messenger: Messenger,
-              elasticSupport: Option[ElasticSupport]
-          ) = {
-
-            if (
-              !hostConfig.isApp && hostConfig.isWorker && elasticSupport.isDefined
-            ) {
-              scribe.info(
-                "This is a remote worker node. Looking for remote node registry."
-              )
-              Resource.eval(
-                NodeRegistry
-                  .makeReference(
-                    masterAddress,
-                    messenger,
-                    elasticSupport,
-                    exitCode
-                  )(
-                    config
-                  )
-                  .map(Some(_))
-              )
-            } else Resource.pure[IO, Option[RemoteNodeRegistry]](None)
+            Resource.eval(io).flatMap(identity)
 
           }
 
-          def elasticSupportFactory(
-              queueActor: QueueActor,
-              messenger: Messenger
-          ): Resource[IO, Option[ElasticSupportInnerFactories]] =
-            if (hostConfig.isApp || hostConfig.isWorker) {
-
-              val codeAddress =
-                if (hostConfig.isApp)
-                  Some(
-                    elastic.CodeAddress(
-                      SimpleSocketAddress(
-                        packageServerHostname,
-                        packageServerPort
-                      ),
-                      config.codeVersion
-                    )
-                  )
-                else None
-
-              Resource.eval[IO, Option[ElasticSupportInnerFactories]](IO {
-                elasticSupport.map(es =>
-                  es(
-                    masterAddress = hostConfig.master,
-                    masterPrefix = hostConfig.masterPrefix,
-                    queueActor = queueActor,
-                    resource = ResourceAvailable(
-                      cpu = hostConfig.availableCPU,
-                      memory = hostConfig.availableMemory,
-                      scratch = hostConfig.availableScratch,
-                      gpu = hostConfig.availableGPU,
-                      image = hostConfig.image
-                    ),
-                    codeAddress = codeAddress,
-                    messenger = messenger,
-                    exitCode = exitCode
-                  )(config)
+          val codeAddress =
+            if (hostConfig.isApp)
+              Some(
+                elastic.CodeAddress(
+                  SimpleSocketAddress(
+                    packageServerHostname,
+                    packageServerPort
+                  ),
+                  config.codeVersion
                 )
-              })
+              )
+            else None
 
-            } else Resource.pure(None)
+          def makeCodeAddress(
+              server: Option[Server]
+          ) = Resource.eval(IO.pure(server.map { _ =>
+            (
+              elastic.CodeAddress(
+                SimpleSocketAddress(
+                  packageServerHostname,
+                  packageServerPort
+                ),
+                config.codeVersion
+              )
+            )
 
-          def packageServer(
-              elasticSupportFactory: Option[ElasticSupportInnerFactories]
+          }))
+
+          def makePackageServer(
+              enable: Boolean
           ): Resource[IO, Option[Server]] = Resource
             .eval(IO {
-              if (hostConfig.isApp && elasticSupportFactory.isDefined) {
+              if (hostConfig.isApp && enable) {
 
                 Try(Deployment.pack(config)) match {
                   case Success(pack) =>
@@ -541,31 +541,55 @@ object TaskSystemComponents {
             })
             .flatMap(identity)
 
-          def localNodeRegistry(
-              elasticSupportFactory: Option[ElasticSupportInnerFactories],
-              messenger: Messenger
-          ): Resource[IO, Unit] =
-            if (hostConfig.isApp && elasticSupportFactory.isDefined) {
+          def initFailed(
+              queue: Queue
+          ) = {
+            (if (!hostConfig.isApp && hostConfig.isWorker) {
+               scribe.error(
+                 "Initialization failed. This is a follower node, notifying remote node registry."
+               )
+               elasticSupport.get.getNodeName.getNodeName(config).flatMap {
+                 nodeName =>
+                   queue.initFailed(nodeName)
+               }
+             } else
+               IO.unit) *> IO.raiseError(new RuntimeException("init failed"))
+          }
 
-              tasks.util.Actor.makeFromBehavior(
-                elasticSupportFactory.get.registry.get,
-                messenger
+          def tempFolderIsWriteable(queue: Queue) = {
+            val tempFolderWriteable =
+              if (!config.checkTempFolderOnWorkerInitialization) true
+              else
+                Try {
+                  val testFile =
+                    tasks.util.TempFile.createTempFile("test")
+                  testFile.delete
+                }.isSuccess
+
+            if (!tempFolderWriteable) {
+              scribe.error(
+                s"Temp folder is not writeable (${System.getProperty("java.io.tmpdir")}). Failing worker init."
               )
-
-            } else Resource.unit
+              Resource.eval(initFailed(queue))
+            } else Resource.pure[IO, Unit](())
+          }
 
           def launcherActor(
-              queueActor: QueueActor,
+              queue: Queue,
               nodeLocalCache: NodeLocalCache.State,
               fs: FileServiceComponent,
               cache: TaskResultCache,
-              messenger: Messenger
+              messenger: Messenger,
+              node: Option[Node],
+              shutdown: Option[tasks.elastic.ShutdownSelfNode],
+              exitCode: Option[Deferred[IO, ExitCode]],
+              launcherName: LauncherName
           ) =
             if (hostConfig.availableCPU > 0 && hostConfig.isWorker) {
               val refreshInterval = config.askInterval
               Launcher
                 .makeHandle(
-                  queueActor,
+                  queue,
                   nodeLocalCache,
                   VersionedResourceAvailable(
                     config.codeVersion,
@@ -582,22 +606,23 @@ object TaskSystemComponents {
                   managedStorage = fs.storage,
                   cache = cache,
                   messenger = messenger,
-                  address = Address(
-                    s"Launcher-${hostConfig.myAddressExternal.getOrElse(hostConfig.myAddressBind).toString}"
-                  )
+                  address = launcherName,
+                  node = node,
+                  shutdown = shutdown,
+                  exitCode = exitCode
                 )(config)
                 .map(Some(_))
 
             } else Resource.pure[IO, Option[LauncherHandle]](None)
 
           def components(
-              queueActor: QueueActor,
+              queue: Queue,
               fileServiceComponent: FileServiceComponent,
               cache: TaskResultCache,
               nodeLocalCache: NodeLocalCache.State,
               messenger: Messenger
           ) = TaskSystemComponents(
-            queue = queueActor,
+            queue = queue,
             fs = fileServiceComponent,
             cache = cache,
             nodeLocalCache = nodeLocalCache,
@@ -610,74 +635,56 @@ object TaskSystemComponents {
             messenger = messenger
           )
 
-          def notifyRegistry(
-              elasticSupportFactory: Option[ElasticSupportInnerFactories],
-              launcherActor: Option[LauncherActor],
-              remoteNodeRegistry: Option[RemoteNodeRegistry],
-              messenger: Messenger
-          ): Resource[IO, Unit] = {
-            val delayed: IO[Resource[IO, Unit]] =
-              if (
-                !hostConfig.isApp && hostConfig.isWorker && elasticSupportFactory.isDefined && launcherActor.isDefined
-              ) {
-                scribe.info("Getting node name..")
-                elasticSupportFactory.get.getNodeName.map { nodeName =>
-                  scribe.info(
-                    "This is a worker node. ElasticNodeAllocation is enabled. Notifying remote node registry about this node. Node name: " + nodeName + ". Launcher actor address is: " + launcherActor.get
+          def getNodeName(
+          ) = Resource.eval(
+            elasticSupport
+              .map(
+                _.getNodeName
+                  .getNodeName(config)
+                  .map(s => Some(s))
+              )
+              .getOrElse(IO.pure(None))
+          )
+
+          def makeLauncherName() =
+            Resource.pure[IO, LauncherName](
+              LauncherName(
+                s"Launcher-${hostConfig.myAddressExternal.getOrElse(hostConfig.myAddressBind).toString}"
+              )
+            )
+
+          def makeNode(
+              launcherName: LauncherName,
+              nodeName: Option[RunningJobId]
+          ): Resource[IO, Option[Node]] = {
+            if (
+              !hostConfig.isApp && hostConfig.isWorker && nodeName.isDefined
+            ) {
+              scribe.info(
+                "This is a worker node. ElasticNodeAllocation is enabled. Notifying remote node registry about this node. Node name: " + nodeName.get + ". Launcher actor address is: " + launcherName
+              )
+
+              Resource.pure(
+                Option(
+                  Node(
+                    nodeName.get,
+                    ResourceAvailable(
+                      hostConfig.availableCPU,
+                      hostConfig.availableMemory,
+                      hostConfig.availableScratch,
+                      hostConfig.availableGPU,
+                      hostConfig.image
+                    ),
+                    launcherName
                   )
+                )
+              )
 
-                  val tempFolderWriteable =
-                    if (!config.checkTempFolderOnWorkerInitialization) true
-                    else
-                      Try {
-                        val testFile =
-                          tasks.util.TempFile.createTempFile("test")
-                        testFile.delete
-                      }.isSuccess
+            } else {
+              scribe.info("This is not a follower node.")
+              Resource.unit[IO].map(_ => None)
+            }
 
-                  if (!tempFolderWriteable) {
-                    scribe.error(
-                      s"Temp folder is not writeable (${System.getProperty("java.io.tmpdir")}). Failing worker init."
-                    )
-                    Resource.eval(initFailed(remoteNodeRegistry, messenger))
-                  } else {
-
-                    Resource
-                      .eval(
-                        messenger.submit(
-                          Message(
-                            MessageData.NodeComingUp(
-                              Node(
-                                RunningJobId(nodeName),
-                                ResourceAvailable(
-                                  hostConfig.availableCPU,
-                                  hostConfig.availableMemory,
-                                  hostConfig.availableScratch,
-                                  hostConfig.availableGPU,
-                                  hostConfig.image
-                                ),
-                                LauncherActor(
-                                  launcherActor.get.address
-                                    .withAddress(messenger.listeningAddress)
-                                )
-                              )
-                            ),
-                            from = Address("_noaddress_"),
-                            to = remoteNodeRegistry.get.address
-                          )
-                        )
-                      )
-                      .flatMap(_ =>
-                        elasticSupportFactory.get.createSelfShutdown
-                      )
-                  }
-                }
-              } else {
-                scribe.info("This is not a follower node.")
-                IO.pure(Resource.unit[IO])
-              }
-
-            Resource.eval(delayed).flatMap(identity)
           }
 
           for {
@@ -685,52 +692,63 @@ object TaskSystemComponents {
               IO(scribe.debug("Start allocation of TaskSystem"))
             )(_ => IO(scribe.debug("Finished deallocation of TaskSystem")))
             _ <- emitLog
-            messenger <- Messenger.make(hostConfig)
-            remoteNodeRegistry <- makeRemoteNodeRegistry(
-              messenger,
-              elasticSupport
+            nodeLocalCache <- nodeLocalCache
+            codeAddress <- makePackageServer(elasticSupport.isDefined).flatMap(
+              makeCodeAddress
             )
+            nodeName <- getNodeName()
+            launcherName <- makeLauncherName()
+            node <- makeNode(
+              launcherName = launcherName,
+              nodeName = nodeName
+            )
+            messenger <- Messenger.make(hostConfig)
             fileServiceComponent <- fileServiceComponent
             cache <- cache(fileServiceComponent)
             _ <- Resource.eval(IO(scribe.info(s"Cache: $cache")))
+            externalQueueState <- externalQueueState
             queue <- makeQueue(
               cache = cache,
               messenger = messenger,
-              remoteNodeRegistry = remoteNodeRegistry
+              externalQueueState = externalQueueState,
+              shutdownNode = elasticSupport.map(_.shutdownFromNodeRegistry),
+              decideNewNode = codeAddress.map(codeAddress =>
+                new SimpleDecideNewNode(codeAddress.codeVersion)(config)
+              ),
+              createNode = codeAddress.flatMap(codeAddress =>
+                elasticSupport.map(
+                  _.createNodeFactory.apply(
+                    masterAddress = hostConfig.master,
+                    masterPrefix = hostConfig.masterPrefix,
+                    codeAddress = codeAddress
+                  )
+                )
+              ),
+              unmanagedResource = ResourceAvailable.empty,
+              shutdownSelf = elasticSupport.map(_.shutdownFromWorker),
+              exitCode = exitCode,
+              nodeName = nodeName
             )
-
-            elasticSupportFactory <- elasticSupportFactory(
-              queue,
-              messenger
-            )
-            _ <- packageServer(
-              elasticSupportFactory
-            )
-            localNodeRegistry <- localNodeRegistry(
-              elasticSupportFactory,
-              messenger
-            )
-            nodeLocalCache <- nodeLocalCache
+            _ <- tempFolderIsWriteable(queue)
             launcherHandle <- launcherActor(
-              queueActor = queue,
+              queue = queue,
               nodeLocalCache = nodeLocalCache,
               fs = fileServiceComponent,
               cache = cache,
-              messenger = messenger
+              messenger = messenger,
+              launcherName = launcherName,
+              node = node,
+              shutdown = elasticSupport.map(_.shutdownFromWorker),
+              exitCode = elasticSupport.map(_ => exitCode)
             )
-            _ <- notifyRegistry(
-              elasticSupportFactory,
-              launcherHandle.map(_.launcherActor),
-              remoteNodeRegistry,
-              messenger
-            )
+
             _ <- Resource.make(
               IO(scribe.debug("Finished allocation of TaskSystem"))
             )(_ => IO(scribe.debug("Start deallocation of TaskSystem")))
 
           } yield (
             components(
-              queueActor = queue,
+              queue = queue,
               fileServiceComponent = fileServiceComponent,
               cache = cache,
               nodeLocalCache = nodeLocalCache,

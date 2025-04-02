@@ -16,15 +16,15 @@ private[tasks] object Ask {
       messenger: Messenger
   ): IO[Either[Throwable, Option[Message]]] = {
 
-    val address: Address = Address(
-      s"Ask-target=$target-${data.hashCode}-${scala.util.Random.nextString(64)}"
-    )
-    val subscriber = messenger.subscribe(address)
-    val message = Message(from = address, to = target, data = data)
-
     IO {
-      scribe.debug(s"Ask start for $target")
-    }.flatMap { _ =>
+      scribe.trace(s"Ask start for $target")
+      val address: Address = Address(
+        s"Ask-target=$target-${data.hashCode}-${scala.util.Random.alphanumeric.take(256).mkString}"
+      )
+      val subscriber = messenger.subscribe(address)
+      val message = Message(from = address, to = target, data = data)
+      (message, subscriber)
+    }.flatMap { case (message, subscriber) =>
       subscriber.flatMap { messageStream =>
         messenger
           .submit(message)

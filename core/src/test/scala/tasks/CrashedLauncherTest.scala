@@ -31,16 +31,25 @@ import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
 import org.ekrich.config.ConfigFactory
-import scala.util._
 import cats.effect.IO
-import cats.effect.kernel.Resource
 import tasks.JvmElasticSupport.JvmGrid
+import cats.effect.kernel.Resource
+import cats.effect.kernel.Deferred
 
-object NodeAllocationMaxNodesTest extends TestHelpers {
+object CrashedLauncherTest extends TestHelpers {
 
-  val testTask = Task[Input, Int]("nodeallocationtest", 1) { _ => _ =>
+  val launcher1Up = Deferred[IO, Boolean].unsafeRunSync()
+  val launcher1Stopped = Deferred[IO, Boolean].unsafeRunSync()
+
+  val testTask = Task[Input, Int]("CrashedLauncherTest", 1) { _ => _ =>
     scribe.info("Hello from task")
-    IO(1)
+    for {
+      _ <- IO { scribe.warn("Launcher 1 up") }
+      _ <- launcher1Up.complete(true)
+      _ <- IO { scribe.warn("Waiting for launcher 1 stopped") }
+      _ <- launcher1Stopped.get
+      _ <- IO { scribe.warn("Launcher1 stopped.") }
+    } yield (1)
   }
 
   val testConfig2 = {
@@ -48,41 +57,56 @@ object NodeAllocationMaxNodesTest extends TestHelpers {
     tmp.delete
     ConfigFactory.parseString(
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
+      tasks.cache.enabled = false
       hosts.numCPU=0
+      tasks.disableRemoting = false
       tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
-      tasks.elastic.maxNodes = 0
-      tasks.disableRemoting = false
+      tasks.failuredetector.acceptable-heartbeat-pause = 10 s
+      
       """
     )
   }
 
   def run = {
-    withTaskSystem(
-      testConfig2,
-      Resource.pure(None),
-      JvmGrid.make(None).map(v => Some(v._2))
-    ) { implicit ts =>
-      val f1 = testTask(Input(1))(ResourceRequest(1, 500))
-      val f2 = testTask(Input(2))(ResourceRequest(1, 500))
-      val f3 = testTask(Input(3))(ResourceRequest(1, 500))
-      val future = for {
-        t1 <- f1
-        t2 <- f2
-        t3 <- f3
-      } yield t1 + t2 + t3
-      import scala.concurrent.duration._
-      (future).timeout(30 seconds).attempt.map(_.toOption)
+    JvmGrid.make(None).use { case (nodeController, elasticSupport) =>
+      withTaskSystem(
+        testConfig2,
+        Resource.pure(None),
+        Resource.pure(Some(elasticSupport))
+      ) { implicit ts =>
+        import scala.concurrent.ExecutionContext.Implicits.global
 
+        val stopFirstLauncher: IO[Boolean] = launcher1Up.get.flatMap { _ =>
+          nodeController.list.flatMap { list =>
+            scribe.info(s"Found list of nodes: $list")
+            nodeController
+              .stop(list.head)
+              .flatMap(_ => launcher1Stopped.complete(true))
+          }
+        }
+
+        val f1 = stopFirstLauncher.start
+          .flatMap(_ => testTask(Input(1))(ResourceRequest(1, 500)))
+
+        (f1)
+
+      }
     }
   }
 
 }
 
-class NodeAllocationMaxNodesTestSuite extends FunSuite with Matchers {
+class CrashedLauncherTestSuite extends FunSuite with Matchers {
 
-  test("elastic node allocation should respect max node configuration") {
-    NodeAllocationMaxNodesTest.run.unsafeRunSync().toOption.get shouldBe None
+  scribe.Logger.root
+    .clearHandlers()
+    .clearModifiers()
+    .withHandler(minimumLevel = Some(scribe.Level.Info))
+    .replace()
+
+  test("respawn node and requeue task after launcher is removed") {
+    CrashedLauncherTest.run.unsafeRunSync().toOption.get should equal(1)
 
   }
 

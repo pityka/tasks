@@ -40,9 +40,10 @@ import cats.effect.kernel.Resource
 import tasks.fileservice.s3.S3Client
 import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
+import tasks.util.Transaction
+import tasks.util.message.LauncherName
 
 package object tasks extends MacroCalls {
-
   val SharedFile = tasks.fileservice.SharedFile
 
   type SharedFile = tasks.fileservice.SharedFile
@@ -105,7 +106,7 @@ package object tasks extends MacroCalls {
   ): FileServiceComponent =
     component.fs
 
-  def releaseResourcesEarly(implicit comp: ComputationEnvironment) =
+  def releaseResourcesEarly(implicit comp: ComputationEnvironment) : IO[Unit] =
     comp.launcher.release(comp.taskActor)
 
   implicit def ts(implicit
@@ -113,10 +114,10 @@ package object tasks extends MacroCalls {
   ): TaskSystemComponents =
     component.components
 
-  implicit def launcherActor(implicit
+  implicit def launcherName(implicit
       component: ComputationEnvironment
-  ): LauncherActor =
-    component.launcher.launcherActor
+  ): LauncherName =
+    component.launcher.address
 
   implicit def resourceAllocated(implicit
       component: ComputationEnvironment
@@ -129,7 +130,12 @@ package object tasks extends MacroCalls {
   def withTaskSystem[T](
       f: TaskSystemComponents => IO[T]
   ): IO[Either[ExitCode, T]] =
-    withTaskSystem(None, Resource.pure(None), Resource.pure(None))(f)
+    withTaskSystem(
+      config = None,
+      s3Client = Resource.pure(None),
+      elasticSupport = Resource.pure(None),
+      externalQueueState = Resource.pure(None)
+    )(f)
 
   def withTaskSystem[T](
       config: Config,
@@ -138,41 +144,63 @@ package object tasks extends MacroCalls {
   )(
       f: TaskSystemComponents => IO[T]
   ): IO[Either[ExitCode, T]] =
-    withTaskSystem(Some(config), s3Client, elasticSupport)(f)
+    withTaskSystem(
+      config = Some(config),
+      s3Client = s3Client,
+      elasticSupport = elasticSupport,
+      externalQueueState = Resource.pure(None)
+    )(f)
 
   def withTaskSystem[T](c: Config)(
       f: TaskSystemComponents => IO[T]
   ): IO[Either[ExitCode, T]] =
-    withTaskSystem(Some(c), Resource.pure(None), Resource.pure(None))(f)
+    withTaskSystem(
+      config = Some(c),
+      s3Client = Resource.pure(None),
+      elasticSupport = Resource.pure(None),
+      externalQueueState = Resource.pure(None)
+    )(f)
 
   def withTaskSystem[T](config: Option[Config])(
       f: TaskSystemComponents => IO[T]
   ): IO[Either[ExitCode, T]] =
-    withTaskSystem(config, Resource.pure(None), Resource.pure(None))(f)
+    withTaskSystem(
+      config = config,
+      s3Client = Resource.pure(None),
+      elasticSupport = Resource.pure(None),
+      externalQueueState = Resource.pure(None)
+    )(f)
 
   def withTaskSystem[T](
       config: String,
       s3Client: Resource[IO, Option[S3Client]],
-      elasticSupport: Resource[IO, Option[elastic.ElasticSupport]]
+      elasticSupport: Resource[IO, Option[elastic.ElasticSupport]],
+      externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]]
   )(
       f: TaskSystemComponents => IO[T]
   ): IO[Either[ExitCode, T]] =
     withTaskSystem(
-      Some(ConfigFactory.parseString(config)),
-      s3Client,
-      elasticSupport
+      config = Some(ConfigFactory.parseString(config)),
+      s3Client = s3Client,
+      elasticSupport = elasticSupport,
+      externalQueueState = externalQueueState
     )(f)
 
   def withTaskSystem[T](
       config: Option[Config],
       s3Client: Resource[IO, Option[S3Client]],
-      elasticSupport: Resource[IO, Option[elastic.ElasticSupport]]
+      elasticSupport: Resource[IO, Option[elastic.ElasticSupport]],
+      externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]]
   )(f: TaskSystemComponents => IO[T]): IO[Either[ExitCode, T]] = {
 
     val resource = Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
-      defaultTaskSystem(config, s3Client, elasticSupport, exitCode).map(tsc =>
-        (tsc, exitCode)
-      )
+      defaultTaskSystem(
+        config = config,
+        s3Client = s3Client,
+        elasticSupport = elasticSupport,
+        externalQueueState = externalQueueState,
+        exitCode = exitCode
+      ).map(tsc => (tsc, exitCode))
     }
 
     resource.use { case ((tsc, hostConfig), exitCode) =>
@@ -195,10 +223,11 @@ package object tasks extends MacroCalls {
       : Resource[IO, (TaskSystemComponents, HostConfiguration)] =
     Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
       defaultTaskSystem(
-        None,
-        Resource.pure(None),
-        Resource.pure(None),
-        exitCode
+        config = None,
+        s3Client = Resource.pure(None),
+        elasticSupport = Resource.pure(None),
+        externalQueueState = Resource.pure(None),
+        exitCode = exitCode
       )
     }
 
@@ -209,10 +238,26 @@ package object tasks extends MacroCalls {
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
     Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
       defaultTaskSystem(
-        Some(ConfigFactory.parseString(config)),
-        s3Client,
-        elasticSupport,
-        exitCode
+        config = Some(ConfigFactory.parseString(config)),
+        s3Client = s3Client,
+        elasticSupport = elasticSupport,
+        externalQueueState = Resource.pure(None),
+        exitCode = exitCode
+      )
+    }
+  def defaultTaskSystem(
+      config: String,
+      s3Client: Resource[IO, Option[S3Client]],
+      elasticSupport: Resource[IO, Option[elastic.ElasticSupport]],
+      externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]]
+  ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
+    Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
+      defaultTaskSystem(
+        config = Some(ConfigFactory.parseString(config)),
+        s3Client = s3Client,
+        elasticSupport = elasticSupport,
+        externalQueueState = externalQueueState,
+        exitCode = exitCode
       )
     }
   def defaultTaskSystem(
@@ -220,10 +265,11 @@ package object tasks extends MacroCalls {
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
     Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
       defaultTaskSystem(
-        Some(ConfigFactory.parseString(config)),
-        Resource.pure(None),
-        Resource.pure(None),
-        exitCode
+        config = Some(ConfigFactory.parseString(config)),
+        s3Client = Resource.pure(None),
+        elasticSupport = Resource.pure(None),
+        externalQueueState = Resource.pure(None),
+        exitCode = exitCode
       )
     }
 
@@ -232,10 +278,11 @@ package object tasks extends MacroCalls {
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
     Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
       defaultTaskSystem(
-        config,
-        Resource.pure(None),
-        Resource.pure(None),
-        exitCode
+        config = config,
+        s3Client = Resource.pure(None),
+        elasticSupport = Resource.pure(None),
+        externalQueueState = Resource.pure(None),
+        exitCode = exitCode
       )
     }
 
@@ -250,6 +297,7 @@ package object tasks extends MacroCalls {
       config: Option[Config],
       s3Client: Resource[IO, Option[S3Client]],
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]],
+      externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]],
       exitCode: Deferred[IO, ExitCode]
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] = {
 
@@ -273,6 +321,7 @@ package object tasks extends MacroCalls {
       hostConfig = hostConfig,
       elasticSupport = elasticSupport,
       s3ClientResource = s3Client,
+      externalQueueState = externalQueueState,
       config = tconfig,
       exitCode = exitCode
     )

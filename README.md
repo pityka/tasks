@@ -122,14 +122,6 @@ The worker role:
 
 The worker and application roles may be present in the same process, i.e. an application process can act as a worker and consume its own queue. 
 
-## Ephemeral queue
-The queue is ephemeral. 
-This library provides no solution for any kind of persisted list of submitted tasks.
-
-The queue provides some active features:
-- it monitors whether a worker nodes are alive and if not it requeues the task execution. In case of network partitions a task may be executed more than once. However tasks are pure functions so this should not pose semantic differences.
-- in case of failures, failed tasks may be requeued a limited number of times
-
 ## Management of worker process life cycle
 Worker processes can be spawned and stopped externally, or there is support for a simple demand based scheduling of them via ssh, kubernetes and EC2.
 
@@ -170,12 +162,19 @@ Worker roles are configured with available resources of the same types.
 Resource allocations are enforced, i.e. a task may use more resources than asked for and the library will not do anything about this.
 
 ## Horizontal scaling
-Worker processes are always attached to a single master process. 
-A single master process may distribute work to multiple worker processes. 
-
-Multiple identical master processes can run aside each other if either:
+Multiple identical processes can run aside each other if the `tasks-postgres` module is used to externalize the state and either:
 - the persistent storage is globally accessible (object storage or a file system mounted on each node). If it is a network filesystem, it must provide atomic rename.
 - or the persistent caching is disabled.
+
+## Job queue
+
+### In memory ephemeral queue
+This requires no external dependencies, however the master process is a single point of failure.
+The state is stored on the master process and workers interact with it via network.
+
+### Durable queue in postgres
+The `tasks-postgres` module can connect to a shared database instance. 
+In this mode each process directly connects to the shared transactional state in postgres.
 
 ## Worker only process
 Worker processes may be launched manually or managed by application.
