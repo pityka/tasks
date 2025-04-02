@@ -108,7 +108,7 @@ private[tasks] object Launcher {
           fs2.Stream.fixedRate[IO](20 seconds).evalMap { _ =>
             ref.get.flatMap(state =>
               IO(
-                scribe.info(
+                scribe.debug(
                   s"Available resources: ${state.availableResources} on $address"
                 )
               )

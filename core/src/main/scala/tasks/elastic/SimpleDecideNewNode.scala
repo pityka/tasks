@@ -91,7 +91,7 @@ private[tasks] class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
         .map(x => x._1 -> x._2.size)
       val fulfilled =
         allocatedRequests.groupBy(x => x).map(x => x._1 -> x._2.size)
-      scribe.info(
+      scribe.debug(
         s"Queued resource requests: $need. Requests allocable with current running or pending nodes: $fulfilled. Current nodes: $registeredNodes , pending: $pendingNodes"
       )
       (addMaps(need, fulfilled)(_ - _)).filter(x => x._2 > 0)

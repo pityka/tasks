@@ -378,7 +378,7 @@ object TaskSystemComponents {
 
             val io: IO[Resource[IO, Queue]] = IO {
               if (externalQueueState.isDefined) {
-                scribe.info(
+                scribe.debug(
                   s"Using direct connection to external queue: ${externalQueueState.get}"
                 )
 
@@ -399,7 +399,7 @@ object TaskSystemComponents {
                   }
 
               } else if (hostConfig.isQueue) {
-                scribe.info(
+                scribe.debug(
                   s"Using in memory proxied queue state. Spawning central queue state."
                 )
 
@@ -661,7 +661,7 @@ object TaskSystemComponents {
               !hostConfig.isApp && hostConfig.isWorker && nodeName.isDefined
             ) {
               scribe.info(
-                "This is a worker node. ElasticNodeAllocation is enabled. Notifying remote node registry about this node. Node name: " + nodeName.get + ". Launcher actor address is: " + launcherName
+                "This is a worker node. ElasticNodeAllocation is enabled. Node name: " + nodeName.get + ". Launcher actor address is: " + launcherName
               )
 
               Resource.pure(

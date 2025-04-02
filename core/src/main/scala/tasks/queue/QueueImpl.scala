@@ -258,7 +258,7 @@ private[tasks] class QueueImpl(
       .map(_.knownLaunchers.keySet.toList)
       .flatMap { launcher =>
         IO.parSequenceN(1)(launcher.map { launcher =>
-          IO(scribe.info(s"Query counter $launcher")) *>
+          IO(scribe.debug(s"Query counter $launcher")) *>
             HeartBeatIO.Counter.sideEffectWhenTimeout(
               query = ref.get.map(_.counters.get(launcher).getOrElse(0L)),
               sideEffect = handleLauncherStopped(launcher)
@@ -420,7 +420,7 @@ private[tasks] class QueueImpl(
       )
       val logIO = if (config.logQueueStatus) {
         IO {
-          scribe.info(
+          scribe.debug(
             s"Queued tasks: ${queueStat.queued.size}. Running tasks: ${queueStat.running.size}. Pending nodes: ${state.nodes.pending.size} . Running nodes: ${state.nodes.running.size}. Largest request: ${queueStat.queued
                 .sortBy(_._2.cpu)
                 .lastOption}/${queueStat.queued.sortBy(_._2.memory).lastOption}"
