@@ -229,7 +229,7 @@ lazy val upicklesupport = project
   .settings(
     name := "tasks-upickle",
     libraryDependencies ++= Seq(
-      "com.lihaoyi" %% "upickle" % "1.4.4"
+      "com.lihaoyi" %% "upickle" % "1.6.0"
     )
   )
   .dependsOn(core)
