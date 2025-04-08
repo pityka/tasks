@@ -64,14 +64,16 @@ object Postgres {
         def decodeKey(in: JsonReader): PendingJobId = PendingJobId(
           in.readKeyAsString()
         )
-        def encodeKey(x: PendingJobId, out: JsonWriter): Unit = out.writeKey(x.value)
+        def encodeKey(x: PendingJobId, out: JsonWriter): Unit =
+          out.writeKey(x.value)
       }
     implicit val keyCodec2: JsonKeyCodec[RunningJobId] =
       new JsonKeyCodec[RunningJobId] {
         def decodeKey(in: JsonReader): RunningJobId = RunningJobId(
           in.readKeyAsString()
         )
-        def encodeKey(x: RunningJobId, out: JsonWriter): Unit = out.writeKey(x.value)
+        def encodeKey(x: RunningJobId, out: JsonWriter): Unit =
+          out.writeKey(x.value)
       }
     implicit val codec: JsonValueCodec[SerializableState] = JsonCodecMaker.make
     val emptyStr = writeToString(fromState(State.empty))

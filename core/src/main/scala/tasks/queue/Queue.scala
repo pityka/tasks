@@ -84,11 +84,11 @@ private[tasks] final class QueueFromQueueImpl(
   def knownLaunchers = queueImpl.knownLaunchers.map(_.keySet)
 
   def increment(launcher: LauncherName): IO[Unit] =
-    queueImpl.increment(launcher).attempt.map{
-      case Right(value) =>  ()
+    queueImpl.increment(launcher).attempt.map {
+      case Right(value) => ()
       case Left(value) =>
-          scribe.error("Unexpected failure. Handle error.",value)
-          ()
+        scribe.error("Unexpected failure. Handle error.", value)
+        ()
     }
   def scheduleTask(sch: ScheduleTask): IO[Unit] = queueImpl.scheduleTask(sch)
 
@@ -137,18 +137,21 @@ private[tasks] class QueueWithActor(
     )
 
   def increment(launcher: LauncherName): IO[Unit] =
-    messenger.submit(
-      Message(
-        MessageData.Increment(launcher),
-        from = Address.unknown,
-        to = queueActor.address0
+    messenger
+      .submit(
+        Message(
+          MessageData.Increment(launcher),
+          from = Address.unknown,
+          to = queueActor.address0
+        )
       )
-    ).attempt.map{
-      case Right(value) =>  ()
-      case Left(value) =>
-          scribe.error("Unexpected failure. Handle error.",value)
+      .attempt
+      .map {
+        case Right(value) => ()
+        case Left(value) =>
+          scribe.error("Unexpected failure. Handle error.", value)
           ()
-    }
+      }
   def ack(
       allocated: VersionedResourceAllocated,
       launcher: LauncherName

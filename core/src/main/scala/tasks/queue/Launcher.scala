@@ -252,11 +252,12 @@ private[tasks] object Launcher {
 
         val sideEffect = task
           .start(scheduleTask.input)
-          .attempt.map{
-            case Right(unit) => 
+          .attempt
+          .map {
+            case Right(unit) =>
               unit
             case Left(value) =>
-              scribe.error("Unexpected failure during task execution.",value)
+              scribe.error("Unexpected failure during task execution.", value)
               ()
           }
           .start
@@ -302,7 +303,7 @@ private[tasks] object Launcher {
                   state.copy(waitingForWork = false)
                 }
               case Right(Right(MessageData.Schedule(scheduleTask))) =>
-                ref.flatModifyFull { case  (poll,state) =>
+                ref.flatModifyFull { case (poll, state) =>
                   scribe.debug(s"Received ScheduleWithProxy ")
                   val st0 = state.copy(waitingForWork = false)
                   val (newState, sideEffects) =

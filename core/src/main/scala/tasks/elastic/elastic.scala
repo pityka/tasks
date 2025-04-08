@@ -40,8 +40,6 @@ import tasks.queue.QueueActor
 import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
 
-
-
 trait GetNodeName {
   def getNodeName(config: TasksConfig): IO[RunningJobId]
 }
