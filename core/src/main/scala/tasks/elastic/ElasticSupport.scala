@@ -44,5 +44,4 @@ final class ElasticSupport(
     val getNodeName: GetNodeName
 ) { self =>
 
-
 }

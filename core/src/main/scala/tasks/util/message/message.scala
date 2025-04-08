@@ -76,10 +76,10 @@ object Message {
 
 import tasks.fileservice.FileServicePrefix
 
- case class QueueStat(
-      queued: List[(String, tasks.shared.VersionedResourceRequest)],
-      running: List[(String, tasks.shared.VersionedResourceAllocated)]
-  ) 
+case class QueueStat(
+    queued: List[(String, tasks.shared.VersionedResourceRequest)],
+    running: List[(String, tasks.shared.VersionedResourceAllocated)]
+)
 
 sealed trait MessageData
 private[tasks] object MessageData {
@@ -101,7 +101,7 @@ private[tasks] object MessageData {
       sch: ScheduleTask,
       cause: Throwable
   ) extends MessageData
- 
+
   case class InputData(b64: Base64Data, noCache: Boolean)
   case class ScheduleTask(
       description: HashedTaskDescription,
@@ -124,10 +124,12 @@ private[tasks] object MessageData {
   ) extends MessageData
   case class Schedule(sch: ScheduleTask) extends MessageData
   case class Increment(launcher: LauncherName) extends MessageData
-  case class QueueAck(allocated: VersionedResourceAllocated, launcher: LauncherName)
-      extends MessageData
+  case class QueueAck(
+      allocated: VersionedResourceAllocated,
+      launcher: LauncherName
+  ) extends MessageData
   case object NothingForSchedule extends MessageData
-  
+
   case class MessageFromTask(result: UntypedResult, retrievedFromCache: Boolean)
       extends MessageData
 }
