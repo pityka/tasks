@@ -93,7 +93,7 @@ class CancellationTestSuite extends FunSuite with Matchers {
   scribe.Logger.root
     .clearHandlers()
     .clearModifiers()
-    .withHandler(minimumLevel = Some(scribe.Level.Debug))
+    .withHandler(minimumLevel = Some(scribe.Level.Info))
     .replace()
 
   test("should cancel") {

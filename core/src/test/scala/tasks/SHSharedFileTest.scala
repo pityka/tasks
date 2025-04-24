@@ -189,7 +189,6 @@ object SHResultWithSharedFilesTest extends TestHelpers {
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 5 s
       tasks.worker-main-class = "tasks.TestWorker"
-
       tasks.sh.contexts = [
        {
         context = c1 
@@ -244,7 +243,7 @@ class SHWithSharedFilesTestSuite extends FunSuite with Matchers {
   scribe.Logger.root
     .clearHandlers()
     .clearModifiers()
-    .withHandler(minimumLevel = Some(scribe.Level.Info))
+    .withHandler(minimumLevel = Some(scribe.Level.Debug))
     .replace()
 
   test("task output <: ResultWithSharedFiles should be cached ") {

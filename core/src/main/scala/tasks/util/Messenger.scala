@@ -8,6 +8,7 @@ import cats.effect.kernel.Resource
 import tasks.util.config.TasksConfig
 import tasks.deploy.HostConfiguration
 import tasks.deploy.LocalConfiguration
+import tasks.deploy.RemotingHostConfiguration
 import tasks.util.message._
 import tasks.wire._
 
@@ -22,15 +23,15 @@ private[tasks] object Messenger {
   def make(hostConfig: HostConfiguration): Resource[IO, Messenger] = {
     hostConfig match {
       case _: LocalConfiguration => LocalMessenger.make
-      case _ =>
+      case t: RemotingHostConfiguration =>
         val externalAddress =
-          hostConfig.myAddressExternal.getOrElse(hostConfig.myAddressBind)
-        val internalAddress = hostConfig.myAddressBind
-        val bindPrefix = hostConfig.bindPrefix
+          t.myAddressExternal.getOrElse(t.myAddressBind)
+        val internalAddress = t.myAddressBind
+        val bindPrefix = t.bindPrefix
 
         val peerUri = {
           val str =
-            s"http://${hostConfig.master.hostName}:${hostConfig.master.port}/${hostConfig.masterPrefix}"
+            s"http://${t.master.hostName}:${t.master.port}/${t.masterPrefix}"
           org.http4s.Uri
             .fromString(str)
             .getOrElse(throw new RuntimeException(s"Can't parse $str"))

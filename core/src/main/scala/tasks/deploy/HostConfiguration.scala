@@ -36,9 +36,8 @@ object App extends Role
 object Queue extends Role
 object Worker extends Role
 
-trait HostConfiguration {
-
-  /** address to which we bind the application sometimes called internal address
+trait RemotingHostConfiguration {
+ /** address to which we bind the application sometimes called internal address
     */
   def myAddressBind: SimpleSocketAddress
 
@@ -50,6 +49,15 @@ trait HostConfiguration {
 
   def bindPrefix: String
 
+  def master: SimpleSocketAddress
+
+  def masterPrefix: String
+}
+
+trait HostConfiguration {
+
+ 
+
   def availableCPU: Int
 
   def availableGPU: List[Int]
@@ -60,9 +68,6 @@ trait HostConfiguration {
 
   def image: Option[String]
 
-  def master: SimpleSocketAddress
-
-  def masterPrefix: String
 
   def myRoles: Set[Role]
 
@@ -71,7 +76,7 @@ trait HostConfiguration {
   def isApp = myRoles.contains(App)
 }
 
-trait HostConfigurationFromConfig extends HostConfiguration {
+trait HostConfigurationFromConfig extends HostConfiguration with RemotingHostConfiguration {
 
   implicit def config: ConfigValuesForHostConfiguration
 
@@ -128,17 +133,7 @@ class LocalConfiguration(
 
   def image = Option.empty[String]
 
-  override val myRoles = Set(App, Queue, Worker)
-
-  override val master = SimpleSocketAddress("localhost", 0)
-
-  val masterPrefix = "prefix"
-
-  val bindPrefix = "prefix"
-
-  def myAddress = master
-  def myAddressBind: SimpleSocketAddress = master
-  def myAddressExternal: Option[SimpleSocketAddress] = None
+  override val myRoles = Set(App, Queue, Worker)  
 
 }
 

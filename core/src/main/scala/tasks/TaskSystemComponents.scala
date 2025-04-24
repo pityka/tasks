@@ -105,15 +105,17 @@ object TaskSystemComponents {
 
         }
         .flatMap { elasticSupport =>
-          val masterAddress: tasks.util.SimpleSocketAddress =
-            hostConfig.master
-          val proxyStoragePort = masterAddress.port + 2
+          // val masterAddress: tasks.util.SimpleSocketAddress =
+          //   hostConfig.master
+          def proxyStoragePort(t: RemotingHostConfiguration) = t.master.port + 2
 
-          val packageServerPort = hostConfig.myAddressBind.getPort + 1
+          def packageServerPort(t: RemotingHostConfiguration) =
+            t.myAddressBind.getPort + 1
 
-          val packageServerHostname = hostConfig.myAddressExternal
-            .getOrElse(hostConfig.myAddressBind)
-            .getHostName
+          def packageServerHostname(t: RemotingHostConfiguration) =
+            t.myAddressExternal
+              .getOrElse(t.myAddressBind)
+              .getHostName
 
           val rootHistory = NoHistory
 
@@ -141,13 +143,16 @@ object TaskSystemComponents {
             hostConfig match {
               case _: LocalConfiguration =>
                 scribe.info("Remoting disabled.")
-              case _ =>
+              case t: RemotingHostConfiguration =>
                 scribe
                   .info(
-                    "Listening on: " + hostConfig.myAddressBind.toString + s" prefix: ${hostConfig.bindPrefix}"
+                    "Listening on: " + t.myAddressBind.toString + s" prefix: ${t.bindPrefix}"
                   )
                 scribe.info(
-                  "External address: " + hostConfig.myAddressExternal.toString
+                  "External address: " + t.myAddressExternal.toString
+                )
+                scribe.info(
+                  "Master node address is: " + t.master.toString + s" prefix: ${t.masterPrefix}"
                 )
             }
             scribe.info("CPU: " + hostConfig.availableCPU.toString)
@@ -170,39 +175,42 @@ object TaskSystemComponents {
               )
             }
 
-            scribe.info(
-              "Master node address is: " + hostConfig.master.toString + s" prefix: ${hostConfig.masterPrefix}"
-            )
           })
 
-          val proxyStorageClient: Resource[IO, ManagedFileStorage] = Resource
-            .eval(IO {
-              scribe.info(
-                s"Trying to use main application's http proxy storage on address ${masterAddress.hostName} and port ${proxyStoragePort}"
-              )
-            })
-            .flatMap { _ =>
-              import org.http4s.Uri
+          def proxyStorageClient(
+              t: RemotingHostConfiguration
+          ): Resource[IO, ManagedFileStorage] =
+            Resource
+              .eval(IO {
+                scribe.info(
+                  s"Trying to use main application's http proxy storage on address ${t.master.hostName} and port ${proxyStoragePort(t)}"
+                )
+              })
+              .flatMap { _ =>
+                import org.http4s.Uri
 
-              ProxyFileStorage
-                .makeClient(
-                  uri = org.http4s.Uri(
-                    scheme = Some(Uri.Scheme.http),
-                    authority = Some(
-                      Uri.Authority(
-                        host =
-                          Uri.Host.unsafeFromString(masterAddress.hostName),
-                        port = Some(proxyStoragePort)
+                ProxyFileStorage
+                  .makeClient(
+                    uri = org.http4s.Uri(
+                      scheme = Some(Uri.Scheme.http),
+                      authority = Some(
+                        Uri.Authority(
+                          host = Uri.Host.unsafeFromString(t.master.hostName),
+                          port = Some(proxyStoragePort(t))
+                        )
                       )
                     )
                   )
-                )
-            }
+
+              }
 
           val remoteFileStorage = streamHelper
             .map(streamHelper => new RemoteFileStorage()(streamHelper, config))
 
-          def proxyFileStorageHttpServer(storage: ManagedFileStorage) = {
+          def proxyFileStorageHttpServer(
+              t: RemotingHostConfiguration,
+              storage: ManagedFileStorage
+          ) = {
             Resource
               .eval(IO {
                 scribe.info("Starting http server for proxy file storage")
@@ -212,7 +220,9 @@ object TaskSystemComponents {
                 EmberServerBuilder
                   .default[IO]
                   .withHost(ipv4"0.0.0.0")
-                  .withPort(com.comcast.ip4s.Port.fromInt(proxyStoragePort).get)
+                  .withPort(
+                    com.comcast.ip4s.Port.fromInt(proxyStoragePort(t)).get
+                  )
                   .withHttpApp(ProxyFileStorage.service(storage).orNotFound)
                   .build
                   .evalTap(server =>
@@ -228,11 +238,14 @@ object TaskSystemComponents {
           }
 
           val managedFileStorage = {
-            val fileStore =
+            val fileStore: Resource[IO, ManagedFileStorage] =
               if (
-                (config.storageURI.toString == "" || config.connectToProxyFileServiceOnMain) && !hostConfig.isQueue
+                (config.storageURI.toString == "" || config.connectToProxyFileServiceOnMain) && !hostConfig.isQueue && hostConfig
+                  .isInstanceOf[RemotingHostConfiguration]
               ) {
-                proxyStorageClient
+                proxyStorageClient(
+                  hostConfig.asInstanceOf[RemotingHostConfiguration]
+                )
               } else {
                 val s3bucket =
                   if (
@@ -251,7 +264,7 @@ object TaskSystemComponents {
                   val _ = actorsystem // suppress unused warning
 
                   s3Client.map(s3Client =>
-                    new fileservice.s3.S3Storage(
+                    (new fileservice.s3.S3Storage(
                       bucketName = s3bucket.get._1,
                       folderPrefix = s3bucket.get._2,
                       sse = config.s3ServerSideEncryption,
@@ -259,7 +272,7 @@ object TaskSystemComponents {
                       grantFullControl = config.s3GrantFullControl,
                       uploadParallelism = config.s3UploadParallelism,
                       s3 = s3Client.get
-                    )(config)
+                    )(config))
                   )
                 } else {
                   Resource
@@ -299,11 +312,16 @@ object TaskSystemComponents {
                           scribe.warn(
                             s"Folder $storageFolder does not exists. This is not a master node. Reverting to proxy via main node."
                           )
-                          proxyStorageClient
+                          hostConfig match {
+                            case t: RemotingHostConfiguration =>
+                              proxyStorageClient(t)
+                            case _ => ???
+                          }
+
                         }
                       } else {
                         Resource.pure[IO, ManagedFileStorage](
-                          new FolderFileStorage(storageFolder)(config)
+                          (new FolderFileStorage(storageFolder)(config))
                         )
                       }
                     })
@@ -329,7 +347,11 @@ object TaskSystemComponents {
               .flatMap { fileStore =>
                 fileStore match {
                   case fs: ManagedFileStorage if config.proxyStorage =>
-                    proxyFileStorageHttpServer(fs).map(_ => fs)
+                    hostConfig match {
+                      case t: RemotingHostConfiguration =>
+                        proxyFileStorageHttpServer(t, fs).map(_ => fs)
+                      case _ => Resource.pure(fs)
+                    }
 
                   case fs: ManagedFileStorage => Resource.pure(fs)
                 }
@@ -471,33 +493,40 @@ object TaskSystemComponents {
 
           val codeAddress =
             if (hostConfig.isApp)
-              Some(
+              hostConfig match {
+                case t: RemotingHostConfiguration =>
+                  Some(
+                    elastic.CodeAddress(
+                      SimpleSocketAddress(
+                        packageServerHostname(t),
+                        packageServerPort(t)
+                      ),
+                      config.codeVersion
+                    )
+                  )
+                case _ => None
+              }
+            else None
+
+          def makeCodeAddress(
+              t: RemotingHostConfiguration,
+              server: Option[Server]
+          ): Resource[IO, Option[CodeAddress]] =
+            Resource.eval(IO.pure(server.map { _ =>
+              (
                 elastic.CodeAddress(
                   SimpleSocketAddress(
-                    packageServerHostname,
-                    packageServerPort
+                    packageServerHostname(t),
+                    packageServerPort(t)
                   ),
                   config.codeVersion
                 )
               )
-            else None
 
-          def makeCodeAddress(
-              server: Option[Server]
-          ) = Resource.eval(IO.pure(server.map { _ =>
-            (
-              elastic.CodeAddress(
-                SimpleSocketAddress(
-                  packageServerHostname,
-                  packageServerPort
-                ),
-                config.codeVersion
-              )
-            )
-
-          }))
+            }))
 
           def makePackageServer(
+              t: RemotingHostConfiguration,
               enable: Boolean
           ): Resource[IO, Option[Server]] = Resource
             .eval(IO {
@@ -521,7 +550,7 @@ object TaskSystemComponents {
                       .default[IO]
                       .withHost(ipv4"0.0.0.0")
                       .withPort(
-                        com.comcast.ip4s.Port.fromInt(packageServerPort).get
+                        com.comcast.ip4s.Port.fromInt(packageServerPort(t)).get
                       )
                       .withHttpApp(service.route.orNotFound)
                       .build
@@ -649,7 +678,11 @@ object TaskSystemComponents {
           def makeLauncherName() =
             Resource.pure[IO, LauncherName](
               LauncherName(
-                s"Launcher-${hostConfig.myAddressExternal.getOrElse(hostConfig.myAddressBind).toString}"
+                hostConfig match {
+                  case t: RemotingHostConfiguration =>
+                    s"Launcher-${t.myAddressExternal.getOrElse(t.myAddressBind).toString}"
+                  case _ => s"Launcher"
+                }
               )
             )
 
@@ -693,9 +726,14 @@ object TaskSystemComponents {
             )(_ => IO(scribe.debug("Finished deallocation of TaskSystem")))
             _ <- emitLog
             nodeLocalCache <- nodeLocalCache
-            codeAddress <- makePackageServer(elasticSupport.isDefined).flatMap(
-              makeCodeAddress
-            )
+            codeAddress <- {
+              hostConfig match {
+                case t: RemotingHostConfiguration =>
+                  makePackageServer(t, elasticSupport.isDefined)
+                    .flatMap(x => makeCodeAddress(t, x))
+                case _ => Resource.eval(IO.pure(None))
+              }
+            }
             nodeName <- getNodeName()
             launcherName <- makeLauncherName()
             node <- makeNode(
@@ -716,13 +754,17 @@ object TaskSystemComponents {
                 new SimpleDecideNewNode(codeAddress.codeVersion)(config)
               ),
               createNode = codeAddress.flatMap(codeAddress =>
-                elasticSupport.map(
-                  _.createNodeFactory.apply(
-                    masterAddress = hostConfig.master,
-                    masterPrefix = hostConfig.masterPrefix,
-                    codeAddress = codeAddress
-                  )
-                )
+                hostConfig match {
+                  case t: RemotingHostConfiguration =>
+                    elasticSupport.map(
+                      _.createNodeFactory.apply(
+                        masterAddress = t.master,
+                        masterPrefix = t.masterPrefix,
+                        codeAddress = codeAddress
+                      )
+                    )
+                  case _ => None
+                }
               ),
               unmanagedResource = ResourceAvailable.empty,
               shutdownSelf = elasticSupport.map(_.shutdownFromWorker),
