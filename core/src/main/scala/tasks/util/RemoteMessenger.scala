@@ -179,6 +179,7 @@ private[tasks] object RemoteMessenger {
           com.comcast.ip4s.Port.fromInt(bindPort).get
         )
         .withHttpApp(r.orNotFound)
+        .withShutdownTimeout(scala.concurrent.duration.Duration.Zero)
         .build
       val client = EmberClientBuilder
         .default[IO]

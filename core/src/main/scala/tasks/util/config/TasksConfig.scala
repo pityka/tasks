@@ -134,8 +134,6 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   def skipContentHashCreationUponImport =
     raw.getBoolean("tasks.skipContentHashCreationUponImport")
 
-  val acceptableHeartbeatPause: FD =
-    raw.getDuration("tasks.failuredetector.acceptable-heartbeat-pause")
 
   val storageURI =
     new java.net.URI(raw.getString("tasks.fileservice.storageURI"))

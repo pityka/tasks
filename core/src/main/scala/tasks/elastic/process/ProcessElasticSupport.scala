@@ -342,34 +342,52 @@ private final class ProcessCreateNode(
           val cmd: List[String] =
             spawnProcessCommand(context, allocated, script)
 
-          scribe.info(s"Exec $cmd")
-          IO.interruptible(
-            scala.sys.process.Process
-              .apply(
-                cmd
-              )
-              .!!
-              .trim
-          ).flatMap { processId =>
-            scribe.info(s"Got process id: $processId")
-            nodeNamesToContainerIds
-              .update { map =>
-                map.updated(nodeName, ProcessId(processId))
-              }
-              .map(_ =>
-                (
-                  PendingJobId(context + ":" + processId),
-                  ResourceAvailable(
-                    cpu = allocated.cpu,
-                    memory = allocated.memory,
-                    scratch = allocated.scratch,
-                    gpu = allocated.gpu,
-                    image = requestSize.image
+          scribe.debug(s"Exec $cmd")
+          fs2.io.process.ProcessBuilder
+            .apply(cmd.head, cmd.drop(1))
+            .spawn[IO]
+            .flatMap { process =>
+              val stdout = process.stdout
+                .through(fs2.text.utf8.decode)
+                .compile
+                .fold("")(_ + _)
+              val stderr = process.stderr
+                .through(fs2.text.utf8.decode)
+                .compile
+                .fold("")(_ + _)
+              val exitcode = process.exitValue
+
+              Resource.eval(IO.both(stdout, stderr).both(exitcode).map {
+                case ((stdout, stderr), exitcode) =>
+                  if (exitcode != 0) {
+                    scribe.error(
+                      s"Failed to spawn process $exitcode $stderr $stdout"
+                    )
+                    ???
+                  } else stdout.trim
+              })
+
+            }
+            .use { processId =>
+              scribe.info(s"Got process id: $processId")
+              nodeNamesToContainerIds
+                .update { map =>
+                  map.updated(nodeName, ProcessId(processId))
+                }
+                .map(_ =>
+                  (
+                    PendingJobId(context + ":" + processId),
+                    ResourceAvailable(
+                      cpu = allocated.cpu,
+                      memory = allocated.memory,
+                      scratch = allocated.scratch,
+                      gpu = allocated.gpu,
+                      image = requestSize.image
+                    )
                   )
                 )
-              )
-          }
 
+            }
       }
       .attempt
       .map { either =>

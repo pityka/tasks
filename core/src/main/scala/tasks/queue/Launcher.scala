@@ -311,9 +311,7 @@ private[tasks] object Launcher {
                       val st1 = st0
                       val (allocated, st2, io1) = launch(st1, scheduleTask, ref)
                       val io2 = poll(queue.ack(allocated, address))
-                      val io3 =
-                        askForWork(ref, messenger, address, queue)
-                      (st2, io1 *> io2 *> io3)
+                      (st2, io1 *> io2)
                     } else (st0, IO.unit)
                   newState -> sideEffects
                 }
