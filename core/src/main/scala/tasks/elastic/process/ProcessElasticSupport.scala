@@ -392,7 +392,7 @@ private final class ProcessCreateNode(
       .attempt
       .map { either =>
         either.left.map { e =>
-          scribe.error("Failed node request", e)
+          scribe.debug("Failed node request", e)
           e.getMessage
         }
       }

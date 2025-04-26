@@ -349,7 +349,7 @@ private[tasks] class QueueImpl(
 
   def scheduleTask(sch: ScheduleTask): IO[Unit] = {
     val scheduleIO = ref.flatModify { state =>
-      scribe.debug("Received ScheduleTask.")
+      scribe.debug(s"Received ScheduleTask from ${sch.proxy}.")
       val proxy = Proxy(sch.proxy)
 
       if (state.queuedButSentByADifferentProxy(sch, proxy)) {
@@ -467,8 +467,8 @@ private[tasks] class QueueImpl(
                       .flatMap {
                         case Left(e) =>
                           IO(
-                            scribe.warn(
-                              "Request failed: " + e + " " + e
+                            scribe.debug( // could be normal, at acapacity
+                              "Request failed: " + e 
                             )
                           ) *>
                             ref.update(
