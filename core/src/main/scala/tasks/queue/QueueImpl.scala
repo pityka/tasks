@@ -203,8 +203,8 @@ object QueueImpl {
       unmanagedResource: tasks.shared.ResourceAvailable
   )(implicit
       config: TasksConfig
-  ) = Resource.make(Ref.of[IO, QueueImpl.State](QueueImpl.State.empty).flatMap {
-    ref =>
+  ) = Resource.make(
+    Ref.of[IO, QueueImpl.State](QueueImpl.State.empty).flatMap { ref =>
       Ref.of[IO, List[FiberIO[Unit]]](Nil).flatMap { ref2 =>
         val q = new QueueImpl(
           ref = Transaction.fromRef(ref),
@@ -218,7 +218,8 @@ object QueueImpl {
         )
         q.startCounterLoops.map(_ => q)
       }
-  })(_.release)
+    }
+  )(_.release)
 }
 
 private[tasks] class QueueImpl(
@@ -234,19 +235,21 @@ private[tasks] class QueueImpl(
   import QueueImpl._
 
   def initFailed(n: RunningJobId): IO[Unit] = {
-    val handleFailureIO  = createNode match {
-    case None => IO.unit
-    case Some(value) =>
-      value.convertRunningToPending(n).flatMap {
-        case Some(pending) =>
-          ref.update(_.update(NodeEvent(NodeRegistryState.InitFailed(pending))))
-        case None =>
-          IO.unit
-      }
-  }
+    val handleFailureIO = createNode match {
+      case None => IO.unit
+      case Some(value) =>
+        value.convertRunningToPending(n).flatMap {
+          case Some(pending) =>
+            ref.update(
+              _.update(NodeEvent(NodeRegistryState.InitFailed(pending)))
+            )
+          case None =>
+            IO.unit
+        }
+    }
 
-  handleFailureIO *> handleQueueStatIO
-}
+    handleFailureIO *> handleQueueStatIO
+  }
 
   def increment(launcher: LauncherName): IO[Unit] =
     ref.update(_.update(Incremented(launcher)))
@@ -567,8 +570,9 @@ private[tasks] class QueueImpl(
     val askIO = ref.flatModify { state =>
       if (state.negotiation.isEmpty) {
         scribe.debug(
-          s"AskForWork $availableResource ${state.negotiation} ${state.queuedTasks.map { case (_, (sch, _)) =>
-              (sch.description.taskId, sch.resource)
+          s"AskForWork $availableResource ${state.negotiation} ${state.queuedTasks.map {
+              case (_, (sch, _)) =>
+                (sch.description.taskId, sch.resource)
             }.toSeq}"
         )
 
@@ -652,47 +656,46 @@ private[tasks] class QueueImpl(
       resourceAllocated: ResourceAllocated
   ): IO[Unit] = {
     val taskSuccessIO = ref.flatModify { state =>
-    scribe.debug(s"TaskDone $sch $resultWithMetadata")
-    if (state.queuedTasks.contains(project(sch))) {
-      scribe.error(
-        s"Should not be queued. ${state.queuedTasks(project(sch))}"
-      )
-    }
-    val io = IO
-      .parSequenceN(1)(
-        state.scheduledTasks
-          .get(project(sch))
-          .toList
-          .flatMap { case (_, _, proxies, _) =>
-            proxies.toList.map { pr =>
-              messenger.submit(
-                Message(
-                  MessageData.MessageFromTask(
-                    resultWithMetadata.untypedResult,
-                    retrievedFromCache = false
-                  ),
-                  from = Address.unknown,
-                  to = pr.address
+      scribe.debug(s"TaskDone $sch $resultWithMetadata")
+      if (state.queuedTasks.contains(project(sch))) {
+        scribe.error(
+          s"Should not be queued. ${state.queuedTasks(project(sch))}"
+        )
+      }
+      val io = IO
+        .parSequenceN(1)(
+          state.scheduledTasks
+            .get(project(sch))
+            .toList
+            .flatMap { case (_, _, proxies, _) =>
+              proxies.toList.map { pr =>
+                messenger.submit(
+                  Message(
+                    MessageData.MessageFromTask(
+                      resultWithMetadata.untypedResult,
+                      retrievedFromCache = false
+                    ),
+                    from = Address.unknown,
+                    to = pr.address
+                  )
                 )
-              )
+
+              }
 
             }
+            .toList
+        )
+        .void
 
-          }
-          .toList
-      )
-      .void
-
-    state.update(
-      TaskDone(sch, resultWithMetadata, elapsedTime, resourceAllocated)
-    ) -> io
+      state.update(
+        TaskDone(sch, resultWithMetadata, elapsedTime, resourceAllocated)
+      ) -> io
+    }
+    taskSuccessIO *> handleQueueStatIO
   }
-  taskSuccessIO *> handleQueueStatIO
-}
 
-  def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit] =
-    {
-      val taskFailedIO = ref.flatModify { state =>
+  def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit] = {
+    val taskFailedIO = ref.flatModify { state =>
       val (updated, sideEffects) = state.scheduledTasks
         .get(project(sch))
         .foldLeft((state, List.empty[IO[Unit]])) {

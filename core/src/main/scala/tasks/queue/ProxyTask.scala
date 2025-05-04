@@ -64,7 +64,7 @@ private[tasks] class ProxyTask[Input, Output](
     lineage: TaskLineage,
     noCache: Boolean,
     messenger: Messenger
-) extends tasks.util.Actor.ActorBehavior[ Proxy](messenger) {
+) extends tasks.util.Actor.ActorBehavior[Proxy](messenger) {
   val address: Address = Address(
     s"ProxyTask-$taskId-${input.hashCode()}-${scala.util.Random.alphanumeric.take(256).mkString}"
   )
@@ -121,7 +121,6 @@ private[tasks] class ProxyTask[Input, Output](
   }
 
   override def schedulers(
-      
       stopQueue: Actor.StopQueue
   ): Option[IO[fs2.Stream[IO, Unit]]] = Some(IO {
     (fs2.Stream.unit ++ fs2.Stream.never[IO]).evalMap(_ =>
@@ -152,7 +151,7 @@ private[tasks] class ProxyTask[Input, Output](
             error,
             s"MessageFromTask received not from cache and failed to decode: ${from}, $untypedOutput, $error. Execution failed."
           )
-           notifyListenersOnFailure(
+          notifyListenersOnFailure(
             new RuntimeException(error)
           ) *> stopProcessingMessages(stopQueue)
       }

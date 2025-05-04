@@ -155,8 +155,6 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   def maxNodesCumulative = raw.getInt("tasks.elastic.maxNodesCumulative")
 
-  
-
   def jvmMaxHeapFactor = raw.getDouble("tasks.elastic.jvmMaxHeapFactor")
 
   def logQueueStatus = raw.getBoolean("tasks.elastic.logQueueStatus")
@@ -207,7 +205,9 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   def folderFileStorageCompleteFileCheck =
     raw.getBoolean("tasks.fileservice.folderFileStorageCompleteFileCheck")
 
-  def pendingNodeTimeout = scala.jdk.DurationConverters.JavaDurationOps(raw.getDuration("tasks.elastic.pendingNodeTimeout")).toScala
+  def pendingNodeTimeout = scala.jdk.DurationConverters
+    .JavaDurationOps(raw.getDuration("tasks.elastic.pendingNodeTimeout"))
+    .toScala
 
   val checkTempFolderOnWorkerInitialization =
     raw.getBoolean("tasks.elastic.checktempfolder")

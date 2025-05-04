@@ -49,7 +49,7 @@ import cats.effect.kernel.Deferred
 private[tasks] object NodeRegistryState {
 
   sealed trait Event
-  case object AllStop extends Event 
+  case object AllStop extends Event
   case object NodeRequested extends Event
   case class NodeIsPending(
       pendingJobId: PendingJobId,
