@@ -133,7 +133,7 @@ lazy val core = project
       "org.http4s" %% "http4s-ember-client" % http4sVersion,
       "org.http4s" %% "http4s-ember-server" % http4sVersion,
       "org.http4s" %% "http4s-dsl" % http4sVersion,
-      "org.ekrich" %% "sconfig" % "1.8.1",
+      "org.ekrich" %% "sconfig" % "1.9.1",
       "org.typelevel" %% "cats-effect" % "3.6.1",
       "io.github.pityka" %% "selfpackage" % "2.1.6",
       "org.scalatest" %% "scalatest" % "3.2.19" % "test",
