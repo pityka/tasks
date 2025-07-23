@@ -142,6 +142,10 @@ case class ResourceAvailable(
     val allocatedCPU = math.min(cpu, r.cpu._2)
     val allocatedScratch = math.min(scratch, r.scratch)
     val allocatedGpu = gpu.take(r.gpu)
+    assert(allocatedMemory >= r.memory)
+    assert(allocatedCPU >= r.cpu._1)
+    assert(allocatedScratch >= r.scratch)
+    assert(allocatedGpu.size >= r.gpu)
     ResourceAllocated(
       allocatedCPU,
       allocatedMemory,
