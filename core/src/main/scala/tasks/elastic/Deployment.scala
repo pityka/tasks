@@ -94,7 +94,7 @@ object Deployment {
         .replace(
           "{RAM}",
           math
-            .max(1, (memory.toDouble * config.jvmMaxHeapFactor).toInt)
+            .max(1000, (memory.toDouble * config.jvmMaxHeapFactor).toInt)
             .toString
         )
         .replace("{EXTRA}", config.additionalJavaCommandline)
@@ -105,7 +105,7 @@ object Deployment {
         .replace("{STORAGE}", config.storageURI.toString)
 
     val runPackage =
-      if (background) s"""(nohup $edited 1> stdout 2> stderr & echo $$!;) """
+      if (background) s"""(nohup $edited > stdstreams & echo $$!;) """
       else s"$edited ;"
 
     s"""$downloadScript && $runPackage"""
