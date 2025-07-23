@@ -318,10 +318,10 @@ private[tasks] class QueueImpl(
     val message = a.message
     val proxy = a.sender
     val sch = a.sch
-    scribe.debug("Cache answered.")
+    scribe.debug(s"Cache answered ${a.sch.description}.")
     val cacheIO = message match {
       case Right(Some(result)) => {
-        scribe.debug("Replying with a Result found in cache.")
+        scribe.debug(s"Replying with a Result found in cache ${a.sch.description}.")
         ref.flatModify { state =>
           state.update(CacheHit(sch, result)) ->
             messenger.submit(
@@ -335,11 +335,11 @@ private[tasks] class QueueImpl(
         }
       }
       case Right(None) => {
-        scribe.debug("Task is not found in cache. Enqueue. ")
+        scribe.debug(s"Task is not found in cache. Enqueue. ${a.sch.description}")
         ref.update(_.update(Enqueued(sch, List(proxy))))
       }
       case Left(_) => {
-        scribe.debug("Task is not found in cache. Enqueue. ")
+        scribe.debug(s"Task is not found in cache. Enqueue. ${a.sch.description.taskId}")
         ref.update(_.update(Enqueued(sch, List(proxy))))
       }
 
@@ -349,7 +349,7 @@ private[tasks] class QueueImpl(
 
   def scheduleTask(sch: ScheduleTask): IO[Unit] = {
     val scheduleIO = ref.flatModify { state =>
-      scribe.debug(s"Received ScheduleTask from ${sch.proxy}.")
+      scribe.debug(s"Received ScheduleTask from ${sch.proxy} ${sch.description} ${sch.resource} .")
       val proxy = Proxy(sch.proxy)
 
       if (state.queuedButSentByADifferentProxy(sch, proxy)) {
@@ -546,8 +546,13 @@ private[tasks] class QueueImpl(
           "Launcher stopped during negotiation phase. Automatic recovery from this is not implemented. The scheduler is deadlocked and it should be restarted."
         )
       }
-      val updated2 = updated.update(LauncherCrashed(launcher))
       val node = state.knownLaunchers.get(launcher).flatten
+      val updated2 = 
+        {
+          val st1 = updated.update(LauncherCrashed(launcher))
+          node.fold(st1)(n => st1.update(NodeEvent(NodeRegistryState.NodeIsDown(n))))
+        }
+        
       val shutdown = node
         .flatMap { node =>
           shutdownNode.map { shutdownNode =>
@@ -566,8 +571,9 @@ private[tasks] class QueueImpl(
 
     val askIO = ref.flatModify { state =>
       if (state.negotiation.isEmpty) {
+        val num = scala.util.Random.nextLong()
         scribe.debug(
-          s"AskForWork $availableResource ${state.negotiation} ${state.queuedTasks.map { case (_, (sch, _)) =>
+          s"AskForWork $num from $launcher $node $availableResource ${state.negotiation} ${state.queuedTasks.map { case (_, (sch, _)) =>
               (sch.description.taskId, sch.resource)
             }.toSeq}"
         )
@@ -579,7 +585,7 @@ private[tasks] class QueueImpl(
             val ret = availableResource.canFulfillRequest(sch.resource)
             if (!ret && (maxPrio == Int.MinValue || sch.priority.s > maxPrio)) {
               scribe.debug(
-                s"Can't fulfill request ${sch.resource} with available resources $availableResource or lower priority than an already selected task"
+                s"Can't fulfill $num request ${sch.resource} with available resources $availableResource or lower priority than an already selected task"
               )
             } else {
               maxPrio = sch.priority.s
@@ -590,12 +596,13 @@ private[tasks] class QueueImpl(
 
         selected match {
           case None =>
+            scribe.debug(s"Found no suitable task $num ${state.queuedTasks}")
             state -> IO.pure(Left(MessageData.NothingForSchedule))
 
           case Some(sch) =>
             val withNegotiation = state.update(Negotiating(launcher, sch))
             scribe.debug(
-              s"Dequeued task ${sch.description.taskId.id} ${sch.description.dataHash} with priority ${sch.priority}. Sending task to $launcher. (Negotation state of queue: ${state.negotiation})"
+              s"Dequeued task $num ${sch.description.taskId.id} ${sch.description.dataHash} with priority ${sch.priority}. Sending task to $launcher. (Negotation state of queue: ${state.negotiation})"
             )
 
             val (newState, io1) =
@@ -618,6 +625,7 @@ private[tasks] class QueueImpl(
         }
 
       } else {
+        scribe.debug(s"AskForWork but queue in negotiation. From $launcher $node $availableResource")
         state -> IO.pure(Left(MessageData.NothingForSchedule))
       }
     }

@@ -44,7 +44,7 @@ object TestWorker {
   scribe.Logger.root
     .clearHandlers()
     .clearModifiers()
-    .withHandler(minimumLevel = Some(scribe.Level.Info))
+    .withHandler(minimumLevel = Some(scribe.Level.Trace),outputFormat = scribe.output.format.ASCIIOutputFormat)
     .replace()
 
   def main(args: Array[String]): Unit = {

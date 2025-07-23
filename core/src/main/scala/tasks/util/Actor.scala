@@ -75,7 +75,7 @@ private[tasks] object Actor {
             .onFinalize(IO(scribe.debug(s"Stream terminated of $address")))
             .compile
             .drain
-            .start
+            .start.flatTap(_ => IO(scribe.debug(s"Streams of actor $address started.")))
         }
 
       Resource

@@ -13,14 +13,14 @@ object LocalShellElasticSupport {
     val contexts = raw.getConfigList("tasks.sh.contexts").asScala.toList
   }
 
-  private object SSHShutdownCommand extends RemoteShutdownCommand {
+  private object SHShutdownCommand extends RemoteShutdownCommand {
     def apply(contextName: String, processId: ProcessId): List[String] =
       List(
         "kill",
         processId.s
       )
   }
-  private class SSHSpawnProcessCommand(config: PConfig)
+  private class SHSpawnProcessCommand(config: PConfig)
       extends SpawnProcessCommand {
     val background = true
     override def apply(
@@ -41,8 +41,8 @@ object LocalShellElasticSupport {
       val c = new PConfig(config)
       ProcessElasticSupport.make(
         processConfig = c,
-        shutdownCommand = SSHShutdownCommand,
-        spawnProcessCommand = new SSHSpawnProcessCommand(c)
+        shutdownCommand = SHShutdownCommand,
+        spawnProcessCommand = new SHSpawnProcessCommand(c)
       )
     }
   }

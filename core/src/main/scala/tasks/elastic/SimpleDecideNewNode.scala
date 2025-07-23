@@ -64,9 +64,9 @@ private[tasks] class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
           if (transformed.isDefined)
             (prefix ::: (transformed.get :: suffix.tail))
           else {
-            scribe.debug(
-              "More resources running than available??"
-            )
+            // scribe.debug(
+            //   "More resources running than available??"
+            // )
             available
           }
       }
@@ -91,9 +91,9 @@ private[tasks] class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
         .map(x => x._1 -> x._2.size)
       val fulfilled =
         allocatedRequests.groupBy(x => x).map(x => x._1 -> x._2.size)
-      scribe.debug(
-        s"Queued resource requests: $need. Requests allocable with current running or pending nodes: $fulfilled. Current nodes: $registeredNodes , pending: $pendingNodes"
-      )
+      // scribe.debug(
+      //   s"Queued resource requests: $need. Requests allocable with current running or pending nodes: $fulfilled. Current nodes: $registeredNodes , pending: $pendingNodes"
+      // )
       (addMaps(need, fulfilled)(_ - _)).filter(x => x._2 > 0)
 
     }

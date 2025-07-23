@@ -210,7 +210,7 @@ private[tasks] object Launcher {
           ref: Ref[IO, State]
       ) = {
 
-        scribe.debug("Launch method")
+        
 
         val allocatedResource =
           state.availableResources.maximum(scheduleTask.resource)
@@ -224,6 +224,8 @@ private[tasks] object Launcher {
               scheduleTask.description.taskId.id
             )
           else scheduleTask.fileServicePrefix
+
+        scribe.debug(s"Launch on ${handle} id:${scheduleTask.description} allocated:${allocatedResource} requested:${scheduleTask.resource} proxy:${scheduleTask.proxy} fileprefix:${filePrefix}")
 
         val task: Task =
           new Task(
@@ -303,7 +305,7 @@ private[tasks] object Launcher {
                 }
               case Right(Right(MessageData.Schedule(scheduleTask))) =>
                 ref.flatModifyFull { case  (poll,state) =>
-                  scribe.debug(s"Received ScheduleWithProxy ")
+                  scribe.debug(s"Received ScheduleWithProxy ${scheduleTask.description} ")
                   val st0 = state.copy(waitingForWork = false)
                   val (newState, sideEffects) =
                     if (!st0.denyWorkBeforeShutdown) {

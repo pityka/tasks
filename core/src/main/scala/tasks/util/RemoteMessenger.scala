@@ -25,12 +25,14 @@ private[tasks] class RemoteMessenger(
 
   def listeningAddress = Some(listeningUri.toString)
   def submit(message: Message): IO[Unit] =
-    localMessenger.channels.get.flatMap { channel =>
-      channel.get(message.to.withoutUri) match {
+    localMessenger.channels.get.flatMap { channels =>
+      channels.get(message.to.withoutUri) match {
         case None =>
+          val messageWithRemoteUri =RemoteMessenger.addUri(message, listeningUri)
+          scribe.debug(s"Submitting message to remote messenger ${message.data.getClass()}. Local channel not found with channel message key ${message.to.withoutUri}. Submit message ${messageWithRemoteUri.to} to peer $peerUri")
           RemoteMessenger
             .submit0(
-              message = RemoteMessenger.addUri(message, listeningUri),
+              message = messageWithRemoteUri,
               client = client,
               peerUri = peerUri
             )
@@ -108,10 +110,8 @@ private[tasks] object RemoteMessenger {
       client: Client[IO],
       peerUri: org.http4s.Uri
   ) = {
-    val request =
-      Request[IO](
-        method = Method.POST,
-        uri = message.to.listeningUri
+    val num = scala.util.Random.nextLong()
+    val effectiveUri = message.to.listeningUri
           .map(s =>
             org.http4s.Uri
               .fromString(s)
@@ -119,21 +119,26 @@ private[tasks] object RemoteMessenger {
               .getOrElse(throw new RuntimeException(s"Can't parse $s"))
           )
           .getOrElse(peerUri)
+    val request =
+      Request[IO](
+        method = Method.POST,
+        uri = effectiveUri
       ).withEntity(
         message
       )
+    
     IO(
       scribe.trace(
-        s"Submit via http $peerUri ${message.from} ${message.to} ${message.data.getClass()}"
+        s"Submit via http $num $effectiveUri (uri in message ${message.to.listeningUri}) ${message.from} ${message.to} ${message.data.getClass()}"
       )
     ) *>
       client.expect[String](request).attempt.flatMap {
         case Right(result) =>
-          IO(scribe.trace(s"Http response: $result")).map(_ => result)
+          IO(scribe.trace(s"Http response $num: $result")).map(_ => result)
         case Left(e) =>
           IO(
             scribe.error(
-              s"Http request failed. $request. ${e.getMessage} ${message.from} ${message.to} ${message.data.getClass()}"
+              s"Http request failed $num. $request. ${e.getMessage} ${message.from} ${message.to} ${message.data.getClass()}"
             )
           ) *> IO.pure("")
       }

@@ -139,7 +139,7 @@ private object ProcessSettings {
         Host.fromConfig(config)
 
       }.toList
-    scribe.info(s"Available contexts: $hosts")
+    scribe.info(s"Available contexts: $hosts ${config.contexts}")
 
     Ref.of[IO, List[Host]](hosts).map { r =>
       new ProcessSettings(r, config)
@@ -154,7 +154,7 @@ private class ProcessSettings(
 ) {
   import ProcessSettings._
 
-  def allocate(h: ResourceRequest) = hosts.modify { hosts =>
+  def allocate(h: ResourceRequest) = hosts.modify { hosts =>    
     hosts.find(_.resourceAvailable.canFulfillRequest(h)) match {
       case None => (hosts, None)
       case Some(value) =>
@@ -349,10 +349,12 @@ private final class ProcessCreateNode(
             .flatMap { process =>
               val stdout = process.stdout
                 .through(fs2.text.utf8.decode)
+                .map(x => {scribe.info(x);x})
                 .compile
                 .fold("")(_ + _)
               val stderr = process.stderr
                 .through(fs2.text.utf8.decode)
+                .map(x => {scribe.info(x);x})
                 .compile
                 .fold("")(_ + _)
               val exitcode = process.exitValue
