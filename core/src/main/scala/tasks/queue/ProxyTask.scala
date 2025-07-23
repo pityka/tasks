@@ -67,7 +67,7 @@ private[tasks] class ProxyTask[Input, Output](
 ) extends tasks.util.Actor.ActorBehavior[ Proxy](messenger) {
   val address: Address = Address(
     s"ProxyTask-$taskId-${input.hashCode()}-${scala.util.Random.alphanumeric.take(256).mkString}"
-  )
+  ).withAddress(messenger.listeningAddress)
   def derive(): Proxy = Proxy(address)
 
   private def distributeResult(result: Output) = {
