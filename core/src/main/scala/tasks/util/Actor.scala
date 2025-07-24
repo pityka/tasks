@@ -72,16 +72,19 @@ private[tasks] object Actor {
         IO.both(messageStream, schedulerStream).flatMap { case (a, b) =>
           (a.mergeHaltBoth(b))
             .mergeHaltBoth(stopStream)
-            .onFinalize(IO(scribe.debug(s"Stream terminated of $address")))
+            .onFinalize(IO(scribe.debug(s"Stream terminated", address)))
             .compile
             .drain
-            .start.flatTap(_ => IO(scribe.debug(s"Streams of actor $address started.")))
+            .start
+            .flatTap(_ =>
+              IO(scribe.debug(s"Streams of actor started.", address))
+            )
         }
 
       Resource
         .make(streamFiber)(fiber =>
           fiber.cancel *> IO(
-            scribe.debug(s"Streams of actor $address canceled.")
+            scribe.debug(s"Streams of actor canceled.", address)
           )
         )
         .map { _ =>

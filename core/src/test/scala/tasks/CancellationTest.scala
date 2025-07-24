@@ -38,12 +38,12 @@ import cats.effect.kernel.Resource
 object CancellationTest extends TestHelpers {
 
   val cancelled = new java.util.concurrent.atomic.AtomicBoolean(false)
-  val start = cats.effect.Deferred[IO,Boolean].unsafeRunSync()
+  val start = cats.effect.Deferred[IO, Boolean].unsafeRunSync()
 
   val testTask = Task[Input, Int]("cancellationtest", 1) { _ => _ =>
     scribe.info("Hello from task")
     start.complete(true) *>
-    IO.never.onCancel(IO.blocking(cancelled.set(true))).map(_ => 1)
+      IO.never.onCancel(IO.blocking(cancelled.set(true))).map(_ => 1)
   }
 
   val testConfig2 = {
@@ -62,28 +62,31 @@ object CancellationTest extends TestHelpers {
   }
 
   def run = {
-    JvmGrid.make(None).use{ case (nodeControl,es) =>
-    val io = withTaskSystem(
-      testConfig2,
-      Resource.pure(None),
-       Resource.pure(Some(es))){ implicit ts =>
-      import scala.concurrent.ExecutionContext.Implicits.global
+    JvmGrid.make(None).use { case (nodeControl, es) =>
+      val io = withTaskSystem(
+        testConfig2,
+        Resource.pure(None),
+        Resource.pure(Some(es))
+      ) { implicit ts =>
+        import scala.concurrent.ExecutionContext.Implicits.global
 
-      val f1 = testTask(Input(1))(ResourceRequest(1, 500))
+        val f1 = testTask(Input(1))(ResourceRequest(1, 500))
 
-      val f2 = f1.flatMap(_ => testTask(Input(2))(ResourceRequest(1, 500)))
-      val f3 = testTask(Input(3))(ResourceRequest(1, 500))
-      val future = for {
-        t1 <- f1
-      } yield t1
+        val f2 = f1.flatMap(_ => testTask(Input(2))(ResourceRequest(1, 500)))
+        val f3 = testTask(Input(3))(ResourceRequest(1, 500))
+        val future = for {
+          t1 <- f1
+        } yield t1
 
-      (future)
+        (future)
 
+      }
+      import scala.concurrent.duration._
+      io.start
+        .flatMap(fiber => start.get *> fiber.cancel)
+        .flatMap(_ => nodeControl.list)
     }
-    import scala.concurrent.duration._
-    io.start.flatMap(fiber => start.get *>  fiber.cancel).flatMap(_ => nodeControl.list)
-  }
-  
+
   }
 
 }
@@ -97,7 +100,7 @@ class CancellationTestSuite extends FunSuite with Matchers {
     .replace()
 
   test("should cancel") {
-    
+
     assert(CancellationTest.run.unsafeRunSync() == Nil)
     assert(CancellationTest.cancelled.get == true)
 

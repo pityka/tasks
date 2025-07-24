@@ -31,6 +31,7 @@ import tasks.wire._
 import tasks.util.config.TasksConfig
 import cats.effect.IO
 import tasks.util.message.MessageData.ScheduleTask
+import tasks.util.CorrelationId
 
 private[tasks] case class AnswerFromCache(
     message: Either[String, Option[UntypedResult]],
@@ -61,7 +62,7 @@ private[tasks] class TaskResultCache(
       cacheMap
         .get(scheduleTask.description)(queryFileServicePrefix)
         .handleError { case e =>
-          scribe.error(e, "Error while looking up in cache")
+          scribe.error(e, "Error while looking up in cache", scheduleTask)
           None
         }
 
@@ -70,7 +71,8 @@ private[tasks] class TaskResultCache(
       answer <- cacheLookup match {
         case None =>
           scribe.debug(
-            s"Checking: $taskId ${scheduleTask.description.dataHash}. Not found in cache."
+            s"Checking. Not found in cache.",
+            scheduleTask
           )
           IO.pure(
             AnswerFromCache(
@@ -81,14 +83,17 @@ private[tasks] class TaskResultCache(
           )
         case _ if !config.verifySharedFileInCache =>
           scribe.debug(
-            s"Checking: $taskId ${scheduleTask.description.dataHash}. Got something (not verified)."
+            s"Checking. Got something (not verified).",
+            scheduleTask
           )
           IO.pure(
             AnswerFromCache(Right(cacheLookup), originalSender, scheduleTask)
           )
         case Some(cacheLookup) =>
           scribe.debug(
-            s"Checking: $taskId ${scheduleTask.description.dataHash}. Got something $cacheLookup, verifying.."
+            s"Checking. Got something, verifying..",
+            scheduleTask,
+            cacheLookup
           )
           val files = cacheLookup.files.toSeq.map(sf => (sf, true))
           val mutableFiles =
@@ -102,7 +107,10 @@ private[tasks] class TaskResultCache(
             .map(seq => (seq, seq.forall(identity)))
             .handleError { case e =>
               scribe.warn(
-                s"Checking: $taskId ${scheduleTask.description.dataHash}. Got something ($cacheLookup), but failed to verify after cache with error: $e."
+                s"Checking. Got something, but failed to verify after cache with error.",
+                scheduleTask,
+                e,
+                cacheLookup
               )
               (Nil, false)
             }
@@ -111,8 +119,10 @@ private[tasks] class TaskResultCache(
                 val inaccessibleFiles =
                   (files zip accessibility).filterNot(_._2)
                 scribe.warn(
-                  s"Checking: $taskId ${scheduleTask.description.dataHash}. Got something ($cacheLookup), but failed to verify after cache. Inaccessible files: ${inaccessibleFiles.size} : ${inaccessibleFiles
-                      .mkString(", ")}"
+                  s"Checking. Got something, but failed to verify after cache. Inaccessible files: ${inaccessibleFiles.size} : ${inaccessibleFiles
+                      .mkString(", ")}",
+                  scheduleTask,
+                  cacheLookup
                 )
                 AnswerFromCache(
                   Left("TaskNotFoundInCache"),
@@ -121,7 +131,8 @@ private[tasks] class TaskResultCache(
                 )
               case (_, true) =>
                 scribe.debug(
-                  s"Checking: $taskId ${scheduleTask.description.dataHash}d. Got something (verified)."
+                  s"Checking. Got something (verified).",
+                  scheduleTask
                 )
                 AnswerFromCache(
                   Right(Some(cacheLookup)),
@@ -134,7 +145,7 @@ private[tasks] class TaskResultCache(
     } yield answer
     answer.onError { case e: Exception =>
       IO {
-        scribe.error(e, "Cache check failed")
+        scribe.error(e, "Cache check failed", scheduleTask)
       }
     }
 
@@ -144,7 +155,8 @@ private[tasks] class TaskResultCache(
       result: UntypedResult,
       prefixFromTask: FileServicePrefix
   ): IO[Unit] = {
-    scribe.debug(s"SavingResult: ${sch.taskId} ${sch.dataHash}")
+    val corr = CorrelationId.make
+    scribe.debug(s"SavingResult.", sch, result, prefixFromTask, corr)
 
     val prefix = config.cachePath match {
       case None => prefixFromTask
@@ -155,7 +167,16 @@ private[tasks] class TaskResultCache(
       .set(sch, result)(prefix)
       .void
       .handleError { case e =>
-        IO { scribe.error(e, "Error while saving into cache") }
+        IO {
+          scribe.error(
+            e,
+            "Error while saving into cache",
+            sch,
+            result,
+            prefix,
+            corr
+          )
+        }
       }
   }
 }

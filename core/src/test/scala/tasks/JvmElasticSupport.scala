@@ -156,7 +156,8 @@ object JvmElasticSupport {
   }
 
   object JvmGetNodeName extends GetNodeName {
-    def getNodeName(config: TasksConfig) = IO.pure(RunningJobId(config.nodeName))
+    def getNodeName(config: TasksConfig) =
+      IO.pure(RunningJobId(config.nodeName))
   }
 
   class JvmNodeControl(

@@ -42,7 +42,4 @@ final class ElasticSupport(
     val shutdownFromWorker: ShutdownSelfNode,
     val createNodeFactory: CreateNodeFactory,
     val getNodeName: GetNodeName
-) { self =>
-
-
-}
+) { self => }

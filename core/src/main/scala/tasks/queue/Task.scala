@@ -103,6 +103,16 @@ final case class UntypedResultWithMetadata(
 )
 
 object UntypedResultWithMetadata {
+  implicit def toLogFeature(rm: UntypedResultWithMetadata): scribe.LogFeature =
+    scribe.data(
+      Map(
+        "result-started" -> rm.metadata.started,
+        "result-ended" -> rm.metadata.ended,
+        "result-nocache" -> rm.noCache,
+        "result-data-files" -> rm.untypedResult.files
+      )
+    )
+
   implicit val codec: JsonValueCodec[UntypedResultWithMetadata] =
     JsonCodecMaker.make(
       CodecMakerConfig
@@ -112,6 +122,12 @@ object UntypedResultWithMetadata {
 }
 
 private[tasks] object UntypedResult {
+
+  implicit def toLogFeature(rm: UntypedResult): scribe.LogFeature = scribe.data(
+    Map(
+      "result-data-files" -> rm.files
+    )
+  )
 
   private def immutableFiles(r: Any): Set[SharedFile] =
     HasSharedFiles.recurse(r)(_.immutableFiles).toSet
@@ -212,7 +228,18 @@ private[tasks] class Task(
   ) =
     program.attempt.flatMap {
       case Right((result, dependencies)) =>
-        scribe.debug("Task success. ")
+        scribe.debug(
+          "TaskSuccess",
+          result,
+          taskHash,
+          scribe.data("start-time", startTimeStamp),
+          scribe.data("no-cache", noCache),
+          scribe.data(
+            "explain",
+            "Task execution succeeded. Sending result to launcher."
+          ),
+          launcherActor.address
+        )
         val endTimeStamp = Instant.now
         launcherActor.internalMessageFromTask(
           this,
@@ -262,7 +289,10 @@ private[tasks] class Task(
       )
 
       scribe.debug(
-        s"Starting task with computation environment $ce and with input data $input."
+        s"StartingTask",
+        taskHash,
+        launcherActor.address,
+        fileServicePrefix
       )
 
       IO.unit.flatMap { _ =>
@@ -307,8 +337,16 @@ private[tasks] class Task(
           case Right(value) => value
           case Left(error) =>
             val logMessage =
-              s"Could not deserialize input. Error: $error. Raw data (as utf8): ${new String(Base64DataHelpers.toBytes(j))}"
-            scribe.error(logMessage)
+              s"Could not deserialize input. Error: $error. Raw data (as utf8): ${}"
+            scribe.error(
+              "DeserializationFailure",
+              scribe.data(
+                Map(
+                  "error" -> error,
+                  "raw-data" -> new String(Base64DataHelpers.toBytes(j))
+                )
+              )
+            )
             throw new RuntimeException(logMessage)
         }
         (w, deserialized)

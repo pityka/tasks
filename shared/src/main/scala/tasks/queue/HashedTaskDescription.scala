@@ -17,6 +17,13 @@ case class HashedTaskDescription(taskId: TaskId, dataHash: String) {
 }
 
 object HashedTaskDescription {
+  implicit def toLogFeature(rm: HashedTaskDescription): scribe.LogFeature =
+    scribe.data(
+      Map(
+        "hashed-taskdescription-task-id" -> s"${rm.taskId.id}.${rm.taskId.version}",
+        "hashed-taskdescription-data-hash" -> rm.dataHash
+      )
+    )
   implicit val codec: JsonValueCodec[HashedTaskDescription] =
     JsonCodecMaker.make
 

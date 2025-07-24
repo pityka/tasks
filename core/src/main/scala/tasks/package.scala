@@ -106,7 +106,7 @@ package object tasks extends MacroCalls {
   ): FileServiceComponent =
     component.fs
 
-  def releaseResourcesEarly(implicit comp: ComputationEnvironment) : IO[Unit] =
+  def releaseResourcesEarly(implicit comp: ComputationEnvironment): IO[Unit] =
     comp.launcher.release(comp.taskActor)
 
   implicit def ts(implicit

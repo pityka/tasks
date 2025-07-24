@@ -10,8 +10,28 @@ case class Node(
     size: tasks.shared.ResourceAvailable,
     launcherActor: LauncherName
 )
+object Node {
+  implicit def toLogFeature(rm: Node): scribe.LogFeature = scribe.data(
+    Map(
+      "node-name" -> rm.name.value,
+      "node-launcher-name" -> rm.launcherActor.name,
+      "node-available-cpu" -> rm.size.cpu,
+      "node-available-memory" -> rm.size.memory,
+      "node-available-gpu" -> rm.size.gpu.mkString(","),
+      "node-available-scratch" -> rm.size.scratch,
+      "node-available-image" -> rm.size.image.getOrElse("none")
+    )
+  )
+}
 
 case class LauncherName(name: String)
+object LauncherName {
+  implicit def toLogFeature(rm: LauncherName): scribe.LogFeature = scribe.data(
+    Map(
+      "launcher-name" -> rm.name
+    )
+  )
+}
 
 case class Address(value: String, listeningUri: Option[String]) {
   private[util] def withoutUri = Address(value, None)
@@ -27,12 +47,28 @@ case class Address(value: String, listeningUri: Option[String]) {
   override def hashCode(): Int = value.hashCode()
 }
 object Address {
+  implicit def toLogFeature(rm: Address): scribe.LogFeature = scribe.data(
+    Map(
+      "address-name" -> rm.value,
+      "address-listening-uri" -> rm.listeningUri.getOrElse("none")
+    )
+  )
   val unknown = Address("unknown", None)
   def apply(value: String): Address = Address(value, None)
 }
 
 case class Message(data: MessageData, from: Address, to: Address)
 object Message {
+
+  implicit def toLogFeature(m: Message): scribe.LogFeature = scribe.data(
+    Map(
+      "from-uri" -> m.from.listeningUri.getOrElse("none"),
+      "from-name" -> m.from.value,
+      "to-uri" -> m.to.listeningUri.getOrElse("none"),
+      "to-name" -> m.to.value,
+      "data-class" -> m.data.getClass().getCanonicalName()
+    )
+  )
 
   implicit val throwableCodec: JsonValueCodec[Throwable] = {
     type DTO = (String, List[(String, String, String, Int)])
@@ -76,10 +112,10 @@ object Message {
 
 import tasks.fileservice.FileServicePrefix
 
- case class QueueStat(
-      queued: List[(String, tasks.shared.VersionedResourceRequest)],
-      running: List[(String, tasks.shared.VersionedResourceAllocated)]
-  ) 
+case class QueueStat(
+    queued: List[(String, tasks.shared.VersionedResourceRequest)],
+    running: List[(String, tasks.shared.VersionedResourceAllocated)]
+)
 
 sealed trait MessageData
 private[tasks] object MessageData {
@@ -101,7 +137,7 @@ private[tasks] object MessageData {
       sch: ScheduleTask,
       cause: Throwable
   ) extends MessageData
- 
+
   case class InputData(b64: Base64Data, noCache: Boolean)
   case class ScheduleTask(
       description: HashedTaskDescription,
@@ -117,6 +153,22 @@ private[tasks] object MessageData {
       lineage: TaskLineage,
       proxy: Address
   ) extends MessageData
+  object ScheduleTask {
+    implicit def toLogFeature(rm: ScheduleTask): scribe.LogFeature =
+      scribe.data(
+        Map(
+          "sch-descr" -> s"${rm.description.taskId.id}.${rm.description.taskId.version}",
+          "sch-resource-request-cpu" -> s"${rm.resource.cpuMemoryRequest.cpu}",
+          "sch-resource-request-memory" -> s"${rm.resource.cpuMemoryRequest.memory}",
+          "sch-resource-request-gpu" -> s"${rm.resource.cpuMemoryRequest.gpu}",
+          "sch-resource-request-scratch" -> s"${rm.resource.cpuMemoryRequest.scratch}",
+          "sch-resource-request-image" -> s"${rm.resource.cpuMemoryRequest.image}",
+          "sch-input-hash" -> s"${rm.description.dataHash}",
+          "proxy-name" -> rm.proxy.value,
+          "proxy-uri" -> rm.proxy.listeningUri.getOrElse("none")
+        )
+      )
+  }
   case class InitFailed(nodename: RunningJobId) extends MessageData
   case class TaskFailedMessageToQueue(
       sch: ScheduleTask,
@@ -124,10 +176,12 @@ private[tasks] object MessageData {
   ) extends MessageData
   case class Schedule(sch: ScheduleTask) extends MessageData
   case class Increment(launcher: LauncherName) extends MessageData
-  case class QueueAck(allocated: VersionedResourceAllocated, launcher: LauncherName)
-      extends MessageData
+  case class QueueAck(
+      allocated: VersionedResourceAllocated,
+      launcher: LauncherName
+  ) extends MessageData
   case object NothingForSchedule extends MessageData
-  
+
   case class MessageFromTask(result: UntypedResult, retrievedFromCache: Boolean)
       extends MessageData
 }

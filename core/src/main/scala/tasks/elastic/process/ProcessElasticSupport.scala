@@ -154,7 +154,7 @@ private class ProcessSettings(
 ) {
   import ProcessSettings._
 
-  def allocate(h: ResourceRequest) = hosts.modify { hosts =>    
+  def allocate(h: ResourceRequest) = hosts.modify { hosts =>
     hosts.find(_.resourceAvailable.canFulfillRequest(h)) match {
       case None => (hosts, None)
       case Some(value) =>
@@ -198,7 +198,7 @@ private object ShutdownFromWorker extends ShutdownSelfNode {
       nodeName: RunningJobId
   ): IO[Unit] = {
     IO {
-      scribe.info("Shut down current process with System.exit")
+      scribe.info("Shut down current process with System.exit", nodeName)
     } *> exitCode.complete(ExitCode(0)).map((_: Boolean) => ())
 
   }
@@ -225,7 +225,8 @@ private class ProcessShutdownFromRegistry(
         case None =>
           IO(
             scribe.error(
-              s"Process id not found for runnig job id $nodeName can't shut it down"
+              s"Process id not found for runnig job id can't shut it down",
+              nodeName
             )
           )
         case Some(processId) =>
@@ -295,7 +296,7 @@ private final class ProcessCreateNode(
             PendingJobId(s"$contextName:${processId.s}")
           ) match {
           case None =>
-            scribe.error(s"Found no nodename $nodeName in $map")
+            scribe.error(s"Found no nodename in $map", nodeName)
             None
           case Some(value) =>
             Some(value)
@@ -342,28 +343,40 @@ private final class ProcessCreateNode(
           val cmd: List[String] =
             spawnProcessCommand(context, allocated, script)
 
-          scribe.debug(s"Exec $cmd")
+          scribe.debug(
+            s"Exec",
+            scribe.data("exec-list", cmd.mkString("['", "','", "']")),
+            scribe.data("explain","command to spawn new process")
+          )
           fs2.io.process.ProcessBuilder
             .apply(cmd.head, cmd.drop(1))
             .spawn[IO]
             .flatMap { process =>
               val stdout = process.stdout
                 .through(fs2.text.utf8.decode)
-                .map(x => {scribe.info(x);x})
                 .compile
                 .fold("")(_ + _)
               val stderr = process.stderr
                 .through(fs2.text.utf8.decode)
-                .map(x => {scribe.info(x);x})
                 .compile
                 .fold("")(_ + _)
-              val exitcode = process.exitValue
+              val exitcode = process.exitValue.timeout(
+                scala.concurrent.duration.Duration
+                  .apply(60, scala.concurrent.duration.SECONDS)
+              )
 
               Resource.eval(IO.both(stdout, stderr).both(exitcode).map {
                 case ((stdout, stderr), exitcode) =>
                   if (exitcode != 0) {
                     scribe.error(
-                      s"Failed to spawn process $exitcode $stderr $stdout"
+                      s"Failed to spawn process",
+                      scribe.data(
+                        Map(
+                          "exit-code" -> exitcode,
+                          "stderr" -> stderr,
+                          "stdout" -> stdout
+                        )
+                      )
                     )
                     ???
                   } else stdout.trim
@@ -371,7 +384,13 @@ private final class ProcessCreateNode(
 
             }
             .use { processId =>
-              scribe.info(s"Got process id: $processId")
+              scribe.info(
+                s"ProcessId",
+                scribe.data("process-id", processId),
+                scribe.data("explain", "PID of spawned process"),
+                nodeName,
+                requestSize
+              )
               nodeNamesToContainerIds
                 .update { map =>
                   map.updated(nodeName, ProcessId(processId))

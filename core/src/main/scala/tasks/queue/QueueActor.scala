@@ -91,20 +91,20 @@ private[tasks] final class QueueActorBehavior(
     messenger: Messenger,
     cache: TaskResultCache
 )(implicit config: TasksConfig)
-    extends ActorBehavior[ QueueActor](messenger) {
+    extends ActorBehavior[QueueActor](messenger) {
   val address: Address = QueueActor.singletonAddress
-  
+
   def derive(): QueueActor = QueueActor(address)
 
-  def receive = ( _) => {
+  def receive = (_) => {
     case Message(sch: ScheduleTask, _, _) =>
       impl.scheduleTask(sch)
 
     case Message(MessageData.Increment(launcher), _, _) =>
       impl.increment(launcher)
-   
+
     case Message(MessageData.InitFailed(n), _, _) =>
-       impl.initFailed(n)
+      impl.initFailed(n)
 
     case Message(
           MessageData.AskForWork(availableResource, launcher, node),
@@ -159,8 +159,6 @@ private[tasks] final class QueueActorBehavior(
       messenger.submit(
         Message(MessageData.Ping, from = address, to = from)
       )
-
-  
 
   }
 

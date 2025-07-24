@@ -387,7 +387,8 @@ private[tasks] class FolderFileStorage(val basePath: File)(implicit
       .flatMap { hash =>
         IO.blocking((file.length(), assemblePath(managed).canRead)).flatMap {
           case (size, canRead) =>
-            scribe.debug(s"Importing file $file under name $proposed")
+            scribe
+              .debug(s"Importing file $file under name proposed name", proposed)
 
             if (canRead) {
               val finalFile = assemblePath(managed)

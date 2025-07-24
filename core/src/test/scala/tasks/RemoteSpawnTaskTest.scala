@@ -70,10 +70,10 @@ object RemoteSpawnTaskTest {
           case 1 => IO.pure(FibOut(1))
           case n => {
             val f1 = child(FibInput(Some(n - 1), Some(false :: tag)))(
-              ResourceRequest(cpu=(1,1),memory=1,gpu=1,scratch=0)
+              ResourceRequest(cpu = (1, 1), memory = 1, gpu = 1, scratch = 0)
             )
             val f2 = child(FibInput(Some(n - 2), Some(true :: tag)))(
-              ResourceRequest(cpu=(1,1),memory=1,gpu=1,scratch=0)
+              ResourceRequest(cpu = (1, 1), memory = 1, gpu = 1, scratch = 0)
             )
             for {
               _ <- releaseResourcesEarly
@@ -119,22 +119,22 @@ class RemoteSpawnTaskTestSuite
     with BeforeAndAfterAll
     with TestHelpers {
 
-       scribe.Logger.root
+  scribe.Logger.root
     .clearHandlers()
     .clearModifiers()
-    .withHandler(minimumLevel = Some(scribe.Level.Trace), outputFormat = scribe.output.format.ASCIIOutputFormat)
-    
+    .withHandler(
+      minimumLevel = Some(scribe.Level.Trace),
+      outputFormat = scribe.output.format.ASCIIOutputFormat
+    )
     .replace()
 
-    // scribe.debug("BOOO")
+  // scribe.debug("BOOO")
 
-    
+  val testConfig2 = {
+    val tmp = tasks.util.TempFile.createTempFile(".temp")
+    tmp.delete()
 
-   val testConfig2 = {    
-        val tmp = tasks.util.TempFile.createTempFile(".temp")
-        tmp.delete()
-
-      s"""
+    s"""
       
 tasks.cache.enabled = false
 tasks.disableRemoting = false
@@ -153,21 +153,29 @@ tasks.sh.contexts = [
   }  
 ]
       """
-    
+
   }
-import scala.sys.process._
-    println("pwd".!!)
-  val pair = defaultTaskSystem(testConfig2,
-      Resource.pure(None),
-      Resource
-        .eval(LocalShellElasticSupport.make(Some(ConfigFactory.parseString(testConfig2))))
-        .map(Some(_))).allocated.unsafeRunSync()
+  import scala.sys.process._
+  println("pwd".!!)
+  val pair = defaultTaskSystem(
+    testConfig2,
+    Resource.pure(None),
+    Resource
+      .eval(
+        LocalShellElasticSupport.make(
+          Some(ConfigFactory.parseString(testConfig2))
+        )
+      )
+      .map(Some(_))
+  ).allocated.unsafeRunSync()
   implicit val system: TaskSystemComponents = pair._1._1
   import RemoteSpawnTaskTest._
 
   test("task from parent on remote node") {
     val n = 4
-    val r = (parent(FibInput(n))(ResourceRequest(cpu=(1,1),memory=1,gpu=1,scratch=0))).unsafeRunSync().n
+    val r = (parent(FibInput(n))(
+      ResourceRequest(cpu = (1, 1), memory = 1, gpu = 1, scratch = 0)
+    )).unsafeRunSync().n
     assertResult(r)(6)
   }
 

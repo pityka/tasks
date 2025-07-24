@@ -39,6 +39,19 @@ case class ResourceRequest(
 
 object ResourceRequest {
 
+   implicit def toLogFeature(rm: ResourceRequest): scribe.LogFeature =
+    scribe.data(
+      Map(
+        "resource-request-cpu" -> rm.cpu,
+        "resource-request-memory" -> rm.memory,
+        "resource-request-gpu" -> rm.gpu,
+        "resource-request-scratch" -> rm.scratch,
+        "resource-request-image" -> rm.image.getOrElse(
+          "none"
+        )
+      )
+    )
+
   def apply(cpu: Int, memory: Int, scratch: Int, gpu: Int): ResourceRequest =
     ResourceRequest((cpu, cpu), memory, scratch, gpu, None)
 
@@ -158,7 +171,17 @@ case class ResourceAvailable(
 }
 
 object ResourceAvailable {
-  val empty = ResourceAvailable(0,0,0,Nil,None)
+  implicit def toLogFeature(rm: ResourceAvailable): scribe.LogFeature =
+    scribe.data(
+      Map(
+        "available-resource-cpu" -> rm.cpu,
+        "available-resource-memory" -> rm.memory,
+        "available-resource-gpu" -> rm.gpu.mkString(","),
+        "available-resource-scratch" -> rm.scratch,
+        "available-resource-image" -> rm.image.getOrElse("none")
+      )
+    )
+  val empty = ResourceAvailable(0, 0, 0, Nil, None)
   private[tasks] def zipMultiplicities(l: List[Int]) =
     l.sorted.foldLeft(List.empty[(Int, Int)]) { case (acc, next) =>
       acc match {
@@ -208,6 +231,18 @@ case class VersionedResourceAllocated(
 }
 
 object VersionedResourceAllocated {
+  implicit def toLogFeature(rm: VersionedResourceAllocated): scribe.LogFeature =
+    scribe.data(
+      Map(
+        "allocated-resource-cpu" -> rm.cpuMemoryAllocated.cpu,
+        "allocated-resource-memory" -> rm.cpuMemoryAllocated.memory,
+        "allocated-resource-gpu" -> rm.cpuMemoryAllocated.gpu.mkString(","),
+        "allocated-resource-scratch" -> rm.cpuMemoryAllocated.scratch,
+        "allocated-resource-image" -> rm.cpuMemoryAllocated.image.getOrElse(
+          "none"
+        )
+      )
+    )
   implicit val codec: JsonValueCodec[VersionedResourceAllocated] =
     JsonCodecMaker.make
 }
@@ -248,6 +283,18 @@ case class VersionedResourceAvailable(
 }
 
 object VersionedResourceAvailable {
+  implicit def toLogFeature(rm: VersionedResourceAvailable): scribe.LogFeature =
+    scribe.data(
+      Map(
+        "available-resource-cpu" -> rm.cpuMemoryAvailable.cpu,
+        "available-resource-memory" -> rm.cpuMemoryAvailable.memory,
+        "available-resource-gpu" -> rm.cpuMemoryAvailable.gpu.mkString(","),
+        "available-resource-scratch" -> rm.cpuMemoryAvailable.scratch,
+        "available-resource-image" -> rm.cpuMemoryAvailable.image.getOrElse(
+          "none"
+        )
+      )
+    )
   implicit val codec: JsonValueCodec[VersionedResourceAvailable] =
     JsonCodecMaker.make
 }
@@ -255,6 +302,11 @@ object VersionedResourceAvailable {
 case class RunningJobId(value: String)
 
 object RunningJobId {
+  implicit def toLogFeature(rm: RunningJobId): scribe.LogFeature = scribe.data(
+    Map(
+      "running-job-id" -> rm.value
+    )
+  )
   implicit val codec: JsonValueCodec[RunningJobId] =
     JsonCodecMaker.make
 }
@@ -262,6 +314,11 @@ object RunningJobId {
 case class PendingJobId(value: String)
 
 object PendingJobId {
+  implicit def toLogFeature(rm: PendingJobId): scribe.LogFeature = scribe.data(
+    Map(
+      "pending-job-id" -> rm.value
+    )
+  )
   implicit val codec: JsonValueCodec[PendingJobId] =
     JsonCodecMaker.make
 }

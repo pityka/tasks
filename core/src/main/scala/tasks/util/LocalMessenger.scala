@@ -40,7 +40,8 @@ private[tasks] class LocalMessenger(
         case None =>
           IO.delay {
             scribe.error(
-              s"Delivery address not found message from ${message.from} to ${message.to}. Message dropped. ${message.data} . Available channels: ${channel.keySet.toList.sortBy(_.toString)}"
+              s"Delivery address not found. Message dropped. ${message.data} . Available channels: ${channel.keySet.toList.sortBy(_.toString)}",
+              message
             )
           }
         case Some(channel) =>
@@ -49,9 +50,11 @@ private[tasks] class LocalMessenger(
               value
             case Left(_) =>
               scribe.warn(
-                s"Channel to ${message.to} was closed. Message dropped. ${message.data}"
+                s"Channel of receiver was closed. Message dropped. ${message.data}",
+                message
               )
           }
       }
     }
+
 }

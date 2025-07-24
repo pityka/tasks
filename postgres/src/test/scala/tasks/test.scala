@@ -160,12 +160,12 @@ class PostgresSuite extends FunSuite with Matchers {
             Ref.of[IO, Int](0).flatMap { ref =>
               val io1 = tx1.flatModify(old =>
                 old.update(
-                  QueueImpl.LauncherJoined(LauncherName(("AAA")),None)
+                  QueueImpl.LauncherJoined(LauncherName(("AAA")), None)
                 ) -> ref.update(_ + 1)
               )
               val io2 = tx2.flatModify(old =>
                 old.update(
-                  QueueImpl.LauncherJoined(LauncherName(("BBB")),None)
+                  QueueImpl.LauncherJoined(LauncherName(("BBB")), None)
                 ) -> ref.update(_ + 1)
               )
               io1.both(io2) *> ref.get.map(a => assert(a == 2))

@@ -37,6 +37,12 @@ case class FileServicePrefix(list: Vector[String]) {
     ProposedManagedFilePath(list :+ name)
 }
 object FileServicePrefix {
+  implicit def toLogFeature(rm: FileServicePrefix): scribe.LogFeature =
+    scribe.data(
+      Map(
+        "fileprefix" -> rm.list.mkString("/")
+      )
+    )
   implicit val codec: JsonValueCodec[FileServicePrefix] = JsonCodecMaker.make
 
 }
@@ -47,6 +53,12 @@ case class ProposedManagedFilePath(list: Vector[String]) {
 }
 
 object ProposedManagedFilePath {
+  implicit def toLogFeature(rm: ProposedManagedFilePath): scribe.LogFeature =
+    scribe.data(
+      Map(
+        "proposed-managed-file-path-uri" -> rm.list.mkString("/")
+      )
+    )
   implicit val codec: JsonValueCodec[ProposedManagedFilePath] =
     JsonCodecMaker.make
 }

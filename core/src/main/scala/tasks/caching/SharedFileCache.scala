@@ -59,7 +59,10 @@ private[tasks] class SharedFileCache(implicit
       .flatMap {
         case None =>
           scribe.debug(
-            s"Not found $prefix $fileName for $hashedTaskDescription"
+            s"Not found",
+            prefix,
+            hashedTaskDescription,
+            scribe.data("filename", fileName)
           )
           IO.pure(None)
         case Some(sf) =>
@@ -74,7 +77,8 @@ private[tasks] class SharedFileCache(implicit
             .handleError { case e =>
               scribe.error(
                 e,
-                s"Failed to locate cached result file: $fileName"
+                s"Failed to locate cached result file.",
+                scribe.data("filename", fileName)
               )
               None
             }
@@ -101,7 +105,9 @@ private[tasks] class SharedFileCache(implicit
           )
         _ <- IO(
           scribe.debug(
-            s"Saved ${hashedTaskDescription.taskId} ${hashedTaskDescription.dataHash} to ${p.list.mkString("/")}/$fname"
+            s"Saved. ",
+            scribe.data("filename", s"${p.list.mkString("/")}/$fname"),
+            hashedTaskDescription
           )
         )
 

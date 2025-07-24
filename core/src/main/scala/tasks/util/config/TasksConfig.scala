@@ -134,7 +134,6 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   def skipContentHashCreationUponImport =
     raw.getBoolean("tasks.skipContentHashCreationUponImport")
 
-
   val storageURI =
     new java.net.URI(raw.getString("tasks.fileservice.storageURI"))
 
@@ -154,8 +153,6 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   def maxPendingNodes = raw.getInt("tasks.elastic.maxPending")
 
   def maxNodesCumulative = raw.getInt("tasks.elastic.maxNodesCumulative")
-
-  
 
   def jvmMaxHeapFactor = raw.getDouble("tasks.elastic.jvmMaxHeapFactor")
 
@@ -207,7 +204,9 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   def folderFileStorageCompleteFileCheck =
     raw.getBoolean("tasks.fileservice.folderFileStorageCompleteFileCheck")
 
-  def pendingNodeTimeout = scala.jdk.DurationConverters.JavaDurationOps(raw.getDuration("tasks.elastic.pendingNodeTimeout")).toScala
+  def pendingNodeTimeout = scala.jdk.DurationConverters
+    .JavaDurationOps(raw.getDuration("tasks.elastic.pendingNodeTimeout"))
+    .toScala
 
   val checkTempFolderOnWorkerInitialization =
     raw.getBoolean("tasks.elastic.checktempfolder")

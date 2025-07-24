@@ -55,6 +55,14 @@ case class RemoteFilePath(uri: Uri) extends FilePath {
   override def toString = uri.toString
   def name = uri.path.toString.split("/").filter(_.size > 0).last
 }
+object RemoteFilePath {
+  implicit def toLogFeature(rm: RemoteFilePath): scribe.LogFeature =
+    scribe.data(
+      Map(
+        "remote-file-path-uri" -> rm.uri
+      )
+    )
+}
 
 case class SharedFile(
     path: FilePath,

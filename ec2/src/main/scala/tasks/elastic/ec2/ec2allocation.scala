@@ -256,7 +256,9 @@ class EC2CreateNodeFactory(
 
 object EC2GetNodeName extends GetNodeName {
   def getNodeName(config: TasksConfig) =
-    IO.interruptible(RunningJobId(EC2Operations.readMetadata("instance-id").head))
+    IO.interruptible(
+      RunningJobId(EC2Operations.readMetadata("instance-id").head)
+    )
 }
 
 class EC2Config(val raw: Config) extends ConfigValuesForHostConfiguration {

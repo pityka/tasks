@@ -26,6 +26,8 @@ import tasks.elastic.ShutdownNode
 import tasks.elastic.DecideNewNode
 import tasks.elastic.CreateNode
 import tasks.shared.RunningJobId
+import tasks.util.CorrelationId
+import scribe.LogFeature
 
 object QueueImpl {
 
@@ -234,19 +236,21 @@ private[tasks] class QueueImpl(
   import QueueImpl._
 
   def initFailed(n: RunningJobId): IO[Unit] = {
-    val handleFailureIO  = createNode match {
-    case None => IO.unit
-    case Some(value) =>
-      value.convertRunningToPending(n).flatMap {
-        case Some(pending) =>
-          ref.update(_.update(NodeEvent(NodeRegistryState.InitFailed(pending))))
-        case None =>
-          IO.unit
-      }
-  }
+    val handleFailureIO = createNode match {
+      case None => IO.unit
+      case Some(value) =>
+        value.convertRunningToPending(n).flatMap {
+          case Some(pending) =>
+            ref.update(
+              _.update(NodeEvent(NodeRegistryState.InitFailed(pending)))
+            )
+          case None =>
+            IO.unit
+        }
+    }
 
-  handleFailureIO *> handleQueueStatIO
-}
+    handleFailureIO *> handleQueueStatIO
+  }
 
   def increment(launcher: LauncherName): IO[Unit] =
     ref.update(_.update(Incremented(launcher)))
@@ -258,7 +262,16 @@ private[tasks] class QueueImpl(
       .map(_.knownLaunchers.keySet.toList)
       .flatMap { launcher =>
         IO.parSequenceN(1)(launcher.map { launcher =>
-          IO(scribe.debug(s"Query counter $launcher")) *>
+          IO(
+            scribe.debug(
+              s"Query counter",
+              launcher,
+              scribe.data(
+                "explain",
+                "if the request times out then we assume the launcher is stopped"
+              )
+            )
+          ) *>
             HeartBeatIO.Counter.sideEffectWhenTimeout(
               query = ref.get.map(_.counters.get(launcher).getOrElse(0L)),
               sideEffect = handleLauncherStopped(launcher)
@@ -284,7 +297,8 @@ private[tasks] class QueueImpl(
     val stopFibers = fiberList.get.flatMap { fibers =>
       IO(
         scribe.debug(
-          s"Releasing resources held by TasksQueue: ${fibers.size} fibers"
+          s"Releasing resources held by TasksQueue.",
+          scribe.data("fiber-count", fibers.size)
         )
       ) *> IO.parSequenceN(1)(fibers.map(_.cancel)).void
     }
@@ -295,11 +309,12 @@ private[tasks] class QueueImpl(
           val shutdown = IO
             .parSequenceN(1)(
               (st.nodes.running.map { case (node, _) =>
-                scribe.info("Shutting down node " + node)
+                scribe.info("Shutting down running node ", node)
                 shutdownNode.shutdownRunningNode(node)
 
               } ++
                 st.nodes.pending.map { case (node, _) =>
+                  scribe.info("Shutting down pending node ", node)
                   shutdownNode.shutdownPendingNode(node)
 
                 }).toList
@@ -318,10 +333,17 @@ private[tasks] class QueueImpl(
     val message = a.message
     val proxy = a.sender
     val sch = a.sch
-    scribe.debug(s"Cache answered ${a.sch.description}.")
+    val num = CorrelationId.make
+    scribe.debug(s"Cache answered.", sch, num, proxy.address)
     val cacheIO = message match {
       case Right(Some(result)) => {
-        scribe.debug(s"Replying with a Result found in cache ${a.sch.description}.")
+        scribe.debug(
+          s"Result found.",
+          sch,
+          num,
+          proxy.address,
+          scribe.data("explain", "replying with result found in cache")
+        )
         ref.flatModify { state =>
           state.update(CacheHit(sch, result)) ->
             messenger.submit(
@@ -335,11 +357,25 @@ private[tasks] class QueueImpl(
         }
       }
       case Right(None) => {
-        scribe.debug(s"Task is not found in cache. Enqueue. ${a.sch.description}")
+        scribe.debug(
+          s"NotFound",
+          sch,
+          num,
+          proxy.address,
+          scribe.data("explain", "Task is not found in cache. Enqueue.")
+        )
         ref.update(_.update(Enqueued(sch, List(proxy))))
       }
-      case Left(_) => {
-        scribe.debug(s"Task is not found in cache. Enqueue. ${a.sch.description.taskId}")
+      case Left(msg) => {
+        scribe.debug(
+          s"NotFound",
+          sch,
+          num,
+          proxy.address,
+          scribe.data("explain", "Task is not found in cache. Enqueue."),
+          scribe.data("message", msg)
+        )
+
         ref.update(_.update(Enqueued(sch, List(proxy))))
       }
 
@@ -349,14 +385,19 @@ private[tasks] class QueueImpl(
 
   def scheduleTask(sch: ScheduleTask): IO[Unit] = {
     val scheduleIO = ref.flatModify { state =>
-      scribe.debug(s"Received ScheduleTask from ${sch.proxy} ${sch.description} ${sch.resource} .")
+      scribe.debug(s"ScheduleTask", sch)
       val proxy = Proxy(sch.proxy)
 
       if (state.queuedButSentByADifferentProxy(sch, proxy)) {
         state.update(Enqueued(sch, List(proxy))) -> IO.unit
       } else if (state.scheduledButSentByADifferentProxy(sch, proxy)) {
         scribe.debug(
-          s"Scheduletask received multiple times from different proxies. Not queueing this one, but delivering result if ready. $sch"
+          s"MultipleProxies",
+          sch,
+          scribe.data(
+            "explain",
+            "Scheduletask received multiple times from different proxies. Not queueing this one, but delivering result if ready. "
+          )
         )
         state.update(ProxyAddedToScheduledMessage(sch, List(proxy))) -> IO.unit
 
@@ -369,7 +410,12 @@ private[tasks] class QueueImpl(
             .void
         } else {
           scribe.debug(
-            "ScheduleTask should not be checked in the cache. Enqueue. "
+            "AvoidCache",
+            sch,
+            scribe.data(
+              "explain",
+              "ScheduleTask should not be checked in the cache. Enqueue. "
+            )
           )
           state.update(Enqueued(sch, List(proxy))) -> IO.unit
         }
@@ -389,7 +435,7 @@ private[tasks] class QueueImpl(
           )
         }
       case None =>
-        scribe.warn(s"Failed to convert back to pending $runningId")
+        scribe.warn(s"Failed to convert back to pending", runningId)
         IO.unit
     }
   }
@@ -421,9 +467,15 @@ private[tasks] class QueueImpl(
       val logIO = if (config.logQueueStatus) {
         IO {
           scribe.debug(
-            s"Queued tasks: ${queueStat.queued.size}. Running tasks: ${queueStat.running.size}. Pending nodes: ${state.nodes.pending.size} . Running nodes: ${state.nodes.running.size}. Largest request: ${queueStat.queued
-                .sortBy(_._2.cpu)
-                .lastOption}/${queueStat.queued.sortBy(_._2.memory).lastOption}"
+            s"Queue state report.",
+            scribe.data(
+              Map(
+                "queued-tasks" -> queueStat.queued.size,
+                "running-tasks" -> queueStat.running.size,
+                "pending-nodes" -> state.nodes.pending.size,
+                "running-nodes" -> state.nodes.running.size
+              )
+            )
           )
         }
       } else IO.unit
@@ -443,7 +495,15 @@ private[tasks] class QueueImpl(
             if (!canRequest) {
               state -> IO(
                 scribe.info(
-                  "New node request will not proceed: pending nodes or reached max nodes. max: " + config.maxNodes + ", pending: " + state.nodes.pending.size + ", running: " + state.nodes.running.size
+                  "MaxNodesReached",
+                  scribe.data(
+                    Map(
+                      "max-nodes" -> config.maxNodes,
+                      "pending-nodes" -> state.nodes.pending.size,
+                      "running-nodes" -> state.nodes.running.size,
+                      "explain" -> "New node request will not proceed because pending nodes or reached max nodes."
+                    )
+                  )
                 )
               )
             } else {
@@ -457,58 +517,77 @@ private[tasks] class QueueImpl(
 
               val updatedState: IO[Unit] = IO(
                 scribe.info(
-                  "Request " + requestedNodes.size + " node. One from each: " + requestedNodes.keySet
+                  "RequestNodes",
+                  scribe.data(
+                    Map(
+                      "request-node-count" -> requestedNodes.size,
+                      "request-node-resources" -> requestedNodes.keySet.toString
+                    )
+                  )
                 )
               ) *> IO
-                .parSequenceN(1)(requestedNodes.toList.map {
-                  case (request, _) =>
-                    createNode
-                      .requestOneNewJobFromJobScheduler(request)
-                      .flatMap {
-                        case Left(e) =>
-                          IO(
-                            scribe.debug( // could be normal, at acapacity
-                              "Request failed: " + e 
+                .parSequenceN(1)(requestedNodes.toList.map { case (request, _) =>
+                  createNode
+                    .requestOneNewJobFromJobScheduler(request)
+                    .flatMap {
+                      case Left(e) =>
+                        IO(
+                          scribe.debug( // could be normal, at acapacity
+                            "NodeRequestFailed",
+                            scribe.data("info", e),
+                            scribe.data(
+                              "explain",
+                              "This is normal if the there are no more capacity"
                             )
-                          ) *>
-                            ref.update(
-                              _.update(
-                                NodeEvent(NodeRegistryState.NodeRequested)
+                          )
+                        ) *>
+                          ref.update(
+                            _.update(
+                              NodeEvent(NodeRegistryState.NodeRequested)
+                            )
+                          )
+                      case Right((jobId, size)) =>
+                        IO(
+                          scribe.info(
+                            s"NodeRequestSucceeded",
+                            jobId,
+                            size
+                          )
+                        ) *> ref.update(
+                          _.update(NodeEvent(NodeRegistryState.NodeRequested))
+                            .update(
+                              NodeEvent(
+                                NodeRegistryState.NodeIsPending(jobId, size)
                               )
                             )
-                        case Right((jobId, size)) =>
-                          IO(
-                            scribe.info(
-                              s"Request succeeded. Job id: $jobId, size: $size"
-                            )
-                          ) *> ref.update(
-                            _.update(NodeEvent(NodeRegistryState.NodeRequested))
-                              .update(
-                                NodeEvent(
-                                  NodeRegistryState.NodeIsPending(jobId, size)
+                        ) *> IO
+                          .sleep(config.pendingNodeTimeout)
+                          .flatMap { initFailed =>
+                            ref.flatModify { state =>
+                              if (state.nodes.pending.contains(jobId)) {
+                                scribe.warn(
+                                  "NodeInitFailed: ",
+                                  jobId,
+                                  scribe.data(
+                                    "explain",
+                                    "The node was allocated but the peer process on the node failed to make initial contact."
+                                  )
                                 )
-                              )
-                          ) *> IO
-                            .sleep(config.pendingNodeTimeout)
-                            .flatMap { initFailed =>
-                              ref.flatModify { state =>
-                                if (state.nodes.pending.contains(jobId)) {
-                                  scribe.warn("Node init failed: " + jobId)
 
-                                  state.update(
-                                    NodeEvent(
-                                      NodeRegistryState.InitFailed(jobId)
-                                    )
-                                  ) ->
-                                    shutdownNode.shutdownPendingNode(jobId)
+                                state.update(
+                                  NodeEvent(
+                                    NodeRegistryState.InitFailed(jobId)
+                                  )
+                                ) ->
+                                  shutdownNode.shutdownPendingNode(jobId)
 
-                                } else (state, IO.unit)
-                              }
+                              } else (state, IO.unit)
                             }
-                            .start
-                            .void
+                          }
+                          .start
+                          .void
 
-                      }
+                    }
                 })
                 .void
 
@@ -527,40 +606,41 @@ private[tasks] class QueueImpl(
 
   private def handleLauncherStopped(
       launcher: LauncherName
-  ) = IO(scribe.info(s"LauncherStopped: $launcher")) *> ref.flatModify {
-    state =>
-      import tasks.util.eq._
-      val msgs =
-        state.scheduledTasks.toSeq.filter(_._2._1 === launcher).map(_._1)
-      val updated = msgs.foldLeft(state) { (state, schProjection) =>
-        val (_, _, proxies, sch) = state.scheduledTasks(schProjection)
-        state.update(TaskLauncherStoppedFor(sch)).update(Enqueued(sch, proxies))
-      }
+  ) = IO(scribe.info(s"LauncherStopped", launcher)) *> ref.flatModify { state =>
+    import tasks.util.eq._
+    val msgs =
+      state.scheduledTasks.toSeq.filter(_._2._1 === launcher).map(_._1)
+    val updated = msgs.foldLeft(state) { (state, schProjection) =>
+      val (_, _, proxies, sch) = state.scheduledTasks(schProjection)
+      state.update(TaskLauncherStoppedFor(sch)).update(Enqueued(sch, proxies))
+    }
 
-      val negotiatingWithStoppedLauncher = state.negotiation.exists {
-        case (negotiatingLauncher, _) =>
-          (negotiatingLauncher: LauncherName) == (launcher: LauncherName)
-      }
-      if (negotiatingWithStoppedLauncher) {
-        scribe.error(
-          "Launcher stopped during negotiation phase. Automatic recovery from this is not implemented. The scheduler is deadlocked and it should be restarted."
-        )
-      }
-      val node = state.knownLaunchers.get(launcher).flatten
-      val updated2 = 
-        {
-          val st1 = updated.update(LauncherCrashed(launcher))
-          node.fold(st1)(n => st1.update(NodeEvent(NodeRegistryState.NodeIsDown(n))))
+    val negotiatingWithStoppedLauncher = state.negotiation.exists {
+      case (negotiatingLauncher, _) =>
+        (negotiatingLauncher: LauncherName) == (launcher: LauncherName)
+    }
+    if (negotiatingWithStoppedLauncher) {
+      scribe.error(
+        "Launcher stopped during negotiation phase. Automatic recovery from this is not implemented. The scheduler is deadlocked and it should be restarted.",
+        launcher
+      )
+    }
+    val node = state.knownLaunchers.get(launcher).flatten
+    val updated2 = {
+      val st1 = updated.update(LauncherCrashed(launcher))
+      node.fold(st1)(n =>
+        st1.update(NodeEvent(NodeRegistryState.NodeIsDown(n)))
+      )
+    }
+
+    val shutdown = node
+      .flatMap { node =>
+        shutdownNode.map { shutdownNode =>
+          shutdownNode.shutdownRunningNode(node.name)
         }
-        
-      val shutdown = node
-        .flatMap { node =>
-          shutdownNode.map { shutdownNode =>
-            shutdownNode.shutdownRunningNode(node.name)
-          }
-        }
-        .getOrElse(IO.unit)
-      (updated2 -> shutdown)
+      }
+      .getOrElse(IO.unit)
+    (updated2 -> shutdown)
   } *> handleQueueStatIO
 
   def askForWork(
@@ -571,11 +651,20 @@ private[tasks] class QueueImpl(
 
     val askIO = ref.flatModify { state =>
       if (state.negotiation.isEmpty) {
-        val num = scala.util.Random.nextLong()
+        val num = CorrelationId.make
         scribe.debug(
-          s"AskForWork $num from $launcher $node $availableResource ${state.negotiation} ${state.queuedTasks.map { case (_, (sch, _)) =>
+          s"AskForWork",
+          scribe.data("negotatiation", state.negotiation.toString),
+          scribe.data(
+            "queued-tasks",
+            state.queuedTasks.map { case (_, (sch, _)) =>
               (sch.description.taskId, sch.resource)
-            }.toSeq}"
+            }.toSeq
+          ),
+          availableResource,
+          num,
+          launcher,
+          node.map(v => Node.toLogFeature(v)).getOrElse(scribe.data(Map.empty))
         )
 
         var maxPrio = Int.MinValue
@@ -585,7 +674,14 @@ private[tasks] class QueueImpl(
             val ret = availableResource.canFulfillRequest(sch.resource)
             if (!ret && (maxPrio == Int.MinValue || sch.priority.s > maxPrio)) {
               scribe.debug(
-                s"Can't fulfill $num request ${sch.resource} with available resources $availableResource or lower priority than an already selected task"
+                s"CantFulfillRequest",
+                num,
+                sch,
+                availableResource,
+                scribe.data(
+                  "explain",
+                  "No available resources or lower priority than an already selected task"
+                )
               )
             } else {
               maxPrio = sch.priority.s
@@ -596,13 +692,24 @@ private[tasks] class QueueImpl(
 
         selected match {
           case None =>
-            scribe.debug(s"Found no suitable task $num ${state.queuedTasks}")
+            scribe.debug(
+              s"FoundNothingToSchedule",
+              num,
+              launcher,
+              availableResource,
+              scribe.data("queued-tasks", state.queuedTasks)
+            )
             state -> IO.pure(Left(MessageData.NothingForSchedule))
 
           case Some(sch) =>
             val withNegotiation = state.update(Negotiating(launcher, sch))
             scribe.debug(
-              s"Dequeued task $num ${sch.description.taskId.id} ${sch.description.dataHash} with priority ${sch.priority}. Sending task to $launcher. (Negotation state of queue: ${state.negotiation})"
+              s"Dequeue",
+              num,
+              sch,
+              launcher,
+              scribe.data("negotatiation", state.negotiation),
+              scribe.data("explain", "Sending task to launcher.")
             )
 
             val (newState, io1) =
@@ -625,7 +732,16 @@ private[tasks] class QueueImpl(
         }
 
       } else {
-        scribe.debug(s"AskForWork but queue in negotiation. From $launcher $node $availableResource")
+        scribe.debug(
+          s"InNegotiation",
+          launcher,
+          availableResource,
+          node.map(v => Node.toLogFeature(v)).getOrElse(scribe.data(Map.empty)),
+          scribe.data(
+            "explain",
+            "An other askforwork - schedule - ack cycle is in flight. Ignoring this ask."
+          )
+        )
         state -> IO.pure(Left(MessageData.NothingForSchedule))
       }
     }
@@ -643,7 +759,10 @@ private[tasks] class QueueImpl(
         val sch = state.negotiation.get._2
         if (state.scheduledTasks.contains(project(sch))) {
           scribe.error(
-            "Routed messages already contains task. This is unexpected and can lead to lost messages."
+            "Routed messages already contains task. This is unexpected and can lead to lost messages.",
+            launcher,
+            allocated,
+            sch
           )
         }
 
@@ -660,47 +779,56 @@ private[tasks] class QueueImpl(
       resourceAllocated: ResourceAllocated
   ): IO[Unit] = {
     val taskSuccessIO = ref.flatModify { state =>
-    scribe.debug(s"TaskDone $sch $resultWithMetadata")
-    if (state.queuedTasks.contains(project(sch))) {
-      scribe.error(
-        s"Should not be queued. ${state.queuedTasks(project(sch))}"
-      )
-    }
-    val io = IO
-      .parSequenceN(1)(
-        state.scheduledTasks
-          .get(project(sch))
-          .toList
-          .flatMap { case (_, _, proxies, _) =>
-            proxies.toList.map { pr =>
-              messenger.submit(
-                Message(
-                  MessageData.MessageFromTask(
-                    resultWithMetadata.untypedResult,
-                    retrievedFromCache = false
-                  ),
-                  from = Address.unknown,
-                  to = pr.address
+      scribe.debug(s"TaskDone", sch, resultWithMetadata)
+      if (state.queuedTasks.contains(project(sch))) {
+        scribe.error(
+          s"ShouldNotBeQueued.",
+          scribe.data(
+            "explain",
+            "This completed task is in the list of queued tasks. It was removed from the list of queued tasks when it was scheduled. Thus it was submitted twice to the queue."
+          ),
+          state.queuedTasks(project(sch))._1,
+          scribe.data(
+            Map(
+              "proxies" -> state.queuedTasks(project(sch))._2.map(_.address)
+            )
+          )
+        )
+      }
+      val io = IO
+        .parSequenceN(1)(
+          state.scheduledTasks
+            .get(project(sch))
+            .toList
+            .flatMap { case (_, _, proxies, _) =>
+              proxies.toList.map { pr =>
+                messenger.submit(
+                  Message(
+                    MessageData.MessageFromTask(
+                      resultWithMetadata.untypedResult,
+                      retrievedFromCache = false
+                    ),
+                    from = Address.unknown,
+                    to = pr.address
+                  )
                 )
-              )
+
+              }
 
             }
+            .toList
+        )
+        .void
 
-          }
-          .toList
-      )
-      .void
-
-    state.update(
-      TaskDone(sch, resultWithMetadata, elapsedTime, resourceAllocated)
-    ) -> io
+      state.update(
+        TaskDone(sch, resultWithMetadata, elapsedTime, resourceAllocated)
+      ) -> io
+    }
+    taskSuccessIO *> handleQueueStatIO
   }
-  taskSuccessIO *> handleQueueStatIO
-}
 
-  def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit] =
-    {
-      val taskFailedIO = ref.flatModify { state =>
+  def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit] = {
+    val taskFailedIO = ref.flatModify { state =>
       val (updated, sideEffects) = state.scheduledTasks
         .get(project(sch))
         .foldLeft((state, List.empty[IO[Unit]])) {
@@ -709,11 +837,15 @@ private[tasks] class QueueImpl(
             if (config.resubmitFailedTask) {
               scribe.error(
                 cause,
-                "Task execution failed ( resubmitting infinite time until done): " + sch.toString
+                "TaskExecutionFailed+Resubmit",
+                sch,
+                scribe.data(
+                  "explain",
+                  "configuration tasks.resubmitFailedTask=false can prevent this"
+                ),
+                scribe.data("queue-size", state.queuedTasks.keys.size)
               )
-              scribe.info(
-                "Requeued 1 message. Queue size: " + state.queuedTasks.keys.size
-              )
+
               (removed.update(Enqueued(sch, proxies)), sideEffectAcc)
             } else {
               val sideEffects = proxies.map(pr =>
@@ -725,7 +857,15 @@ private[tasks] class QueueImpl(
                   )
                 )
               )
-              scribe.error(cause, "Task execution failed: " + sch.toString)
+              scribe.error(
+                cause,
+                "TaskExecutionFailed",
+                sch,
+                scribe.data(
+                  "explain",
+                  "configuration tasks.resubmitFailedTask=true can resubmit automatically"
+                )
+              )
               (removed, sideEffectAcc ++ sideEffects)
             }
         }

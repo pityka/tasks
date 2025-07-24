@@ -2,7 +2,8 @@ import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 
 // new setting for the Central Portal
 ThisBuild / publishTo := {
-  val centralSnapshots = "https://central.sonatype.com/repository/maven-snapshots/"
+  val centralSnapshots =
+    "https://central.sonatype.com/repository/maven-snapshots/"
   if (isSnapshot.value) Some("central-snapshots" at centralSnapshots)
   else localStaging.value
 }
@@ -101,6 +102,7 @@ lazy val shared = crossProject(JVMPlatform)
   .settings(
     name := "tasks-shared",
     libraryDependencies ++= Seq(
+      "com.outr" %% "scribe" % scribeVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % jsoniterVersion,
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
     )

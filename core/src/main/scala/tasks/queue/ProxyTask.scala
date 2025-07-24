@@ -64,14 +64,14 @@ private[tasks] class ProxyTask[Input, Output](
     lineage: TaskLineage,
     noCache: Boolean,
     messenger: Messenger
-) extends tasks.util.Actor.ActorBehavior[ Proxy](messenger) {
+) extends tasks.util.Actor.ActorBehavior[Proxy](messenger) {
   val address: Address = Address(
     s"ProxyTask-$taskId-${input.hashCode()}-${scala.util.Random.alphanumeric.take(256).mkString}"
   ).withAddress(messenger.listeningAddress)
   def derive(): Proxy = Proxy(address)
 
   private def distributeResult(result: Output) = {
-    scribe.debug("Completing promise.")
+    scribe.debug("Completing promise.", address)
     promise.complete(Right(result))
   }
 
@@ -112,16 +112,18 @@ private[tasks] class ProxyTask[Input, Output](
       )
     }
 
-    scribe.debug("proxy submitting ScheduleTask object to queue.")
-
     scheduleTask.flatMap { scheduleTask =>
+      scribe.debug(
+        "proxy submitting ScheduleTask object to queue.",
+        scheduleTask,
+        address
+      )
       queue.scheduleTask(scheduleTask)
     }
 
   }
 
   override def schedulers(
-      
       stopQueue: Actor.StopQueue
   ): Option[IO[fs2.Stream[IO, Unit]]] = Some(IO {
     (fs2.Stream.unit ++ fs2.Stream.never[IO]).evalMap(_ =>
@@ -152,7 +154,7 @@ private[tasks] class ProxyTask[Input, Output](
             error,
             s"MessageFromTask received not from cache and failed to decode: ${from}, $untypedOutput, $error. Execution failed."
           )
-           notifyListenersOnFailure(
+          notifyListenersOnFailure(
             new RuntimeException(error)
           ) *> stopProcessingMessages(stopQueue)
       }

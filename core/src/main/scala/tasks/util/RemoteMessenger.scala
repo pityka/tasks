@@ -18,8 +18,8 @@ import cats.instances.list
 import tasks.util.message._
 private[tasks] class RemoteMessenger(
     client: Client[IO],
-    listeningUri: org.http4s.Uri,
-    peerUri: org.http4s.Uri,
+    val listeningUri: org.http4s.Uri,
+    val peerUri: org.http4s.Uri,
     localMessenger: LocalMessenger
 ) extends Messenger {
 
@@ -28,8 +28,17 @@ private[tasks] class RemoteMessenger(
     localMessenger.channels.get.flatMap { channels =>
       channels.get(message.to.withoutUri) match {
         case None =>
-          val messageWithRemoteUri =RemoteMessenger.addUri(message, listeningUri)
-          scribe.debug(s"Submitting message to remote messenger ${message.data.getClass()}. Local channel not found with channel message key ${message.to.withoutUri}. Submit message ${messageWithRemoteUri.to} to peer $peerUri")
+          val messageWithRemoteUri =
+            RemoteMessenger.addUri(message, listeningUri)
+          scribe.debug(
+            "Submit",
+            message,
+            this,
+            scribe.data(
+              "explain",
+              "Can't deliver message to a local subscription because no open channels found, thus submit message to remote messenger."
+            )
+          )
           RemoteMessenger
             .submit0(
               message = messageWithRemoteUri,
@@ -41,12 +50,32 @@ private[tasks] class RemoteMessenger(
       }
     }
   def subscribe(address: Address): IO[fs2.Stream[IO, Message]] =
-    IO(scribe.trace(s"Subscribing to $address")) *> localMessenger.subscribe(
-      address
-    )
+    IO(
+      scribe.trace(
+        s"Subscribe",
+        address,
+        this,
+        scribe.data(
+          "explain",
+          "Returns a message stream to the caller on this address."
+        )
+      )
+    ) *> localMessenger
+      .subscribe(
+        address
+      )
 }
 
 private[tasks] object RemoteMessenger {
+
+  implicit def toLogFeature(rm: RemoteMessenger): scribe.LogFeature =
+    scribe.data(
+      Map(
+        "remote-messenger-peer-uri" -> rm.peerUri,
+        "remote-messenger-listening-uri" -> rm.listeningUri,
+        "remote-messenger-explain" -> "peer uri is inserted into outgoing messages so that replies can be made to that uri. listening uri is the address on which the http server is bound."
+      )
+    )
 
   def addUri(message: Message, listeningUri: org.http4s.Uri) = {
     message.copy(from =
@@ -93,14 +122,15 @@ private[tasks] object RemoteMessenger {
       request.decode[Message] { message =>
         IO(
           scribe.trace(
-            s"HTTP server received message ${message.from} ${message.to} ${message.data.getClass}"
+            s"HTTP receive",
+            message
           )
         ) *>
           localMessenger
             .submit(message)
             .flatMap(_ =>
               Ok(
-                s"submitted ${message.from} ${message.to} ${message.data.getClass()}"
+                s"submitted message"
               )
             )
       }
@@ -110,15 +140,15 @@ private[tasks] object RemoteMessenger {
       client: Client[IO],
       peerUri: org.http4s.Uri
   ) = {
-    val num = scala.util.Random.nextLong()
+    val num = CorrelationId.make
     val effectiveUri = message.to.listeningUri
-          .map(s =>
-            org.http4s.Uri
-              .fromString(s)
-              .toOption
-              .getOrElse(throw new RuntimeException(s"Can't parse $s"))
-          )
-          .getOrElse(peerUri)
+      .map(s =>
+        org.http4s.Uri
+          .fromString(s)
+          .toOption
+          .getOrElse(throw new RuntimeException(s"Can't parse $s"))
+      )
+      .getOrElse(peerUri)
     val request =
       Request[IO](
         method = Method.POST,
@@ -126,19 +156,36 @@ private[tasks] object RemoteMessenger {
       ).withEntity(
         message
       )
-    
-    IO(
-      scribe.trace(
-        s"Submit via http $num $effectiveUri (uri in message ${message.to.listeningUri}) ${message.from} ${message.to} ${message.data.getClass()}"
+
+    val requestData = scribe.data(
+      Map(
+        "uri" -> effectiveUri
       )
+    )
+
+    IO(
+      scribe.trace(s"HTTP request", message, num, requestData)
     ) *>
       client.expect[String](request).attempt.flatMap {
         case Right(result) =>
-          IO(scribe.trace(s"Http response $num: $result")).map(_ => result)
+          IO(
+            scribe.trace(
+              s"HTTP response",
+              num,
+              requestData,
+              message,
+              scribe.data("response-body", result)
+            )
+          )
+            .map(_ => result)
         case Left(e) =>
           IO(
             scribe.error(
-              s"Http request failed $num. $request. ${e.getMessage} ${message.from} ${message.to} ${message.data.getClass()}"
+              s"HTTP request failed.",
+              num,
+              requestData,
+              message,
+              e
             )
           ) *> IO.pure("")
       }
@@ -191,15 +238,17 @@ private[tasks] object RemoteMessenger {
         .build
       client.flatMap { client =>
         server.map { server =>
-          scribe.info(
-            s"Remote messenger with ${listeningUri} built. Peer: $peerUri"
-          )
-          new RemoteMessenger(
+          val rm = new RemoteMessenger(
             client = client,
             peerUri = peerUri,
             listeningUri = listeningUri,
             localMessenger = localMessenger
           )
+          scribe.info(
+            s"Remote messenger built.",
+            rm
+          )
+          rm
         }
       }
     }

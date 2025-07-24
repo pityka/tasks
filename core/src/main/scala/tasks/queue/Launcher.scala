@@ -49,6 +49,7 @@ import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
 import tasks.elastic.ShutdownSelfNode
 import cats.effect.kernel.Resource
+import cats.syntax.all
 
 private[tasks] object Base64DataHelpers {
   def toBytes(b64: Base64Data): Array[Byte] = base64(b64.value)
@@ -109,7 +110,9 @@ private[tasks] object Launcher {
             ref.get.flatMap(state =>
               IO(
                 scribe.debug(
-                  s"Available resources: ${state.availableResources} on $address"
+                  s"Available resources: ",
+                  state.availableResources,
+                  address
                 )
               )
             )
@@ -138,7 +141,7 @@ private[tasks] object Launcher {
 
       val streamFiber = schedulerStream.flatMap { case stream =>
         stream
-          .onFinalize(IO(scribe.debug(s"Stream terminated of $address")))
+          .onFinalize(IO(scribe.debug(s"Stream terminated", address)))
           .compile
           .drain
           .start
@@ -147,16 +150,17 @@ private[tasks] object Launcher {
       val releaseIO =
         IO(
           scribe.debug(
-            s"Will cancel fibers of $address"
+            s"Will cancel fibers",
+            address
           )
         ) *> stateRef.get.flatMap(release).void *> IO(
-          scribe.debug(s"Canceled fibers of $address ")
+          scribe.debug(s"Canceled fibers ", address)
         )
 
       Resource
         .make(streamFiber)(fiber =>
           releaseIO *> fiber.cancel *> IO(
-            scribe.debug(s"Streams of actor $address canceled.")
+            scribe.debug(s"Streams of actor canceled.", address)
           )
         )
         .map { _ =>
@@ -210,8 +214,6 @@ private[tasks] object Launcher {
           ref: Ref[IO, State]
       ) = {
 
-        
-
         val allocatedResource =
           state.availableResources.maximum(scheduleTask.resource)
         val newState = state.copy(availableResources =
@@ -225,7 +227,13 @@ private[tasks] object Launcher {
             )
           else scheduleTask.fileServicePrefix
 
-        scribe.debug(s"Launch on ${handle} id:${scheduleTask.description} allocated:${allocatedResource} requested:${scheduleTask.resource} proxy:${scheduleTask.proxy} fileprefix:${filePrefix}")
+        scribe.debug(
+          s"Launch",
+          scheduleTask,
+          allocatedResource,
+          filePrefix,
+          address
+        )
 
         val task: Task =
           new Task(
@@ -254,11 +262,12 @@ private[tasks] object Launcher {
 
         val sideEffect = task
           .start(scheduleTask.input)
-          .attempt.map{
-            case Right(unit) => 
+          .attempt
+          .map {
+            case Right(unit) =>
               unit
             case Left(value) =>
-              scribe.error("Unexpected failure during task execution.",value)
+              scribe.error("Unexpected failure during task execution.", value)
               ()
           }
           .start
@@ -304,8 +313,8 @@ private[tasks] object Launcher {
                   state.copy(waitingForWork = false)
                 }
               case Right(Right(MessageData.Schedule(scheduleTask))) =>
-                ref.flatModifyFull { case  (poll,state) =>
-                  scribe.debug(s"Received ScheduleWithProxy ${scheduleTask.description} ")
+                ref.flatModifyFull { case (poll, state) =>
+                  scribe.debug(s"Received Schedule ", scheduleTask)
                   val st0 = state.copy(waitingForWork = false)
                   val (newState, sideEffects) =
                     if (!st0.denyWorkBeforeShutdown) {
@@ -336,7 +345,8 @@ private[tasks] object Launcher {
           }
         } else {
           scribe.debug(
-            "Not asking for work because no available resources or preparing for shut down."
+            "Not asking for work because no available resources or preparing for shut down.",
+            address
           )
           (state, IO.pure(Left(NothingForSchedule)))
         }
@@ -347,7 +357,7 @@ private[tasks] object Launcher {
       ref.update { state =>
         val allocated = state.runningTasks.find(_._1 == task).map(_._3)
         val newState = if (allocated.isEmpty) {
-          scribe.error("Can't find actor ")
+          scribe.error("Can't find proxy ", task.proxy, address)
           state
         } else {
           state.copy(
@@ -419,7 +429,7 @@ private[tasks] object Launcher {
           .attempt
           .flatMap {
             case Left(e) =>
-              IO(scribe.error(e, s"Failed to save ${scheduleTask.description}"))
+              IO(scribe.error(e, s"Failed to save", scheduleTask, address))
             case Right(_) =>
               queue.taskSuccess(
                 scheduleTask,
