@@ -39,7 +39,7 @@ case class ResourceRequest(
 
 object ResourceRequest {
 
-   implicit def toLogFeature(rm: ResourceRequest): scribe.LogFeature =
+  implicit def toLogFeature(rm: ResourceRequest): scribe.LogFeature =
     scribe.data(
       Map(
         "resource-request-cpu" -> rm.cpu,
