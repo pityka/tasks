@@ -105,7 +105,7 @@ object Deployment {
         .replace("{STORAGE}", config.storageURI.toString)
 
     val runPackage =
-      if (background) s"""(nohup $edited 2>&1 > stdstreams & echo $$!;) """
+      if (background) s"""(nohup $edited > stdstreams 2>&1 & echo $$!;) """
       else s"$edited ;"
 
     s"""$downloadScript && $runPackage"""
