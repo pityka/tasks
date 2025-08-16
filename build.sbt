@@ -202,7 +202,7 @@ lazy val kubernetes = project
   .settings(
     name := "tasks-kubernetes",
     libraryDependencies ++= Seq(
-      "com.goyeau" %% "kubernetes-client" % "0.11.0",
+      "com.goyeau" %% "kubernetes-client" % "0.11.1",
       "io.github.pityka" %% "selfpackage-jib" % "2.1.6"
     )
   )
