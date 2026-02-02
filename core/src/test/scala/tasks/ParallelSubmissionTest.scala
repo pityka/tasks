@@ -1,0 +1,168 @@
+/*
+ * The MIT License
+ *
+ * Copyright (c) 2018 Istvan Bartha
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the Software
+ * is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+package tasks
+
+import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
+import org.scalatest.matchers.should._
+import org.scalatest._
+import org.ekrich.config.ConfigFactory
+
+import tasks.jsonitersupport._
+
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core._
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
+import tasks.releaseResourcesEarly
+import scribe.modify.LogModifier
+
+object ParallelSubmissionTest {
+
+  def serial(n: Int): Int = n match {
+    case 0 => 0
+    case 1 => 1
+    case _ => serial(n - 1) + serial(n - 2)
+  }
+
+  case class FibInput(n: Option[Int], tag: Option[List[Boolean]])
+
+  object FibInput {
+    implicit val codec: JsonValueCodec[FibInput] = JsonCodecMaker.make
+
+    def apply(n: Int): FibInput = FibInput(Some(n), tag = Some(Nil))
+  }
+
+  case class FibOut(n: Int)
+  object FibOut {
+    implicit val codec: JsonValueCodec[FibOut] = JsonCodecMaker.make
+
+  }
+
+  val externalCounter = new java.util.concurrent.ConcurrentHashMap[Int, Boolean]
+  externalCounter.put(0, false)
+  externalCounter.put(1, false)
+  externalCounter.put(2, false)
+  externalCounter.put(3, false)
+
+  val fibtask: TaskDefinition[FibInput, FibOut] =
+    Task[FibInput, FibOut]("fib", 1) {
+
+      case FibInput(Some(n), Some(tag)) => { implicit ce =>
+        assert(ce.resourceAllocated.gpu.size == 1)
+        val gpu = ce.resourceAllocated.gpu.head
+        assert(externalCounter.get(gpu) == false)
+        externalCounter.put(gpu, true)
+        val prg = n match {
+          case 0 =>
+            IO {
+              externalCounter.put(gpu, false)
+            } *> IO.pure(FibOut(0))
+          case 1 =>
+            IO {
+              externalCounter.put(gpu, false)
+            } *> IO.pure(FibOut(1))
+          case n => {
+            val f1 = fibtask(FibInput(Some(n - 1), Some(false :: tag)))(
+              ResourceRequest(cpu = (1, 1), memory = 1, gpu = 1, scratch = 1)
+            )
+            val f2 = fibtask(FibInput(Some(n - 2), Some(true :: tag)))(
+              ResourceRequest(cpu = (1, 1), memory = 1, gpu = 1, scratch = 1)
+            )
+            for {
+              _ <- IO {
+                Thread.sleep(scala.util.Random.nextLong(100))
+              }
+              _ <- IO {
+                externalCounter.put(gpu, false)
+              }
+              _ <- releaseResourcesEarly
+              r <- IO.both(f1, f2)
+
+            } yield FibOut(r._1.n + r._2.n)
+          }
+
+        }
+
+        prg
+      }
+
+      case _ => ???
+
+    }
+
+}
+
+class ParallelSubmissionTestSuite
+    extends FunSuite
+    with Matchers
+    with BeforeAndAfterAll
+    with TestHelpers {
+
+  override val testConfig = {
+    val tmp = tasks.util.TempFile.createTempFile(".temp")
+    tmp.delete
+    ConfigFactory.parseString(
+      s"""
+      
+tasks.cache.enabled = false
+tasks.disableRemoting = true
+hosts.numCPU=4
+hosts.scratch = 4
+hosts.gpus = [0,1,2,3]
+      tasks.fileservice.storageURI=${tmp.getAbsolutePath}
+      """
+    )
+  }
+
+  scribe.Logger.root
+    .clearHandlers()
+    .clearModifiers()
+    // .withHandler(minimumLevel = Some(scribe.Level.Debug))
+    // .withModifier(scribe.filter.FilterBuilder(select = List(scribe.filter.className.startsWith("tasks.queue.Launcher"))).excludeUnselected)
+    .replace()
+
+  val pair = defaultTaskSystem(Some(testConfig)).allocated.unsafeRunSync()
+  implicit val system: TaskSystemComponents = pair._1._1
+  import ParallelSubmissionTest._
+
+  test("parallel submission of recursive fibonacci with 'gpu' counting ") {
+    IO.parSequenceN(50)((1 to 13).toList.map { n =>
+      {
+        val r = (fibtask(FibInput(n))(
+          ResourceRequest(cpu = (1, 1), memory = 1, gpu = 1, scratch = 1)
+        )).map(_.n)
+        r.map { r =>
+          assertResult(r)(serial(n))
+        }
+      }
+    }).unsafeRunSync()
+  }
+
+  override def afterAll() = {
+    Thread.sleep(1500)
+    pair._2.unsafeRunSync()
+
+  }
+}

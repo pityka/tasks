@@ -125,13 +125,15 @@ case class ResourceAvailable(
   )
 
   def addBack(r: ResourceAllocated) =
+   {
+    assert((gpu.toSet & r.gpu.toSet).isEmpty,s"$gpu + ${r.gpu}") 
     ResourceAvailable(
       cpu + r.cpu,
       memory + r.memory,
       scratch + r.scratch,
       gpu ++ r.gpu,
       image
-    )
+    )}
 
   def all =
     ResourceAllocated(

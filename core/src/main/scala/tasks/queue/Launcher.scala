@@ -234,6 +234,8 @@ private[tasks] object Launcher {
           filePrefix,
           address
         )
+        scribe.debug("RemainsAfterLaunch",scheduleTask,newState.availableResources,address)
+          
 
         val task: Task =
           new Task(
@@ -290,6 +292,7 @@ private[tasks] object Launcher {
       ref.flatModifyFull { case (poll, state) =>
         if (!state.denyWorkBeforeShutdown && !state.waitingForWork) {
 
+          scribe.debug(s"WillAskForWork ", state.availableResources,address)
           val effect: IO[Unit] = poll(
             queue
               .askForWork(address, state.availableResources, node)
@@ -306,15 +309,17 @@ private[tasks] object Launcher {
                   )
                 ) *>
                   ref.update { state =>
+                    scribe.debug(s"QueueError ", state.availableResources,address)
                     state.copy(waitingForWork = false)
                   }
               case Right(Left(MessageData.NothingForSchedule)) =>
                 ref.update { state =>
+                  scribe.debug(s"NothingForSchedule ", state.availableResources,address)
                   state.copy(waitingForWork = false)
                 }
               case Right(Right(MessageData.Schedule(scheduleTask))) =>
                 ref.flatModifyFull { case (poll, state) =>
-                  scribe.debug(s"Received Schedule ", scheduleTask)
+                  scribe.debug(s"Received Schedule ", scheduleTask,state.availableResources,address)
                   val st0 = state.copy(waitingForWork = false)
                   val (newState, sideEffects) =
                     if (!st0.denyWorkBeforeShutdown) {
@@ -324,6 +329,7 @@ private[tasks] object Launcher {
                       val io2 = poll(queue.ack(allocated, address))
                       (st2, io1 *> io2)
                     } else (st0, IO.unit)
+                  scribe.debug(s"State after Schedule",scheduleTask,newState.availableResources,address)
                   newState -> sideEffects
                 }
             }
@@ -355,6 +361,7 @@ private[tasks] object Launcher {
 
     def release(task: Task) = {
       ref.update { state =>
+        
         val allocated = state.runningTasks.find(_._1 == task).map(_._3)
         val newState = if (allocated.isEmpty) {
           scribe.error("Can't find proxy ", task.proxy, address)
@@ -372,6 +379,8 @@ private[tasks] object Launcher {
             )
           )
         }
+        scribe.debug("ReleaseLauncherResourceBefore",address,state.availableResources)
+        scribe.debug("ReleaseLauncherResource",address,newState.availableResources)
         newState
       } *> askForWork(ref, messenger, address, queue)
     }
@@ -464,6 +473,8 @@ private[tasks] object Launcher {
         )
       }
       val st2 = st1.copy(lastTaskFinished = System.nanoTime)
+      scribe.debug(s"TaskFinishedOld ", scheduleTask,state.availableResources,address)
+      scribe.debug(s"TaskFinished ", scheduleTask,st2.availableResources,address)
       (st2, sideEffect)
     }
 
