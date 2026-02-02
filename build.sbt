@@ -34,8 +34,8 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.16",
-  crossScalaVersions := Seq("2.13.16", "3.6.4"),
+  scalaVersion := "2.13.18",
+  crossScalaVersions := Seq("2.13.18", "3.6.4"),
   parallelExecution in Test := false,
   scalacOptions ++= (CrossVersion.partialVersion(scalaVersion.value) match {
     case Some((2, 13)) =>
@@ -143,7 +143,7 @@ lazy val core = project
       "org.http4s" %% "http4s-ember-server" % http4sVersion,
       "org.http4s" %% "http4s-dsl" % http4sVersion,
       "org.ekrich" %% "sconfig" % "1.8.1",
-      "org.typelevel" %% "cats-effect" % "3.6.1",
+      "org.typelevel" %% "cats-effect" % "3.6.3",
       "io.github.pityka" %% "selfpackage" % "2.1.6",
       "org.scalatest" %% "scalatest" % "3.2.19" % "test",
       "com.outr" %% "scribe" % scribeVersion,
