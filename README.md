@@ -60,7 +60,7 @@ There are two constructor methods which can provide an instance of this type:
 ### Configuration
 Configuration may be passed to both constructors (see signatures). 
 For the list of configuration values see the reference.conf in the source tree.
-All configuration values can be override by system properties.
+All configuration values can be overriden by system properties.
 The library is using sconfig (https://github.com/ekrich/sconfig) for configuration. The priority order of configuration sources is:
 - system properties (`ConfigFactory.defaultOverrides`) overriding configuration keys
 - the configuration values passed in the constructor methods 
@@ -169,8 +169,8 @@ Multiple identical processes can run aside each other if the `tasks-postgres` mo
 ## Job queue
 
 ### In memory ephemeral queue
-This requires no external dependencies, however the master process is a single point of failure.
-The state is stored on the master process and workers interact with it via network.
+This requires no external dependencies, however the main process with the application role is a single point of failure.
+The state is stored on the main process and workers interact with it via network.
 
 ### Durable queue in postgres
 The `tasks-postgres` module can connect to a shared database instance. 
