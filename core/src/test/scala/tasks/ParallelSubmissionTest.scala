@@ -114,7 +114,7 @@ object ParallelSubmissionTest {
 
 }
 
-class ParallelSubmissionTestSuite
+class RecursiveParallelSubmissionTestSuite
     extends FunSuite
     with Matchers
     with BeforeAndAfterAll
@@ -128,8 +128,8 @@ class ParallelSubmissionTestSuite
       
 tasks.cache.enabled = false
 tasks.disableRemoting = true
-hosts.numCPU=4
-hosts.scratch = 4
+hosts.numCPU=400
+hosts.scratch = 4000
 hosts.gpus = [0,1,2,3]
       tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       """
@@ -148,8 +148,9 @@ hosts.gpus = [0,1,2,3]
   import ParallelSubmissionTest._
 
   test("parallel submission of recursive fibonacci with 'gpu' counting ") {
-    IO.parSequenceN(50)((1 to 13).toList.map { n =>
+    IO.parSequenceN(500)((1 to 3000).toList.map { n0 =>
       {
+        val n = math.min(n0,8)
         val r = (fibtask(FibInput(n))(
           ResourceRequest(cpu = (1, 1), memory = 1, gpu = 1, scratch = 1)
         )).map(_.n)

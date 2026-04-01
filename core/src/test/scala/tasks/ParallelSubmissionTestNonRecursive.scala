@@ -76,7 +76,7 @@ object ParallelSubmissionTestNonRecursive {
           assert(externalCounter.get(gpu) == false)
           externalCounter.put(gpu, true)
           val r = serial(n)
-          Thread.sleep(scala.util.Random.nextLong(500))
+          Thread.sleep(scala.util.Random.nextLong(2000))
           externalCounter.put(gpu, false)
           FibOut(r)
         }
@@ -100,8 +100,8 @@ class NonRecursiveParallelSubmissionTestSuite
       
 tasks.cache.enabled = false
 tasks.disableRemoting = true
-hosts.numCPU=4
-hosts.scratch = 4
+hosts.numCPU=200
+hosts.scratch = 4000
 hosts.gpus = [0,1,2,3]
       tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       """
@@ -119,16 +119,17 @@ hosts.gpus = [0,1,2,3]
   implicit val system: TaskSystemComponents = pair._1._1
   import ParallelSubmissionTestNonRecursive._
 
-  test("parallel submission of recursive fibonacci with 'gpu' counting ") {
-    IO.parSequenceN(50)((1 to 30).toList.map { n =>
-      {
+  test("parallel submission of non-recursive task with 'gpu' counting ") {
+    IO.parSequenceN(500)((1 to 10000).toList.map { n1=>
+      IO{
+        val n = math.min(30,n1)
         val r = (fibtask(FibInput(n))(
           ResourceRequest(cpu = (1, 1), memory = 1, gpu = 1, scratch = 1)
         )).map(_.n)
         r.map { r =>
           assertResult(r)(serial(n))
         }
-      }
+      }.flatten
     }).unsafeRunSync()
   }
 

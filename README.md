@@ -161,7 +161,7 @@ Worker roles are configured with available resources of the same types.
 
 Resource allocations are enforced, i.e. a task may use more resources than asked for and the library will not do anything about this.
 
-## Horizontal scaling
+## Horizontal scaling of the application role
 Multiple identical processes can run aside each other if the `tasks-postgres` module is used to externalize the state and either:
 - the persistent storage is globally accessible (object storage or a file system mounted on each node). If it is a network filesystem, it must provide atomic rename.
 - or the persistent caching is disabled.
