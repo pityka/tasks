@@ -351,7 +351,7 @@ private[tasks] class FolderFileStorage(val basePath: File)(implicit
         .takeThrough(identity)
         .compile
         .last
-        .map(_.isEmpty)
+        .map(_.getOrElse(true))
 
     } else {
       val a1 = FolderFileStorage.getContentHashOfFile(
