@@ -23,14 +23,16 @@ private[tasks] class LocalMessenger(
   def subscribe(address: Address): IO[fs2.Stream[IO, Message]] = {
     for {
       ch <- Channel.unbounded[IO, Message]
-      _ <- channels.get.flatMap(_.get(address.withoutUri) match {
-        case None => IO.unit
-        case Some(value) =>
-          IO.raiseError(
-            new RuntimeException(s"Address $address already subscribed")
-          )
-      })
-      _ <- channels.update(map => map.updated(address.withoutUri, ch))
+      _ <- channels.modify { map =>
+        map.get(address.withoutUri) match {
+          case None =>
+            (map.updated(address.withoutUri, ch), IO.unit)
+          case Some(_) =>
+            (map, IO.raiseError[Unit](
+              new RuntimeException(s"Address $address already subscribed")
+            ))
+        }
+      }.flatten
     } yield ch.stream
   }
 
