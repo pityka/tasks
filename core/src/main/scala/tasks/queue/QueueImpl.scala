@@ -90,7 +90,7 @@ object QueueImpl {
           copy(nodes = nodes.update(ev))
         case Incremented(launcher) =>
           copy(counters = counters.get(launcher) match {
-            case None        => counters.updated(launcher, 0L)
+            case None        => counters.updated(launcher, 1L)
             case Some(value) => counters.updated(launcher, value + 1)
           })
         case Enqueued(sch, proxies) =>
@@ -532,12 +532,14 @@ private[tasks] class QueueImpl(
                     .flatMap {
                       case Left(e) =>
                         IO(
-                          scribe.debug( // could be normal, at acapacity
+                          scribe.debug(
                             "NodeRequestFailed",
                             scribe.data("info", e),
                             scribe.data(
                               "explain",
-                              "This is normal if the there are no more capacity"
+                              "This is normal if there is no more capacity. " +
+                              "Note: failed requests still count against maxNodesCumulative " +
+                              "as a defensive measure to bound total attempts."
                             )
                           )
                         ) *>
@@ -672,7 +674,10 @@ private[tasks] class QueueImpl(
         state.queuedTasks.valuesIterator
           .foreach { case (sch, _) =>
             val ret = availableResource.canFulfillRequest(sch.resource)
-            if (!ret && (maxPrio == Int.MinValue || sch.priority.s > maxPrio)) {
+            if (ret && sch.priority.s > maxPrio) {
+              maxPrio = sch.priority.s
+              selected = Some(sch)
+            } else if (!ret) {
               scribe.debug(
                 s"CantFulfillRequest",
                 num,
@@ -680,12 +685,9 @@ private[tasks] class QueueImpl(
                 availableResource,
                 scribe.data(
                   "explain",
-                  "No available resources or lower priority than an already selected task"
+                  "No available resources for this task"
                 )
               )
-            } else {
-              maxPrio = sch.priority.s
-              selected = Some(sch)
             }
 
           }
