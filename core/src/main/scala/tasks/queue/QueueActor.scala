@@ -132,9 +132,6 @@ private[tasks] final class QueueActorBehavior(
             )
         }
 
-    case Message(MessageData.QueueAck(allocated, launcher), _, _) =>
-      impl.ack(allocated, launcher)
-
     case Message(
           MessageData.TaskDone(
             sch,

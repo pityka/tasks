@@ -52,11 +52,6 @@ private[tasks] trait Queue {
 
   def initFailed(nodeName: RunningJobId): IO[Unit]
 
-  def ack(
-      allocated: VersionedResourceAllocated,
-      launcher: LauncherName
-  ): IO[Unit]
-
   def askForWork(
       launcherAsking: LauncherName,
       availableResources: VersionedResourceAvailable,
@@ -91,12 +86,6 @@ private[tasks] final class QueueFromQueueImpl(
         ()
     }
   def scheduleTask(sch: ScheduleTask): IO[Unit] = queueImpl.scheduleTask(sch)
-
-  def ack(
-      allocated: VersionedResourceAllocated,
-      launcher: LauncherName
-  ): IO[Unit] =
-    queueImpl.ack(allocated, launcher)
 
   def askForWork(
       launcherAsking: LauncherName,
@@ -152,18 +141,6 @@ private[tasks] class QueueWithActor(
           scribe.error("Unexpected failure. Handle error.", value)
           ()
       }
-  def ack(
-      allocated: VersionedResourceAllocated,
-      launcher: LauncherName
-  ): IO[Unit] =
-    messenger.submit(
-      Message(
-        MessageData.QueueAck(allocated, launcher),
-        from = Address.unknown,
-        to = queueActor.address0
-      )
-    )
-
   def scheduleTask(sch: ScheduleTask): IO[Unit] =
     messenger
       .submit(

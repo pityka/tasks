@@ -326,8 +326,7 @@ private[tasks] object Launcher {
 
                       val st1 = st0
                       val (allocated, st2, io1) = launch(st1, scheduleTask, ref)
-                      val io2 = poll(queue.ack(allocated, address))
-                      (st2, io1 *> io2)
+                      (st2, io1)
                     } else (st0, IO.unit)
                   scribe.debug(s"State after Schedule",scheduleTask,newState.availableResources,address)
                   newState -> sideEffects

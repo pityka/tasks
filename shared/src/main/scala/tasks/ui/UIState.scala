@@ -77,7 +77,6 @@ case class UIQueueState(
       (HashedTaskDescription, (UILauncherActor, VersionedResourceAllocated))
     ],
     knownLaunchers: Set[UILauncherActor],
-    negotiation: Option[(UILauncherActor, HashedTaskDescription)],
     failedTasks: List[
       (HashedTaskDescription, (UILauncherActor, VersionedResourceAllocated))
     ],
@@ -86,7 +85,7 @@ case class UIQueueState(
 )
 
 object UIQueueState {
-  val empty = UIQueueState(Nil, Nil, Set(), None, Nil, Set(), Set())
+  val empty = UIQueueState(Nil, Nil, Set(), Nil, Set(), Set())
   implicit val codec: JsonValueCodec[UIQueueState] =
     JsonCodecMaker.make
 }

@@ -42,11 +42,8 @@ object QueueImpl {
       sch: ScheduleTask,
       proxies: List[Proxy]
   ) extends Event
-  case class Negotiating(launcher: LauncherName, sch: ScheduleTask)
-      extends Event
   case class LauncherJoined(launcher: LauncherName, node: Option[Node])
       extends Event
-  case object NegotiationDone extends Event
   case class TaskScheduled(
       sch: ScheduleTask,
       launcher: LauncherName,
@@ -77,9 +74,6 @@ object QueueImpl {
         (LauncherName, VersionedResourceAllocated, List[Proxy], ScheduleTask)
       ],
       knownLaunchers: Map[LauncherName, Option[Node]],
-      /*This is non empty while waiting for response from the tasklauncher
-       *during that, no other tasks are started*/
-      negotiation: Option[(LauncherName, ScheduleTask)],
       counters: Map[LauncherName, Long],
       nodes: NodeRegistryState.State
   ) {
@@ -120,11 +114,8 @@ object QueueImpl {
                 (launcher, allocation, (newProxies ::: proxies).distinct, sch)
               )
           )
-        case Negotiating(launcher, sch) =>
-          copy(negotiation = Some((launcher, sch)))
         case LauncherJoined(launcher, node) =>
           copy(knownLaunchers = knownLaunchers + (launcher -> node))
-        case NegotiationDone => copy(negotiation = None)
         case TaskScheduled(sch, launcher, allocated) =>
           val (_, proxies) = queuedTasks(project(sch))
           copy(
@@ -162,13 +153,11 @@ object QueueImpl {
         }
         .getOrElse(false)
 
-    def negotiatingWithCurrentSender(sender: LauncherName) =
-      negotiation.map(_._1 === sender).getOrElse(false)
   }
 
   object State {
     def empty =
-      State(Map(), Map(), Map(), None, Map(), NodeRegistryState.State.empty)
+      State(Map(), Map(), Map(), Map(), NodeRegistryState.State.empty)
 
   }
 
@@ -617,16 +606,6 @@ private[tasks] class QueueImpl(
       state.update(TaskLauncherStoppedFor(sch)).update(Enqueued(sch, proxies))
     }
 
-    val negotiatingWithStoppedLauncher = state.negotiation.exists {
-      case (negotiatingLauncher, _) =>
-        (negotiatingLauncher: LauncherName) == (launcher: LauncherName)
-    }
-    if (negotiatingWithStoppedLauncher) {
-      scribe.error(
-        "Launcher stopped during negotiation phase. Automatic recovery from this is not implemented. The scheduler is deadlocked and it should be restarted.",
-        launcher
-      )
-    }
     val node = state.knownLaunchers.get(launcher).flatten
     val updated2 = {
       val st1 = updated.update(LauncherCrashed(launcher))
@@ -652,127 +631,95 @@ private[tasks] class QueueImpl(
   ): IO[Either[MessageData.NothingForSchedule.type, MessageData.Schedule]] = {
 
     val askIO = ref.flatModify { state =>
-      if (state.negotiation.isEmpty) {
-        val num = CorrelationId.make
-        scribe.debug(
-          s"AskForWork",
-          scribe.data("negotatiation", state.negotiation.toString),
-          scribe.data(
-            "queued-tasks",
-            state.queuedTasks.map { case (_, (sch, _)) =>
-              (sch.description.taskId, sch.resource)
-            }.toSeq
-          ),
-          availableResource,
-          num,
-          launcher,
-          node.map(v => Node.toLogFeature(v)).getOrElse(scribe.data(Map.empty))
-        )
+      val num = CorrelationId.make
+      scribe.debug(
+        s"AskForWork",
+        scribe.data(
+          "queued-tasks",
+          state.queuedTasks.map { case (_, (sch, _)) =>
+            (sch.description.taskId, sch.resource)
+          }.toSeq
+        ),
+        availableResource,
+        num,
+        launcher,
+        node.map(v => Node.toLogFeature(v)).getOrElse(scribe.data(Map.empty))
+      )
 
-        var maxPrio = Int.MinValue
-        var selected = Option.empty[ScheduleTask]
-        state.queuedTasks.valuesIterator
-          .foreach { case (sch, _) =>
-            val ret = availableResource.canFulfillRequest(sch.resource)
-            if (ret && sch.priority.s > maxPrio) {
-              maxPrio = sch.priority.s
-              selected = Some(sch)
-            } else if (!ret) {
-              scribe.debug(
-                s"CantFulfillRequest",
-                num,
-                sch,
-                availableResource,
-                scribe.data(
-                  "explain",
-                  "No available resources for this task"
-                )
-              )
-            }
-
-          }
-
-        selected match {
-          case None =>
+      var maxPrio = Int.MinValue
+      var selected = Option.empty[ScheduleTask]
+      state.queuedTasks.valuesIterator
+        .foreach { case (sch, _) =>
+          val ret = availableResource.canFulfillRequest(sch.resource)
+          if (ret && sch.priority.s > maxPrio) {
+            maxPrio = sch.priority.s
+            selected = Some(sch)
+          } else if (!ret) {
             scribe.debug(
-              s"FoundNothingToSchedule",
-              num,
-              launcher,
-              availableResource,
-              scribe.data("queued-tasks", state.queuedTasks)
-            )
-            state -> IO.pure(Left(MessageData.NothingForSchedule))
-
-          case Some(sch) =>
-            val withNegotiation = state.update(Negotiating(launcher, sch))
-            scribe.debug(
-              s"Dequeue",
+              s"CantFulfillRequest",
               num,
               sch,
-              launcher,
-              scribe.data("negotatiation", state.negotiation),
-              scribe.data("explain", "Sending task to launcher.")
+              availableResource,
+              scribe.data(
+                "explain",
+                "No available resources for this task"
+              )
             )
-
-            val (newState, io1) =
-              if (!state.knownLaunchers.contains(launcher)) {
-                val st2 =
-                  withNegotiation.update(LauncherJoined(launcher, node))
-                st2 -> node
-                  .flatMap(n =>
-                    createNode.map(createNode => handleNewNode(n, createNode))
-                  )
-                  .getOrElse(IO.unit)
-              } else withNegotiation -> IO.unit
-
-            val io2 = IO.pure(
-              Right(MessageData.Schedule(sch))
-            )
-
-            newState -> (io1 *> io2)
+          }
 
         }
 
-      } else {
-        scribe.debug(
-          s"InNegotiation",
-          launcher,
-          availableResource,
-          node.map(v => Node.toLogFeature(v)).getOrElse(scribe.data(Map.empty)),
-          scribe.data(
-            "explain",
-            "An other askforwork - schedule - ack cycle is in flight. Ignoring this ask."
+      selected match {
+        case None =>
+          scribe.debug(
+            s"FoundNothingToSchedule",
+            num,
+            launcher,
+            availableResource,
+            scribe.data("queued-tasks", state.queuedTasks)
           )
-        )
-        state -> IO.pure(Left(MessageData.NothingForSchedule))
+          state -> IO.pure(Left(MessageData.NothingForSchedule))
+
+        case Some(sch) =>
+          val allocated = availableResource.maximum(sch.resource)
+          scribe.debug(
+            s"Dequeue",
+            num,
+            sch,
+            launcher,
+            allocated,
+            scribe.data("explain", "Scheduling task to launcher.")
+          )
+
+          val withJoin =
+            if (!state.knownLaunchers.contains(launcher))
+              state.update(LauncherJoined(launcher, node))
+            else state
+
+          val newState = withJoin
+            .update(TaskScheduled(sch, launcher, allocated))
+
+          val joinIO =
+            if (!state.knownLaunchers.contains(launcher))
+              node
+                .flatMap(n =>
+                  createNode.map(createNode => handleNewNode(n, createNode))
+                )
+                .getOrElse(IO.unit)
+            else IO.unit
+
+          val io = joinIO *> IO.pure(
+            Right(MessageData.Schedule(sch))
+          )
+
+          newState -> io
+
       }
     }
 
     handleQueueStatIO *> askIO
 
   }
-
-  def ack(
-      allocated: VersionedResourceAllocated,
-      launcher: LauncherName
-  ): IO[Unit] =
-    ref.update { state =>
-      if (state.negotiatingWithCurrentSender(launcher)) {
-        val sch = state.negotiation.get._2
-        if (state.scheduledTasks.contains(project(sch))) {
-          scribe.error(
-            "Routed messages already contains task. This is unexpected and can lead to lost messages.",
-            launcher,
-            allocated,
-            sch
-          )
-        }
-
-        state
-          .update(NegotiationDone)
-          .update(TaskScheduled(sch, launcher, allocated))
-      } else state
-    }
 
   def taskSuccess(
       sch: ScheduleTask,

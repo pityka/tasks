@@ -33,9 +33,6 @@ object Postgres {
         )
       ],
       knownLaunchers: List[(LauncherName, Option[Node])],
-      /*This is non empty while waiting for response from the tasklauncher
-       *during that, no other tasks are started*/
-      negotiation: Option[(LauncherName, ScheduleTask)],
       counters: List[(LauncherName, Long)],
       nodes: NodeRegistryState.State
   ) {
@@ -43,7 +40,6 @@ object Postgres {
       queuedTasks = queuedTasks.toMap,
       scheduledTasks = scheduledTasks.toMap,
       knownLaunchers = knownLaunchers.toMap,
-      negotiation = negotiation,
       counters = counters.toMap,
       nodes = nodes
     )
@@ -53,7 +49,6 @@ object Postgres {
       queuedTasks = state.queuedTasks.toList,
       scheduledTasks = state.scheduledTasks.toList,
       knownLaunchers = state.knownLaunchers.toList,
-      negotiation = state.negotiation,
       counters = state.counters.toList,
       nodes = state.nodes
     )
