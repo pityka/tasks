@@ -20,7 +20,9 @@ private[tasks] class RemoteMessenger(
     client: Client[IO],
     val listeningUri: org.http4s.Uri,
     val peerUri: org.http4s.Uri,
-    localMessenger: LocalMessenger
+    localMessenger: LocalMessenger,
+    httpRetryCount: Int,
+    httpRetryBaseDelay: scala.concurrent.duration.FiniteDuration
 ) extends Messenger {
 
   def listeningAddress = Some(listeningUri.toString)
@@ -43,7 +45,9 @@ private[tasks] class RemoteMessenger(
             .submit0(
               message = messageWithRemoteUri,
               client = client,
-              peerUri = peerUri
+              peerUri = peerUri,
+              retryCount = httpRetryCount,
+              retryBaseDelay = httpRetryBaseDelay
             )
             .void
         case _ => localMessenger.submit(message)
@@ -138,7 +142,9 @@ private[tasks] object RemoteMessenger {
   private def submit0(
       message: Message,
       client: Client[IO],
-      peerUri: org.http4s.Uri
+      peerUri: org.http4s.Uri,
+      retryCount: Int,
+      retryBaseDelay: scala.concurrent.duration.FiniteDuration
   ) = {
     val num = CorrelationId.make
     val effectiveUri = message.to.listeningUri
@@ -163,32 +169,45 @@ private[tasks] object RemoteMessenger {
       )
     )
 
-    IO(
-      scribe.trace(s"HTTP request", message, num, requestData)
-    ) *>
-      client.expect[String](request).attempt.flatMap {
-        case Right(result) =>
-          IO(
-            scribe.trace(
-              s"HTTP response",
-              num,
-              requestData,
-              message,
-              scribe.data("response-body", result)
+    def attempt(remaining: Int): IO[String] =
+      IO(
+        scribe.trace(s"HTTP request", message, num, requestData)
+      ) *>
+        client.expect[String](request).attempt.flatMap {
+          case Right(result) =>
+            IO(
+              scribe.trace(
+                s"HTTP response",
+                num,
+                requestData,
+                message,
+                scribe.data("response-body", result)
+              )
             )
-          )
-            .map(_ => result)
-        case Left(e) =>
-          IO(
-            scribe.error(
-              s"HTTP request failed.",
-              num,
-              requestData,
-              message,
-              e
-            )
-          ) *> IO.pure("")
-      }
+              .map(_ => result)
+          case Left(e) if remaining > 0 =>
+            val delay = retryBaseDelay * (retryCount - remaining + 1).toLong
+            IO(
+              scribe.warn(
+                s"HTTP request failed, retrying in $delay ($remaining retries left).",
+                num,
+                requestData,
+                e
+              )
+            ) *> IO.sleep(delay) *> attempt(remaining - 1)
+          case Left(e) =>
+            IO(
+              scribe.error(
+                s"HTTP request failed after ${retryCount + 1} attempts.",
+                num,
+                requestData,
+                message,
+                e
+              )
+            ) *> IO.pure("")
+        }
+
+    attempt(retryCount)
   }
 
   /** Will receive http POST messages on http://$bindHost:$bindPort/$bindPrefix
@@ -207,7 +226,9 @@ private[tasks] object RemoteMessenger {
       bindHost: String,
       bindPort: Int,
       bindPrefix: String,
-      peerUri: org.http4s.Uri
+      peerUri: org.http4s.Uri,
+      httpRetryCount: Int,
+      httpRetryBaseDelay: scala.concurrent.duration.FiniteDuration
   ) = {
     import com.comcast.ip4s._
 
@@ -242,7 +263,9 @@ private[tasks] object RemoteMessenger {
             client = client,
             peerUri = peerUri,
             listeningUri = listeningUri,
-            localMessenger = localMessenger
+            localMessenger = localMessenger,
+            httpRetryCount = httpRetryCount,
+            httpRetryBaseDelay = httpRetryBaseDelay
           )
           scribe.info(
             s"Remote messenger built.",

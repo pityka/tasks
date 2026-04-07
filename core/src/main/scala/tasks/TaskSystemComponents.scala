@@ -740,7 +740,7 @@ object TaskSystemComponents {
               launcherName = launcherName,
               nodeName = nodeName
             )
-            messenger <- Messenger.make(hostConfig)
+            messenger <- Messenger.make(hostConfig)(config)
             fileServiceComponent <- fileServiceComponent
             cache <- cache(fileServiceComponent)
             _ <- Resource.eval(IO(scribe.info(s"Cache: $cache")))
