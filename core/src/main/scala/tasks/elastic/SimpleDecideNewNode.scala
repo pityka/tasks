@@ -53,7 +53,7 @@ private[tasks] class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
       (registeredNodes ++ pendingNodes).toList
 
     val availableResourcesMinusRunningJobs =
-      (resourcesUsedByRunningJobs).foldLeft(List.empty[ResourceAvailable]) {
+      (resourcesUsedByRunningJobs).foldLeft(availableResources) {
         case (available, runningJob) =>
           val (prefix, suffix) =
             available.span(x => !x.canFulfillRequest(runningJob))
