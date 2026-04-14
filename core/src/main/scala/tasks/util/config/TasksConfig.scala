@@ -123,9 +123,6 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   val disableRemoting = raw.getBoolean("tasks.disableRemoting")
 
-  val httpRetryCount = raw.getInt("tasks.httpRetryCount")
-  val httpRetryBaseDelay: FD = raw.getDuration("tasks.httpRetryBaseDelay")
-
   val workerWorkingDirectory =
     raw.getString("tasks.elastic.workerWorkingDirectory")
 
