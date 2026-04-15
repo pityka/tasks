@@ -39,7 +39,7 @@ case class ResourceRequest(
 
 object ResourceRequest {
 
-   implicit def toLogFeature(rm: ResourceRequest): scribe.LogFeature =
+  implicit def toLogFeature(rm: ResourceRequest): scribe.LogFeature =
     scribe.data(
       Map(
         "resource-request-cpu" -> rm.cpu,
@@ -124,16 +124,16 @@ case class ResourceAvailable(
     image
   )
 
-  def addBack(r: ResourceAllocated) =
-   {
-    assert((gpu.toSet & r.gpu.toSet).isEmpty,s"$gpu + ${r.gpu}") 
+  def addBack(r: ResourceAllocated) = {
+    assert((gpu.toSet & r.gpu.toSet).isEmpty, s"$gpu + ${r.gpu}")
     ResourceAvailable(
       cpu + r.cpu,
       memory + r.memory,
       scratch + r.scratch,
       gpu ++ r.gpu,
       image
-    )}
+    )
+  }
 
   def all =
     ResourceAllocated(

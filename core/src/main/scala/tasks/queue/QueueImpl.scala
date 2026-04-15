@@ -194,8 +194,8 @@ object QueueImpl {
       unmanagedResource: tasks.shared.ResourceAvailable
   )(implicit
       config: TasksConfig
-  ) = Resource.make(Ref.of[IO, QueueImpl.State](QueueImpl.State.empty).flatMap {
-    ref =>
+  ) = Resource.make(
+    Ref.of[IO, QueueImpl.State](QueueImpl.State.empty).flatMap { ref =>
       Ref.of[IO, List[FiberIO[Unit]]](Nil).flatMap { ref2 =>
         val q = new QueueImpl(
           ref = Transaction.fromRef(ref),
@@ -209,7 +209,8 @@ object QueueImpl {
         )
         q.startCounterLoops.map(_ => q)
       }
-  })(_.release)
+    }
+  )(_.release)
 }
 
 private[tasks] class QueueImpl(
@@ -515,70 +516,71 @@ private[tasks] class QueueImpl(
                   )
                 )
               ) *> IO
-                .parSequenceN(1)(requestedNodes.toList.map { case (request, _) =>
-                  createNode
-                    .requestOneNewJobFromJobScheduler(request)
-                    .flatMap {
-                      case Left(e) =>
-                        IO(
-                          scribe.debug(
-                            "NodeRequestFailed",
-                            scribe.data("info", e),
-                            scribe.data(
-                              "explain",
-                              "This is normal if there is no more capacity. " +
-                              "Note: failed requests still count against maxNodesCumulative " +
-                              "as a defensive measure to bound total attempts."
-                            )
-                          )
-                        ) *>
-                          ref.update(
-                            _.update(
-                              NodeEvent(NodeRegistryState.NodeRequested)
-                            )
-                          )
-                      case Right((jobId, size)) =>
-                        IO(
-                          scribe.info(
-                            s"NodeRequestSucceeded",
-                            jobId,
-                            size
-                          )
-                        ) *> ref.update(
-                          _.update(NodeEvent(NodeRegistryState.NodeRequested))
-                            .update(
-                              NodeEvent(
-                                NodeRegistryState.NodeIsPending(jobId, size)
+                .parSequenceN(1)(requestedNodes.toList.map {
+                  case (request, _) =>
+                    createNode
+                      .requestOneNewJobFromJobScheduler(request)
+                      .flatMap {
+                        case Left(e) =>
+                          IO(
+                            scribe.debug(
+                              "NodeRequestFailed",
+                              scribe.data("info", e),
+                              scribe.data(
+                                "explain",
+                                "This is normal if there is no more capacity. " +
+                                  "Note: failed requests still count against maxNodesCumulative " +
+                                  "as a defensive measure to bound total attempts."
                               )
                             )
-                        ) *> IO
-                          .sleep(config.pendingNodeTimeout)
-                          .flatMap { initFailed =>
-                            ref.flatModify { state =>
-                              if (state.nodes.pending.contains(jobId)) {
-                                scribe.warn(
-                                  "NodeInitFailed: ",
-                                  jobId,
-                                  scribe.data(
-                                    "explain",
-                                    "The node was allocated but the peer process on the node failed to make initial contact."
-                                  )
+                          ) *>
+                            ref.update(
+                              _.update(
+                                NodeEvent(NodeRegistryState.NodeRequested)
+                              )
+                            )
+                        case Right((jobId, size)) =>
+                          IO(
+                            scribe.info(
+                              s"NodeRequestSucceeded",
+                              jobId,
+                              size
+                            )
+                          ) *> ref.update(
+                            _.update(NodeEvent(NodeRegistryState.NodeRequested))
+                              .update(
+                                NodeEvent(
+                                  NodeRegistryState.NodeIsPending(jobId, size)
                                 )
-
-                                state.update(
-                                  NodeEvent(
-                                    NodeRegistryState.InitFailed(jobId)
+                              )
+                          ) *> IO
+                            .sleep(config.pendingNodeTimeout)
+                            .flatMap { initFailed =>
+                              ref.flatModify { state =>
+                                if (state.nodes.pending.contains(jobId)) {
+                                  scribe.warn(
+                                    "NodeInitFailed: ",
+                                    jobId,
+                                    scribe.data(
+                                      "explain",
+                                      "The node was allocated but the peer process on the node failed to make initial contact."
+                                    )
                                   )
-                                ) ->
-                                  shutdownNode.shutdownPendingNode(jobId)
 
-                              } else (state, IO.unit)
+                                  state.update(
+                                    NodeEvent(
+                                      NodeRegistryState.InitFailed(jobId)
+                                    )
+                                  ) ->
+                                    shutdownNode.shutdownPendingNode(jobId)
+
+                                } else (state, IO.unit)
+                              }
                             }
-                          }
-                          .start
-                          .void
+                            .start
+                            .void
 
-                    }
+                      }
                 })
                 .void
 

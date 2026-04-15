@@ -346,7 +346,7 @@ private final class ProcessCreateNode(
           scribe.debug(
             s"Exec",
             scribe.data("exec-list", cmd.mkString("['", "','", "']")),
-            scribe.data("explain","command to spawn new process")
+            scribe.data("explain", "command to spawn new process")
           )
           fs2.io.process.ProcessBuilder
             .apply(cmd.head, cmd.drop(1))
