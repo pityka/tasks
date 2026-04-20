@@ -150,7 +150,7 @@ hosts.gpus = [0,1,2,3]
   test("parallel submission of recursive fibonacci with 'gpu' counting ") {
     IO.parSequenceN(500)((1 to 3000).toList.map { n0 =>
       {
-        val n = math.min(n0,8)
+        val n = math.min(n0, 8)
         val r = (fibtask(FibInput(n))(
           ResourceRequest(cpu = (1, 1), memory = 1, gpu = 1, scratch = 1)
         )).map(_.n)
