@@ -172,6 +172,17 @@ lazy val ec2 = project
   )
   .dependsOn(core)
 
+lazy val batch = project
+  .in(file("batch"))
+  .settings(commonSettings: _*)
+  .settings(
+    name := "tasks-batch",
+    libraryDependencies ++= Seq(
+      "software.amazon.awssdk" % "batch" % "2.23.13" // scala-steward:off
+    )
+  )
+  .dependsOn(core)
+
 lazy val s3 = project
   .in(file("s3"))
   .settings(commonSettings: _*)
@@ -273,6 +284,7 @@ lazy val root = (project in file("."))
     sharedJVM,
     // sharedJS,
     ec2,
+    batch,
     s3,
     kubernetes,
     kubernetesTest,
