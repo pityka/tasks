@@ -178,7 +178,9 @@ lazy val batch = project
   .settings(
     name := "tasks-batch",
     libraryDependencies ++= Seq(
-      "software.amazon.awssdk" % "batch" % "2.23.13" // scala-steward:off
+      "software.amazon.awssdk" % "batch" % "2.23.13", // scala-steward:off
+      "software.amazon.awssdk" % "cloudwatchlogs" % "2.23.13", // scala-steward:off
+      "io.github.pityka" %% "selfpackage-jib" % "2.1.6"
     )
   )
   .dependsOn(core)

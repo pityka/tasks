@@ -1,4 +1,4 @@
-/*
+  /*
  * The MIT License
  *
  * Copyright (c) 2016 Istvan Bartha
@@ -221,6 +221,8 @@ class BatchConfig(val raw: Config) extends ConfigValuesForHostConfiguration {
   val minimumCpu: Int = raw.getInt("tasks.elastic.batch.minimumCpu")
 
   val minimumMemory: Int = raw.getInt("tasks.elastic.batch.minimumMemory")
+
+  val logGroup: String = raw.getString("tasks.elastic.batch.logGroup")
 
   val tags: Map[String, String] = {
     val list: List[String] =
