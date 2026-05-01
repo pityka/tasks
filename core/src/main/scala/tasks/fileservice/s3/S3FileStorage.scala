@@ -95,8 +95,9 @@ private[tasks] class S3Storage(
       .map(x => if (x.endsWith("/")) x.dropRight(1) else x)
       .mkString("/")
 
-  def sink(
-      path: ProposedManagedFilePath
+  private def sinkWithPartSize(
+      path: ProposedManagedFilePath,
+      partSizeMB: Int
   ): Pipe[IO, Byte, (Long, Int, ManagedFilePath)] = { (in: Stream[IO, Byte]) =>
     val assembledPath = assembleName(path.toManaged)
     Stream.eval(
@@ -104,7 +105,7 @@ private[tasks] class S3Storage(
         s3.uploadFileMultipart(
           bucket = bucketName,
           key = assembledPath,
-          partSize = 5,
+          partSize = partSizeMB,
           multiPartConcurrency = uploadParallelism,
           cannedAcl = cannedAcls.toList,
           serverSideEncryption = Some(sse),
@@ -127,6 +128,32 @@ private[tasks] class S3Storage(
 
         }
     )
+  }
+
+  def sink(
+      path: ProposedManagedFilePath
+  ): Pipe[IO, Byte, (Long, Int, ManagedFilePath)] =
+    sinkWithPartSize(path, config.s3UploadPartSizeMB)
+
+  override def importFile(
+      f: File,
+      path: ProposedManagedFilePath,
+      canMove: Boolean
+  ): IO[(Long, Int, ManagedFilePath)] = {
+    val fileSize = f.length()
+    val minPartSizeMB = math.max(
+      config.s3UploadPartSizeMB,
+      ((fileSize / 10000L) / 1048576L + 1).toInt
+    )
+    tasks.util.retryIO(s"upload to $path")(
+      fs2.io.file
+        .Files[IO]
+        .readAll(fs2.io.file.Path.fromNioPath(f.toPath))
+        .through(sinkWithPartSize(path, minPartSizeMB))
+        .compile
+        .lastOrError,
+      4
+    )(scribe.Logger[ManagedFileStorage])
   }
 
   def stream(

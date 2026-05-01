@@ -177,6 +177,8 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   val s3UploadParallelism = raw.getInt("tasks.s3.uploadParallelism")
 
+  val s3UploadPartSizeMB = raw.getInt("tasks.s3.uploadPartSizeMB")
+
   val s3DownloadParallelism = raw.getInt("tasks.s3.downloadParallelism")
 
   val s3DownloadPartSizeMB = raw.getInt("tasks.s3.downloadPartSizeMB")
