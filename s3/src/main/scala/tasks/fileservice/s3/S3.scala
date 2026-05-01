@@ -360,7 +360,7 @@ class S3(val s3: S3AsyncClient) extends tasks.fileservice.s3.S3Client {
         )
       ).flatMap { resp =>
         IO.interruptible {
-          Chunk(unsafeWrapArray(resp.asByteArray()): _*)
+          Chunk.ByteBuffer(resp.asByteBuffer())
         }
       }
 
