@@ -159,30 +159,38 @@ private[tasks] class S3Storage(
 
       val assembledPath = assembleName(path)
 
-      val upload = s3
-        .readFile(bucketName, assembledPath)
-        .through(
-          fs2.io.file
-            .Files[IO]
-            .writeAll(fs2.io.file.Path.fromNioPath(file.toPath()))
-        )
-        .compile
-        .drain
-
-      val verify = s3
+      val downloadAndVerify = s3
         .getObjectMetadata(bucketName, assembledPath)
+        .flatMap {
+          case None =>
+            IO.raiseError(
+              new RuntimeException("S3: File does not exists")
+            )
+          case Some(metadata) =>
+            val (size1, _) = getLengthAndHash(metadata)
+            val source =
+              if (size1 > config.s3MultipartThreshold)
+                s3.readFileMultipart(bucket = bucketName, key = assembledPath, partSize = config.s3DownloadPartSizeMB, multiPartConcurrency = config.s3DownloadParallelism)
+              else s3.readFile(bucketName, assembledPath)
 
-      (upload *> verify).map { metadata =>
-        if (metadata.isEmpty) {
-          throw new RuntimeException("S3: File does not exists")
+            source
+              .through(
+                fs2.io.file
+                  .Files[IO]
+                  .writeAll(fs2.io.file.Path.fromNioPath(file.toPath()))
+              )
+              .compile
+              .drain
+              .map { _ =>
+                if (size1 !== file.length)
+                  throw new RuntimeException(
+                    "S3: Downloaded file length != metadata"
+                  )
+                file
+              }
         }
 
-        val (size1, _) = getLengthAndHash(metadata.get)
-        if (size1 !== file.length)
-          throw new RuntimeException("S3: Downloaded file length != metadata")
-
-        file
-      }
+      downloadAndVerify
 
     }(file => IO(file.delete))
 

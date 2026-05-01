@@ -277,6 +277,7 @@ lazy val root = (project in file("."))
   .settings(
     publishArtifact := false,
     publish / skip := true,
+    publishLocal / skip := true,
     crossScalaVersions := Nil
   )
   .aggregate(
