@@ -22,7 +22,7 @@
 package tasks.fileservice.s3
 
 import cats.effect._
-import fs2.{Chunk, Pipe, Pull}
+import fs2.{Chunk, Pipe}
 import software.amazon.awssdk.core.async.{
   AsyncRequestBody,
   AsyncResponseTransformer
@@ -327,58 +327,67 @@ class S3(val s3: S3AsyncClient) extends tasks.fileservice.s3.S3Client {
     * Suitable for big files.
     *
     * It does so in constant memory. So at a given time, only the number of
-    * bytes indicated by @partSize will be loaded in memory.
+    * chunks indicated by @partSize * @multiPartConcurrency will be loaded in
+    * memory.
     *
     * For small files, consider using [[readFile]] instead.
     *
     * @param partSize
     *   in megabytes
+    * @param multiPartConcurrency
+    *   the number of concurrent part downloads
     */
   def readFileMultipart(
       bucket: String,
       key: String,
-      partSize: Int
+      partSize: Int,
+      multiPartConcurrency: Int
   ): fs2.Stream[IO, Byte] = {
-    val chunkSizeBytes = partSize * 1048576
+    val chunkSizeBytes = partSize.toLong * 1048576L
 
-    // Range must be in the form "bytes=0-500" -> https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.35
-    def go(offset: Long): Pull[IO, Byte, Unit] =
-      fs2.Stream
-        .eval {
-          io(
-            s3.getObject(
-              GetObjectRequest
-                .builder()
-                .range(s"bytes=$offset-${offset + chunkSizeBytes}")
-                .bucket(bucket)
-                .key(key)
-                .build(),
-              AsyncResponseTransformer.toBytes[GetObjectResponse]
+    def downloadPart(offset: Long): IO[Chunk[Byte]] =
+      io(
+        s3.getObject(
+          GetObjectRequest
+            .builder()
+            .range(
+              s"bytes=$offset-${offset + chunkSizeBytes - 1}"
             )
-          )
+            .bucket(bucket)
+            .key(key)
+            .build(),
+          AsyncResponseTransformer.toBytes[GetObjectResponse]
+        )
+      ).flatMap { resp =>
+        IO.interruptible {
+          Chunk(unsafeWrapArray(resp.asByteArray()): _*)
         }
-        .pull
-        .last
-        .flatMap {
-          case Some(resp) =>
-            Pull.eval {
-              IO.interruptible {
-                val bs = resp.asByteArray()
-                val len = bs.length
-                if (len < 0) None else Some(Chunk(unsafeWrapArray(bs): _*))
-              }
-            }
+      }
+
+    fs2.Stream
+      .eval(
+        getObjectMetadata(bucket, key).flatMap {
           case None =>
-            Pull.eval(IO.pure(None))
+            IO.raiseError(
+              new RuntimeException(s"S3: File does not exist $bucket/$key")
+            )
+          case Some(meta) => IO.pure(meta.contentLength)
         }
-        .flatMap {
-          case Some(o) =>
-            if (o.size < chunkSizeBytes) Pull.output(o)
-            else Pull.output(o) >> go(offset + o.size)
-          case None => Pull.done
-        }
+      )
+      .flatMap { totalSize =>
+        val offsets =
+          Iterator
+            .iterate(0L)(_ + chunkSizeBytes)
+            .takeWhile(_ < totalSize)
+            .toList
 
-    go(0).stream
-  }
+        fs2.Stream
+          .emits(offsets)
+          .covary[IO]
+          .parEvalMap(multiPartConcurrency)(downloadPart)
+          .prefetchN(multiPartConcurrency)
+          .flatMap(fs2.Stream.chunk)
+      }
 
+}
 }

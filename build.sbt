@@ -191,7 +191,8 @@ lazy val s3 = project
   .settings(
     name := "tasks-s3",
     libraryDependencies ++= Seq(
-      "software.amazon.awssdk" % "s3" % "2.23.13" // scala-steward:off
+      "software.amazon.awssdk" % "s3" % "2.23.13", // scala-steward:off
+      "org.scalatest" %% "scalatest" % "3.2.19" % "test"
     )
   )
   .dependsOn(core)
