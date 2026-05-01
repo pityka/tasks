@@ -36,7 +36,10 @@ import fs2.Chunk
 import s3.S3Client
 private[tasks] class StreamHelper(
     s3Client: Option[S3Client],
-    httpClient: Option[Client[IO]]
+    httpClient: Option[Client[IO]],
+    s3DownloadPartSizeMB: Int,
+    s3DownloadParallelism: Int,
+    s3MultipartThreshold: Long
 ) {
 
   def s3Loc(uri: Uri) = {
@@ -213,8 +216,8 @@ private[tasks] class StreamHelper(
       }
 
     fs2.Stream.force(length.map { length =>
-      if (length > 1024 * 1024 * 10)
-        s3Client.get.readFileMultipart(bucket = bucket, key = key, partSize = 1,multiPartConcurrency = 64)
+      if (length > s3MultipartThreshold)
+        s3Client.get.readFileMultipart(bucket = bucket, key = key, partSize = s3DownloadPartSizeMB, multiPartConcurrency = s3DownloadParallelism)
       else s3Client.get.readFile(bucket, key)
     })
   }

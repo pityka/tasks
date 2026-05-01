@@ -135,7 +135,7 @@ object TaskSystemComponents {
 
           val streamHelper = httpClient.flatMap { http =>
             s3Client.map { s3 =>
-              new StreamHelper(s3, http)
+              new StreamHelper(s3Client = s3, httpClient = http, s3DownloadPartSizeMB = config.s3DownloadPartSizeMB, s3DownloadParallelism = config.s3DownloadParallelism, s3MultipartThreshold = config.s3MultipartThreshold)
             }
           }
 

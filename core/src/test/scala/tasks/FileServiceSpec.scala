@@ -58,7 +58,7 @@ class FileServiceSpec
     with TestHelpers {
   self: Suite =>
 
-  implicit val sh: StreamHelper = new StreamHelper(None, None)
+  implicit val sh: StreamHelper = new StreamHelper(s3Client = None, httpClient = None, s3DownloadPartSizeMB = 1, s3DownloadParallelism = 64, s3MultipartThreshold = 1024L * 1024 * 10)
 
   implicit val tconfig: TasksConfig = tasks.util.config
     .parse(() => ConfigFactory.load())

@@ -177,6 +177,12 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   val s3UploadParallelism = raw.getInt("tasks.s3.uploadParallelism")
 
+  val s3DownloadParallelism = raw.getInt("tasks.s3.downloadParallelism")
+
+  val s3DownloadPartSizeMB = raw.getInt("tasks.s3.downloadPartSizeMB")
+
+  val s3MultipartThreshold = raw.getLong("tasks.s3.multipartThreshold")
+
   val httpRemoteEnabled = raw.getBoolean("tasks.fileservice.remote.http")
   val s3RemoteEnabled = raw.getBoolean("tasks.fileservice.remote.s3")
 
