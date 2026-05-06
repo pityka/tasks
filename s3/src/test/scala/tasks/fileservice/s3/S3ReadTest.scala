@@ -3,6 +3,7 @@ package tasks.fileservice.s3
 import cats.effect.unsafe.implicits.global
 import org.scalatest.funsuite.AnyFunSuite
 import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider
+import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3AsyncClient
 
@@ -13,6 +14,9 @@ class S3ReadTest extends AnyFunSuite {
       .builder()
       .credentialsProvider(AnonymousCredentialsProvider.create())
       .region(region)
+      .httpClient(
+        NettyNioAsyncHttpClient.builder().maxConcurrency(256).build()
+      )
       .build()
 
   // Sentinel-2 L2A - public bucket in eu-central-1, ~105 MB file

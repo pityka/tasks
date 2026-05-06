@@ -37,30 +37,45 @@ import java.util.concurrent.CompletableFuture
 import scala.jdk.CollectionConverters._
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider
 import software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain
+import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient
 import S3Client.{S3UploadResponse, ObjectMetaData}
 
 object S3 {
-  def makeS3ClientResource(regionProfileName: Option[String]) =
+  def makeS3ClientResource(
+      regionProfileName: Option[String],
+      httpMaxConcurrency: Option[Int]
+  ) =
     Resource.make[IO, tasks.fileservice.s3.S3](IO {
 
       val s3AWSSDKClient =
         tasks.fileservice.s3.S3
-          .makeAWSSDKClient(regionProfileName)
+          .makeAWSSDKClient(regionProfileName, httpMaxConcurrency)
 
       new tasks.fileservice.s3.S3(s3AWSSDKClient)
 
     })(v => IO { v.s3.close })
-  def makeAWSSDKClient(regionProfileName: Option[String]) = S3AsyncClient
-    .builder()
-    .credentialsProvider(DefaultCredentialsProvider.create())
-    .region({
-      val b = DefaultAwsRegionProviderChain.builder()
-      regionProfileName
-        .foldLeft(b)((a, b) => a.profileName(b))
-        .build
-        .getRegion()
-    })
-    .build()
+  def makeAWSSDKClient(
+      regionProfileName: Option[String],
+      httpMaxConcurrency: Option[Int]
+  ) = {
+    val builder = S3AsyncClient
+      .builder()
+      .credentialsProvider(DefaultCredentialsProvider.create())
+      .region({
+        val b = DefaultAwsRegionProviderChain.builder()
+        regionProfileName
+          .foldLeft(b)((a, b) => a.profileName(b))
+          .build
+          .getRegion()
+      })
+    httpMaxConcurrency
+      .foldLeft(builder)((b, n) =>
+        b.httpClient(
+          NettyNioAsyncHttpClient.builder().maxConcurrency(n).build()
+        )
+      )
+      .build()
+  }
 }
 
 /** Wrapper of AWS SDK's S3AsyncClient into fs2.Stream and cats.effect.IO
