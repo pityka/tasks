@@ -38,25 +38,36 @@ import scala.jdk.CollectionConverters._
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider
 import software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain
 import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient
+import java.time.Duration
+import scala.concurrent.duration.FiniteDuration
 import S3Client.{S3UploadResponse, ObjectMetaData}
 
 object S3 {
   def makeS3ClientResource(
       regionProfileName: Option[String],
-      httpMaxConcurrency: Option[Int]
+      httpMaxConcurrency: Option[Int],
+      httpMaxPendingConnectionAcquires: Option[Int],
+      httpConnectionAcquisitionTimeout: Option[FiniteDuration]
   ) =
     Resource.make[IO, tasks.fileservice.s3.S3](IO {
 
       val s3AWSSDKClient =
         tasks.fileservice.s3.S3
-          .makeAWSSDKClient(regionProfileName, httpMaxConcurrency)
+          .makeAWSSDKClient(
+            regionProfileName,
+            httpMaxConcurrency,
+            httpMaxPendingConnectionAcquires,
+            httpConnectionAcquisitionTimeout
+          )
 
       new tasks.fileservice.s3.S3(s3AWSSDKClient)
 
     })(v => IO { v.s3.close })
   def makeAWSSDKClient(
       regionProfileName: Option[String],
-      httpMaxConcurrency: Option[Int]
+      httpMaxConcurrency: Option[Int],
+      httpMaxPendingConnectionAcquires: Option[Int],
+      httpConnectionAcquisitionTimeout: Option[FiniteDuration]
   ) = {
     val builder = S3AsyncClient
       .builder()
@@ -68,13 +79,21 @@ object S3 {
           .build
           .getRegion()
       })
-    httpMaxConcurrency
-      .foldLeft(builder)((b, n) =>
-        b.httpClient(
-          NettyNioAsyncHttpClient.builder().maxConcurrency(n).build()
-        )
+    if (
+      httpMaxConcurrency.isDefined ||
+      httpMaxPendingConnectionAcquires.isDefined ||
+      httpConnectionAcquisitionTimeout.isDefined
+    ) {
+      val nettyBuilder = NettyNioAsyncHttpClient.builder()
+      httpMaxConcurrency.foreach(nettyBuilder.maxConcurrency(_))
+      httpMaxPendingConnectionAcquires.foreach(
+        nettyBuilder.maxPendingConnectionAcquires(_)
       )
-      .build()
+      httpConnectionAcquisitionTimeout.foreach(d =>
+        nettyBuilder.connectionAcquisitionTimeout(Duration.ofNanos(d.toNanos))
+      )
+      builder.httpClient(nettyBuilder.build()).build()
+    } else builder.build()
   }
 }
 
