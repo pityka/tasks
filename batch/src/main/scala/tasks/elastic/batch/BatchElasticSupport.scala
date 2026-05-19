@@ -170,7 +170,7 @@ class BatchCreateNode(
   private def selectResources(
       requestSize: ResourceRequest
   ): ResourceAvailable = {
-    val cpu = math.max(requestSize.cpu._1, batchConfig.minimumCpu)
+    val cpu = math.max(requestSize.cpu._2, batchConfig.minimumCpu)
     val memory = math.max(requestSize.memory, batchConfig.minimumMemory)
     val scratch = requestSize.scratch
     val gpus = 0 until requestSize.gpu toList
