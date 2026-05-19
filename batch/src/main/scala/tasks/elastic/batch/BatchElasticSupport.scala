@@ -214,9 +214,25 @@ class BatchConfig(val raw: Config) extends ConfigValuesForHostConfiguration {
 
   val region: String = raw.getString("tasks.elastic.batch.region")
 
-  val jobQueue: String = raw.getString("tasks.elastic.batch.jobQueue")
+  val jobQueue: String = {
+    val v = raw.getString("tasks.elastic.batch.jobQueue")
+    require(
+      v.nonEmpty,
+      "tasks.elastic.batch.jobQueue must be set to a non-empty queue name or ARN. " +
+        "An empty value yields IAM errors like \"not authorized on resource job-queue/\""
+    )
+    v
+  }
 
-  val jobDefinition: String = raw.getString("tasks.elastic.batch.jobDefinition")
+  val jobDefinition: String = {
+    val v = raw.getString("tasks.elastic.batch.jobDefinition")
+    require(
+      v.nonEmpty,
+      "tasks.elastic.batch.jobDefinition must be set to a non-empty job-definition name or ARN. " +
+        "An empty value yields IAM errors like \"not authorized on resource job-definition/\""
+    )
+    v
+  }
 
   val minimumCpu: Int = raw.getInt("tasks.elastic.batch.minimumCpu")
 

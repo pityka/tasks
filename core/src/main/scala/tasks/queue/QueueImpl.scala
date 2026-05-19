@@ -504,6 +504,10 @@ private[tasks] class QueueImpl(
 
               val requestedNodes = neededNodes.take(allowedNewNodes)
 
+              val preCommittedState = (1 to requestedNodes.size).foldLeft(state) {
+                (s, _) => s.update(NodeEvent(NodeRegistryState.NodeRequested))
+              }
+
               val updatedState: IO[Unit] = IO(
                 scribe.info(
                   "RequestNodes",
@@ -531,12 +535,8 @@ private[tasks] class QueueImpl(
                               "as a defensive measure to bound total attempts."
                             )
                           )
-                        ) *>
-                          ref.update(
-                            _.update(
-                              NodeEvent(NodeRegistryState.NodeRequested)
-                            )
-                          )
+                        )
+                        // NodeRequested already pre-committed above.
                       case Right((jobId, size)) =>
                         IO(
                           scribe.info(
@@ -545,12 +545,12 @@ private[tasks] class QueueImpl(
                             size
                           )
                         ) *> ref.update(
-                          _.update(NodeEvent(NodeRegistryState.NodeRequested))
-                            .update(
-                              NodeEvent(
-                                NodeRegistryState.NodeIsPending(jobId, size)
-                              )
+                          // NodeRequested already pre-committed; only record Pending.
+                          _.update(
+                            NodeEvent(
+                              NodeRegistryState.NodeIsPending(jobId, size)
                             )
+                          )
                         ) *> IO
                           .sleep(config.pendingNodeTimeout)
                           .flatMap { initFailed =>
@@ -582,7 +582,7 @@ private[tasks] class QueueImpl(
                 })
                 .void
 
-              (state, updatedState)
+              (preCommittedState, updatedState)
 
             }
           } else (state, IO.unit)
