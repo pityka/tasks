@@ -478,18 +478,21 @@ private[tasks] class QueueImpl(
 
           val skip = neededNodes.values.sum == 0
           if (!skip) {
+            val activeOrInFlight =
+              state.nodes.running.size + state.nodes.pending.size + state.nodes.inFlightRequests
             val canRequest =
-              config.maxNodes > (state.nodes.running.size + state.nodes.pending.size) &&
+              config.maxNodes > activeOrInFlight &&
                 state.nodes.cumulativeRequested < config.maxNodesCumulative
             if (!canRequest) {
               state -> IO(
-                scribe.info(
+                scribe.debug(
                   "MaxNodesReached",
                   scribe.data(
                     Map(
                       "max-nodes" -> config.maxNodes,
                       "max-nodes-cumulative" -> config.maxNodesCumulative,
                       "cumulative-requested" -> state.nodes.cumulativeRequested,
+                      "in-flight-requests" -> state.nodes.inFlightRequests,
                       "pending-nodes" -> state.nodes.pending.size,
                       "running-nodes" -> state.nodes.running.size,
                       "explain" -> "New node request will not proceed because pending nodes or reached max nodes."
@@ -500,7 +503,7 @@ private[tasks] class QueueImpl(
             } else {
 
               val allowedNewNodes = math.min(
-                config.maxNodes - (state.nodes.running.size + state.nodes.pending.size),
+                config.maxNodes - activeOrInFlight,
                 config.maxNodesCumulative - state.nodes.cumulativeRequested
               )
 
@@ -537,8 +540,11 @@ private[tasks] class QueueImpl(
                               "as a defensive measure to bound total attempts."
                             )
                           )
+                        ) *> ref.update(
+                          _.update(
+                            NodeEvent(NodeRegistryState.NodeRequestFailed)
+                          )
                         )
-                        // NodeRequested already pre-committed above.
                       case Right((jobId, size)) =>
                         IO(
                           scribe.info(

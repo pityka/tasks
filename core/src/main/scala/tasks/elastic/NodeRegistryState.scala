@@ -48,9 +48,47 @@ import cats.effect.kernel.Deferred
 
 private[tasks] object NodeRegistryState {
 
+  /** Lifecycle of a worker node, as tracked by [[State]]:
+    *
+    * {{{
+    *                       NodeRequested
+    *                            │
+    *                            ▼
+    *                    ┌──────────────┐
+    *                    │ inFlight     │
+    *                    │ (counter)    │
+    *                    └──────┬───────┘
+    *               NodeIsPending│
+    *      NodeRequestFailed     │
+    *           ┌────────────────┤
+    *           ▼                ▼
+    *         done       ┌──────────────┐
+    *                    │ pending      │
+    *                    │ (map)        │
+    *                    └──────┬───────┘
+    *                  NodeIsUp │ InitFailed
+    *           ┌───────────────┤────────────┐
+    *           ▼               │            ▼
+    *    ┌──────────────┐       │          done
+    *    │ running      │       │
+    *    │ (map)        │       │
+    *    └──────┬───────┘       │
+    *  NodeIsDown│               │
+    *           ▼               │
+    *         done              │
+    * }}}
+    *
+    * `AllStop` clears running/pending/inFlight in one shot.
+    * `cumulativeRequested` is monotonic — it counts every `NodeRequested`
+    * (including ones that later fail) and gates `maxNodesCumulative`.
+    * `inFlightRequests` counts requests still mid-spawn (between
+    * `NodeRequested` and `NodeIsPending` / `NodeRequestFailed`) so the
+    * `maxNodes` gate can see them and not race past the cap.
+    */
   sealed trait Event
   case object AllStop extends Event
   case object NodeRequested extends Event
+  case object NodeRequestFailed extends Event
   case class NodeIsPending(
       pendingJobId: PendingJobId,
       resource: ResourceAvailable
@@ -62,13 +100,20 @@ private[tasks] object NodeRegistryState {
   case class State(
       running: Map[RunningJobId, ResourceAvailable],
       pending: Map[PendingJobId, ResourceAvailable],
-      cumulativeRequested: Int
+      cumulativeRequested: Int,
+      inFlightRequests: Int
   ) {
     def update(e: Event): State = {
       e match {
-        case AllStop => copy(running = Map.empty, pending = Map.empty)
+        case AllStop =>
+          copy(running = Map.empty, pending = Map.empty, inFlightRequests = 0)
         case NodeRequested =>
-          copy(cumulativeRequested = cumulativeRequested + 1)
+          copy(
+            cumulativeRequested = cumulativeRequested + 1,
+            inFlightRequests = inFlightRequests + 1
+          )
+        case NodeRequestFailed =>
+          copy(inFlightRequests = math.max(0, inFlightRequests - 1))
         case NodeIsUp(Node(runningJobId, resource, _), pendingJobId) =>
           copy(
             pending = pending - pendingJobId,
@@ -78,13 +123,16 @@ private[tasks] object NodeRegistryState {
           copy(running = running - runningJobId)
         case InitFailed(pendingJobId) => copy(pending = pending - pendingJobId)
         case NodeIsPending(pendingJobId, resource) =>
-          copy(pending = pending + ((pendingJobId, resource)))
+          copy(
+            pending = pending + ((pendingJobId, resource)),
+            inFlightRequests = math.max(0, inFlightRequests - 1)
+          )
       }
     }
   }
 
   object State {
-    val empty = State(Map(), Map(), 0)
+    val empty = State(Map(), Map(), 0, 0)
   }
 
 }
