@@ -669,6 +669,25 @@ private[tasks] class QueueImpl(
 
         }
 
+      // Register the launcher / mark the node up on FIRST contact, regardless of
+      // whether there is work to hand it. Doing this inside the `Some(sch)`
+      // branch (the previous behaviour) meant a worker that came up while the
+      // queue was momentarily empty was never recorded as up, so its pending
+      // entry would hit `pendingNodeTimeout` and trigger `NodeInitFailed` even
+      // though the worker was fully alive and polling for work.
+      val isNewLauncher = !state.knownLaunchers.contains(launcher)
+      val withJoin =
+        if (isNewLauncher) state.update(LauncherJoined(launcher, node))
+        else state
+      val joinIO =
+        if (isNewLauncher)
+          node
+            .flatMap(n =>
+              createNode.map(createNode => handleNewNode(n, createNode))
+            )
+            .getOrElse(IO.unit)
+        else IO.unit
+
       selected match {
         case None =>
           scribe.debug(
@@ -678,7 +697,7 @@ private[tasks] class QueueImpl(
             availableResource,
             scribe.data("queued-tasks", state.queuedTasks)
           )
-          state -> IO.pure(Left(MessageData.NothingForSchedule))
+          withJoin -> (joinIO *> IO.pure(Left(MessageData.NothingForSchedule)))
 
         case Some(sch) =>
           val allocated = availableResource.maximum(sch.resource)
@@ -691,22 +710,8 @@ private[tasks] class QueueImpl(
             scribe.data("explain", "Scheduling task to launcher.")
           )
 
-          val withJoin =
-            if (!state.knownLaunchers.contains(launcher))
-              state.update(LauncherJoined(launcher, node))
-            else state
-
           val newState = withJoin
             .update(TaskScheduled(sch, launcher, allocated))
-
-          val joinIO =
-            if (!state.knownLaunchers.contains(launcher))
-              node
-                .flatMap(n =>
-                  createNode.map(createNode => handleNewNode(n, createNode))
-                )
-                .getOrElse(IO.unit)
-            else IO.unit
 
           val io = joinIO *> IO.pure(
             Right(MessageData.Schedule(sch))
