@@ -488,6 +488,8 @@ private[tasks] class QueueImpl(
                   scribe.data(
                     Map(
                       "max-nodes" -> config.maxNodes,
+                      "max-nodes-cumulative" -> config.maxNodesCumulative,
+                      "cumulative-requested" -> state.nodes.cumulativeRequested,
                       "pending-nodes" -> state.nodes.pending.size,
                       "running-nodes" -> state.nodes.running.size,
                       "explain" -> "New node request will not proceed because pending nodes or reached max nodes."
@@ -525,7 +527,7 @@ private[tasks] class QueueImpl(
                     .flatMap {
                       case Left(e) =>
                         IO(
-                          scribe.debug(
+                          scribe.warn(
                             "NodeRequestFailed",
                             scribe.data("info", e),
                             scribe.data(
