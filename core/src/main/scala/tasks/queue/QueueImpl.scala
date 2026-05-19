@@ -480,7 +480,7 @@ private[tasks] class QueueImpl(
           if (!skip) {
             val canRequest =
               config.maxNodes > (state.nodes.running.size + state.nodes.pending.size) &&
-                state.nodes.cumulativeRequested <= config.maxNodesCumulative
+                state.nodes.cumulativeRequested < config.maxNodesCumulative
             if (!canRequest) {
               state -> IO(
                 scribe.info(

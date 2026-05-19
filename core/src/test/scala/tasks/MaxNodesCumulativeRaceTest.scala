@@ -34,7 +34,7 @@ import scala.concurrent.duration._
 
 /** Regression test for the maxNodesCumulative race:
   *
-  * `handleQueueStat` runs the check (`cumulativeRequested <= maxNodesCumulative`)
+  * `handleQueueStat` runs the check (`cumulativeRequested < maxNodesCumulative`)
   * inside a `ref.flatModify`, but historically returned the *unchanged* state and
   * deferred the actual `cumulativeRequested += 1` updates into the IO that runs
   * after the modify releases. Concurrent task submissions caused many parallel
