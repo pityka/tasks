@@ -161,9 +161,13 @@ object Bootstrap {
       val jobName =
         "tasks-master-" + java.util.UUID.randomUUID.toString.take(8)
 
+      val mainQueue =
+        if (batchConfig.jobQueue.nonEmpty) batchConfig.jobQueue
+        else batchConfig.onDemandJobQueue
+
       val submitRequest = SubmitJobRequest.builder
         .jobName(jobName)
-        .jobQueue(batchConfig.jobQueue)
+        .jobQueue(mainQueue)
         .jobDefinition(batchConfig.jobDefinition)
         .containerOverrides(containerOverrides)
         .tags(batchConfig.tags.asJava)

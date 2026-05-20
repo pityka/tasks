@@ -99,6 +99,8 @@ class BatchCreateNode(
       Try {
         val selectedResources = selectResources(requestSize)
 
+        val targetQueue = selectJobQueue(selectedResources)
+
         val script = Deployment.script(
           memory = selectedResources.memory,
           cpu = selectedResources.cpu,
@@ -150,7 +152,7 @@ class BatchCreateNode(
           .jobName(
             "tasks-worker-" + java.util.UUID.randomUUID.toString.take(8)
           )
-          .jobQueue(batchConfig.jobQueue)
+          .jobQueue(targetQueue)
           .jobDefinition(batchConfig.jobDefinition)
           .containerOverrides(containerOverrides)
           .tags(batchConfig.tags.asJava)
@@ -161,6 +163,67 @@ class BatchCreateNode(
         (jobId, selectedResources)
       }.toEither.left.map(_.getMessage)
     }
+
+  private def selectJobQueue(selected: ResourceAvailable): String = {
+    if (selected.gpu.nonEmpty) batchConfig.gpuJobQueue
+    else if (batchConfig.spotJobQueue == batchConfig.onDemandJobQueue)
+      batchConfig.onDemandJobQueue
+    else {
+      val onDemandHasRoom = Try {
+        val computeEnvs = listComputeEnvironments(batchConfig.onDemandJobQueue)
+        val (maxVcpus, desiredVcpus) = describeCapacity(computeEnvs)
+        scribe.debug(
+          s"on-demand queue ${batchConfig.onDemandJobQueue}: desired=$desiredVcpus max=$maxVcpus headroom=${batchConfig.onDemandHeadroomVcpu} ask=${selected.cpu}"
+        )
+        desiredVcpus + selected.cpu <= maxVcpus - batchConfig.onDemandHeadroomVcpu
+      } match {
+        case scala.util.Success(b) => b
+        case scala.util.Failure(e) =>
+          scribe.warn(
+            s"Failed to query on-demand queue capacity, defaulting to on-demand: ${e.getMessage}"
+          )
+          true
+      }
+      if (onDemandHasRoom) batchConfig.onDemandJobQueue
+      else batchConfig.spotJobQueue
+    }
+  }
+
+  private def listComputeEnvironments(jobQueueName: String): List[String] = {
+    val resp = batch.describeJobQueues(
+      DescribeJobQueuesRequest.builder.jobQueues(jobQueueName).build
+    )
+    resp.jobQueues.asScala.toList.flatMap { jq =>
+      jq.computeEnvironmentOrder.asScala.toList.map(_.computeEnvironment)
+    }
+  }
+
+  private def describeCapacity(
+      computeEnvArns: List[String]
+  ): (Int, Int) = {
+    if (computeEnvArns.isEmpty) (0, 0)
+    else {
+      val resp = batch.describeComputeEnvironments(
+        DescribeComputeEnvironmentsRequest.builder
+          .computeEnvironments(computeEnvArns.asJava)
+          .build
+      )
+      val ces = resp.computeEnvironments.asScala.toList
+      val maxVcpus = ces.map { ce =>
+        Option(ce.computeResources)
+          .flatMap(cr => Option(cr.maxvCpus))
+          .map(_.intValue)
+          .getOrElse(0)
+      }.sum
+      val desiredVcpus = ces.map { ce =>
+        Option(ce.computeResources)
+          .flatMap(cr => Option(cr.desiredvCpus))
+          .map(_.intValue)
+          .getOrElse(0)
+      }.sum
+      (maxVcpus, desiredVcpus)
+    }
+  }
 
   override def convertRunningToPending(
       p: RunningJobId
@@ -214,15 +277,33 @@ class BatchConfig(val raw: Config) extends ConfigValuesForHostConfiguration {
 
   val region: String = raw.getString("tasks.elastic.batch.region")
 
-  val jobQueue: String = {
-    val v = raw.getString("tasks.elastic.batch.jobQueue")
-    require(
-      v.nonEmpty,
-      "tasks.elastic.batch.jobQueue must be set to a non-empty queue name or ARN. " +
-        "An empty value yields IAM errors like \"not authorized on resource job-queue/\""
-    )
-    v
+  val jobQueue: String = raw.getString("tasks.elastic.batch.jobQueue")
+
+  private def readQueue(path: String, fallback: String): String = {
+    val v = if (raw.hasPath(path)) raw.getString(path) else ""
+    if (v.nonEmpty) v else fallback
   }
+
+  val gpuJobQueue: String =
+    readQueue("tasks.elastic.batch.gpuJobQueue", jobQueue)
+
+  val onDemandJobQueue: String =
+    readQueue("tasks.elastic.batch.onDemandJobQueue", jobQueue)
+
+  val spotJobQueue: String =
+    readQueue("tasks.elastic.batch.spotJobQueue", onDemandJobQueue)
+
+  val onDemandHeadroomVcpu: Int =
+    if (raw.hasPath("tasks.elastic.batch.onDemandHeadroomVcpu"))
+      raw.getInt("tasks.elastic.batch.onDemandHeadroomVcpu")
+    else 0
+
+  require(
+    gpuJobQueue.nonEmpty && onDemandJobQueue.nonEmpty && spotJobQueue.nonEmpty,
+    "At least one of tasks.elastic.batch.{jobQueue, gpuJobQueue, onDemandJobQueue, spotJobQueue} " +
+      "must be set to a non-empty queue name or ARN. An empty value yields IAM errors like " +
+      "\"not authorized on resource job-queue/\""
+  )
 
   val jobDefinition: String = {
     val v = raw.getString("tasks.elastic.batch.jobDefinition")
