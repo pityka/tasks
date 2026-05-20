@@ -88,7 +88,8 @@ object JvmElasticSupport {
       state: Ref[IO, State],
       externalQueueState: Option[Ref[IO, tasks.queue.QueueImpl.State]],
       masterAddress: SimpleSocketAddress,
-      masterPrefix: String
+      masterPrefix: String,
+      extraWorkerConfig: String
   ) extends CreateNode {
 
     def requestOneNewJobFromJobScheduler(
@@ -103,18 +104,34 @@ object JvmElasticSupport {
 
         defaultTaskSystem(
           config = s"""
-    
+
     hosts.master = "${masterAddress.getHostName}:${masterAddress.getPort}"
     hosts.masterprefix = ${masterPrefix}
     hosts.app = false
     tasks.disableRemoting = false
     tasks.elastic.nodename = $jobid
-    tasks.addShutdownHook = false 
+    tasks.addShutdownHook = false
     tasks.fileservice.storageURI="${config.storageURI.toString}"
+    $extraWorkerConfig
     """,
           s3Client = Resource.pure(None),
-          elasticSupport =
-            JvmGrid.make(externalQueueState).map(v => Some(v._2)),
+          // Share the parent state so the worker's self-shutdown is observable
+          // from the controller held by the test that constructed the grid.
+          elasticSupport = Resource.pure(
+            Some(
+              new ElasticSupport(
+                hostConfig = None,
+                shutdownFromNodeRegistry = new Shutdown(state),
+                shutdownFromWorker = new ShutdownSelf(state),
+                createNodeFactory = new JvmCreateNodeFactory(
+                  state,
+                  externalQueueState,
+                  extraWorkerConfig
+                ),
+                getNodeName = JvmGetNodeName
+              )
+            )
+          ),
           externalQueueState = Resource.pure(
             externalQueueState.map(ref => tasks.util.Transaction.fromRef(ref))
           )
@@ -145,14 +162,21 @@ object JvmElasticSupport {
 
   class JvmCreateNodeFactory(
       ref: Ref[IO, State],
-      externalQueueState: Option[Ref[IO, tasks.queue.QueueImpl.State]]
+      externalQueueState: Option[Ref[IO, tasks.queue.QueueImpl.State]],
+      extraWorkerConfig: String
   ) extends CreateNodeFactory {
     def apply(
         master: SimpleSocketAddress,
         masterPrefix: String,
         codeAddress: CodeAddress
     ) =
-      new JvmCreateNode(ref, externalQueueState, master, masterPrefix)
+      new JvmCreateNode(
+        ref,
+        externalQueueState,
+        master,
+        masterPrefix,
+        extraWorkerConfig
+      )
   }
 
   object JvmGetNodeName extends GetNodeName {
@@ -164,6 +188,7 @@ object JvmElasticSupport {
       state: Ref[IO, State]
   ) {
     def list = state.get.map(_.taskSystems.map(_._1))
+    def shutdowns: IO[List[String]] = state.get.map(_.nodesShutdown)
     def stop(a: String) = {
       scribe.info(s"Stop called on $a")
       (new Shutdown(state)).shutdownRunningNode(RunningJobId(a))
@@ -184,7 +209,8 @@ object JvmElasticSupport {
     }
 
     def make(
-        externalQueueState: Option[Ref[IO, tasks.queue.QueueImpl.State]]
+        externalQueueState: Option[Ref[IO, tasks.queue.QueueImpl.State]],
+        extraWorkerConfig: String = ""
     ): Resource[IO, (JvmNodeControl, ElasticSupport)] =
       stateResource.map { state =>
         val controller = new JvmNodeControl(state)
@@ -195,7 +221,7 @@ object JvmElasticSupport {
             shutdownFromNodeRegistry = new Shutdown(state),
             shutdownFromWorker = new ShutdownSelf(state),
             createNodeFactory =
-              new JvmCreateNodeFactory(state, externalQueueState),
+              new JvmCreateNodeFactory(state, externalQueueState, extraWorkerConfig),
             getNodeName = JvmGetNodeName
           )
 

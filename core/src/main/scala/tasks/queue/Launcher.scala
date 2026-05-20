@@ -93,11 +93,11 @@ private[tasks] object Launcher {
       )
 
     val init: IO[Launcher.State] =
-      IO.pure(
+      IO(
         Launcher.State(
           maxResources = slots,
           availableResources = slots,
-          lastTaskFinished = 0L
+          lastTaskFinished = System.nanoTime
         )
       )
 
@@ -170,6 +170,14 @@ private[tasks] object Launcher {
     }
   }
 
+  /** Per-launcher mutable state.
+    *
+    * @param lastTaskFinished
+    *   `System.nanoTime` at the most recent task completion, or at boot for a
+    *   launcher that has not yet executed a task. Used to gate
+    *   `idleNodeTimeout`-based self-shutdown so that a freshly started node
+    *   gets a full grace window before being eligible to terminate.
+    */
   case class State(
       maxResources: VersionedResourceAvailable,
       availableResources: VersionedResourceAvailable,
@@ -291,63 +299,65 @@ private[tasks] object Launcher {
 
       ref.flatModifyFull { case (poll, state) =>
         if (!state.denyWorkBeforeShutdown && !state.waitingForWork) {
-
-          scribe.debug(s"WillAskForWork ", state.availableResources,address)
-          val effect: IO[Unit] = poll(
-            queue
-              .askForWork(address, state.availableResources, node)
+          val idleElapsed = FiniteDuration(
+            System.nanoTime - state.lastTaskFinished,
+            scala.concurrent.duration.NANOSECONDS
           )
-            .onCancel(ref.update { state =>
-              state.copy(waitingForWork = false)
-            })
-            .flatMap {
-              case Left(throwable) =>
-                IO(
-                  scribe.error(
-                    s"Queue returned error on askForWork. Handling exception.",
-                    throwable
-                  )
-                ) *>
+          val shouldShutdown =
+            state.isIdle && idleElapsed > config.idleNodeTimeout &&
+              node.isDefined && exitCode.isDefined && shutdown.isDefined
+
+          if (shouldShutdown) {
+            scribe.debug(s"IdleShutdown", state.availableResources, address)
+            state.copy(denyWorkBeforeShutdown = true) ->
+              shutdown.get.shutdownRunningNode(exitCode.get, node.get.name)
+          } else {
+
+            scribe.debug(s"WillAskForWork ", state.availableResources,address)
+            val effect: IO[Unit] = poll(
+              queue
+                .askForWork(address, state.availableResources, node)
+            )
+              .onCancel(ref.update { state =>
+                state.copy(waitingForWork = false)
+              })
+              .flatMap {
+                case Left(throwable) =>
+                  IO(
+                    scribe.error(
+                      s"Queue returned error on askForWork. Handling exception.",
+                      throwable
+                    )
+                  ) *>
+                    ref.update { state =>
+                      scribe.debug(s"QueueError ", state.availableResources,address)
+                      state.copy(waitingForWork = false)
+                    }
+                case Right(Left(MessageData.NothingForSchedule)) =>
                   ref.update { state =>
-                    scribe.debug(s"QueueError ", state.availableResources,address)
+                    scribe.debug(s"NothingForSchedule ", state.availableResources,address)
                     state.copy(waitingForWork = false)
                   }
-              case Right(Left(MessageData.NothingForSchedule)) =>
-                ref.update { state =>
-                  scribe.debug(s"NothingForSchedule ", state.availableResources,address)
-                  state.copy(waitingForWork = false)
-                }
-              case Right(Right(MessageData.Schedule(scheduleTask))) =>
-                ref.flatModifyFull { case (poll, state) =>
-                  scribe.debug(s"Received Schedule ", scheduleTask,state.availableResources,address)
-                  val st0 = state.copy(waitingForWork = false)
-                  val (newState, sideEffects) =
-                    if (!st0.denyWorkBeforeShutdown) {
+                case Right(Right(MessageData.Schedule(scheduleTask))) =>
+                  ref.flatModifyFull { case (poll, state) =>
+                    scribe.debug(s"Received Schedule ", scheduleTask,state.availableResources,address)
+                    val st0 = state.copy(waitingForWork = false)
+                    val (newState, sideEffects) =
+                      if (!st0.denyWorkBeforeShutdown) {
 
-                      val st1 = st0
-                      val (allocated, st2, io1) = launch(st1, scheduleTask, ref)
-                      (st2, io1)
-                    } else (st0, IO.unit)
-                  scribe.debug(s"State after Schedule",scheduleTask,newState.availableResources,address)
-                  newState -> sideEffects
-                }
-            }
+                        val st1 = st0
+                        val (allocated, st2, io1) = launch(st1, scheduleTask, ref)
+                        (st2, io1)
+                      } else (st0, IO.unit)
+                    scribe.debug(s"State after Schedule",scheduleTask,newState.availableResources,address)
+                    newState -> sideEffects
+                  }
+              }
 
-          (state.copy(waitingForWork = true), effect)
-        } else if (!state.denyWorkBeforeShutdown) {
-          if (
-            state.isIdle && FiniteDuration(
-              System.nanoTime - state.lastTaskFinished,
-              scala.concurrent.duration.NANOSECONDS
-            ) > config.idleNodeTimeout && node.isDefined && exitCode.isDefined && shutdown.isDefined
-          )
-            state.copy(denyWorkBeforeShutdown = true) -> shutdown.get
-              .shutdownRunningNode(exitCode.get, node.get.name) *> IO.pure(
-              Left(NothingForSchedule)
-            )
-          else {
-            state -> IO.pure(Left(NothingForSchedule))
+            (state.copy(waitingForWork = true), effect)
           }
+        } else if (!state.denyWorkBeforeShutdown) {
+          state -> IO.pure(Left(NothingForSchedule))
         } else {
           scribe.debug(
             "Not asking for work because no available resources or preparing for shut down.",
