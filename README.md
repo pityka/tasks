@@ -184,6 +184,53 @@ Manually managed worker nodes may be launched by the `defaultTaskSystem` or `wit
 - `hosts.app=false` must be defined and set to false
 Worker and application processes must have the same classpath. If you launch workers manually you have to ensure this.
 
+# Instrumentation with OpenTelemetry
+
+The library is instrumented with `otel4s-core`. The public entry points (`defaultTaskSystem`, `withTaskSystem`) accept an optional `Resource[IO, MeterProvider[IO]]` parameter defaulting to `MeterProvider.noop[IO]`. To enable metrics, applications construct the backend and pass it in.
+
+Using the OTel Java SDK bridge (`otel4s-oteljava`):
+
+```scala
+import org.typelevel.otel4s.oteljava.OtelJava
+
+val meterProvider =
+  OtelJava.autoConfigured[IO]().map(_.meterProvider)
+
+withTaskSystem(
+  config = None,
+  s3Client = Resource.pure(None),
+  elasticSupport = Resource.pure(None),
+  externalQueueState = Resource.pure(None),
+  meterProvider = meterProvider
+) { ts => ... }
+```
+
+## Telemetry configuration
+
+One HOCON key, capping the maximum number of active metric series the library is allowed to emit. Bounds Prometheus/AMP ingest cost regardless of caller behavior. Overflow `(task.id, task.version)` pairs fold into a `_other` sentinel and a single WARN is logged.
+
+```
+tasks.otel.maxSeries = 5000
+```
+
+Everything else is configured by the otel backend supplied by the application.
+
+## Metrics
+
+All metrics record at the main process. Recording is synchronous on event handling; export frequency is governed by the otel backend implementation (OTEL_METRIC_EXPORT_INTERVAL).
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `tasks.queued.count` | gauge (observable) | `task.id`, `task.version` | Tasks currently queued, grouped by task name and version |
+| `tasks.running.count` | gauge (observable) | `task.id`, `task.version` | Tasks currently executing on a launcher |
+| `tasks.completed.count` | counter | `task.id`, `task.version` | Cumulative successful completions since process start |
+| `tasks.failed.count` | counter | `task.id`, `task.version` | Cumulative execution failures since process start |
+| `tasks.cache_hit.count` | counter | `task.id`, `task.version` | Cumulative cache hits since process start |
+| `tasks.resources.allocated.cpu` | gauge (observable) | — | Total CPU currently allocated to scheduled tasks |
+| `tasks.resources.allocated.memory` | gauge (observable) | — | Total memory (MB) currently allocated to scheduled tasks |
+| `tasks.execution.duration` | histogram | `task.id`, `task.version` | Task execution time, seconds. Buckets: `[1, 10, 60, 600, 3600]` |
+| `tasks.queue.wait_time` | histogram | `task.id`, `task.version` | Time from enqueue to scheduled, seconds. Buckets: `[0.1, 1, 10, 60, 600]` |
+
 
 # Licence
 

@@ -92,6 +92,8 @@ lazy val commonSettings = Seq(
 
 lazy val circeVersion = "0.14.9"
 lazy val jsoniterVersion = "2.34.0"
+
+lazy val otel4sCoreVersion = "1.0.0"
 lazy val http4sVersion = "0.23.27"
 lazy val scribeVersion = "3.16.1"
 lazy val fs2Version = "3.12.0"
@@ -148,6 +150,8 @@ lazy val core = project
       "org.scalatest" %% "scalatest" % "3.2.19" % "test",
       "com.outr" %% "scribe" % scribeVersion,
       "com.outr" %% "scribe-slf4j" % scribeVersion,
+      "org.typelevel" %% "otel4s-core" % otel4sCoreVersion,
+      "org.typelevel" %% "otel4s-sdk-metrics-testkit" % "0.19.0" % "test",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test"
     ) ++ (CrossVersion

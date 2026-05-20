@@ -68,7 +68,8 @@ case class TaskSystemComponents private[tasks] (
     private[tasks] val priority: Priority,
     private[tasks] val labels: Labels,
     private[tasks] val lineage: TaskLineage,
-    private[tasks] val messenger: Messenger
+    private[tasks] val messenger: Messenger,
+    val meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO]
 ) {
 
   def withChildPrefix(name: String) =
@@ -90,7 +91,11 @@ object TaskSystemComponents {
       s3ClientResource: Resource[IO, Option[tasks.fileservice.s3.S3Client]],
       externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]],
       config: TasksConfig,
-      exitCode: Deferred[IO, ExitCode]
+      exitCode: Deferred[IO, ExitCode],
+      meterProviderResource: Resource[
+        IO,
+        org.typelevel.otel4s.metrics.MeterProvider[IO]
+      ]
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
     hostConfig.flatMap { hostConfig =>
       elasticSupport.attempt
@@ -395,7 +400,8 @@ object TaskSystemComponents {
               unmanagedResource: tasks.shared.ResourceAvailable,
               shutdownSelf: Option[tasks.elastic.ShutdownSelfNode],
               exitCode: Deferred[IO, ExitCode],
-              nodeName: Option[RunningJobId]
+              nodeName: Option[RunningJobId],
+              meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO]
           ): Resource[IO, Queue] = {
 
             val io: IO[Resource[IO, Queue]] = IO {
@@ -412,7 +418,8 @@ object TaskSystemComponents {
                     shutdownNode,
                     decideNewNode,
                     createNode,
-                    unmanagedResource
+                    unmanagedResource,
+                    meterProvider
                   )(config)
                   .map { queueImpl =>
                     (new QueueFromQueueImpl(
@@ -432,7 +439,8 @@ object TaskSystemComponents {
                     shutdownNode,
                     decideNewNode,
                     createNode,
-                    unmanagedResource
+                    unmanagedResource,
+                    meterProvider
                   )(config)
                   .flatMap { impl =>
                     QueueActor
@@ -649,7 +657,8 @@ object TaskSystemComponents {
               fileServiceComponent: FileServiceComponent,
               cache: TaskResultCache,
               nodeLocalCache: NodeLocalCache.State,
-              messenger: Messenger
+              messenger: Messenger,
+              meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO]
           ) = TaskSystemComponents(
             queue = queue,
             fs = fileServiceComponent,
@@ -661,7 +670,8 @@ object TaskSystemComponents {
             priority = Priority(0),
             labels = Labels.empty,
             lineage = TaskLineage.root,
-            messenger = messenger
+            messenger = messenger,
+            meterProvider = meterProvider
           )
 
           def getNodeName(
@@ -741,6 +751,7 @@ object TaskSystemComponents {
               nodeName = nodeName
             )
             messenger <- Messenger.make(hostConfig)
+            meterProvider <- meterProviderResource
             fileServiceComponent <- fileServiceComponent
             cache <- cache(fileServiceComponent)
             _ <- Resource.eval(IO(scribe.info(s"Cache: $cache")))
@@ -769,7 +780,8 @@ object TaskSystemComponents {
               unmanagedResource = ResourceAvailable.empty,
               shutdownSelf = elasticSupport.map(_.shutdownFromWorker),
               exitCode = exitCode,
-              nodeName = nodeName
+              nodeName = nodeName,
+              meterProvider = meterProvider
             )
             _ <- tempFolderIsWriteable(queue)
             launcherHandle <- launcherActor(
@@ -794,7 +806,8 @@ object TaskSystemComponents {
               fileServiceComponent = fileServiceComponent,
               cache = cache,
               nodeLocalCache = nodeLocalCache,
-              messenger = messenger
+              messenger = messenger,
+              meterProvider = meterProvider
             ),
             hostConfig
           )

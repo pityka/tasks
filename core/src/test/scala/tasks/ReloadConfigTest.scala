@@ -39,9 +39,9 @@ object ReloadConfigTest extends TestHelpers with Matchers {
     input => implicit computationEnvironment =>
       scribe.info("Hello from task")
       if (input.i > 1) {
-        computationEnvironment.components.tasksConfig.trackerFqcn shouldBe "Input(1)"
+        computationEnvironment.components.tasksConfig.workerMainClass shouldBe "Input(1)"
       }
-      System.getProperties.setProperty("tasks.tracker.fqcn", input.toString)
+      System.getProperties.setProperty("tasks.worker-main-class", input.toString)
       Thread.sleep(2100)
       IO(1)
   }

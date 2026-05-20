@@ -190,7 +190,13 @@ package object tasks extends MacroCalls {
       config: Option[Config],
       s3Client: Resource[IO, Option[S3Client]],
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]],
-      externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]]
+      externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]],
+      meterProvider: Resource[
+        IO,
+        org.typelevel.otel4s.metrics.MeterProvider[IO]
+      ] = Resource.pure[IO, org.typelevel.otel4s.metrics.MeterProvider[IO]](
+        org.typelevel.otel4s.metrics.MeterProvider.noop[IO]
+      )
   )(f: TaskSystemComponents => IO[T]): IO[Either[ExitCode, T]] = {
 
     val resource = Resource.eval(Deferred[IO, ExitCode]).flatMap { exitCode =>
@@ -199,7 +205,8 @@ package object tasks extends MacroCalls {
         s3Client = s3Client,
         elasticSupport = elasticSupport,
         externalQueueState = externalQueueState,
-        exitCode = exitCode
+        exitCode = exitCode,
+        meterProvider = meterProvider
       ).map(tsc => (tsc, exitCode))
     }
 
@@ -298,7 +305,13 @@ package object tasks extends MacroCalls {
       s3Client: Resource[IO, Option[S3Client]],
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]],
       externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]],
-      exitCode: Deferred[IO, ExitCode]
+      exitCode: Deferred[IO, ExitCode],
+      meterProvider: Resource[
+        IO,
+        org.typelevel.otel4s.metrics.MeterProvider[IO]
+      ] = Resource.pure[IO, org.typelevel.otel4s.metrics.MeterProvider[IO]](
+        org.typelevel.otel4s.metrics.MeterProvider.noop[IO]
+      )
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] = {
 
     val configuration = () => {
@@ -323,7 +336,8 @@ package object tasks extends MacroCalls {
       s3ClientResource = s3Client,
       externalQueueState = externalQueueState,
       config = tconfig,
-      exitCode = exitCode
+      exitCode = exitCode,
+      meterProviderResource = meterProvider
     )
   }
 

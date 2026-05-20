@@ -168,21 +168,25 @@ object QueueImpl {
       shutdownNode: Option[tasks.elastic.ShutdownNode],
       decideNewNode: Option[tasks.elastic.DecideNewNode],
       createNode: Option[tasks.elastic.CreateNode],
-      unmanagedResource: tasks.shared.ResourceAvailable
+      unmanagedResource: tasks.shared.ResourceAvailable,
+      meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO]
   )(implicit config: TasksConfig): Resource[IO, QueueImpl] = {
-    Resource.make(Ref.of[IO, List[FiberIO[Unit]]](Nil).flatMap { ref =>
-      val q = new QueueImpl(
-        ref = transaction,
-        fiberList = ref,
-        cache = cache,
-        messenger = messenger,
-        shutdownNode = shutdownNode,
-        decideNewNode = decideNewNode,
-        createNode = createNode,
-        unmanagedResource = unmanagedResource
-      )
-      q.startCounterLoops.map(_ => q)
-    })(_.release)
+    QueueMetrics.make(meterProvider, transaction.get).flatMap { metrics =>
+      Resource.make(Ref.of[IO, List[FiberIO[Unit]]](Nil).flatMap { ref =>
+        val q = new QueueImpl(
+          ref = transaction,
+          fiberList = ref,
+          cache = cache,
+          messenger = messenger,
+          shutdownNode = shutdownNode,
+          decideNewNode = decideNewNode,
+          createNode = createNode,
+          unmanagedResource = unmanagedResource,
+          metrics = metrics
+        )
+        q.startCounterLoops.map(_ => q)
+      })(_.release)
+    }
   }
 
   private[tasks] def initRef(
@@ -191,25 +195,29 @@ object QueueImpl {
       shutdownNode: Option[tasks.elastic.ShutdownNode],
       decideNewNode: Option[tasks.elastic.DecideNewNode],
       createNode: Option[tasks.elastic.CreateNode],
-      unmanagedResource: tasks.shared.ResourceAvailable
+      unmanagedResource: tasks.shared.ResourceAvailable,
+      meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO]
   )(implicit
       config: TasksConfig
-  ) = Resource.make(Ref.of[IO, QueueImpl.State](QueueImpl.State.empty).flatMap {
-    ref =>
-      Ref.of[IO, List[FiberIO[Unit]]](Nil).flatMap { ref2 =>
-        val q = new QueueImpl(
-          ref = Transaction.fromRef(ref),
-          fiberList = ref2,
-          cache = cache,
-          messenger = messenger,
-          shutdownNode = shutdownNode,
-          decideNewNode = decideNewNode,
-          createNode = createNode,
-          unmanagedResource = unmanagedResource
-        )
-        q.startCounterLoops.map(_ => q)
+  ) = Resource.eval(Ref.of[IO, QueueImpl.State](QueueImpl.State.empty)).flatMap {
+    stateRef =>
+      QueueMetrics.make(meterProvider, stateRef.get).flatMap { metrics =>
+        Resource.make(Ref.of[IO, List[FiberIO[Unit]]](Nil).flatMap { ref2 =>
+          val q = new QueueImpl(
+            ref = Transaction.fromRef(stateRef),
+            fiberList = ref2,
+            cache = cache,
+            messenger = messenger,
+            shutdownNode = shutdownNode,
+            decideNewNode = decideNewNode,
+            createNode = createNode,
+            unmanagedResource = unmanagedResource,
+            metrics = metrics
+          )
+          q.startCounterLoops.map(_ => q)
+        })(_.release)
       }
-  })(_.release)
+  }
 }
 
 private[tasks] class QueueImpl(
@@ -220,7 +228,8 @@ private[tasks] class QueueImpl(
     shutdownNode: Option[tasks.elastic.ShutdownNode],
     decideNewNode: Option[tasks.elastic.DecideNewNode],
     createNode: Option[tasks.elastic.CreateNode],
-    unmanagedResource: tasks.shared.ResourceAvailable
+    unmanagedResource: tasks.shared.ResourceAvailable,
+    metrics: QueueMetrics
 )(implicit config: TasksConfig) {
   import QueueImpl._
 
@@ -335,13 +344,13 @@ private[tasks] class QueueImpl(
         )
         ref.flatModify { state =>
           state.update(CacheHit(sch, result)) ->
-            messenger.submit(
+            (metrics.onCacheHit(sch.description) *> messenger.submit(
               Message(
                 MessageData.MessageFromTask(result, retrievedFromCache = true),
                 from = Address.unknown,
                 to = proxy.address
               )
-            )
+            ))
 
         }
       }
@@ -353,7 +362,7 @@ private[tasks] class QueueImpl(
           proxy.address,
           scribe.data("explain", "Task is not found in cache. Enqueue.")
         )
-        ref.update(_.update(Enqueued(sch, List(proxy))))
+        ref.update(_.update(Enqueued(sch, List(proxy)))) *> metrics.onEnqueued(sch.description)
       }
       case Left(msg) => {
         scribe.debug(
@@ -365,7 +374,7 @@ private[tasks] class QueueImpl(
           scribe.data("message", msg)
         )
 
-        ref.update(_.update(Enqueued(sch, List(proxy))))
+        ref.update(_.update(Enqueued(sch, List(proxy)))) *> metrics.onEnqueued(sch.description)
       }
 
     }
@@ -378,7 +387,7 @@ private[tasks] class QueueImpl(
       val proxy = Proxy(sch.proxy)
 
       if (state.queuedButSentByADifferentProxy(sch, proxy)) {
-        state.update(Enqueued(sch, List(proxy))) -> IO.unit
+        state.update(Enqueued(sch, List(proxy))) -> metrics.onEnqueued(sch.description)
       } else if (state.scheduledButSentByADifferentProxy(sch, proxy)) {
         scribe.debug(
           s"MultipleProxies",
@@ -406,7 +415,7 @@ private[tasks] class QueueImpl(
               "ScheduleTask should not be checked in the cache. Enqueue. "
             )
           )
-          state.update(Enqueued(sch, List(proxy))) -> IO.unit
+          state.update(Enqueued(sch, List(proxy))) -> metrics.onEnqueued(sch.description)
         }
 
       }
@@ -609,10 +618,15 @@ private[tasks] class QueueImpl(
     import tasks.util.eq._
     val msgs =
       state.scheduledTasks.toSeq.filter(_._2._1 === launcher).map(_._1)
-    val updated = msgs.foldLeft(state) { (state, schProjection) =>
-      val (_, _, proxies, sch) = state.scheduledTasks(schProjection)
-      state.update(TaskLauncherStoppedFor(sch)).update(Enqueued(sch, proxies))
-    }
+    val (updated, reEnqueued) =
+      msgs.foldLeft((state, List.empty[ScheduleTask])) {
+        case ((state, acc), schProjection) =>
+          val (_, _, proxies, sch) = state.scheduledTasks(schProjection)
+          (
+            state.update(TaskLauncherStoppedFor(sch)).update(Enqueued(sch, proxies)),
+            sch :: acc
+          )
+      }
 
     val node = state.knownLaunchers.get(launcher).flatten
     val updated2 = {
@@ -629,7 +643,9 @@ private[tasks] class QueueImpl(
         }
       }
       .getOrElse(IO.unit)
-    (updated2 -> shutdown)
+    val recordMetrics =
+      reEnqueued.foldLeft(IO.unit)((acc, sch) => acc *> metrics.onEnqueued(sch.description))
+    (updated2 -> (recordMetrics *> shutdown))
   } *> handleQueueStatIO
 
   def askForWork(
@@ -721,7 +737,7 @@ private[tasks] class QueueImpl(
           val newState = withJoin
             .update(TaskScheduled(sch, launcher, allocated))
 
-          val io = joinIO *> IO.pure(
+          val io = metrics.onTaskScheduled(sch.description) *> joinIO *> IO.pure(
             Right(MessageData.Schedule(sch))
           )
 
@@ -742,6 +758,7 @@ private[tasks] class QueueImpl(
   ): IO[Unit] = {
     val taskSuccessIO = ref.flatModify { state =>
       scribe.debug(s"TaskDone", sch, resultWithMetadata)
+      val recordMetric = metrics.onTaskDone(sch.description, elapsedTime.s)
       if (state.queuedTasks.contains(project(sch))) {
         scribe.error(
           s"ShouldNotBeQueued.",
@@ -784,13 +801,14 @@ private[tasks] class QueueImpl(
 
       state.update(
         TaskDone(sch, resultWithMetadata, elapsedTime, resourceAllocated)
-      ) -> io
+      ) -> (recordMetric *> io)
     }
     taskSuccessIO *> handleQueueStatIO
   }
 
   def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit] = {
     val taskFailedIO = ref.flatModify { state =>
+      val recordMetric = metrics.onTaskFailed(sch.description)
       val (updated, sideEffects) = state.scheduledTasks
         .get(project(sch))
         .foldLeft((state, List.empty[IO[Unit]])) {
@@ -808,7 +826,10 @@ private[tasks] class QueueImpl(
                 scribe.data("queue-size", state.queuedTasks.keys.size)
               )
 
-              (removed.update(Enqueued(sch, proxies)), sideEffectAcc)
+              (
+                removed.update(Enqueued(sch, proxies)),
+                sideEffectAcc :+ metrics.onEnqueued(sch.description)
+              )
             } else {
               val sideEffects = proxies.map(pr =>
                 messenger.submit(
@@ -831,7 +852,7 @@ private[tasks] class QueueImpl(
               (removed, sideEffectAcc ++ sideEffects)
             }
         }
-      updated -> IO.parSequenceN(1)(sideEffects).void
+      updated -> (recordMetric *> IO.parSequenceN(1)(sideEffects).void)
     }
     taskFailedIO *> handleQueueStatIO
   }

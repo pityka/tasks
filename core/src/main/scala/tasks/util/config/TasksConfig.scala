@@ -190,15 +190,7 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   val addShutdownHook = raw.getBoolean("tasks.addShutdownHook")
 
-  val uiFqcn = raw.getString("tasks.ui.fqcn")
-
-  val uiServerHost = raw.getString("tasks.ui.queue.host")
-
-  val uiServerPort = raw.getInt("tasks.ui.queue.port")
-
-  val appUIServerHost = raw.getString("tasks.ui.app.host")
-
-  val appUIServerPort = raw.getInt("tasks.ui.app.port")
+  val otelMaxSeries = raw.getInt("tasks.otel.maxSeries")
 
   val workerMainClass = raw.getString("tasks.worker-main-class")
 
@@ -218,10 +210,6 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   val checkTempFolderOnWorkerInitialization =
     raw.getBoolean("tasks.elastic.checktempfolder")
-
-  val trackerFqcn = raw.getString("tasks.tracker.fqcn")
-
-  val resourceUtilizationLogFile = raw.getString("tasks.tracker.logFile")
 
   def trackDataFlow = raw.getBoolean("tasks.queue.trackDataFlow")
 

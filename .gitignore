@@ -24,3 +24,4 @@ stderr
 stdout 
 taskSize.txt
 core/stdstreams
+.claude/settings.local.json
