@@ -43,7 +43,7 @@ class S3ReadTest extends AnyFunSuite {
 
     val client = anonymousClient(region)
     try {
-      val s3 = new S3(client)
+      val s3 = new S3(client, None)
 
       val configs = List(
         Config(5, 1),

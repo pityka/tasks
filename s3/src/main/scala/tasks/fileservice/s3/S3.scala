@@ -22,6 +22,7 @@
 package tasks.fileservice.s3
 
 import cats.effect._
+import cats.effect.std.Semaphore
 import fs2.{Chunk, Pipe}
 import software.amazon.awssdk.core.async.{
   AsyncRequestBody,
@@ -47,22 +48,32 @@ object S3 {
       regionProfileName: Option[String],
       httpMaxConcurrency: Option[Int],
       httpMaxPendingConnectionAcquires: Option[Int],
-      httpConnectionAcquisitionTimeout: Option[FiniteDuration]
-  ) =
-    Resource.make[IO, tasks.fileservice.s3.S3](IO {
+      httpConnectionAcquisitionTimeout: Option[FiniteDuration],
+      maxConcurrentRequests: Option[Int]
+  ) = {
+    val rateLimiter: Resource[IO, Option[Semaphore[IO]]] =
+      maxConcurrentRequests match {
+        case Some(n) if n > 0 =>
+          Resource.eval(Semaphore[IO](n.toLong).map(Some(_)))
+        case _ => Resource.pure(None)
+      }
+    rateLimiter.flatMap { sem =>
+      Resource.make[IO, tasks.fileservice.s3.S3](IO {
 
-      val s3AWSSDKClient =
-        tasks.fileservice.s3.S3
-          .makeAWSSDKClient(
-            regionProfileName,
-            httpMaxConcurrency,
-            httpMaxPendingConnectionAcquires,
-            httpConnectionAcquisitionTimeout
-          )
+        val s3AWSSDKClient =
+          tasks.fileservice.s3.S3
+            .makeAWSSDKClient(
+              regionProfileName,
+              httpMaxConcurrency,
+              httpMaxPendingConnectionAcquires,
+              httpConnectionAcquisitionTimeout
+            )
 
-      new tasks.fileservice.s3.S3(s3AWSSDKClient)
+        new tasks.fileservice.s3.S3(s3AWSSDKClient, sem)
 
-    })(v => IO { v.s3.close })
+      })(v => IO { v.s3.close })
+    }
+  }
   def makeAWSSDKClient(
       regionProfileName: Option[String],
       httpMaxConcurrency: Option[Int],
@@ -101,13 +112,18 @@ object S3 {
   *
   * @param s3
   */
-class S3(val s3: S3AsyncClient) extends tasks.fileservice.s3.S3Client {
+class S3(
+    val s3: S3AsyncClient,
+    rateLimiter: Option[Semaphore[IO]]
+) extends tasks.fileservice.s3.S3Client {
   private type PartId = Long
   private type PartLength = Long
   private type UploadId = String
 
-  def io[J, A](fut: => CompletableFuture[A]): IO[A] =
-    IO.fromCompletableFuture(IO.delay(fut))
+  def io[J, A](fut: => CompletableFuture[A]): IO[A] = {
+    val call = IO.fromCompletableFuture(IO.delay(fut))
+    rateLimiter.fold(call)(_.permit.use(_ => call))
+  }
 
   /** Deletes a file in a single request.
     */
