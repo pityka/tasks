@@ -8,6 +8,18 @@ ThisBuild / publishTo := {
   else localStaging.value
 }
 
+ThisBuild / credentials ++= {
+  for {
+    actor <- sys.env.get("GITHUB_ACTOR")
+    token <- sys.env.get("GITHUB_TOKEN")
+  } yield Credentials(
+    "GitHub Package Registry",
+    "maven.pkg.github.com",
+    actor,
+    token
+  )
+}.toSeq
+
 ThisBuild / versionScheme := Some("early-semver")
 
 ThisBuild / versionPolicyIntention := Compatibility.None
