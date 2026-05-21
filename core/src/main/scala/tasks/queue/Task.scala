@@ -281,9 +281,7 @@ private[tasks] class Task(
           priority = priority,
           labels = labels,
           lineage = lineage,
-          messenger = messenger,
-          meterProvider =
-            org.typelevel.otel4s.metrics.MeterProvider.noop[cats.effect.IO]
+          messenger = messenger
         ),
         launcher = launcherActor,
         taskActor = this,

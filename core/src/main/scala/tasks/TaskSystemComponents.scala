@@ -68,8 +68,7 @@ case class TaskSystemComponents private[tasks] (
     private[tasks] val priority: Priority,
     private[tasks] val labels: Labels,
     private[tasks] val lineage: TaskLineage,
-    private[tasks] val messenger: Messenger,
-    val meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO]
+    private[tasks] val messenger: Messenger
 ) {
 
   def withChildPrefix(name: String) =
@@ -657,8 +656,7 @@ object TaskSystemComponents {
               fileServiceComponent: FileServiceComponent,
               cache: TaskResultCache,
               nodeLocalCache: NodeLocalCache.State,
-              messenger: Messenger,
-              meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO]
+              messenger: Messenger
           ) = TaskSystemComponents(
             queue = queue,
             fs = fileServiceComponent,
@@ -670,8 +668,7 @@ object TaskSystemComponents {
             priority = Priority(0),
             labels = Labels.empty,
             lineage = TaskLineage.root,
-            messenger = messenger,
-            meterProvider = meterProvider
+            messenger = messenger
           )
 
           def getNodeName(
@@ -806,8 +803,7 @@ object TaskSystemComponents {
               fileServiceComponent = fileServiceComponent,
               cache = cache,
               nodeLocalCache = nodeLocalCache,
-              messenger = messenger,
-              meterProvider = meterProvider
+              messenger = messenger
             ),
             hostConfig
           )
