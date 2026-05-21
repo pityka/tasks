@@ -47,34 +47,36 @@ private[tasks] final class QueueMetrics(
   private[queue] def attrsFor(taskId: TaskId): IO[Attributes] = {
     val isOverflowMarker: Attributes => Boolean =
       _.get[String](idKey).exists(_.value == otherSentinel)
-    admittedPairs.modify { admitted =>
-      val pair = (taskId.id, taskId.version)
-      if (admitted.contains(pair))
-        (admitted, attrPair(taskId.id, taskId.version.toString))
-      else if (admitted.size < cap)
-        (admitted + pair, attrPair(taskId.id, taskId.version.toString))
-      else
-        (admitted, attrPair(otherSentinel, otherSentinel))
-    }.flatTap { attrs =>
-      if (isOverflowMarker(attrs))
-        overflowWarned.getAndSet(true).flatMap {
-          case true => IO.unit
-          case false =>
-            IO(
-              scribe.warn(
-                "OTel cardinality cap reached; subsequent novel (task.id, task.version) pairs fold into \"_other\". Raise tasks.otel.maxSeries to admit more.",
-                scribe.data(
-                  Map(
-                    "cap" -> cap,
-                    "first-overflow-task-id" -> taskId.id,
-                    "first-overflow-task-version" -> taskId.version
+    admittedPairs
+      .modify { admitted =>
+        val pair = (taskId.id, taskId.version)
+        if (admitted.contains(pair))
+          (admitted, attrPair(taskId.id, taskId.version.toString))
+        else if (admitted.size < cap)
+          (admitted + pair, attrPair(taskId.id, taskId.version.toString))
+        else
+          (admitted, attrPair(otherSentinel, otherSentinel))
+      }
+      .flatTap { attrs =>
+        if (isOverflowMarker(attrs))
+          overflowWarned.getAndSet(true).flatMap {
+            case true => IO.unit
+            case false =>
+              IO(
+                scribe.warn(
+                  "OTel cardinality cap reached; subsequent novel (task.id, task.version) pairs fold into \"_other\". Raise tasks.otel.maxSeries to admit more.",
+                  scribe.data(
+                    Map(
+                      "cap" -> cap,
+                      "first-overflow-task-id" -> taskId.id,
+                      "first-overflow-task-version" -> taskId.version
+                    )
                   )
                 )
               )
-            )
-        }
-      else IO.unit
-    }
+          }
+        else IO.unit
+      }
   }
 
   private def attrPair(id: String, version: String): Attributes =
@@ -89,19 +91,21 @@ private[tasks] final class QueueMetrics(
     }
 
   def onTaskScheduled(description: HashedTaskDescription): IO[Unit] =
-    enqueueTimestamps.modify { ts =>
-      ts.get(description) match {
-        case Some(start) => (ts - description, Some(start))
-        case None        => (ts, None)
-      }
-    }.flatMap {
-      case None => IO.unit
-      case Some(startNanos) =>
-        val elapsedSeconds = (System.nanoTime() - startNanos) / 1e9
-        attrsFor(description.taskId).flatMap { attrs =>
-          queueWaitTime.record(elapsedSeconds, attrs)
+    enqueueTimestamps
+      .modify { ts =>
+        ts.get(description) match {
+          case Some(start) => (ts - description, Some(start))
+          case None        => (ts, None)
         }
-    }
+      }
+      .flatMap {
+        case None => IO.unit
+        case Some(startNanos) =>
+          val elapsedSeconds = (System.nanoTime() - startNanos) / 1e9
+          attrsFor(description.taskId).flatMap { attrs =>
+            queueWaitTime.record(elapsedSeconds, attrs)
+          }
+      }
 
   def onTaskDone(
       description: HashedTaskDescription,
@@ -216,9 +220,9 @@ private[tasks] object QueueMetrics {
               .mapValues(_.size.toLong)
               .toVector
             byTask.foldLeft(IO.unit) { case (acc, (taskId, count)) =>
-              acc *> qm.attrsFor(taskId).flatMap(attrs =>
-                obs.record(count, attrs)
-              )
+              acc *> qm
+                .attrsFor(taskId)
+                .flatMap(attrs => obs.record(count, attrs))
             }
           }
         }
@@ -236,9 +240,9 @@ private[tasks] object QueueMetrics {
               .mapValues(_.size.toLong)
               .toVector
             byTask.foldLeft(IO.unit) { case (acc, (taskId, count)) =>
-              acc *> qm.attrsFor(taskId).flatMap(attrs =>
-                obs.record(count, attrs)
-              )
+              acc *> qm
+                .attrsFor(taskId)
+                .flatMap(attrs => obs.record(count, attrs))
             }
           }
         }
@@ -249,11 +253,9 @@ private[tasks] object QueueMetrics {
         .createWithCallback { obs =>
           stateSnapshot.flatMap { st =>
             val total =
-              st.scheduledTasks.valuesIterator
-                .map { case (_, alloc, _, _) =>
-                  alloc.cpuMemoryAllocated.cpu.toLong
-                }
-                .sum
+              st.scheduledTasks.valuesIterator.map { case (_, alloc, _, _) =>
+                alloc.cpuMemoryAllocated.cpu.toLong
+              }.sum
             obs.record(total)
           }
         }
@@ -267,11 +269,9 @@ private[tasks] object QueueMetrics {
         .createWithCallback { obs =>
           stateSnapshot.flatMap { st =>
             val total =
-              st.scheduledTasks.valuesIterator
-                .map { case (_, alloc, _, _) =>
-                  alloc.cpuMemoryAllocated.memory.toLong
-                }
-                .sum
+              st.scheduledTasks.valuesIterator.map { case (_, alloc, _, _) =>
+                alloc.cpuMemoryAllocated.memory.toLong
+              }.sum
             obs.record(total)
           }
         }

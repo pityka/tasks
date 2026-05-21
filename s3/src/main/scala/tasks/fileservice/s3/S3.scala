@@ -439,5 +439,5 @@ class S3(
           .flatMap(fs2.Stream.chunk)
       }
 
-}
+  }
 }

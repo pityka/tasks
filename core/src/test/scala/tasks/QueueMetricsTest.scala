@@ -25,7 +25,11 @@ import org.scalatest.matchers.should.Matchers
 import org.typelevel.otel4s.context.LocalProvider
 import org.typelevel.otel4s.sdk.common.Diagnostic
 import org.typelevel.otel4s.sdk.context.{Context, LocalContextProvider}
-import org.typelevel.otel4s.sdk.metrics.data.{MetricData, MetricPoints, PointData}
+import org.typelevel.otel4s.sdk.metrics.data.{
+  MetricData,
+  MetricPoints,
+  PointData
+}
 import org.typelevel.otel4s.sdk.testkit.metrics.MetricsTestkit
 import tasks.queue.{HashedTaskDescription, QueueImpl, QueueMetrics, TaskId}
 
@@ -66,7 +70,9 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
     metrics
       .find(_.name == name)
       .getOrElse(
-        fail(s"metric $name not found; got: ${metrics.map(_.name).mkString(", ")}")
+        fail(
+          s"metric $name not found; got: ${metrics.map(_.name).mkString(", ")}"
+        )
       )
 
   private def sumPointsByTask(
@@ -104,13 +110,31 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
       } yield ()
     }
 
-    sumPointsByTask(find(metrics, "tasks.completed.count"), "alignment", "3") shouldBe 2L
-    sumPointsByTask(find(metrics, "tasks.completed.count"), "variant_call", "1") shouldBe 1L
-    sumPointsByTask(find(metrics, "tasks.failed.count"), "alignment", "3") shouldBe 1L
-    sumPointsByTask(find(metrics, "tasks.cache_hit.count"), "alignment", "3") shouldBe 1L
+    sumPointsByTask(
+      find(metrics, "tasks.completed.count"),
+      "alignment",
+      "3"
+    ) shouldBe 2L
+    sumPointsByTask(
+      find(metrics, "tasks.completed.count"),
+      "variant_call",
+      "1"
+    ) shouldBe 1L
+    sumPointsByTask(
+      find(metrics, "tasks.failed.count"),
+      "alignment",
+      "3"
+    ) shouldBe 1L
+    sumPointsByTask(
+      find(metrics, "tasks.cache_hit.count"),
+      "alignment",
+      "3"
+    ) shouldBe 1L
   }
 
-  test("execution.duration histogram records seconds with buckets [1,10,60,600,3600]") {
+  test(
+    "execution.duration histogram records seconds with buckets [1,10,60,600,3600]"
+  ) {
     val metrics = collect() { qm =>
       qm.onTaskDone(descA, elapsedNanos = 5_000_000_000L) *>
         qm.onTaskDone(descA, elapsedNanos = 30_000_000_000L)
@@ -123,7 +147,9 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
         val pt = h.points.toVector
           .collectFirst {
             case p: PointData.Histogram
-                if attr(p.attributes, QueueMetrics.idKey).contains("alignment") =>
+                if attr(p.attributes, QueueMetrics.idKey).contains(
+                  "alignment"
+                ) =>
               p
           }
           .getOrElse(fail("no histogram point for alignment"))
@@ -135,7 +161,9 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
     }
   }
 
-  test("queue.wait_time records elapsed between onEnqueued and onTaskScheduled") {
+  test(
+    "queue.wait_time records elapsed between onEnqueued and onTaskScheduled"
+  ) {
     val metrics = collect() { qm =>
       for {
         _ <- qm.onEnqueued(descA)
@@ -184,7 +212,9 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
   test("cardinality cap folds overflow pairs to (_other, _other)") {
     val capOverrideConfig = tasks.util.config.parse(() =>
       ConfigFactory
-        .parseString("tasks.otel.maxSeries = 47") // pairCap = floor((47-2)/21)-1 = 1
+        .parseString(
+          "tasks.otel.maxSeries = 47"
+        ) // pairCap = floor((47-2)/21)-1 = 1
         .withFallback(ConfigFactory.load())
     )
 

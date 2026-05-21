@@ -34,22 +34,23 @@ import scala.concurrent.duration._
 
 /** Regression test for the maxNodesCumulative race:
   *
-  * `handleQueueStat` runs the check (`cumulativeRequested < maxNodesCumulative`)
-  * inside a `ref.flatModify`, but historically returned the *unchanged* state and
-  * deferred the actual `cumulativeRequested += 1` updates into the IO that runs
-  * after the modify releases. Concurrent task submissions caused many parallel
-  * invocations to each read the same stale `cumulativeRequested = 0`, each decide
-  * to submit a node, and collectively blow past the configured cumulative cap.
+  * `handleQueueStat` runs the check (`cumulativeRequested <
+  * maxNodesCumulative`) inside a `ref.flatModify`, but historically returned
+  * the *unchanged* state and deferred the actual `cumulativeRequested += 1`
+  * updates into the IO that runs after the modify releases. Concurrent task
+  * submissions caused many parallel invocations to each read the same stale
+  * `cumulativeRequested = 0`, each decide to submit a node, and collectively
+  * blow past the configured cumulative cap.
   *
   * This test wires an [[ElasticSupport]] that:
   *   - counts every `requestOneNewJobFromJobScheduler` invocation,
-  *   - never lets allocated nodes become live (returns `Left` so pending/running
-  *     stays at 0 and only the cumulative counter matters),
+  *   - never lets allocated nodes become live (returns `Left` so
+  *     pending/running stays at 0 and only the cumulative counter matters),
   *   - adds a small delay inside the request to widen the race window.
   *
-  * With the bug, the counter blows past `maxNodesCumulative`.
-  * With the fix (state pre-committed inside `flatModify`), the counter is exactly
-  * equal to `maxNodesCumulative`.
+  * With the bug, the counter blows past `maxNodesCumulative`. With the fix
+  * (state pre-committed inside `flatModify`), the counter is exactly equal to
+  * `maxNodesCumulative`.
   */
 object MaxNodesCumulativeRaceTest extends TestHelpers {
 
@@ -57,15 +58,17 @@ object MaxNodesCumulativeRaceTest extends TestHelpers {
 
   // A task that just sleeps; we need many of these to enqueue in parallel so that
   // `handleQueueStat` is invoked many times in rapid succession.
-  val sleepingTask = Task[Input, Int]("maxNodesCumulativeRaceTask", 1) { _ => _ =>
-    IO.sleep(60.seconds).as(0)
+  val sleepingTask = Task[Input, Int]("maxNodesCumulativeRaceTask", 1) {
+    _ => _ =>
+      IO.sleep(60.seconds).as(0)
   }
 
   class CountingCreateNode(counter: Ref[IO, Int]) extends CreateNode {
     def requestOneNewJobFromJobScheduler(
         requestSize: ResourceRequest
-    )(implicit config: TasksConfig)
-        : IO[Either[String, (PendingJobId, ResourceAvailable)]] =
+    )(implicit
+        config: TasksConfig
+    ): IO[Either[String, (PendingJobId, ResourceAvailable)]] =
       // Delay widens the race window: many concurrent callers all enter, increment
       // the (test) counter, but with the production fix none of them should make
       // it past the modify because cumulativeRequested is pre-committed.
@@ -83,7 +86,8 @@ object MaxNodesCumulativeRaceTest extends TestHelpers {
     def shutdownPendingNode(nodeName: PendingJobId): IO[Unit] = IO.unit
   }
 
-  class CountingCreateNodeFactory(counter: Ref[IO, Int]) extends CreateNodeFactory {
+  class CountingCreateNodeFactory(counter: Ref[IO, Int])
+      extends CreateNodeFactory {
     def apply(
         master: tasks.util.SimpleSocketAddress,
         masterPrefix: String,
@@ -92,10 +96,13 @@ object MaxNodesCumulativeRaceTest extends TestHelpers {
   }
 
   object CountingGetNodeName extends GetNodeName {
-    def getNodeName(config: TasksConfig) = IO.pure(RunningJobId(config.nodeName))
+    def getNodeName(config: TasksConfig) =
+      IO.pure(RunningJobId(config.nodeName))
   }
 
-  def elasticSupport(counter: Ref[IO, Int]): Resource[IO, Option[ElasticSupport]] =
+  def elasticSupport(
+      counter: Ref[IO, Int]
+  ): Resource[IO, Option[ElasticSupport]] =
     Resource.pure(
       Some(
         new ElasticSupport(
@@ -137,7 +144,10 @@ object MaxNodesCumulativeRaceTest extends TestHelpers {
         val n = 100
         import cats.syntax.all._
         val submit = (1 to n).toList.parTraverse { i =>
-          sleepingTask(Input(i))(tasks.ResourceRequest(cpu=(1,1), memory=1,scratch=0,gpu=0)).attempt.void
+          sleepingTask(Input(i))(
+            tasks
+              .ResourceRequest(cpu = (1, 1), memory = 1, scratch = 0, gpu = 0)
+          ).attempt.void
         }.start
 
         for {

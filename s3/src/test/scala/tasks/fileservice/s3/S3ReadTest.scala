@@ -55,10 +55,12 @@ class S3ReadTest extends AnyFunSuite {
         Config(2, 64),
         Config(1, 32),
         Config(1, 64),
-        Config(8, 10),
+        Config(8, 10)
       )
 
-      info(f"${"partSize"}%10s ${"concurrency"}%12s ${"time(ms)"}%10s ${"MB/s"}%10s")
+      info(
+        f"${"partSize"}%10s ${"concurrency"}%12s ${"time(ms)"}%10s ${"MB/s"}%10s"
+      )
       info("-" * 48)
 
       var expectedSize = -1L
@@ -68,7 +70,9 @@ class S3ReadTest extends AnyFunSuite {
         else assert(bytes == expectedSize, s"Size mismatch for $cfg")
         val sizeMB = bytes / (1024.0 * 1024.0)
         val throughput = sizeMB / ms * 1000
-        println(f"${cfg.partSizeMB}%10d ${cfg.concurrency}%12d ${ms}%10d ${throughput}%10.1f")
+        println(
+          f"${cfg.partSizeMB}%10d ${cfg.concurrency}%12d ${ms}%10d ${throughput}%10.1f"
+        )
         info(
           f"${cfg.partSizeMB}%10d ${cfg.concurrency}%12d ${ms}%10d ${throughput}%10.1f"
         )

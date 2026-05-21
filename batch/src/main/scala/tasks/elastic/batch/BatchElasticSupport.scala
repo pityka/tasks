@@ -1,4 +1,4 @@
-  /*
+/*
  * The MIT License
  *
  * Copyright (c) 2016 Istvan Bartha
@@ -43,7 +43,9 @@ import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
 import tasks.util.message.Node
 
-class BatchShutdown(batch: BatchClient) extends ShutdownNode with ShutdownSelfNode {
+class BatchShutdown(batch: BatchClient)
+    extends ShutdownNode
+    with ShutdownSelfNode {
 
   def shutdownRunningNode(nodeName: RunningJobId): IO[Unit] =
     IO.interruptible {
@@ -266,12 +268,15 @@ object BatchGetNodeName extends GetNodeName {
     if (nodeName.nonEmpty) RunningJobId(nodeName)
     else {
       val envJobId = Option(System.getenv("AWS_BATCH_JOB_ID"))
-      RunningJobId(envJobId.getOrElse(java.net.InetAddress.getLocalHost.getHostName))
+      RunningJobId(
+        envJobId.getOrElse(java.net.InetAddress.getLocalHost.getHostName)
+      )
     }
   }
 }
 
-class BatchHostConfig(val config: BatchConfig) extends HostConfigurationFromConfig
+class BatchHostConfig(val config: BatchConfig)
+    extends HostConfigurationFromConfig
 
 class BatchConfig(val raw: Config) extends ConfigValuesForHostConfiguration {
 
@@ -334,7 +339,9 @@ class BatchConfig(val raw: Config) extends ConfigValuesForHostConfiguration {
 
 object BatchElasticSupport {
 
-  def apply(config: Option[Config]): cats.effect.Resource[IO, ElasticSupport] = {
+  def apply(
+      config: Option[Config]
+  ): cats.effect.Resource[IO, ElasticSupport] = {
     val batchConfig = new BatchConfig(tasks.util.loadConfig(config))
     cats.effect.Resource.make {
       IO {

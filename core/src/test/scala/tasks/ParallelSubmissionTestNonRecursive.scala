@@ -120,9 +120,9 @@ hosts.gpus = [0,1,2,3]
   import ParallelSubmissionTestNonRecursive._
 
   test("parallel submission of non-recursive task with 'gpu' counting ") {
-    IO.parSequenceN(500)((1 to 10000).toList.map { n1=>
-      IO{
-        val n = math.min(30,n1)
+    IO.parSequenceN(500)((1 to 10000).toList.map { n1 =>
+      IO {
+        val n = math.min(30, n1)
         val r = (fibtask(FibInput(n))(
           ResourceRequest(cpu = (1, 1), memory = 1, gpu = 1, scratch = 1)
         )).map(_.n)
