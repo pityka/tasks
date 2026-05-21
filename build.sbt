@@ -103,7 +103,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val circeVersion = "0.14.9"
-lazy val jsoniterVersion = "2.34.0"
+lazy val jsoniterVersion = "2.34.1"
 
 lazy val otel4sCoreVersion = "1.0.0"
 lazy val http4sVersion = "0.23.27"
