@@ -303,9 +303,21 @@ private[tasks] object Launcher {
             System.nanoTime - state.lastTaskFinished,
             scala.concurrent.duration.NANOSECONDS
           )
+          val idleTimedOut =
+            state.isIdle && idleElapsed > config.idleNodeTimeout
           val shouldShutdown =
-            state.isIdle && idleElapsed > config.idleNodeTimeout &&
+            idleTimedOut &&
               node.isDefined && exitCode.isDefined && shutdown.isDefined
+
+          if (
+            idleTimedOut && !shouldShutdown
+          ) {
+            scribe.warn(
+              s"Idle node timeout elapsed but self-shutdown is not configured: " +
+                s"node=${node.isDefined}, exitCode=${exitCode.isDefined}, shutdown=${shutdown.isDefined}",
+              address
+            )
+          }
 
           if (shouldShutdown) {
             scribe.debug(s"IdleShutdown", state.availableResources, address)
