@@ -199,25 +199,26 @@ object QueueImpl {
       meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO]
   )(implicit
       config: TasksConfig
-  ) = Resource.eval(Ref.of[IO, QueueImpl.State](QueueImpl.State.empty)).flatMap {
-    stateRef =>
-      QueueMetrics.make(meterProvider, stateRef.get).flatMap { metrics =>
-        Resource.make(Ref.of[IO, List[FiberIO[Unit]]](Nil).flatMap { ref2 =>
-          val q = new QueueImpl(
-            ref = Transaction.fromRef(stateRef),
-            fiberList = ref2,
-            cache = cache,
-            messenger = messenger,
-            shutdownNode = shutdownNode,
-            decideNewNode = decideNewNode,
-            createNode = createNode,
-            unmanagedResource = unmanagedResource,
-            metrics = metrics
-          )
-          q.startCounterLoops.map(_ => q)
-        })(_.release)
-      }
-  }
+  ) =
+    Resource.eval(Ref.of[IO, QueueImpl.State](QueueImpl.State.empty)).flatMap {
+      stateRef =>
+        QueueMetrics.make(meterProvider, stateRef.get).flatMap { metrics =>
+          Resource.make(Ref.of[IO, List[FiberIO[Unit]]](Nil).flatMap { ref2 =>
+            val q = new QueueImpl(
+              ref = Transaction.fromRef(stateRef),
+              fiberList = ref2,
+              cache = cache,
+              messenger = messenger,
+              shutdownNode = shutdownNode,
+              decideNewNode = decideNewNode,
+              createNode = createNode,
+              unmanagedResource = unmanagedResource,
+              metrics = metrics
+            )
+            q.startCounterLoops.map(_ => q)
+          })(_.release)
+        }
+    }
 }
 
 private[tasks] class QueueImpl(
@@ -362,7 +363,9 @@ private[tasks] class QueueImpl(
           proxy.address,
           scribe.data("explain", "Task is not found in cache. Enqueue.")
         )
-        ref.update(_.update(Enqueued(sch, List(proxy)))) *> metrics.onEnqueued(sch.description)
+        ref.update(_.update(Enqueued(sch, List(proxy)))) *> metrics.onEnqueued(
+          sch.description
+        )
       }
       case Left(msg) => {
         scribe.debug(
@@ -374,7 +377,9 @@ private[tasks] class QueueImpl(
           scribe.data("message", msg)
         )
 
-        ref.update(_.update(Enqueued(sch, List(proxy)))) *> metrics.onEnqueued(sch.description)
+        ref.update(_.update(Enqueued(sch, List(proxy)))) *> metrics.onEnqueued(
+          sch.description
+        )
       }
 
     }
@@ -387,7 +392,9 @@ private[tasks] class QueueImpl(
       val proxy = Proxy(sch.proxy)
 
       if (state.queuedButSentByADifferentProxy(sch, proxy)) {
-        state.update(Enqueued(sch, List(proxy))) -> metrics.onEnqueued(sch.description)
+        state.update(Enqueued(sch, List(proxy))) -> metrics.onEnqueued(
+          sch.description
+        )
       } else if (state.scheduledButSentByADifferentProxy(sch, proxy)) {
         scribe.debug(
           s"MultipleProxies",
@@ -415,7 +422,9 @@ private[tasks] class QueueImpl(
               "ScheduleTask should not be checked in the cache. Enqueue. "
             )
           )
-          state.update(Enqueued(sch, List(proxy))) -> metrics.onEnqueued(sch.description)
+          state.update(Enqueued(sch, List(proxy))) -> metrics.onEnqueued(
+            sch.description
+          )
         }
 
       }
@@ -518,9 +527,10 @@ private[tasks] class QueueImpl(
 
               val requestedNodes = neededNodes.take(allowedNewNodes)
 
-              val preCommittedState = (1 to requestedNodes.size).foldLeft(state) {
-                (s, _) => s.update(NodeEvent(NodeRegistryState.NodeRequested))
-              }
+              val preCommittedState =
+                (1 to requestedNodes.size).foldLeft(state) { (s, _) =>
+                  s.update(NodeEvent(NodeRegistryState.NodeRequested))
+                }
 
               val updatedState: IO[Unit] = IO(
                 scribe.info(
@@ -533,69 +543,70 @@ private[tasks] class QueueImpl(
                   )
                 )
               ) *> IO
-                .parSequenceN(1)(requestedNodes.toList.map { case (request, _) =>
-                  createNode
-                    .requestOneNewJobFromJobScheduler(request)
-                    .flatMap {
-                      case Left(e) =>
-                        IO(
-                          scribe.warn(
-                            "NodeRequestFailed",
-                            scribe.data("info", e),
-                            scribe.data(
-                              "explain",
-                              "This is normal if there is no more capacity. " +
-                              "Note: failed requests still count against maxNodesCumulative " +
-                              "as a defensive measure to bound total attempts."
+                .parSequenceN(1)(requestedNodes.toList.map {
+                  case (request, _) =>
+                    createNode
+                      .requestOneNewJobFromJobScheduler(request)
+                      .flatMap {
+                        case Left(e) =>
+                          IO(
+                            scribe.warn(
+                              "NodeRequestFailed",
+                              scribe.data("info", e),
+                              scribe.data(
+                                "explain",
+                                "This is normal if there is no more capacity. " +
+                                  "Note: failed requests still count against maxNodesCumulative " +
+                                  "as a defensive measure to bound total attempts."
+                              )
+                            )
+                          ) *> ref.update(
+                            _.update(
+                              NodeEvent(NodeRegistryState.NodeRequestFailed)
                             )
                           )
-                        ) *> ref.update(
-                          _.update(
-                            NodeEvent(NodeRegistryState.NodeRequestFailed)
-                          )
-                        )
-                      case Right((jobId, size)) =>
-                        IO(
-                          scribe.info(
-                            s"NodeRequestSucceeded",
-                            jobId,
-                            size
-                          )
-                        ) *> ref.update(
-                          // NodeRequested already pre-committed; only record Pending.
-                          _.update(
-                            NodeEvent(
-                              NodeRegistryState.NodeIsPending(jobId, size)
+                        case Right((jobId, size)) =>
+                          IO(
+                            scribe.info(
+                              s"NodeRequestSucceeded",
+                              jobId,
+                              size
                             )
-                          )
-                        ) *> IO
-                          .sleep(config.pendingNodeTimeout)
-                          .flatMap { initFailed =>
-                            ref.flatModify { state =>
-                              if (state.nodes.pending.contains(jobId)) {
-                                scribe.warn(
-                                  "NodeInitFailed: ",
-                                  jobId,
-                                  scribe.data(
-                                    "explain",
-                                    "The node was allocated but the peer process on the node failed to make initial contact."
+                          ) *> ref.update(
+                            // NodeRequested already pre-committed; only record Pending.
+                            _.update(
+                              NodeEvent(
+                                NodeRegistryState.NodeIsPending(jobId, size)
+                              )
+                            )
+                          ) *> IO
+                            .sleep(config.pendingNodeTimeout)
+                            .flatMap { initFailed =>
+                              ref.flatModify { state =>
+                                if (state.nodes.pending.contains(jobId)) {
+                                  scribe.warn(
+                                    "NodeInitFailed: ",
+                                    jobId,
+                                    scribe.data(
+                                      "explain",
+                                      "The node was allocated but the peer process on the node failed to make initial contact."
+                                    )
                                   )
-                                )
 
-                                state.update(
-                                  NodeEvent(
-                                    NodeRegistryState.InitFailed(jobId)
-                                  )
-                                ) ->
-                                  shutdownNode.shutdownPendingNode(jobId)
+                                  state.update(
+                                    NodeEvent(
+                                      NodeRegistryState.InitFailed(jobId)
+                                    )
+                                  ) ->
+                                    shutdownNode.shutdownPendingNode(jobId)
 
-                              } else (state, IO.unit)
+                                } else (state, IO.unit)
+                              }
                             }
-                          }
-                          .start
-                          .void
+                            .start
+                            .void
 
-                    }
+                      }
                 })
                 .void
 
@@ -623,7 +634,9 @@ private[tasks] class QueueImpl(
         case ((state, acc), schProjection) =>
           val (_, _, proxies, sch) = state.scheduledTasks(schProjection)
           (
-            state.update(TaskLauncherStoppedFor(sch)).update(Enqueued(sch, proxies)),
+            state
+              .update(TaskLauncherStoppedFor(sch))
+              .update(Enqueued(sch, proxies)),
             sch :: acc
           )
       }
@@ -644,7 +657,9 @@ private[tasks] class QueueImpl(
       }
       .getOrElse(IO.unit)
     val recordMetrics =
-      reEnqueued.foldLeft(IO.unit)((acc, sch) => acc *> metrics.onEnqueued(sch.description))
+      reEnqueued.foldLeft(IO.unit)((acc, sch) =>
+        acc *> metrics.onEnqueued(sch.description)
+      )
     (updated2 -> (recordMetrics *> shutdown))
   } *> handleQueueStatIO
 
@@ -737,9 +752,10 @@ private[tasks] class QueueImpl(
           val newState = withJoin
             .update(TaskScheduled(sch, launcher, allocated))
 
-          val io = metrics.onTaskScheduled(sch.description) *> joinIO *> IO.pure(
-            Right(MessageData.Schedule(sch))
-          )
+          val io =
+            metrics.onTaskScheduled(sch.description) *> joinIO *> IO.pure(
+              Right(MessageData.Schedule(sch))
+            )
 
           newState -> io
 

@@ -37,8 +37,8 @@ import scala.concurrent.duration._
   * `handleQueueStat` pre-commits `cumulativeRequested` inside the `flatModify`
   * (see `MaxNodesCumulativeRaceTest`), but `pending` is only updated
   * asynchronously, *after* `requestOneNewJobFromJobScheduler` returns
-  * `Right(...)`. While a node-spawn call is in flight, subsequent
-  * `flatModify` invocations still see `pending.size == 0`, so the
+  * `Right(...)`. While a node-spawn call is in flight, subsequent `flatModify`
+  * invocations still see `pending.size == 0`, so the
   * `maxNodes > running + pending` gate keeps admitting new requests. The only
   * remaining throttle is `maxNodesCumulative`, so the worker pool overshoots
   * `maxNodes` by up to `maxNodesCumulative - maxNodes`.
@@ -48,10 +48,11 @@ import scala.concurrent.duration._
   *   - returns `Right(...)` from `requestOneNewJobFromJobScheduler` but only
   *     after a long sleep — long enough that no `NodeIsPending` event lands
   *     during the test window,
-  *   - counts how many times the scheduler invoked `requestOneNewJobFromJobScheduler`.
+  *   - counts how many times the scheduler invoked
+  *     `requestOneNewJobFromJobScheduler`.
   *
-  * With the bug, the counter grows up to `maxNodesCumulative`.
-  * With the fix, the counter is capped at `maxNodes`.
+  * With the bug, the counter grows up to `maxNodesCumulative`. With the fix,
+  * the counter is capped at `maxNodes`.
   */
 object MaxNodesRaceTest extends TestHelpers {
 
@@ -62,15 +63,16 @@ object MaxNodesRaceTest extends TestHelpers {
     IO.sleep(60.seconds).as(0)
   }
 
-  /** Records every invocation and stalls long enough that `NodeIsPending`
-    * never lands during the test window — keeping `pending.size == 0` so the
+  /** Records every invocation and stalls long enough that `NodeIsPending` never
+    * lands during the test window — keeping `pending.size == 0` so the
     * `maxNodes` gate is exercised in the racy regime.
     */
   class CountingCreateNode(counter: Ref[IO, Int]) extends CreateNode {
     def requestOneNewJobFromJobScheduler(
         requestSize: ResourceRequest
-    )(implicit config: TasksConfig)
-        : IO[Either[String, (PendingJobId, ResourceAvailable)]] =
+    )(implicit
+        config: TasksConfig
+    ): IO[Either[String, (PendingJobId, ResourceAvailable)]] =
       counter.update(_ + 1) *>
         IO.sleep(60.seconds) *>
         IO.pure(
@@ -108,7 +110,8 @@ object MaxNodesRaceTest extends TestHelpers {
   }
 
   object CountingGetNodeName extends GetNodeName {
-    def getNodeName(config: TasksConfig) = IO.pure(RunningJobId(config.nodeName))
+    def getNodeName(config: TasksConfig) =
+      IO.pure(RunningJobId(config.nodeName))
   }
 
   def elasticSupport(
@@ -155,7 +158,8 @@ object MaxNodesRaceTest extends TestHelpers {
         import cats.syntax.all._
         val submit = (1 to n).toList.parTraverse { i =>
           sleepingTask(Input(i))(
-            tasks.ResourceRequest(cpu = (1, 1), memory = 1, scratch = 0, gpu = 0)
+            tasks
+              .ResourceRequest(cpu = (1, 1), memory = 1, scratch = 0, gpu = 0)
           ).attempt.void
         }.start
 

@@ -220,8 +220,11 @@ object JvmElasticSupport {
             hostConfig = None,
             shutdownFromNodeRegistry = new Shutdown(state),
             shutdownFromWorker = new ShutdownSelf(state),
-            createNodeFactory =
-              new JvmCreateNodeFactory(state, externalQueueState, extraWorkerConfig),
+            createNodeFactory = new JvmCreateNodeFactory(
+              state,
+              externalQueueState,
+              extraWorkerConfig
+            ),
             getNodeName = JvmGetNodeName
           )
 
