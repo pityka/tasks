@@ -108,7 +108,7 @@ lazy val jsoniterVersion = "2.34.0"
 lazy val otel4sCoreVersion = "1.0.0"
 lazy val http4sVersion = "0.23.27"
 lazy val scribeVersion = "3.16.1"
-lazy val fs2Version = "3.12.0"
+lazy val fs2Version = "3.12.2"
 
 lazy val shared = crossProject(JVMPlatform)
   .crossType(sbtcrossproject.CrossPlugin.autoImport.CrossType.Pure)
