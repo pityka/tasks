@@ -181,6 +181,19 @@ class ComputationEnvironment(
       )
     )
 
+  def replaceFilePrefix[B](
+      prefix: Seq[String]
+  )(fun: ComputationEnvironment => B): B =
+    fun(
+      new ComputationEnvironment(
+        resourceAllocated = resourceAllocated,
+        components = components.replaceFilePrefix(prefix),
+        launcher = launcher,
+        taskActor = taskActor,
+        taskHash = taskHash
+      )
+    )
+
   implicit def fileServiceComponent: FileServiceComponent = components.fs
 
   implicit def filePrefix: FileServicePrefix = components.filePrefix

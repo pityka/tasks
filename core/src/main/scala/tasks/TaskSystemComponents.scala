@@ -77,6 +77,9 @@ case class TaskSystemComponents private[tasks] (
   def withChildPrefix(names: Seq[String]) =
     this.copy(filePrefix = this.filePrefix.append(names))
 
+  def replaceFilePrefix(names: Seq[String]) =
+    this.copy(filePrefix = FileServicePrefix(names.toVector))
+
   def withFilePrefix[B](
       prefix: Seq[String]
   )(fun: TaskSystemComponents => B): B =
