@@ -53,6 +53,7 @@ private[tasks] class ProxyTask[Input, Output](
     function: Spore[Input, ComputationEnvironment => IO[Output]],
     input: Input,
     writer: Serializer[Input],
+    filePrefix: FilePrefix[Input],
     reader: Deserializer[Output],
     resourceConsumed: VersionedResourceRequest,
     queue: Queue,
@@ -85,18 +86,12 @@ private[tasks] class ProxyTask[Input, Output](
       case _                   => None
     }
 
-    val hash: IO[HashedTaskDescription] = writer
-      .hash(persisted.getOrElse(input))
-      .map(hash =>
-        HashedTaskDescription(
-          taskId,
-          hash
-        )
-      )
+    val hashInput = persisted.getOrElse(input)
 
-    val scheduleTask = hash.map { hash =>
+    val scheduleTask = writer.hash(hashInput).map { dataHash =>
+      val prefix = filePrefix.prefix(hashInput)
       MessageData.ScheduleTask(
-        description = hash,
+        description = HashedTaskDescription(taskId, dataHash),
         inputDeserializer = inputDeserializer.as[AnyRef, AnyRef],
         outputSerializer = outputSerializer.as[AnyRef, AnyRef],
         function = function.as[AnyRef, AnyRef],
@@ -108,7 +103,8 @@ private[tasks] class ProxyTask[Input, Output](
         priority = priority,
         labels = labels,
         lineage = lineage,
-        proxy = address
+        proxy = address,
+        filePrefix = prefix.value
       )
     }
 

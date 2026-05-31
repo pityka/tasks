@@ -151,7 +151,8 @@ private[tasks] object MessageData {
       priority: Priority,
       labels: Labels,
       lineage: TaskLineage,
-      proxy: Address
+      proxy: Address,
+      filePrefix: String = ""
   ) extends MessageData
   object ScheduleTask {
     implicit def toLogFeature(rm: ScheduleTask): scribe.LogFeature =

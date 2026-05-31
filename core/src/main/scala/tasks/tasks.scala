@@ -92,7 +92,7 @@ trait HasPersistent[+A] { self: A =>
   def persistent: A
 }
 
-final class TaskDefinition[A: Serializer, B: Deserializer](
+final class TaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
     private[tasks] val rs: Spore[Unit, Deserializer[A]],
     private[tasks] val ws: Spore[Unit, Serializer[B]],
     private[tasks] val fs: Spore[A, ComputationEnvironment => IO[B]],
@@ -122,6 +122,7 @@ final class TaskDefinition[A: Serializer, B: Deserializer](
         function = fs,
         input = a,
         writer = writer1,
+        filePrefix = implicitly[FilePrefix[A]],
         reader = reader2,
         resourceConsumed = resource,
         queue = queue,

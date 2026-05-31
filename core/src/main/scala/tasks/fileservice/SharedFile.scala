@@ -34,6 +34,7 @@ import tasks.Implicits._
 import tasks.HasSharedFiles
 import tasks.fs
 import tasks.tasksConfig
+import tasks.queue.ComputationEnvironment
 
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
@@ -119,29 +120,44 @@ object SharedFile {
     SharedFileHelper.create(RemoteFilePath(uri), tsc.fs.remote)
 
   def apply(file: File, name: String)(implicit
+      notInTask: NotInTaskScope,
       tsc: TaskSystemComponents
-  ): IO[SharedFile] =
+  ): IO[SharedFile] = {
+    val _ = notInTask
     apply(file, name, false)
+  }
 
   def apply(file: File, name: String, deleteFile: Boolean)(implicit
+      notInTask: NotInTaskScope,
       tsc: TaskSystemComponents
-  ): IO[SharedFile] =
+  ): IO[SharedFile] = {
+    val _ = notInTask
     SharedFileHelper.createFromFile(file, name, deleteFile)
+  }
 
   def apply(source: Stream[IO, Byte], name: String)(implicit
+      notInTask: NotInTaskScope,
       tsc: TaskSystemComponents
-  ): IO[SharedFile] =
+  ): IO[SharedFile] = {
+    val _ = notInTask
     SharedFileHelper.createFromStream(source, name)
+  }
 
   def apply(bytes: Array[Byte], name: String)(implicit
+      notInTask: NotInTaskScope,
       tsc: TaskSystemComponents
-  ): IO[SharedFile] =
+  ): IO[SharedFile] = {
+    val _ = notInTask
     this.apply(fs2.Stream.chunk(fs2.Chunk.array(bytes)), name)
+  }
 
   def sink(name: String)(implicit
+      notInTask: NotInTaskScope,
       tsc: TaskSystemComponents
-  ): Pipe[IO, Byte, SharedFile] =
+  ): Pipe[IO, Byte, SharedFile] = {
+    val _ = notInTask
     SharedFileHelper.sink(name)
+  }
 
   def fromFolder(parallelism: Int)(
       callback: File => List[File]
@@ -152,6 +168,52 @@ object SharedFile {
       name: String
   )(implicit tsc: TaskSystemComponents): IO[Option[SharedFile]] =
     SharedFileHelper.getByName(name, retrieveSizeAndHash = true)
+
+  def scoped(file: File, suffix: String)(implicit
+      ce: ComputationEnvironment
+  ): IO[SharedFile] =
+    scoped(file, suffix, deleteFile = false)
+
+  def scoped(file: File, suffix: String, deleteFile: Boolean)(implicit
+      ce: ComputationEnvironment
+  ): IO[SharedFile] = {
+    val tsc = ce.toTaskSystemComponents
+    SharedFileHelper.createFromFile(file, suffix, deleteFile)(
+      tsc.filePrefix.append(ce.prefix.value),
+      tsc.fs,
+      tsc.tasksConfig,
+      tsc.historyContext
+    )
+  }
+
+  def scoped(source: Stream[IO, Byte], suffix: String)(implicit
+      ce: ComputationEnvironment
+  ): IO[SharedFile] = {
+    val tsc = ce.toTaskSystemComponents
+    SharedFileHelper.createFromStream(source, suffix)(
+      tsc.filePrefix.append(ce.prefix.value),
+      tsc.fs,
+      tsc.tasksConfig,
+      tsc.historyContext
+    )
+  }
+
+  def scoped(bytes: Array[Byte], suffix: String)(implicit
+      ce: ComputationEnvironment
+  ): IO[SharedFile] =
+    scoped(fs2.Stream.chunk(fs2.Chunk.array(bytes)), suffix)
+
+  def scopedSink(suffix: String)(implicit
+      ce: ComputationEnvironment
+  ): Pipe[IO, Byte, SharedFile] = {
+    val tsc = ce.toTaskSystemComponents
+    SharedFileHelper.sink(suffix)(
+      tsc.filePrefix.append(ce.prefix.value),
+      tsc.fs,
+      tsc.tasksConfig,
+      tsc.historyContext
+    )
+  }
 
 }
 

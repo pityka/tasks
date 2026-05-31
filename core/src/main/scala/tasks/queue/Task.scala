@@ -155,7 +155,8 @@ class ComputationEnvironment(
     implicit val components: TaskSystemComponents,
     implicit val launcher: LauncherHandle,
     val taskActor: Task,
-    val taskHash: HashedTaskDescription
+    val taskHash: HashedTaskDescription,
+    val filePrefixValue: String
 ) {
 
   private val logQueue =
@@ -177,7 +178,8 @@ class ComputationEnvironment(
         components = components.withChildPrefix(prefix),
         launcher = launcher,
         taskActor = taskActor,
-        taskHash = taskHash
+        taskHash = taskHash,
+        filePrefixValue = filePrefixValue
       )
     )
 
@@ -190,7 +192,8 @@ class ComputationEnvironment(
         components = components.replaceFilePrefix(prefix),
         launcher = launcher,
         taskActor = taskActor,
-        taskHash = taskHash
+        taskHash = taskHash,
+        filePrefixValue = filePrefixValue
       )
     )
 
@@ -201,6 +204,9 @@ class ComputationEnvironment(
   implicit def queue: Queue = components.queue
 
   implicit def cache: TaskResultCache = components.cache
+
+  implicit def prefix: Prefix =
+    Prefix(if (filePrefixValue.isEmpty) taskHash.dataHash else filePrefixValue)
 
   def toTaskSystemComponents =
     components
@@ -224,6 +230,7 @@ private[tasks] class Task(
     taskId: TaskId,
     lineage: TaskLineage,
     taskHash: HashedTaskDescription,
+    filePrefixValue: String,
     val proxy: tasks.util.message.Address,
     messenger: Messenger
 ) {
@@ -298,7 +305,8 @@ private[tasks] class Task(
         ),
         launcher = launcherActor,
         taskActor = this,
-        taskHash = taskHash
+        taskHash = taskHash,
+        filePrefixValue = filePrefixValue
       )
 
       scribe.debug(

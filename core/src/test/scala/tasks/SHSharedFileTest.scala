@@ -30,6 +30,7 @@ import org.scalatest.matchers.should.Matchers
 import cats.effect.unsafe.implicits.global
 
 import tasks.jsonitersupport._
+import tasks.fileservice.NotInTaskScope.allowInTaskScope._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 

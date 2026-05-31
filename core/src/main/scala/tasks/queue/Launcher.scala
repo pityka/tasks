@@ -266,6 +266,7 @@ private[tasks] object Launcher {
             taskId = scheduleTask.description.taskId,
             lineage = scheduleTask.lineage.inherit(scheduleTask.description),
             taskHash = scheduleTask.description,
+            filePrefixValue = scheduleTask.filePrefix,
             proxy = scheduleTask.proxy,
             messenger = messenger
           )

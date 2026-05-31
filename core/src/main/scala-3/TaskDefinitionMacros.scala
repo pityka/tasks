@@ -35,6 +35,7 @@ private[tasks] object TaskDefinitionMacros {
       deserA: Expr[Deserializer[A]],
       serC: Expr[Serializer[C]],
       deserC: Expr[Deserializer[C]],
+      filePrefix: Expr[FilePrefix[A]],
       taskID: Expr[String],
       taskVersion: Expr[Int],
       comp: Expr[A => ComputationEnvironment => IO[C]]
@@ -67,7 +68,7 @@ private[tasks] object TaskDefinitionMacros {
         $i2,
         $i3,
         _root_.tasks.queue.TaskId($taskID, $taskVersion)
-      )(using $serA, $deserC)
+      )(using $serA, $filePrefix, $deserC)
     }
 
     val block = Block(List(d1, d2, d3), td.asTerm)

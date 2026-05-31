@@ -10,7 +10,8 @@ trait MacroCalls {
       inline serA: Serializer[A],
       inline deserA: Deserializer[A],
       inline serC: Serializer[C],
-      inline deserC: Deserializer[C]
+      inline deserC: Deserializer[C],
+      inline filePrefix: FilePrefix[A]
   ): TaskDefinition[A, C] = ${
     TaskDefinitionMacros
       .taskDefinitionFromTree[A, C](
@@ -18,6 +19,7 @@ trait MacroCalls {
         deserA = 'deserA,
         serC = 'serC,
         deserC = 'deserC,
+        filePrefix = 'filePrefix,
         taskID = 'taskID,
         taskVersion = 'taskVersion,
         comp = 'comp
