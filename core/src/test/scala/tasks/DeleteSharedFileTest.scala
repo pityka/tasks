@@ -30,6 +30,7 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import tasks.util.TempFile
+import tasks.fileservice.allowUnscopedSharedFiles.allow
 
 object DeleteSharedFileTest extends TestHelpers {
 

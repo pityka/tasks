@@ -30,7 +30,7 @@ import tasks.jsonitersupport._
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import cats.effect.IO
-
+import tasks.fileservice.allowUnscopedSharedFiles.allow
 import cats.effect.unsafe.implicits.global
 
 /** Definitions of subtasks for calculating Pi

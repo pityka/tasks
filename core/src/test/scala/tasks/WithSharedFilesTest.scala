@@ -29,7 +29,7 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import tasks.fileservice.NotInTaskScope.allowInTaskScope._
+import tasks.fileservice.allowUnscopedSharedFiles.allow
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 
