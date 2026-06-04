@@ -27,10 +27,15 @@ trait S3Client {
       bucket: String,
       key: String,
       partSize: Int,
-      multiPartConcurrency: Int
+      multiPartConcurrency: Int,
+      fromOffset: Long = 0L
   ): fs2.Stream[IO, Byte]
 
-  def readFile(bucket: String, key: String): fs2.Stream[IO, Byte]
+  def readFile(
+      bucket: String,
+      key: String,
+      fromOffset: Long = 0L
+  ): fs2.Stream[IO, Byte]
 
   def uploadFileMultipart(
       bucket: String,

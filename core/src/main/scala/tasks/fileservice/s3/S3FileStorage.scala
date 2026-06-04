@@ -173,8 +173,8 @@ private[tasks] class S3Storage(
 
     Stream.force(length.map { length =>
       if (length > config.s3MultipartThreshold)
-        s3.readFileMultipart(bucket = bucketName, key = assembledPath, partSize = config.s3DownloadPartSizeMB, multiPartConcurrency = config.s3DownloadParallelism)
-      else s3.readFile(bucketName, assembledPath)
+        s3.readFileMultipart(bucket = bucketName, key = assembledPath, partSize = config.s3DownloadPartSizeMB, multiPartConcurrency = config.s3DownloadParallelism, fromOffset = fromOffset)
+      else s3.readFile(bucketName, assembledPath, fromOffset = fromOffset)
     })
 
   }

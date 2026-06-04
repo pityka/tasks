@@ -201,10 +201,6 @@ private[tasks] class StreamHelper(
       uri: Uri,
       fromOffset: Long
   ): fs2.Stream[IO, Byte] = {
-    assert(
-      fromOffset == 0L,
-      "Seeking into S3 file not implemented. Use GetObjectMetaData.range to implement it."
-    )
     assert(s3Client.isDefined, "S3Client is not started (enable in config)")
     val (bucket, key) = s3Loc(uri)
     val length = s3Client.get
@@ -217,8 +213,8 @@ private[tasks] class StreamHelper(
 
     fs2.Stream.force(length.map { length =>
       if (length > s3MultipartThreshold)
-        s3Client.get.readFileMultipart(bucket = bucket, key = key, partSize = s3DownloadPartSizeMB, multiPartConcurrency = s3DownloadParallelism)
-      else s3Client.get.readFile(bucket, key)
+        s3Client.get.readFileMultipart(bucket = bucket, key = key, partSize = s3DownloadPartSizeMB, multiPartConcurrency = s3DownloadParallelism, fromOffset = fromOffset)
+      else s3Client.get.readFile(bucket, key, fromOffset = fromOffset)
     })
   }
 

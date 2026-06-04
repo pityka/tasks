@@ -355,19 +355,24 @@ class S3(
     *
     * For big files, consider using [[readFileMultipart]] instead.
     */
-  def readFile(bucket: String, key: String): fs2.Stream[IO, Byte] =
+  def readFile(
+      bucket: String,
+      key: String,
+      fromOffset: Long = 0L
+  ): fs2.Stream[IO, Byte] =
     fs2.Stream
       .eval(
-        io(
+        io {
+          val builder = GetObjectRequest
+            .builder()
+            .bucket(bucket)
+            .key(key)
+          if (fromOffset > 0L) builder.range(s"bytes=$fromOffset-")
           s3.getObject(
-            GetObjectRequest
-              .builder()
-              .bucket(bucket)
-              .key(key)
-              .build(),
+            builder.build(),
             AsyncResponseTransformer.toBytes[GetObjectResponse]
           )
-        )
+        }
       )
       .flatMap(r =>
         fs2.Stream.chunk(Chunk(ArraySeq.unsafeWrapArray(r.asByteArray): _*))
@@ -391,7 +396,8 @@ class S3(
       bucket: String,
       key: String,
       partSize: Int,
-      multiPartConcurrency: Int
+      multiPartConcurrency: Int,
+      fromOffset: Long = 0L
   ): fs2.Stream[IO, Byte] = {
     val chunkSizeBytes = partSize.toLong * 1048576L
 
@@ -427,7 +433,7 @@ class S3(
       .flatMap { totalSize =>
         val offsets =
           Iterator
-            .iterate(0L)(_ + chunkSizeBytes)
+            .iterate(fromOffset)(_ + chunkSizeBytes)
             .takeWhile(_ < totalSize)
             .toList
 
