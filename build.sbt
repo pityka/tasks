@@ -322,5 +322,6 @@ lazy val testables = (project in file("testables"))
     core,
     upicklesupport,
     circe,
-    sharedJVM
+    sharedJVM,
+    s3
   )
