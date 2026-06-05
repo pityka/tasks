@@ -441,8 +441,7 @@ class S3(
           .emits(offsets)
           .covary[IO]
           .parEvalMap(multiPartConcurrency)(downloadPart)
-          .prefetchN(multiPartConcurrency)
-          .flatMap(fs2.Stream.chunk)
+          .unchunks
       }
 
 }
