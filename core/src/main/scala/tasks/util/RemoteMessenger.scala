@@ -117,23 +117,33 @@ private[tasks] object RemoteMessenger {
     }
   }
 
-  private def route(localMessenger: LocalMessenger, prefix: String) =
-    HttpRoutes.of[IO] { case request @ POST -> Root / prefix =>
-      request.decode[Message] { message =>
-        IO(
-          scribe.trace(
-            s"HTTP receive",
-            message
-          )
-        ) *>
-          localMessenger
-            .submit(message)
-            .flatMap(_ =>
-              Ok(
-                s"submitted message"
-              )
+  private def route(
+      localMessenger: LocalMessenger,
+      prefix: String,
+      workerHealth: IO[Boolean]
+  ) =
+    HttpRoutes.of[IO] {
+      case request @ POST -> Root / prefix =>
+        request.decode[Message] { message =>
+          IO(
+            scribe.trace(
+              s"HTTP receive",
+              message
             )
-      }
+          ) *>
+            localMessenger
+              .submit(message)
+              .flatMap(_ =>
+                Ok(
+                  s"submitted message"
+                )
+              )
+        }
+      case GET -> Root / "health" =>
+        workerHealth.flatMap {
+          case true  => Ok("healthy")
+          case false => ServiceUnavailable("worker cannot self-shutdown")
+        }
     }
   private def submit0(
       message: Message,
@@ -207,12 +217,13 @@ private[tasks] object RemoteMessenger {
       bindHost: String,
       bindPort: Int,
       bindPrefix: String,
-      peerUri: org.http4s.Uri
+      peerUri: org.http4s.Uri,
+      workerHealth: IO[Boolean] = IO.pure(true)
   ) = {
     import com.comcast.ip4s._
 
     LocalMessenger.make.flatMap { localMessenger =>
-      val r = route(localMessenger, bindPrefix)
+      val r = route(localMessenger, bindPrefix, workerHealth)
       val listeningUri = {
         val u = s"http://$bindHost:$bindPort/$bindPrefix"
         org.http4s.Uri

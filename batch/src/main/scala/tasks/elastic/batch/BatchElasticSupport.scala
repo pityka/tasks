@@ -119,7 +119,9 @@ class BatchCreateNode(
           followerNodeName = None,
           followerMayUseArbitraryPort = true,
           background = false,
-          image = None
+          image = None,
+          workerHealthUrlFile =
+            config.workerHealthUrlFile.map(_.getAbsolutePath)
         )(config)
 
         val resourceReqs = {

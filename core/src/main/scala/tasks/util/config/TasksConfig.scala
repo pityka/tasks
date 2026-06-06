@@ -211,6 +211,11 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   val checkTempFolderOnWorkerInitialization =
     raw.getBoolean("tasks.elastic.checktempfolder")
 
+  def workerHealthUrlFile: Option[java.io.File] = {
+    val v = raw.getString("tasks.worker.healthUrlFile")
+    if (v.isEmpty || v == "-") None else Some(new java.io.File(v))
+  }
+
   def trackDataFlow = raw.getBoolean("tasks.queue.trackDataFlow")
 
   val parallelismOfReadingHistoryFiles =

@@ -53,7 +53,8 @@ object Deployment {
       followerMayUseArbitraryPort: Boolean,
       followerNodeName: Option[String],
       background: Boolean,
-      image: Option[String]
+      image: Option[String],
+      workerHealthUrlFile: Option[String] = None
   )(implicit config: TasksConfig): String = {
     val packageFileFolder = config.workerWorkingDirectory
     val packageFileName = config.workerPackageName
@@ -89,8 +90,13 @@ object Deployment {
         s"-Dtasks.fileservice.connectToProxy=true"
       else ""
 
+    val workerHealthUrlFileString = workerHealthUrlFile match {
+      case None       => ""
+      case Some(path) => s"-Dtasks.worker.healthUrlFile=$path"
+    }
+
     val edited =
-      s"./$packageFileName -J-Xmx{RAM}M {EXTRA} -Dhosts.master={MASTER} -Dhosts.masterprefix=$masterPrefix  -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString $hostImageString $externalHostnameString  $mayUseArbitraryPortString $followerNodeNameString $connectToProxyFileService -Dtasks.disableRemoting=false"
+      s"./$packageFileName -J-Xmx{RAM}M {EXTRA} -Dhosts.master={MASTER} -Dhosts.masterprefix=$masterPrefix  -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString $hostImageString $externalHostnameString  $mayUseArbitraryPortString $followerNodeNameString $connectToProxyFileService $workerHealthUrlFileString -Dtasks.disableRemoting=false"
         .replace(
           "{RAM}",
           math

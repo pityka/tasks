@@ -55,6 +55,7 @@ import tasks.tasksConfig
 import org.http4s.server.Server
 import org.ekrich.config.ConfigFactory
 import cats.effect.kernel.Deferred
+import cats.effect.kernel.Ref
 import cats.effect.ExitCode
 
 case class TaskSystemComponents private[tasks] (
@@ -595,6 +596,48 @@ object TaskSystemComponents {
                IO.unit) *> IO.raiseError(new RuntimeException("init failed"))
           }
 
+          def writeWorkerHealthUrlFile(messenger: Messenger): IO[Unit] =
+            config.workerHealthUrlFile match {
+              case None => IO.unit
+              case Some(file) =>
+                messenger.listeningAddress match {
+                  case None =>
+                    IO.raiseError(
+                      new RuntimeException(
+                        s"tasks.worker.healthUrlFile is set to ${file.getAbsolutePath} " +
+                          "but the messenger has no listening address (local messenger)."
+                      )
+                    )
+                  case Some(addr) =>
+                    IO {
+                      val baseUrl = org.http4s.Uri
+                        .fromString(addr)
+                        .toOption
+                        .map(u => u.copy(path = org.http4s.Uri.Path.Root).renderString)
+                        .getOrElse(addr)
+                      Option(file.getParentFile).foreach(_.mkdirs())
+                      val tmp = new java.io.File(
+                        file.getParentFile,
+                        file.getName + ".tmp"
+                      )
+                      java.nio.file.Files.writeString(
+                        tmp.toPath,
+                        baseUrl,
+                        java.nio.charset.StandardCharsets.UTF_8
+                      )
+                      java.nio.file.Files.move(
+                        tmp.toPath,
+                        file.toPath,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE
+                      )
+                      scribe.info(
+                        s"Wrote worker health URL to ${file.getAbsolutePath} ($baseUrl)"
+                      )
+                    }
+                }
+            }
+
           def tempFolderIsWriteable(queue: Queue) = {
             val tempFolderWriteable =
               if (!config.checkTempFolderOnWorkerInitialization) true
@@ -622,7 +665,8 @@ object TaskSystemComponents {
               node: Option[Node],
               shutdown: Option[tasks.elastic.ShutdownSelfNode],
               exitCode: Option[Deferred[IO, ExitCode]],
-              launcherName: LauncherName
+              launcherName: LauncherName,
+              shutdownInitiated: Ref[IO, Boolean]
           ) =
             if (hostConfig.availableCPU > 0 && hostConfig.isWorker) {
               val refreshInterval = config.askInterval
@@ -648,7 +692,8 @@ object TaskSystemComponents {
                   address = launcherName,
                   node = node,
                   shutdown = shutdown,
-                  exitCode = exitCode
+                  exitCode = exitCode,
+                  shutdownInitiated = shutdownInitiated
                 )(config)
                 .map(Some(_))
 
@@ -750,7 +795,22 @@ object TaskSystemComponents {
               launcherName = launcherName,
               nodeName = nodeName
             )
-            messenger <- Messenger.make(hostConfig)
+            shutdownInitiated <- Resource.eval(Ref.of[IO, Boolean](false))
+            staticHealthOk = {
+              if (!hostConfig.isApp && hostConfig.isWorker)
+                node.isDefined && elasticSupport.isDefined
+              else true
+            }
+            workerHealth: IO[Boolean] =
+              if (staticHealthOk)
+                shutdownInitiated.get.map(initiated => !initiated)
+              else IO.pure(false)
+            messenger <- Messenger.make(hostConfig, workerHealth)
+            _ <- Resource.eval(
+              if (!hostConfig.isApp && hostConfig.isWorker)
+                writeWorkerHealthUrlFile(messenger)
+              else IO.unit
+            )
             meterProvider <- meterProviderResource
             fileServiceComponent <- fileServiceComponent
             cache <- cache(fileServiceComponent)
@@ -793,7 +853,8 @@ object TaskSystemComponents {
               launcherName = launcherName,
               node = node,
               shutdown = elasticSupport.map(_.shutdownFromWorker),
-              exitCode = elasticSupport.map(_ => exitCode)
+              exitCode = elasticSupport.map(_ => exitCode),
+              shutdownInitiated = shutdownInitiated
             )
 
             _ <- Resource.make(

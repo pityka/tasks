@@ -20,7 +20,10 @@ private[tasks] trait Messenger {
 }
 
 private[tasks] object Messenger {
-  def make(hostConfig: HostConfiguration): Resource[IO, Messenger] = {
+  def make(
+      hostConfig: HostConfiguration,
+      workerHealth: IO[Boolean] = IO.pure(true)
+  ): Resource[IO, Messenger] = {
     hostConfig match {
       case _: LocalConfiguration => LocalMessenger.make
       case t: RemotingHostConfiguration =>
@@ -40,7 +43,8 @@ private[tasks] object Messenger {
           bindHost = internalAddress.hostName,
           bindPort = internalAddress.port,
           bindPrefix = bindPrefix,
-          peerUri
+          peerUri = peerUri,
+          workerHealth = workerHealth
         )
     }
 

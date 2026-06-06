@@ -70,7 +70,8 @@ private[tasks] object Launcher {
       address: LauncherName,
       node: Option[Node],
       shutdown: Option[tasks.elastic.ShutdownSelfNode],
-      exitCode: Option[Deferred[IO, ExitCode]]
+      exitCode: Option[Deferred[IO, ExitCode]],
+      shutdownInitiated: Ref[IO, Boolean]
   )(implicit config: TasksConfig) = {
     def release(st: Launcher.State): IO[Unit] =
       IO.parSequenceN(1)(st.fibers.map(_.cancel)).void
@@ -89,7 +90,8 @@ private[tasks] object Launcher {
         managedStorage = managedStorage,
         node = node,
         shutdown = shutdown,
-        exitCode = exitCode
+        exitCode = exitCode,
+        shutdownInitiated = shutdownInitiated
       )
 
     val init: IO[Launcher.State] =
@@ -207,7 +209,8 @@ private[tasks] object Launcher {
       managedStorage: ManagedFileStorage,
       node: Option[Node],
       shutdown: Option[tasks.elastic.ShutdownSelfNode],
-      exitCode: Option[Deferred[IO, ExitCode]]
+      exitCode: Option[Deferred[IO, ExitCode]],
+      shutdownInitiated: Ref[IO, Boolean]
   ) { handle =>
 
     def askForWork(
@@ -323,7 +326,10 @@ private[tasks] object Launcher {
           if (shouldShutdown) {
             scribe.debug(s"IdleShutdown", state.availableResources, address)
             state.copy(denyWorkBeforeShutdown = true) ->
-              shutdown.get.shutdownRunningNode(exitCode.get, node.get.name)
+              IO.both(
+                shutdownInitiated.set(true),
+                shutdown.get.shutdownRunningNode(exitCode.get, node.get.name)
+              ).void
           } else {
 
             scribe.debug(s"WillAskForWork ", state.availableResources,address)
