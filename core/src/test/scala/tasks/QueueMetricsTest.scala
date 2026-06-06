@@ -282,6 +282,89 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
     memTotal shouldBe 1024L
   }
 
+  test("node-registry gauges reflect running/pending/inflight and cumulative") {
+    val shape = tasks.shared.ResourceAvailable(
+      cpu = 2,
+      memory = 256,
+      scratch = 0,
+      gpu = Nil,
+      image = None
+    )
+    val node1 = tasks.util.message.Node(
+      tasks.shared.RunningJobId("r1"),
+      shape,
+      tasks.util.message.LauncherName("l1")
+    )
+    val node2 = tasks.util.message.Node(
+      tasks.shared.RunningJobId("r2"),
+      shape,
+      tasks.util.message.LauncherName("l2")
+    )
+
+    val nodeRegistry = tasks.elastic.NodeRegistryState.State.empty
+      .update(tasks.elastic.NodeRegistryState.NodeRequested(shape))
+      .update(
+        tasks.elastic.NodeRegistryState.NodeIsPending(
+          tasks.shared.PendingJobId("p1"),
+          shape,
+          shape
+        )
+      )
+      .update(tasks.elastic.NodeRegistryState.NodeIsUp(node1, tasks.shared.PendingJobId("p1")))
+      .update(tasks.elastic.NodeRegistryState.NodeRequested(shape))
+      .update(
+        tasks.elastic.NodeRegistryState.NodeIsPending(
+          tasks.shared.PendingJobId("p2"),
+          shape,
+          shape
+        )
+      )
+      .update(tasks.elastic.NodeRegistryState.NodeIsUp(node2, tasks.shared.PendingJobId("p2")))
+      .update(tasks.elastic.NodeRegistryState.NodeRequested(shape))
+      .update(
+        tasks.elastic.NodeRegistryState.NodeIsPending(
+          tasks.shared.PendingJobId("p3"),
+          shape,
+          shape
+        )
+      )
+      .update(tasks.elastic.NodeRegistryState.NodeRequested(shape))
+      .update(tasks.elastic.NodeRegistryState.NodeRequested(shape))
+
+    nodeRegistry.running.size shouldBe 2
+    nodeRegistry.pending.size shouldBe 1
+    nodeRegistry.inFlightRequests.size shouldBe 2
+    nodeRegistry.cumulativeRequested shouldBe 5
+
+    val state = QueueImpl.State(
+      queuedTasks = Map.empty,
+      scheduledTasks = Map.empty,
+      knownLaunchers = Map.empty,
+      counters = Map.empty,
+      nodes = nodeRegistry
+    )
+
+    val metrics = collect(IO.pure(state))(_ => IO.unit)
+
+    def gaugeLong(name: String): Long =
+      find(metrics, name).data match {
+        case g: MetricPoints.Gauge =>
+          g.points.toVector.head.asInstanceOf[PointData.LongNumber].value
+        case other => fail(s"expected gauge for $name, got $other")
+      }
+
+    gaugeLong("tasks.nodes.running.count") shouldBe 2L
+    gaugeLong("tasks.nodes.pending.count") shouldBe 1L
+    gaugeLong("tasks.nodes.inflight.count") shouldBe 2L
+
+    find(metrics, "tasks.nodes.cumulative_requested").data match {
+      case s: MetricPoints.Sum =>
+        s.points.toVector.head.asInstanceOf[PointData.LongNumber].value shouldBe 5L
+      case other =>
+        fail(s"expected sum for tasks.nodes.cumulative_requested, got $other")
+    }
+  }
+
   // Constructs a ScheduleTask with only the description field meaningfully populated.
   // QueueMetrics' state-snapshot callbacks read description.taskId and the resource
   // allocation tuple on scheduled tasks; everything else is irrelevant for these

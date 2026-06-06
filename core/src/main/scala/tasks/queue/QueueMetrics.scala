@@ -127,10 +127,8 @@ private[tasks] object QueueMetrics {
   val versionKey = "task.version"
   val otherSentinel = "_other"
 
-  // 21 series per distinct (task.id, task.version) pair + 2 fixed-label series.
-  // See OTEL_DESIGN.md.
   private val seriesPerTaskPair = 21
-  private val fixedSeries = 2
+  private val fixedSeries = 6
 
   def pairCap(maxSeries: Int): Int =
     math.max(1, (maxSeries - fixedSeries) / seriesPerTaskPair - 1)
@@ -274,6 +272,48 @@ private[tasks] object QueueMetrics {
                 .sum
             obs.record(total)
           }
+        }
+
+      _ <- meter
+        .observableGauge[Long]("tasks.nodes.running.count")
+        .withDescription("Worker nodes currently running.")
+        .createWithCallback { obs =>
+          stateSnapshot.flatMap(st => obs.record(st.nodes.running.size.toLong))
+        }
+
+      _ <- meter
+        .observableGauge[Long]("tasks.nodes.pending.count")
+        .withDescription(
+          "Worker nodes that have been allocated by the scheduler " +
+            "but are not yet up."
+        )
+        .createWithCallback { obs =>
+          stateSnapshot.flatMap(st => obs.record(st.nodes.pending.size.toLong))
+        }
+
+      _ <- meter
+        .observableGauge[Long]("tasks.nodes.inflight.count")
+        .withDescription(
+          "Node requests that have been pre-committed but not yet " +
+            "resolved (still mid-spawn)."
+        )
+        .createWithCallback { obs =>
+          stateSnapshot.flatMap(st =>
+            obs.record(st.nodes.inFlightRequests.size.toLong)
+          )
+        }
+
+      _ <- meter
+        .observableCounter[Long]("tasks.nodes.cumulative_requested")
+        .withDescription(
+          "Total node requests issued across the lifetime of this " +
+            "task system (monotonic; counts failures too, gates " +
+            "maxNodesCumulative)."
+        )
+        .createWithCallback { obs =>
+          stateSnapshot.flatMap(st =>
+            obs.record(st.nodes.cumulativeRequested.toLong)
+          )
         }
     } yield qm
   }
