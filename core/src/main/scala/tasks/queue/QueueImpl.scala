@@ -481,11 +481,33 @@ private[tasks] class QueueImpl(
       } else IO.unit
       val (newState, io) =
         try {
-          val neededNodes = decideNewNode.needNewNode(
+          val rawNeededNodes = decideNewNode.needNewNode(
             queueStat,
             state.nodes.running.toSeq.map(_._2) ++ Seq(unmanagedResource),
-            state.nodes.pending.toSeq.map(_._2) ++ state.nodes.inFlightRequests
+            state.nodes.pending.toSeq.map(_._2)
           )
+
+          def committedResourceFor(req: ResourceRequest): ResourceAvailable =
+            ResourceAvailable(
+              cpu = req.cpu._1,
+              memory = req.memory,
+              scratch = req.scratch,
+              gpu = (0 until req.gpu).toList,
+              image = req.image
+            )
+
+          val inFlightByShape: Map[ResourceAvailable, Int] =
+            state.nodes.inFlightRequests
+              .groupBy(identity)
+              .map { case (k, v) => k -> v.size }
+
+          val neededNodes: Map[ResourceRequest, Int] =
+            rawNeededNodes.flatMap { case (req, count) =>
+              val alreadyInFlight =
+                inFlightByShape.getOrElse(committedResourceFor(req), 0)
+              val adjusted = count - alreadyInFlight
+              if (adjusted > 0) Some(req -> adjusted) else None
+            }
 
           val skip = neededNodes.values.sum == 0
           if (!skip) {
@@ -520,23 +542,13 @@ private[tasks] class QueueImpl(
 
               val requestedNodes = neededNodes.take(allowedNewNodes)
 
-              def committedResourceFor(req: ResourceRequest): ResourceAvailable =
-                ResourceAvailable(
-                  cpu = req.cpu._1,
-                  memory = req.memory,
-                  scratch = req.scratch,
-                  gpu = (0 until req.gpu).toList,
-                  image = req.image
-                )
-
               val preCommittedState =
-                requestedNodes.foldLeft(state) { case (s, (req, count)) =>
-                  val resource = committedResourceFor(req)
-                  (1 to count).foldLeft(s) { (s2, _) =>
-                    s2.update(
-                      NodeEvent(NodeRegistryState.NodeRequested(resource))
+                requestedNodes.foldLeft(state) { case (s, (req, _)) =>
+                  s.update(
+                    NodeEvent(
+                      NodeRegistryState.NodeRequested(committedResourceFor(req))
                     )
-                  }
+                  )
                 }
 
               val updatedState: IO[Unit] = IO(
