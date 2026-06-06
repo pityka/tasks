@@ -564,9 +564,17 @@ private[tasks] class QueueImpl(
               ) *> IO
                 .parSequenceN(1)(requestedNodes.toList.map { case (request, _) =>
                   val committedResource = committedResourceFor(request)
-                  createNode
-                    .requestOneNewJobFromJobScheduler(request)
-                    .flatMap {
+                  val recordFailure: IO[Unit] = ref.update(
+                    _.update(
+                      NodeEvent(
+                        NodeRegistryState.NodeRequestFailed(committedResource)
+                      )
+                    )
+                  )
+                  IO.uncancelable { poll =>
+                    poll(
+                      createNode.requestOneNewJobFromJobScheduler(request)
+                    ).flatMap {
                       case Left(e) =>
                         IO(
                           scribe.warn(
@@ -579,15 +587,7 @@ private[tasks] class QueueImpl(
                               "as a defensive measure to bound total attempts."
                             )
                           )
-                        ) *> ref.update(
-                          _.update(
-                            NodeEvent(
-                              NodeRegistryState.NodeRequestFailed(
-                                committedResource
-                              )
-                            )
-                          )
-                        )
+                        ) *> recordFailure
                       case Right((jobId, size)) =>
                         IO(
                           scribe.info(
@@ -596,7 +596,6 @@ private[tasks] class QueueImpl(
                             size
                           )
                         ) *> ref.update(
-                          // NodeRequested already pre-committed; only record Pending.
                           _.update(
                             NodeEvent(
                               NodeRegistryState.NodeIsPending(
@@ -632,8 +631,22 @@ private[tasks] class QueueImpl(
                           }
                           .start
                           .void
-
                     }
+                  }.guaranteeCase {
+                    case cats.effect.Outcome.Canceled() =>
+                      IO(
+                        scribe.warn(
+                          "NodeRequestCancelled",
+                          scribe.data(
+                            "explain",
+                            "Pre-committed in-flight slot is being released " +
+                              "because the requesting IO was cancelled before " +
+                              "the scheduler could respond."
+                          )
+                        )
+                      ) *> recordFailure
+                    case _ => IO.unit
+                  }
                 })
                 .void
 

@@ -3,9 +3,15 @@ package tasks
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 
+import cats.effect.IO
+import cats.effect.kernel.Ref
+import cats.effect.unsafe.implicits.global
+
 import tasks.elastic.NodeRegistryState
 import tasks.elastic.NodeRegistryState._
 import tasks.shared._
+
+import scala.concurrent.duration._
 
 class NodeRegistryStateTest extends AnyFunSuite with Matchers {
 
@@ -80,6 +86,44 @@ class NodeRegistryStateTest extends AnyFunSuite with Matchers {
     val s2 = s1.update(NodeRequested(shapeA))
     s2.inFlightRequests shouldBe List(shapeA)
     s2.cumulativeRequested shouldBe 2
+  }
+
+  test(
+    "removeFirst is idempotent when the shape is not present"
+  ) {
+    val s0 = NodeRegistryState.State.empty.update(NodeRequested(shapeB))
+    val s1 = s0.update(NodeRequestFailed(shapeA))
+    s1.inFlightRequests shouldBe List(shapeB)
+  }
+
+  test(
+    "cancelled in-flight IO releases its pre-committed slot via guaranteeCase"
+  ) {
+    val program = for {
+      ref <- Ref.of[IO, NodeRegistryState.State](
+        NodeRegistryState.State.empty.update(NodeRequested(shapeA))
+      )
+      committedResource = shapeA
+      recordFailure = ref.update(_.update(NodeRequestFailed(committedResource)))
+      hangingRequest = IO.uncancelable { poll =>
+        poll(IO.never[Either[String, (PendingJobId, ResourceAvailable)]])
+          .flatMap {
+            case Left(_)  => recordFailure
+            case Right(_) => IO.unit
+          }
+      }.guaranteeCase {
+        case cats.effect.Outcome.Canceled() => recordFailure
+        case _                              => IO.unit
+      }
+      fiber <- hangingRequest.start
+      _ <- IO.sleep(50.millis)
+      _ <- fiber.cancel
+      st <- ref.get
+    } yield st
+
+    val st = program.unsafeRunSync()
+    st.inFlightRequests shouldBe Nil
+    st.cumulativeRequested shouldBe 1
   }
 
   test(

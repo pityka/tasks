@@ -104,7 +104,7 @@ private[tasks] object NodeRegistryState {
       x: ResourceAvailable
   ): List[ResourceAvailable] = {
     val (before, after) = xs.span(_ != x)
-    if (after.isEmpty) xs.drop(1)
+    if (after.isEmpty) xs
     else before ++ after.tail
   }
 
