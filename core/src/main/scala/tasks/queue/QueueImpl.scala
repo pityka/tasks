@@ -10,6 +10,8 @@ import tasks.util.message.MessageData
 import tasks.util.message.Address
 import tasks.shared.ElapsedTimeNanoSeconds
 import tasks.shared.ResourceAllocated
+import tasks.shared.ResourceAvailable
+import tasks.shared.ResourceRequest
 import tasks.util.config.TasksConfig
 import tasks.util.message.LauncherName
 import tasks.shared.VersionedResourceAvailable
@@ -482,13 +484,13 @@ private[tasks] class QueueImpl(
           val neededNodes = decideNewNode.needNewNode(
             queueStat,
             state.nodes.running.toSeq.map(_._2) ++ Seq(unmanagedResource),
-            state.nodes.pending.toSeq.map(_._2)
+            state.nodes.pending.toSeq.map(_._2) ++ state.nodes.inFlightRequests
           )
 
           val skip = neededNodes.values.sum == 0
           if (!skip) {
             val activeOrInFlight =
-              state.nodes.running.size + state.nodes.pending.size + state.nodes.inFlightRequests
+              state.nodes.running.size + state.nodes.pending.size + state.nodes.inFlightRequests.size
             val canRequest =
               config.maxNodes > activeOrInFlight &&
                 state.nodes.cumulativeRequested < config.maxNodesCumulative
@@ -501,7 +503,7 @@ private[tasks] class QueueImpl(
                       "max-nodes" -> config.maxNodes,
                       "max-nodes-cumulative" -> config.maxNodesCumulative,
                       "cumulative-requested" -> state.nodes.cumulativeRequested,
-                      "in-flight-requests" -> state.nodes.inFlightRequests,
+                      "in-flight-requests" -> state.nodes.inFlightRequests.size,
                       "pending-nodes" -> state.nodes.pending.size,
                       "running-nodes" -> state.nodes.running.size,
                       "explain" -> "New node request will not proceed because pending nodes or reached max nodes."
@@ -518,9 +520,24 @@ private[tasks] class QueueImpl(
 
               val requestedNodes = neededNodes.take(allowedNewNodes)
 
-              val preCommittedState = (1 to requestedNodes.size).foldLeft(state) {
-                (s, _) => s.update(NodeEvent(NodeRegistryState.NodeRequested))
-              }
+              def committedResourceFor(req: ResourceRequest): ResourceAvailable =
+                ResourceAvailable(
+                  cpu = req.cpu._1,
+                  memory = req.memory,
+                  scratch = req.scratch,
+                  gpu = (0 until req.gpu).toList,
+                  image = req.image
+                )
+
+              val preCommittedState =
+                requestedNodes.foldLeft(state) { case (s, (req, count)) =>
+                  val resource = committedResourceFor(req)
+                  (1 to count).foldLeft(s) { (s2, _) =>
+                    s2.update(
+                      NodeEvent(NodeRegistryState.NodeRequested(resource))
+                    )
+                  }
+                }
 
               val updatedState: IO[Unit] = IO(
                 scribe.info(
@@ -534,6 +551,7 @@ private[tasks] class QueueImpl(
                 )
               ) *> IO
                 .parSequenceN(1)(requestedNodes.toList.map { case (request, _) =>
+                  val committedResource = committedResourceFor(request)
                   createNode
                     .requestOneNewJobFromJobScheduler(request)
                     .flatMap {
@@ -551,7 +569,11 @@ private[tasks] class QueueImpl(
                           )
                         ) *> ref.update(
                           _.update(
-                            NodeEvent(NodeRegistryState.NodeRequestFailed)
+                            NodeEvent(
+                              NodeRegistryState.NodeRequestFailed(
+                                committedResource
+                              )
+                            )
                           )
                         )
                       case Right((jobId, size)) =>
@@ -565,7 +587,11 @@ private[tasks] class QueueImpl(
                           // NodeRequested already pre-committed; only record Pending.
                           _.update(
                             NodeEvent(
-                              NodeRegistryState.NodeIsPending(jobId, size)
+                              NodeRegistryState.NodeIsPending(
+                                jobId,
+                                size,
+                                committedResource
+                              )
                             )
                           )
                         ) *> IO

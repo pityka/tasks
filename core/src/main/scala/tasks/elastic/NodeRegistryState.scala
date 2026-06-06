@@ -87,33 +87,44 @@ private[tasks] object NodeRegistryState {
     */
   sealed trait Event
   case object AllStop extends Event
-  case object NodeRequested extends Event
-  case object NodeRequestFailed extends Event
+  case class NodeRequested(committedResource: ResourceAvailable) extends Event
+  case class NodeRequestFailed(committedResource: ResourceAvailable)
+      extends Event
   case class NodeIsPending(
       pendingJobId: PendingJobId,
-      resource: ResourceAvailable
+      resource: ResourceAvailable,
+      committedResource: ResourceAvailable
   ) extends Event
   case class NodeIsUp(node: Node, pendingJobId: PendingJobId) extends Event
   case class NodeIsDown(node: Node) extends Event
   case class InitFailed(pending: PendingJobId) extends Event
 
+  private def removeFirst(
+      xs: List[ResourceAvailable],
+      x: ResourceAvailable
+  ): List[ResourceAvailable] = {
+    val (before, after) = xs.span(_ != x)
+    if (after.isEmpty) xs.drop(1)
+    else before ++ after.tail
+  }
+
   case class State(
       running: Map[RunningJobId, ResourceAvailable],
       pending: Map[PendingJobId, ResourceAvailable],
       cumulativeRequested: Int,
-      inFlightRequests: Int
+      inFlightRequests: List[ResourceAvailable]
   ) {
     def update(e: Event): State = {
       e match {
         case AllStop =>
-          copy(running = Map.empty, pending = Map.empty, inFlightRequests = 0)
-        case NodeRequested =>
+          copy(running = Map.empty, pending = Map.empty, inFlightRequests = Nil)
+        case NodeRequested(resource) =>
           copy(
             cumulativeRequested = cumulativeRequested + 1,
-            inFlightRequests = inFlightRequests + 1
+            inFlightRequests = resource :: inFlightRequests
           )
-        case NodeRequestFailed =>
-          copy(inFlightRequests = math.max(0, inFlightRequests - 1))
+        case NodeRequestFailed(committedResource) =>
+          copy(inFlightRequests = removeFirst(inFlightRequests, committedResource))
         case NodeIsUp(Node(runningJobId, resource, _), pendingJobId) =>
           copy(
             pending = pending - pendingJobId,
@@ -122,17 +133,17 @@ private[tasks] object NodeRegistryState {
         case NodeIsDown(Node(runningJobId, _, _)) =>
           copy(running = running - runningJobId)
         case InitFailed(pendingJobId) => copy(pending = pending - pendingJobId)
-        case NodeIsPending(pendingJobId, resource) =>
+        case NodeIsPending(pendingJobId, resource, committedResource) =>
           copy(
             pending = pending + ((pendingJobId, resource)),
-            inFlightRequests = math.max(0, inFlightRequests - 1)
+            inFlightRequests = removeFirst(inFlightRequests, committedResource)
           )
       }
     }
   }
 
   object State {
-    val empty = State(Map(), Map(), 0, 0)
+    val empty = State(Map(), Map(), 0, Nil)
   }
 
 }
