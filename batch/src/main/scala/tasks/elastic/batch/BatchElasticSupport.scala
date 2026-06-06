@@ -82,12 +82,53 @@ class BatchShutdown(batch: BatchClient) extends ShutdownNode with ShutdownSelfNo
     }
 }
 
+/** Records on-demand vCPUs that we have routed but AWS Batch has likely not yet
+  * reflected in the compute environment's `desiredvCpus`. Combined with
+  * `desiredvCpus` in [[BatchCreateNode.selectJobQueue]] so concurrent routing
+  * decisions cannot all race past `onDemandMaxVcpu`.
+  *
+  * Entries are pruned by TTL — long enough for AWS Batch's autoscaler to bump
+  * `desiredvCpus` to include the submission, typically 30-60s during scale-up.
+  */
+private[batch] class PendingOnDemandTracker(
+    ttlNanos: Long,
+    state: cats.effect.kernel.Ref[IO, Vector[(Long, Int)]]
+) {
+
+  /** Atomically prune entries older than `ttlNanos`, check whether `desired +
+    * pendingSum + addCpu <= cap`, and if so append `(now, addCpu)`. Returns
+    * whether the reservation was accepted and the pending sum observed
+    * (post-prune, pre-add). The atomicity is provided by `Ref.modify`, so
+    * concurrent callers can never both observe room when only one fits.
+    */
+  def tryReserve(
+      now: Long,
+      addCpu: Int,
+      desiredVcpus: Int,
+      cap: Int
+  ): IO[(Boolean, Int)] = state.modify { entries =>
+    val pruned = entries.filter { case (t, _) => (now - t) <= ttlNanos }
+    val pendingSum = pruned.iterator.map(_._2).sum
+    val accept = desiredVcpus + pendingSum + addCpu <= cap
+    val next = if (accept) pruned :+ ((now, addCpu)) else pruned
+    (next, (accept, pendingSum))
+  }
+}
+
+private[batch] object PendingOnDemandTracker {
+  def make(ttlNanos: Long): IO[PendingOnDemandTracker] =
+    cats.effect.kernel.Ref
+      .of[IO, Vector[(Long, Int)]](Vector.empty)
+      .map(new PendingOnDemandTracker(ttlNanos, _))
+}
+
 class BatchCreateNode(
     masterAddress: SimpleSocketAddress,
     masterPrefix: String,
     codeAddress: CodeAddress,
     batch: BatchClient,
-    batchConfig: BatchConfig
+    batchConfig: BatchConfig,
+    pendingOnDemand: PendingOnDemandTracker
 ) extends CreateNode {
 
   def requestOneNewJobFromJobScheduler(
@@ -95,84 +136,84 @@ class BatchCreateNode(
   )(implicit
       config: TasksConfig
   ): IO[Either[String, (PendingJobId, ResourceAvailable)]] =
-    IO.interruptible {
-      Try {
-        val selectedResources = selectResources(requestSize)
+    for {
+      selectedResources <- IO(selectResources(requestSize))
+      targetQueue <- selectJobQueue(selectedResources)
+      submitted <- IO.interruptible {
+        Try {
+          val script = Deployment.script(
+            memory = selectedResources.memory,
+            cpu = selectedResources.cpu,
+            scratch = selectedResources.scratch,
+            gpus = selectedResources.gpu,
+            masterAddress = masterAddress,
+            masterPrefix = masterPrefix,
+            download = Uri(
+              scheme = "http",
+              hostname = codeAddress.address.getHostName,
+              port = codeAddress.address.getPort,
+              path = "/"
+            ),
+            followerHostname = None,
+            followerExternalHostname = None,
+            followerNodeName = None,
+            followerMayUseArbitraryPort = true,
+            background = false,
+            image = None,
+            workerHealthUrlFile =
+              config.workerHealthUrlFile.map(_.getAbsolutePath)
+          )(config)
 
-        val targetQueue = selectJobQueue(selectedResources)
+          val resourceReqs = {
+            val reqs = List(
+              ResourceRequirement.builder
+                .`type`(ResourceType.VCPU)
+                .value(selectedResources.cpu.toString)
+                .build,
+              ResourceRequirement.builder
+                .`type`(ResourceType.MEMORY)
+                .value(selectedResources.memory.toString)
+                .build
+            ) ++ (if (selectedResources.gpu.nonEmpty)
+                    List(
+                      ResourceRequirement.builder
+                        .`type`(ResourceType.GPU)
+                        .value(selectedResources.gpu.size.toString)
+                        .build
+                    )
+                  else Nil)
+            reqs.asJava
+          }
 
-        val script = Deployment.script(
-          memory = selectedResources.memory,
-          cpu = selectedResources.cpu,
-          scratch = selectedResources.scratch,
-          gpus = selectedResources.gpu,
-          masterAddress = masterAddress,
-          masterPrefix = masterPrefix,
-          download = Uri(
-            scheme = "http",
-            hostname = codeAddress.address.getHostName,
-            port = codeAddress.address.getPort,
-            path = "/"
-          ),
-          followerHostname = None,
-          followerExternalHostname = None,
-          followerNodeName = None,
-          followerMayUseArbitraryPort = true,
-          background = false,
-          image = None,
-          workerHealthUrlFile =
-            config.workerHealthUrlFile.map(_.getAbsolutePath)
-        )(config)
+          val containerOverrides = ContainerOverrides.builder
+            .resourceRequirements(resourceReqs)
+            .command("/bin/bash", "-c", script)
+            .build
 
-        val resourceReqs = {
-          val reqs = List(
-            ResourceRequirement.builder
-              .`type`(ResourceType.VCPU)
-              .value(selectedResources.cpu.toString)
-              .build,
-            ResourceRequirement.builder
-              .`type`(ResourceType.MEMORY)
-              .value(selectedResources.memory.toString)
-              .build
-          ) ++ (if (selectedResources.gpu.nonEmpty)
-                  List(
-                    ResourceRequirement.builder
-                      .`type`(ResourceType.GPU)
-                      .value(selectedResources.gpu.size.toString)
-                      .build
-                  )
-                else Nil)
-          reqs.asJava
-        }
+          val submitRequest = SubmitJobRequest.builder
+            .jobName(
+              "tasks-worker-" + java.util.UUID.randomUUID.toString.take(8)
+            )
+            .jobQueue(targetQueue)
+            .jobDefinition(batchConfig.jobDefinition)
+            .containerOverrides(containerOverrides)
+            .tags(batchConfig.tags.asJava)
+            .build
 
-        val containerOverrides = ContainerOverrides.builder
-          .resourceRequirements(resourceReqs)
-          .command("/bin/bash", "-c", script)
-          .build
+          val result = batch.submitJob(submitRequest)
+          val jobId = PendingJobId(result.jobId)
+          (jobId, selectedResources)
+        }.toEither.left.map(_.getMessage)
+      }
+    } yield submitted
 
-        val submitRequest = SubmitJobRequest.builder
-          .jobName(
-            "tasks-worker-" + java.util.UUID.randomUUID.toString.take(8)
-          )
-          .jobQueue(targetQueue)
-          .jobDefinition(batchConfig.jobDefinition)
-          .containerOverrides(containerOverrides)
-          .tags(batchConfig.tags.asJava)
-          .build
-
-        val result = batch.submitJob(submitRequest)
-        val jobId = PendingJobId(result.jobId)
-        (jobId, selectedResources)
-      }.toEither.left.map(_.getMessage)
-    }
-
-  private def selectJobQueue(selected: ResourceAvailable): String = {
-    val chosen =
-      if (selected.gpu.nonEmpty) batchConfig.gpuJobQueue
+  private def selectJobQueue(selected: ResourceAvailable): IO[String] = {
+    val decide: IO[String] =
+      if (selected.gpu.nonEmpty) IO.pure(batchConfig.gpuJobQueue)
       else if (batchConfig.spotJobQueue == batchConfig.onDemandJobQueue)
-        batchConfig.onDemandJobQueue
+        IO.pure(batchConfig.onDemandJobQueue)
       else {
-        val onDemandHasRoom = Try {
+        val queryCapacity = IO.interruptible {
           val computeEnvs =
             listComputeEnvironments(batchConfig.onDemandJobQueue)
           val (maxVcpus, desiredVcpus) = describeCapacity(computeEnvs)
@@ -180,25 +221,44 @@ class BatchCreateNode(
             maxVcpus - batchConfig.onDemandHeadroomVcpu,
             batchConfig.onDemandMaxVcpu
           )
-          scribe.info(
-            s"on-demand queue ${batchConfig.onDemandJobQueue} CEs=[${computeEnvs.mkString(",")}] desired=$desiredVcpus max=$maxVcpus headroom=${batchConfig.onDemandHeadroomVcpu} onDemandMaxVcpu=${batchConfig.onDemandMaxVcpu} cap=$cap ask=${selected.cpu}"
-          )
-          desiredVcpus + selected.cpu <= cap
-        } match {
-          case scala.util.Success(b) => b
-          case scala.util.Failure(e) =>
-            scribe.warn(
-              s"Failed to query on-demand queue capacity, defaulting to on-demand: ${e.getMessage}"
-            )
-            true
+          (computeEnvs, maxVcpus, desiredVcpus, cap)
         }
-        if (onDemandHasRoom) batchConfig.onDemandJobQueue
-        else batchConfig.spotJobQueue
+        queryCapacity.attempt.flatMap {
+          case Left(e) =>
+            IO(
+              scribe.warn(
+                s"Failed to query on-demand queue capacity, defaulting to on-demand: ${e.getMessage}"
+              )
+            ).as(batchConfig.onDemandJobQueue)
+          case Right((computeEnvs, maxVcpus, desiredVcpus, cap)) =>
+            IO.monotonic.flatMap { nowFD =>
+              pendingOnDemand
+                .tryReserve(
+                  now = nowFD.toNanos,
+                  addCpu = selected.cpu,
+                  desiredVcpus = desiredVcpus,
+                  cap = cap
+                )
+                .flatMap { case (accepted, pendingSum) =>
+                  val chosen =
+                    if (accepted) batchConfig.onDemandJobQueue
+                    else batchConfig.spotJobQueue
+                  IO(
+                    scribe.info(
+                      s"on-demand queue ${batchConfig.onDemandJobQueue} CEs=[${computeEnvs.mkString(",")}] desired=$desiredVcpus pending=$pendingSum max=$maxVcpus headroom=${batchConfig.onDemandHeadroomVcpu} onDemandMaxVcpu=${batchConfig.onDemandMaxVcpu} cap=$cap ask=${selected.cpu} accepted=$accepted"
+                    )
+                  ).as(chosen)
+                }
+            }
+        }
       }
-    scribe.info(
-      s"routing worker request cpu=${selected.cpu} gpu=${selected.gpu.size} -> queue=$chosen"
+    decide.flatTap(chosen =>
+      IO(
+        scribe.info(
+          s"routing worker request cpu=${selected.cpu} gpu=${selected.gpu.size} -> queue=$chosen"
+        )
+      )
     )
-    chosen
   }
 
   private def listComputeEnvironments(jobQueueName: String): List[String] = {
@@ -256,7 +316,8 @@ class BatchCreateNode(
 
 class BatchCreateNodeFactory(
     batchConfig: BatchConfig,
-    batch: BatchClient
+    batch: BatchClient,
+    pendingOnDemand: PendingOnDemandTracker
 ) extends CreateNodeFactory {
   def apply(
       master: SimpleSocketAddress,
@@ -268,7 +329,8 @@ class BatchCreateNodeFactory(
       masterPrefix = masterPrefix,
       codeAddress = codeAddress,
       batch = batch,
-      batchConfig = batchConfig
+      batchConfig = batchConfig,
+      pendingOnDemand = pendingOnDemand
     )
 }
 
@@ -315,6 +377,15 @@ class BatchConfig(val raw: Config) extends ConfigValuesForHostConfiguration {
       raw.getInt("tasks.elastic.batch.onDemandMaxVcpu")
     else Int.MaxValue
 
+  val onDemandSubmissionWindow: scala.concurrent.duration.FiniteDuration =
+    if (raw.hasPath("tasks.elastic.batch.onDemandSubmissionWindow"))
+      scala.jdk.DurationConverters
+        .JavaDurationOps(
+          raw.getDuration("tasks.elastic.batch.onDemandSubmissionWindow")
+        )
+        .toScala
+    else scala.concurrent.duration.DurationInt(60).seconds
+
   require(
     gpuJobQueue.nonEmpty && onDemandJobQueue.nonEmpty && spotJobQueue.nonEmpty,
     "At least one of tasks.elastic.batch.{jobQueue, gpuJobQueue, onDemandJobQueue, spotJobQueue} " +
@@ -353,23 +424,26 @@ object BatchElasticSupport {
 
   def apply(config: Option[Config]): cats.effect.Resource[IO, ElasticSupport] = {
     val batchConfig = new BatchConfig(tasks.util.loadConfig(config))
-    cats.effect.Resource.make {
-      IO {
-        val batch =
+    cats.effect.Resource.eval {
+      for {
+        batch <- IO {
           if (batchConfig.region.isEmpty) BatchClient.create
           else
             BatchClient.builder
               .region(Region.of(batchConfig.region))
               .build
-
-        new ElasticSupport(
-          hostConfig = Some(new BatchHostConfig(batchConfig)),
-          shutdownFromNodeRegistry = new BatchShutdown(batch),
-          shutdownFromWorker = new BatchShutdown(batch),
-          createNodeFactory = new BatchCreateNodeFactory(batchConfig, batch),
-          getNodeName = BatchGetNodeName
+        }
+        pendingOnDemand <- PendingOnDemandTracker.make(
+          ttlNanos = batchConfig.onDemandSubmissionWindow.toNanos
         )
-      }
-    } { _ => IO.unit }
+      } yield new ElasticSupport(
+        hostConfig = Some(new BatchHostConfig(batchConfig)),
+        shutdownFromNodeRegistry = new BatchShutdown(batch),
+        shutdownFromWorker = new BatchShutdown(batch),
+        createNodeFactory =
+          new BatchCreateNodeFactory(batchConfig, batch, pendingOnDemand),
+        getNodeName = BatchGetNodeName
+      )
+    }
   }
 }
