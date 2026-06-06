@@ -165,28 +165,38 @@ class BatchCreateNode(
     }
 
   private def selectJobQueue(selected: ResourceAvailable): String = {
-    if (selected.gpu.nonEmpty) batchConfig.gpuJobQueue
-    else if (batchConfig.spotJobQueue == batchConfig.onDemandJobQueue)
-      batchConfig.onDemandJobQueue
-    else {
-      val onDemandHasRoom = Try {
-        val computeEnvs = listComputeEnvironments(batchConfig.onDemandJobQueue)
-        val (maxVcpus, desiredVcpus) = describeCapacity(computeEnvs)
-        scribe.debug(
-          s"on-demand queue ${batchConfig.onDemandJobQueue}: desired=$desiredVcpus max=$maxVcpus headroom=${batchConfig.onDemandHeadroomVcpu} ask=${selected.cpu}"
-        )
-        desiredVcpus + selected.cpu <= maxVcpus - batchConfig.onDemandHeadroomVcpu
-      } match {
-        case scala.util.Success(b) => b
-        case scala.util.Failure(e) =>
-          scribe.warn(
-            s"Failed to query on-demand queue capacity, defaulting to on-demand: ${e.getMessage}"
+    val chosen =
+      if (selected.gpu.nonEmpty) batchConfig.gpuJobQueue
+      else if (batchConfig.spotJobQueue == batchConfig.onDemandJobQueue)
+        batchConfig.onDemandJobQueue
+      else {
+        val onDemandHasRoom = Try {
+          val computeEnvs =
+            listComputeEnvironments(batchConfig.onDemandJobQueue)
+          val (maxVcpus, desiredVcpus) = describeCapacity(computeEnvs)
+          val cap = math.min(
+            maxVcpus - batchConfig.onDemandHeadroomVcpu,
+            batchConfig.onDemandMaxVcpu
           )
-          true
+          scribe.info(
+            s"on-demand queue ${batchConfig.onDemandJobQueue} CEs=[${computeEnvs.mkString(",")}] desired=$desiredVcpus max=$maxVcpus headroom=${batchConfig.onDemandHeadroomVcpu} onDemandMaxVcpu=${batchConfig.onDemandMaxVcpu} cap=$cap ask=${selected.cpu}"
+          )
+          desiredVcpus + selected.cpu <= cap
+        } match {
+          case scala.util.Success(b) => b
+          case scala.util.Failure(e) =>
+            scribe.warn(
+              s"Failed to query on-demand queue capacity, defaulting to on-demand: ${e.getMessage}"
+            )
+            true
+        }
+        if (onDemandHasRoom) batchConfig.onDemandJobQueue
+        else batchConfig.spotJobQueue
       }
-      if (onDemandHasRoom) batchConfig.onDemandJobQueue
-      else batchConfig.spotJobQueue
-    }
+    scribe.info(
+      s"routing worker request cpu=${selected.cpu} gpu=${selected.gpu.size} -> queue=$chosen"
+    )
+    chosen
   }
 
   private def listComputeEnvironments(jobQueueName: String): List[String] = {
@@ -297,6 +307,11 @@ class BatchConfig(val raw: Config) extends ConfigValuesForHostConfiguration {
     if (raw.hasPath("tasks.elastic.batch.onDemandHeadroomVcpu"))
       raw.getInt("tasks.elastic.batch.onDemandHeadroomVcpu")
     else 0
+
+  val onDemandMaxVcpu: Int =
+    if (raw.hasPath("tasks.elastic.batch.onDemandMaxVcpu"))
+      raw.getInt("tasks.elastic.batch.onDemandMaxVcpu")
+    else Int.MaxValue
 
   require(
     gpuJobQueue.nonEmpty && onDemandJobQueue.nonEmpty && spotJobQueue.nonEmpty,
