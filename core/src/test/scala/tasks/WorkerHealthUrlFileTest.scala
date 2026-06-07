@@ -50,7 +50,6 @@ object WorkerHealthUrlFileTest extends TestHelpers {
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=0
       tasks.disableRemoting = false
-      tasks.elastic.queueCheckInterval = 1 seconds
       tasks.elastic.idleNodeTimeout = 60 seconds
       tasks.askInterval = 250 millis
       tasks.addShutdownHook = false

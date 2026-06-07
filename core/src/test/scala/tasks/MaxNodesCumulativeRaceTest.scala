@@ -114,8 +114,6 @@ object MaxNodesCumulativeRaceTest extends TestHelpers {
     ConfigFactory.parseString(
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU = 0
-      tasks.elastic.queueCheckInterval = 200 milliseconds
-      tasks.elastic.queueCheckInitialDelay = 100 milliseconds
       tasks.addShutdownHook = false
       tasks.elastic.maxNodes = 100
       tasks.elastic.maxNodesCumulative = $MaxNodesCumulative

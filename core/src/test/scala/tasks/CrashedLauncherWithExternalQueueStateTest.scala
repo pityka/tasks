@@ -61,7 +61,6 @@ object CrashedLauncherWithExternalQueueStateTest extends TestHelpers {
       tasks.cache.enabled = false
       hosts.numCPU=0
       tasks.disableRemoting = false
-      tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
       

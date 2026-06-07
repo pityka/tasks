@@ -49,7 +49,6 @@ object NodeAllocationMaxNodesTest extends TestHelpers {
     ConfigFactory.parseString(
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=0
-      tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.elastic.maxNodes = 0
       tasks.disableRemoting = false

@@ -56,7 +56,6 @@ object KubernetesTest extends IOApp {
       s"""tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       hosts.numCPU=0
       hosts.hostname="$hostname"
-      tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
       tasks.kubernetes.image = "eclipse-temurin:17.0.13_11-jre-ubi9-minimal"

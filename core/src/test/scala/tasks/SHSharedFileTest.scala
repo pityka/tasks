@@ -189,7 +189,6 @@ object SHResultWithSharedFilesTest extends TestHelpers {
         tasks.fileservice.proxyStorage=true
       hosts.numCPU=0
       tasks.disableRemoting = false
-      tasks.elastic.queueCheckInterval = 3 seconds  
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 5 s
       tasks.worker-main-class = "tasks.TestWorker"
