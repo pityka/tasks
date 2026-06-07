@@ -489,7 +489,7 @@ private[tasks] class QueueImpl(
       )
       val logIO = if (config.logQueueStatus) {
         IO {
-          scribe.info(
+          scribe.debug(
             s"Queue state report.",
             scribe.data(
               Map(
@@ -542,7 +542,7 @@ private[tasks] class QueueImpl(
             if (!canRequest) {
               state -> IO(
                 if (config.logQueueStatus) {
-                  scribe.info(
+                  scribe.debug(
                     "MaxNodesReached",
                     scribe.data(
                       Map(
@@ -556,21 +556,22 @@ private[tasks] class QueueImpl(
                       )
                     )
                   )
-                 }
+                }
               )
             } else {
-
-              
 
               val allowedNewNodes = math.min(
                 config.maxNodes - activeOrInFlight,
                 config.maxNodesCumulative - state.nodes.cumulativeRequested
               )
 
-              val requestedNodes = neededNodes.take(allowedNewNodes)
+              val requestedList: List[ResourceRequest] =
+                neededNodes.toList
+                  .flatMap { case (req, count) => List.fill(count)(req) }
+                  .take(allowedNewNodes)
 
               val preCommittedState =
-                requestedNodes.foldLeft(state) { case (s, (req, _)) =>
+                requestedList.foldLeft(state) { (s, req) =>
                   s.update(
                     NodeEvent(
                       NodeRegistryState.NodeRequested(committedResourceFor(req))
@@ -583,13 +584,18 @@ private[tasks] class QueueImpl(
                   "RequestNodes",
                   scribe.data(
                     Map(
-                      "request-node-count" -> requestedNodes.size,
-                      "request-node-resources" -> requestedNodes.keySet.toString
+                      "request-node-count" -> requestedList.size,
+                      "request-node-resources" -> requestedList
+                        .groupBy(identity)
+                        .view
+                        .mapValues(_.size)
+                        .toMap
+                        .toString
                     )
                   )
                 )
               ) *> IO
-                .parSequenceN(1)(requestedNodes.toList.map { case (request, _) =>
+                .parSequenceN(1)(requestedList.map { request =>
                   val committedResource = committedResourceFor(request)
                   val recordFailure: IO[Unit] = ref.update(
                     _.update(
