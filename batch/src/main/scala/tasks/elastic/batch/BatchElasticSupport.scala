@@ -42,7 +42,6 @@ import cats.effect.IO
 import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
 import cats.effect.std.Mutex
-import scala.concurrent.duration._
 import tasks.util.message.Node
 
 class BatchShutdown(batch: BatchClient)
@@ -100,167 +99,156 @@ class BatchCreateNode(
   )(implicit
       config: TasksConfig
   ): IO[Either[String, (PendingJobId, ResourceAvailable)]] =
-    requestMutex.lock.surround(
-      IO.interruptible {
-        Try {
-          val selectedResources = selectResources(requestSize)
+    requestMutex.lock.surround {
+      val selectedResources = selectResources(requestSize)
+      selectJobQueue(selectedResources)
+        .flatMap { targetQueue =>
+          IO.interruptible {
+            val script = Deployment.script(
+              memory = selectedResources.memory,
+              cpu = selectedResources.cpu,
+              scratch = selectedResources.scratch,
+              gpus = selectedResources.gpu,
+              masterAddress = masterAddress,
+              masterPrefix = masterPrefix,
+              download = Uri(
+                scheme = "http",
+                hostname = codeAddress.address.getHostName,
+                port = codeAddress.address.getPort,
+                path = "/"
+              ),
+              followerHostname = None,
+              followerExternalHostname = None,
+              followerNodeName = None,
+              followerMayUseArbitraryPort = true,
+              background = false,
+              image = None,
+              workerHealthUrlFile =
+                config.workerHealthUrlFile.map(_.getAbsolutePath)
+            )(config)
 
-          val targetQueue = selectJobQueue(selectedResources)
-          val targetCes = listComputeEnvironments(targetQueue)
-          val (_, preSubmitDesired) = describeCapacity(targetCes)
+            val resourceReqs = {
+              val reqs = List(
+                ResourceRequirement.builder
+                  .`type`(ResourceType.VCPU)
+                  .value(selectedResources.cpu.toString)
+                  .build,
+                ResourceRequirement.builder
+                  .`type`(ResourceType.MEMORY)
+                  .value(selectedResources.memory.toString)
+                  .build
+              ) ++ (if (selectedResources.gpu.nonEmpty)
+                      List(
+                        ResourceRequirement.builder
+                          .`type`(ResourceType.GPU)
+                          .value(selectedResources.gpu.size.toString)
+                          .build
+                      )
+                    else Nil)
+              reqs.asJava
+            }
 
-          val script = Deployment.script(
-            memory = selectedResources.memory,
-            cpu = selectedResources.cpu,
-            scratch = selectedResources.scratch,
-            gpus = selectedResources.gpu,
-            masterAddress = masterAddress,
-            masterPrefix = masterPrefix,
-            download = Uri(
-              scheme = "http",
-              hostname = codeAddress.address.getHostName,
-              port = codeAddress.address.getPort,
-              path = "/"
-            ),
-            followerHostname = None,
-            followerExternalHostname = None,
-            followerNodeName = None,
-            followerMayUseArbitraryPort = true,
-            background = false,
-            image = None,
-            workerHealthUrlFile =
-              config.workerHealthUrlFile.map(_.getAbsolutePath)
-          )(config)
+            val containerOverrides = ContainerOverrides.builder
+              .resourceRequirements(resourceReqs)
+              .command("/bin/bash", "-c", script)
+              .build
 
-          val resourceReqs = {
-            val reqs = List(
-              ResourceRequirement.builder
-                .`type`(ResourceType.VCPU)
-                .value(selectedResources.cpu.toString)
-                .build,
-              ResourceRequirement.builder
-                .`type`(ResourceType.MEMORY)
-                .value(selectedResources.memory.toString)
-                .build
-            ) ++ (if (selectedResources.gpu.nonEmpty)
-                    List(
-                      ResourceRequirement.builder
-                        .`type`(ResourceType.GPU)
-                        .value(selectedResources.gpu.size.toString)
-                        .build
-                    )
-                  else Nil)
-            reqs.asJava
+            val submitRequest = SubmitJobRequest.builder
+              .jobName(
+                "tasks-worker-" + java.util.UUID.randomUUID.toString.take(8)
+              )
+              .jobQueue(targetQueue)
+              .jobDefinition(batchConfig.jobDefinition)
+              .containerOverrides(containerOverrides)
+              .tags(batchConfig.tags.asJava)
+              .build
+
+            val result = batch.submitJob(submitRequest)
+            val jobId = PendingJobId(result.jobId)
+            (jobId, selectedResources)
           }
+        }
+        .attempt
+        .map(_.left.map(_.getMessage))
+    }
 
-          val containerOverrides = ContainerOverrides.builder
-            .resourceRequirements(resourceReqs)
-            .command("/bin/bash", "-c", script)
-            .build
-
-          val submitRequest = SubmitJobRequest.builder
-            .jobName(
-              "tasks-worker-" + java.util.UUID.randomUUID.toString.take(8)
-            )
-            .jobQueue(targetQueue)
-            .jobDefinition(batchConfig.jobDefinition)
-            .containerOverrides(containerOverrides)
-            .tags(batchConfig.tags.asJava)
-            .build
-
-          val result = batch.submitJob(submitRequest)
-          val jobId = PendingJobId(result.jobId)
-          (jobId, selectedResources, targetCes, preSubmitDesired)
-        }.toEither.left.map(_.getMessage)
-      }.flatMap {
-        case Right((jobId, selected, ces, preDesired)) =>
-          awaitDesiredAtLeast(ces, preDesired + selected.cpu)
-            .as(Right((jobId, selected)))
-        case Left(err) =>
-          IO.pure(Left(err))
-      }
-    )
-
-  private def selectJobQueue(selected: ResourceAvailable): String = {
-    val chosen =
-      if (selected.gpu.nonEmpty) batchConfig.gpuJobQueue
+  private def selectJobQueue(selected: ResourceAvailable): IO[String] = {
+    val chosenIO: IO[String] =
+      if (selected.gpu.nonEmpty) IO.pure(batchConfig.gpuJobQueue)
       else if (batchConfig.spotJobQueue == batchConfig.onDemandJobQueue)
-        batchConfig.onDemandJobQueue
+        IO.pure(batchConfig.onDemandJobQueue)
       else {
-        val onDemandHasRoom = Try {
-          val computeEnvs =
-            listComputeEnvironments(batchConfig.onDemandJobQueue)
-          val (maxVcpus, desiredVcpus) = describeCapacity(computeEnvs)
-          val cap = math.min(
+        val onDemandHasRoom: IO[Boolean] = (for {
+          computeEnvs <- listComputeEnvironments(batchConfig.onDemandJobQueue)
+          capacity <- describeCapacity(computeEnvs)
+          (maxVcpus, desiredVcpus) = capacity
+          cap = math.min(
             maxVcpus - batchConfig.onDemandHeadroomVcpu,
             batchConfig.onDemandMaxVcpu
           )
-          scribe.info(
-            s"on-demand queue ${batchConfig.onDemandJobQueue} CEs=[${computeEnvs.mkString(",")}] desired=$desiredVcpus max=$maxVcpus headroom=${batchConfig.onDemandHeadroomVcpu} onDemandMaxVcpu=${batchConfig.onDemandMaxVcpu} cap=$cap ask=${selected.cpu}"
+          _ <- IO(
+            scribe.info(
+              s"on-demand queue ${batchConfig.onDemandJobQueue} CEs=[${computeEnvs.mkString(",")}] desired=$desiredVcpus max=$maxVcpus headroom=${batchConfig.onDemandHeadroomVcpu} onDemandMaxVcpu=${batchConfig.onDemandMaxVcpu} cap=$cap ask=${selected.cpu}"
+            )
           )
-          desiredVcpus + selected.cpu <= cap
-        } match {
-          case scala.util.Success(b) => b
-          case scala.util.Failure(e) =>
+        } yield desiredVcpus + selected.cpu <= cap).handleErrorWith { e =>
+          IO(
             scribe.warn(
               s"Failed to query on-demand queue capacity, defaulting to on-demand: ${e.getMessage}"
             )
-            true
+          ).as(true)
         }
-        if (onDemandHasRoom) batchConfig.onDemandJobQueue
-        else batchConfig.spotJobQueue
+        onDemandHasRoom.map { onDemandHasRoom =>
+          if (onDemandHasRoom) batchConfig.onDemandJobQueue
+          else batchConfig.spotJobQueue
+        }
       }
-    scribe.info(
-      s"routing worker request cpu=${selected.cpu} gpu=${selected.gpu.size} -> queue=$chosen"
-    )
-    chosen
-  }
-
-  private def listComputeEnvironments(jobQueueName: String): List[String] = {
-    val resp = batch.describeJobQueues(
-      DescribeJobQueuesRequest.builder.jobQueues(jobQueueName).build
-    )
-    resp.jobQueues.asScala.toList.flatMap { jq =>
-      jq.computeEnvironmentOrder.asScala.toList.map(_.computeEnvironment)
+    chosenIO.flatTap { chosen =>
+      IO(
+        scribe.info(
+          s"routing worker request cpu=${selected.cpu} gpu=${selected.gpu.size} -> queue=$chosen"
+        )
+      )
     }
   }
+
+  private def listComputeEnvironments(
+      jobQueueName: String
+  ): IO[List[String]] =
+    IO.interruptible {
+      val resp = batch.describeJobQueues(
+        DescribeJobQueuesRequest.builder.jobQueues(jobQueueName).build
+      )
+      resp.jobQueues.asScala.toList.flatMap { jq =>
+        jq.computeEnvironmentOrder.asScala.toList.map(_.computeEnvironment)
+      }
+    }
 
   private def describeCapacity(
       computeEnvArns: List[String]
-  ): (Int, Int) = {
-    if (computeEnvArns.isEmpty) (0, 0)
-    else {
-      val resp = batch.describeComputeEnvironments(
-        DescribeComputeEnvironmentsRequest.builder
-          .computeEnvironments(computeEnvArns.asJava)
-          .build
-      )
-      val ces = resp.computeEnvironments.asScala.toList
-      val maxVcpus = ces.map { ce =>
-        Option(ce.computeResources)
-          .flatMap(cr => Option(cr.maxvCpus))
-          .map(_.intValue)
-          .getOrElse(0)
-      }.sum
-      val desiredVcpus = ces.map { ce =>
-        Option(ce.computeResources)
-          .flatMap(cr => Option(cr.desiredvCpus))
-          .map(_.intValue)
-          .getOrElse(0)
-      }.sum
-      (maxVcpus, desiredVcpus)
-    }
-  }
-
-  private def awaitDesiredAtLeast(
-      computeEnvs: List[String],
-      target: Int
-  ): IO[Unit] =
-    if (computeEnvs.isEmpty) IO.unit
+  ): IO[(Int, Int)] =
+    if (computeEnvArns.isEmpty) IO.pure((0, 0))
     else
-      IO.interruptible(describeCapacity(computeEnvs)._2).flatMap { current =>
-        if (current >= target) IO.unit
-        else IO.sleep(2.seconds) >> awaitDesiredAtLeast(computeEnvs, target)
+      IO.interruptible {
+        val resp = batch.describeComputeEnvironments(
+          DescribeComputeEnvironmentsRequest.builder
+            .computeEnvironments(computeEnvArns.asJava)
+            .build
+        )
+        val ces = resp.computeEnvironments.asScala.toList
+        val maxVcpus = ces.map { ce =>
+          Option(ce.computeResources)
+            .flatMap(cr => Option(cr.maxvCpus))
+            .map(_.intValue)
+            .getOrElse(0)
+        }.sum
+        val desiredVcpus = ces.map { ce =>
+          Option(ce.computeResources)
+            .flatMap(cr => Option(cr.desiredvCpus))
+            .map(_.intValue)
+            .getOrElse(0)
+        }.sum
+        (maxVcpus, desiredVcpus)
       }
 
   override def convertRunningToPending(

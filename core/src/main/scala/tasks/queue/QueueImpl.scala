@@ -20,6 +20,7 @@ import tasks.util.eq._
 import tasks.shared.VersionedResourceAllocated
 import cats.effect.kernel.Ref
 import cats.effect.FiberIO
+import cats.effect.std.Mutex
 import tasks.util.Transaction
 import cats.effect.kernel.Resource
 import tasks.elastic.NodeRegistryState
@@ -174,20 +175,25 @@ object QueueImpl {
       meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO]
   )(implicit config: TasksConfig): Resource[IO, QueueImpl] = {
     QueueMetrics.make(meterProvider, transaction.get).flatMap { metrics =>
-      Resource.make(Ref.of[IO, List[FiberIO[Unit]]](Nil).flatMap { ref =>
-        val q = new QueueImpl(
-          ref = transaction,
-          fiberList = ref,
-          cache = cache,
-          messenger = messenger,
-          shutdownNode = shutdownNode,
-          decideNewNode = decideNewNode,
-          createNode = createNode,
-          unmanagedResource = unmanagedResource,
-          metrics = metrics
+      Resource.make(
+        Mutex[IO].flatMap(handleQueueStatMutex =>
+          Ref.of[IO, List[FiberIO[Unit]]](Nil).flatMap { ref =>
+            val q = new QueueImpl(
+              ref = transaction,
+              fiberList = ref,
+              cache = cache,
+              messenger = messenger,
+              shutdownNode = shutdownNode,
+              decideNewNode = decideNewNode,
+              createNode = createNode,
+              unmanagedResource = unmanagedResource,
+              metrics = metrics,
+              handleQueueStatMutex = handleQueueStatMutex
+            )
+            q.startCounterLoops.map(_ => q)
+          }
         )
-        q.startCounterLoops.map(_ => q)
-      })(_.release)
+      )(_.release)
     }
   }
 
@@ -201,25 +207,31 @@ object QueueImpl {
       meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO]
   )(implicit
       config: TasksConfig
-  ) = Resource.eval(Ref.of[IO, QueueImpl.State](QueueImpl.State.empty)).flatMap {
-    stateRef =>
-      QueueMetrics.make(meterProvider, stateRef.get).flatMap { metrics =>
-        Resource.make(Ref.of[IO, List[FiberIO[Unit]]](Nil).flatMap { ref2 =>
-          val q = new QueueImpl(
-            ref = Transaction.fromRef(stateRef),
-            fiberList = ref2,
-            cache = cache,
-            messenger = messenger,
-            shutdownNode = shutdownNode,
-            decideNewNode = decideNewNode,
-            createNode = createNode,
-            unmanagedResource = unmanagedResource,
-            metrics = metrics
-          )
-          q.startCounterLoops.map(_ => q)
-        })(_.release)
-      }
-  }
+  ) =
+    Resource.eval(Ref.of[IO, QueueImpl.State](QueueImpl.State.empty)).flatMap {
+      stateRef =>
+        QueueMetrics.make(meterProvider, stateRef.get).flatMap { metrics =>
+          Resource.make(
+            Mutex[IO].flatMap(handleQueueStatMutex =>
+              Ref.of[IO, List[FiberIO[Unit]]](Nil).flatMap { ref2 =>
+                val q = new QueueImpl(
+                  ref = Transaction.fromRef(stateRef),
+                  fiberList = ref2,
+                  cache = cache,
+                  messenger = messenger,
+                  shutdownNode = shutdownNode,
+                  decideNewNode = decideNewNode,
+                  createNode = createNode,
+                  unmanagedResource = unmanagedResource,
+                  metrics = metrics,
+                  handleQueueStatMutex = handleQueueStatMutex
+                )
+                q.startCounterLoops.map(_ => q)
+              }
+            )
+          )(_.release)
+        }
+    }
 }
 
 private[tasks] class QueueImpl(
@@ -231,7 +243,8 @@ private[tasks] class QueueImpl(
     decideNewNode: Option[tasks.elastic.DecideNewNode],
     createNode: Option[tasks.elastic.CreateNode],
     unmanagedResource: tasks.shared.ResourceAvailable,
-    metrics: QueueMetrics
+    metrics: QueueMetrics,
+    handleQueueStatMutex: Mutex[IO]
 )(implicit config: TasksConfig) {
   import QueueImpl._
 
@@ -364,7 +377,9 @@ private[tasks] class QueueImpl(
           proxy.address,
           scribe.data("explain", "Task is not found in cache. Enqueue.")
         )
-        ref.update(_.update(Enqueued(sch, List(proxy)))) *> metrics.onEnqueued(sch.description)
+        ref.update(_.update(Enqueued(sch, List(proxy)))) *> metrics.onEnqueued(
+          sch.description
+        )
       }
       case Left(msg) => {
         scribe.debug(
@@ -376,7 +391,9 @@ private[tasks] class QueueImpl(
           scribe.data("message", msg)
         )
 
-        ref.update(_.update(Enqueued(sch, List(proxy)))) *> metrics.onEnqueued(sch.description)
+        ref.update(_.update(Enqueued(sch, List(proxy)))) *> metrics.onEnqueued(
+          sch.description
+        )
       }
 
     }
@@ -389,7 +406,9 @@ private[tasks] class QueueImpl(
       val proxy = Proxy(sch.proxy)
 
       if (state.queuedButSentByADifferentProxy(sch, proxy)) {
-        state.update(Enqueued(sch, List(proxy))) -> metrics.onEnqueued(sch.description)
+        state.update(Enqueued(sch, List(proxy))) -> metrics.onEnqueued(
+          sch.description
+        )
       } else if (state.scheduledButSentByADifferentProxy(sch, proxy)) {
         scribe.debug(
           s"MultipleProxies",
@@ -417,7 +436,9 @@ private[tasks] class QueueImpl(
               "ScheduleTask should not be checked in the cache. Enqueue. "
             )
           )
-          state.update(Enqueued(sch, List(proxy))) -> metrics.onEnqueued(sch.description)
+          state.update(Enqueued(sch, List(proxy))) -> metrics.onEnqueued(
+            sch.description
+          )
         }
 
       }
@@ -441,14 +462,16 @@ private[tasks] class QueueImpl(
   }
 
   private val handleQueueStatIO =
-    createNode
-      .flatMap { createNode =>
-        shutdownNode
-          .flatMap { shn =>
-            decideNewNode.map { dn => handleQueueStat(shn, dn, createNode) }
-          }
-      }
-      .getOrElse(IO.unit)
+    handleQueueStatMutex.lock.surround(
+      createNode
+        .flatMap { createNode =>
+          shutdownNode
+            .flatMap { shn =>
+              decideNewNode.map { dn => handleQueueStat(shn, dn, createNode) }
+            }
+        }
+        .getOrElse(IO.unit)
+    )
 
   private def handleQueueStat(
       shutdownNode: ShutdownNode,
@@ -583,8 +606,8 @@ private[tasks] class QueueImpl(
                             scribe.data(
                               "explain",
                               "This is normal if there is no more capacity. " +
-                              "Note: failed requests still count against maxNodesCumulative " +
-                              "as a defensive measure to bound total attempts."
+                                "Note: failed requests still count against maxNodesCumulative " +
+                                "as a defensive measure to bound total attempts."
                             )
                           )
                         ) *> recordFailure
@@ -674,7 +697,9 @@ private[tasks] class QueueImpl(
         case ((state, acc), schProjection) =>
           val (_, _, proxies, sch) = state.scheduledTasks(schProjection)
           (
-            state.update(TaskLauncherStoppedFor(sch)).update(Enqueued(sch, proxies)),
+            state
+              .update(TaskLauncherStoppedFor(sch))
+              .update(Enqueued(sch, proxies)),
             sch :: acc
           )
       }
@@ -695,7 +720,9 @@ private[tasks] class QueueImpl(
       }
       .getOrElse(IO.unit)
     val recordMetrics =
-      reEnqueued.foldLeft(IO.unit)((acc, sch) => acc *> metrics.onEnqueued(sch.description))
+      reEnqueued.foldLeft(IO.unit)((acc, sch) =>
+        acc *> metrics.onEnqueued(sch.description)
+      )
     (updated2 -> (recordMetrics *> shutdown))
   } *> handleQueueStatIO
 
@@ -788,9 +815,10 @@ private[tasks] class QueueImpl(
           val newState = withJoin
             .update(TaskScheduled(sch, launcher, allocated))
 
-          val io = metrics.onTaskScheduled(sch.description) *> joinIO *> IO.pure(
-            Right(MessageData.Schedule(sch))
-          )
+          val io =
+            metrics.onTaskScheduled(sch.description) *> joinIO *> IO.pure(
+              Right(MessageData.Schedule(sch))
+            )
 
           newState -> io
 
