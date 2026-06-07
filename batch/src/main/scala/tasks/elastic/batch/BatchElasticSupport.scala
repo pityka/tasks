@@ -39,10 +39,14 @@ import software.amazon.awssdk.regions.Region
 import scala.jdk.CollectionConverters._
 import org.ekrich.config.Config
 import cats.effect.IO
+import cats.effect.Ref
 import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
 import cats.effect.std.Mutex
 import tasks.util.message.Node
+
+import java.time.{Instant, Duration => JDuration}
+import scala.concurrent.duration._
 
 class BatchShutdown(batch: BatchClient)
     extends ShutdownNode
@@ -91,7 +95,8 @@ class BatchCreateNode(
     codeAddress: CodeAddress,
     batch: BatchClient,
     batchConfig: BatchConfig,
-    requestMutex: Mutex[IO]
+    requestMutex: Mutex[IO],
+    recentOnDemandSubmissions: Ref[IO, List[(Instant, String)]]
 ) extends CreateNode {
 
   def requestOneNewJobFromJobScheduler(
@@ -103,7 +108,7 @@ class BatchCreateNode(
       val selectedResources = selectResources(requestSize)
       selectJobQueue(selectedResources)
         .flatMap { targetQueue =>
-          IO.interruptible {
+          val submit = IO.interruptible {
             val script = Deployment.script(
               memory = selectedResources.memory,
               cpu = selectedResources.cpu,
@@ -167,10 +172,39 @@ class BatchCreateNode(
             val jobId = PendingJobId(result.jobId)
             (jobId, selectedResources)
           }
+          val recordIfOnDemand =
+            if (targetQueue == batchConfig.onDemandJobQueue)
+              submit.flatTap { case (jobId, _) =>
+                recordOnDemandSubmission(jobId.value)
+              }
+            else submit
+          recordIfOnDemand
         }
         .attempt
         .map(_.left.map(_.getMessage))
     }
+
+  private def recordOnDemandSubmission(jobId: String): IO[Unit] =
+    IO.realTimeInstant.flatMap { now =>
+      val cutoff = now.minus(JDuration.ofHours(1))
+      recentOnDemandSubmissions.update { lst =>
+        (now, jobId) :: lst.filter(_._1.isAfter(cutoff))
+      }
+    }
+
+  private def recentOnDemandIds: IO[Set[String]] =
+    IO.realTimeInstant.flatMap { now =>
+      val cutoff = now.minus(JDuration.ofHours(1))
+      recentOnDemandSubmissions.modify { lst =>
+        val pruned = lst.filter(_._1.isAfter(cutoff))
+        (pruned, pruned.map(_._2).toSet)
+      }
+    }
+
+  private def dropRecentIds(ids: Set[String]): IO[Unit] =
+    if (ids.isEmpty) IO.unit
+    else
+      recentOnDemandSubmissions.update(_.filterNot(t => ids.contains(t._2)))
 
   private def selectJobQueue(selected: ResourceAvailable): IO[String] = {
     val chosenIO: IO[String] =
@@ -180,18 +214,18 @@ class BatchCreateNode(
       else {
         val onDemandHasRoom: IO[Boolean] = (for {
           computeEnvs <- listComputeEnvironments(batchConfig.onDemandJobQueue)
-          capacity <- describeCapacity(computeEnvs)
-          (maxVcpus, desiredVcpus) = capacity
+          maxVcpus <- describeMaxVcpus(computeEnvs)
+          inUseVcpus <- sumOnDemandJobVcpus
           cap = math.min(
             maxVcpus - batchConfig.onDemandHeadroomVcpu,
             batchConfig.onDemandMaxVcpu
           )
           _ <- IO(
             scribe.info(
-              s"on-demand queue ${batchConfig.onDemandJobQueue} CEs=[${computeEnvs.mkString(",")}] desired=$desiredVcpus max=$maxVcpus headroom=${batchConfig.onDemandHeadroomVcpu} onDemandMaxVcpu=${batchConfig.onDemandMaxVcpu} cap=$cap ask=${selected.cpu}"
+              s"on-demand queue ${batchConfig.onDemandJobQueue} CEs=[${computeEnvs.mkString(",")}] inUseVcpus=$inUseVcpus max=$maxVcpus headroom=${batchConfig.onDemandHeadroomVcpu} onDemandMaxVcpu=${batchConfig.onDemandMaxVcpu} cap=$cap ask=${selected.cpu}"
             )
           )
-        } yield desiredVcpus + selected.cpu <= cap).handleErrorWith { e =>
+        } yield inUseVcpus + selected.cpu <= cap).handleErrorWith { e =>
           IO(
             scribe.warn(
               s"Failed to query on-demand queue capacity, defaulting to on-demand: ${e.getMessage}"
@@ -224,10 +258,10 @@ class BatchCreateNode(
       }
     }
 
-  private def describeCapacity(
+  private def describeMaxVcpus(
       computeEnvArns: List[String]
-  ): IO[(Int, Int)] =
-    if (computeEnvArns.isEmpty) IO.pure((0, 0))
+  ): IO[Int] =
+    if (computeEnvArns.isEmpty) IO.pure(0)
     else
       IO.interruptible {
         val resp = batch.describeComputeEnvironments(
@@ -235,21 +269,126 @@ class BatchCreateNode(
             .computeEnvironments(computeEnvArns.asJava)
             .build
         )
-        val ces = resp.computeEnvironments.asScala.toList
-        val maxVcpus = ces.map { ce =>
+        resp.computeEnvironments.asScala.toList.map { ce =>
           Option(ce.computeResources)
             .flatMap(cr => Option(cr.maxvCpus))
             .map(_.intValue)
             .getOrElse(0)
         }.sum
-        val desiredVcpus = ces.map { ce =>
-          Option(ce.computeResources)
-            .flatMap(cr => Option(cr.desiredvCpus))
-            .map(_.intValue)
-            .getOrElse(0)
-        }.sum
-        (maxVcpus, desiredVcpus)
       }
+
+  private val activeJobStatuses: List[JobStatus] = List(
+    JobStatus.SUBMITTED,
+    JobStatus.PENDING,
+    JobStatus.RUNNABLE,
+    JobStatus.STARTING,
+    JobStatus.RUNNING
+  )
+
+  private def listJobIdsInStatus(
+      queue: String,
+      status: JobStatus
+  ): IO[List[String]] = {
+    def fetchPage(
+        token: Option[String]
+    ): IO[(List[String], Option[String])] =
+      IO.interruptible {
+        val builder = ListJobsRequest.builder
+          .jobQueue(queue)
+          .jobStatus(status)
+        val req = token.fold(builder.build)(t => builder.nextToken(t).build)
+        val resp = batch.listJobs(req)
+        val ids = resp.jobSummaryList.asScala.toList.map(_.jobId)
+        (ids, Option(resp.nextToken))
+      }
+
+    def loop(acc: List[String], token: Option[String]): IO[List[String]] =
+      fetchPage(token).flatMap { case (ids, next) =>
+        val updated = acc ::: ids
+        next match {
+          case Some(_) => loop(updated, next)
+          case None    => IO.pure(updated)
+        }
+      }
+
+    loop(Nil, None)
+  }
+
+  private def listAllActiveJobIds: IO[List[String]] = {
+    val queue = batchConfig.onDemandJobQueue
+    activeJobStatuses.foldLeft(IO.pure(List.empty[String])) {
+      (accIO, status) =>
+        accIO.flatMap { acc =>
+          listJobIdsInStatus(queue, status).map(acc ::: _)
+        }
+    }
+  }
+
+  private case class JobDetail(
+      id: String,
+      status: JobStatus,
+      vcpus: Int
+  )
+
+  private def describeJobs(jobIds: List[String]): IO[List[JobDetail]] =
+    if (jobIds.isEmpty) IO.pure(Nil)
+    else
+      IO.interruptible {
+        jobIds.grouped(100).flatMap { batchIds =>
+          val resp = batch.describeJobs(
+            DescribeJobsRequest.builder.jobs(batchIds.asJava).build
+          )
+          resp.jobs.asScala.toList.map { j =>
+            val vcpus = Option(j.container)
+              .flatMap(c => Option(c.resourceRequirements))
+              .map(_.asScala.toList)
+              .getOrElse(Nil)
+              .find(_.`type` == ResourceType.VCPU)
+              .flatMap(r => Option(r.value))
+              .map(_.toInt)
+              .getOrElse(0)
+            JobDetail(j.jobId, j.status, vcpus)
+          }
+        }.toList
+      }
+
+  private val maxReconcileAttempts: Int = 5
+  private val reconcileBackoff: FiniteDuration = 1500.millis
+
+  private def sumOnDemandJobVcpus: IO[Int] = {
+    def loop(attempt: Int): IO[Int] =
+      for {
+        activeIds <- listAllActiveJobIds.map(_.toSet)
+        recentIds <- recentOnDemandIds
+        missing = recentIds -- activeIds
+        result <-
+          if (missing.isEmpty) describeJobs(activeIds.toList).map(_.map(_.vcpus).sum)
+          else
+            describeJobs(missing.toList).flatMap { details =>
+              val terminal =
+                details.filter(d => !activeJobStatuses.contains(d.status))
+              val stillActive =
+                details.filter(d => activeJobStatuses.contains(d.status))
+              val terminalIds = terminal.map(_.id).toSet
+              val unknownIds = missing -- details.map(_.id).toSet
+              dropRecentIds(terminalIds) *> {
+                if (stillActive.isEmpty && unknownIds.isEmpty)
+                  describeJobs(activeIds.toList).map(_.map(_.vcpus).sum)
+                else if (attempt >= maxReconcileAttempts)
+                  IO(
+                    scribe.warn(
+                      s"listJobs eventual consistency: ${stillActive.size} active + ${unknownIds.size} unknown ids still missing after $maxReconcileAttempts attempts; counting them optimistically"
+                    )
+                  ) *> describeJobs(activeIds.toList).map { ds =>
+                    ds.map(_.vcpus).sum + stillActive.map(_.vcpus).sum
+                  }
+                else IO.sleep(reconcileBackoff) *> loop(attempt + 1)
+              }
+            }
+      } yield result
+
+    loop(0)
+  }
 
   override def convertRunningToPending(
       p: RunningJobId
@@ -271,7 +410,8 @@ class BatchCreateNode(
 class BatchCreateNodeFactory(
     batchConfig: BatchConfig,
     batch: BatchClient,
-    requestMutex: Mutex[IO]
+    requestMutex: Mutex[IO],
+    recentOnDemandSubmissions: Ref[IO, List[(Instant, String)]]
 ) extends CreateNodeFactory {
   def apply(
       master: SimpleSocketAddress,
@@ -284,7 +424,8 @@ class BatchCreateNodeFactory(
       codeAddress = codeAddress,
       batch = batch,
       batchConfig = batchConfig,
-      requestMutex = requestMutex
+      requestMutex = requestMutex,
+      recentOnDemandSubmissions = recentOnDemandSubmissions
     )
 }
 
@@ -375,8 +516,10 @@ object BatchElasticSupport {
   ): cats.effect.Resource[IO, ElasticSupport] = {
     val batchConfig = new BatchConfig(tasks.util.loadConfig(config))
     cats.effect.Resource.eval {
-      Mutex[IO].flatMap { requestMutex =>
-        IO {
+      for {
+        requestMutex <- Mutex[IO]
+        recentOnDemandSubmissions <- Ref.of[IO, List[(Instant, String)]](Nil)
+        support <- IO {
           val batch =
             if (batchConfig.region.isEmpty) BatchClient.create
             else
@@ -388,12 +531,16 @@ object BatchElasticSupport {
             hostConfig = Some(new BatchHostConfig(batchConfig)),
             shutdownFromNodeRegistry = new BatchShutdown(batch),
             shutdownFromWorker = new BatchShutdown(batch),
-            createNodeFactory =
-              new BatchCreateNodeFactory(batchConfig, batch, requestMutex),
+            createNodeFactory = new BatchCreateNodeFactory(
+              batchConfig,
+              batch,
+              requestMutex,
+              recentOnDemandSubmissions
+            ),
             getNodeName = BatchGetNodeName
           )
         }
-      }
+      } yield support
     }
   }
 }
