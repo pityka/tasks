@@ -31,12 +31,18 @@ import scala.concurrent.duration._
   * AWS submit), this produced "scale-up goes one node at a time."
   *
   * This test sets `maxNodes = 5`, submits many tasks of the same shape,
-  * and uses a `CreateNode` whose request handler sleeps for many seconds
-  * before returning `Right`. After a short delay it asserts that the
-  * occupied capacity (`inFlightRequests + pending`) has reached `maxNodes`.
+  * and uses a `CreateNode` whose request handler sleeps for 10 seconds
+  * before returning `Right`.
   *
-  * With the bug, the observed occupied capacity is 1.
-  * With the fix, it should equal `maxNodes`.
+  * With the fix, occupied capacity (`inFlightRequests + pending`) reaches
+  * `maxNodes` within ~10 s: the first invocation may see only one queued
+  * task (and commit 1 node), but the next invocation — after that first
+  * `createNode` sleep releases the mutex — sees the full queue and commits
+  * the remaining 4 atomically.
+  *
+  * With the bug, occupied advances by exactly 1 per ~10 s, so reaching 5
+  * takes ~40 s. The test polls with a much shorter timeout, so the bug
+  * cannot pass even on a slow CI runner.
   */
 object RequestNodeBatchSizeTest extends TestHelpers {
 
@@ -123,10 +129,16 @@ object RequestNodeBatchSizeTest extends TestHelpers {
     )
   }
 
-  /** Returns (occupied = inFlight + pending) after letting the queue settle for
-    * `observeAfter`, before any AWS submit has had a chance to resolve.
+  /** Polls the shared queue state until occupied capacity (inFlight + pending)
+    * reaches `MaxNodes`, or `timeout` elapses. Returns whatever value is
+    * observed at that point.
+    *
+    * Polling (instead of a fixed sleep) is what makes the test non-flaky:
+    * the test no longer depends on how much of the 50-task `parTraverse`
+    * has been dispatched before the first `handleQueueStat` reads state —
+    * which is essentially a microsecond-scale race on the runner's speed.
     */
-  def run(observeAfter: FiniteDuration): IO[Int] = {
+  def run(timeout: FiniteDuration): IO[Int] = {
     Ref.of[IO, QueueImpl.State](QueueImpl.State.empty).flatMap { stateRef =>
       val node = new SlowCreateNode
       withTaskSystem(
@@ -148,11 +160,18 @@ object RequestNodeBatchSizeTest extends TestHelpers {
           ).attempt.void
         }.start
 
+        val occupiedNow: IO[Int] = stateRef.get.map { st =>
+          st.nodes.inFlightRequests.size + st.nodes.pending.size
+        }
+
+        def waitForTarget: IO[Int] = occupiedNow.flatMap { occupied =>
+          if (occupied >= MaxNodes) IO.pure(occupied)
+          else IO.sleep(100.millis) *> waitForTarget
+        }
+
         for {
           fiber <- submit
-          _ <- IO.sleep(observeAfter)
-          st <- stateRef.get
-          occupied = st.nodes.inFlightRequests.size + st.nodes.pending.size
+          occupied <- waitForTarget.timeoutTo(timeout, occupiedNow)
           _ <- fiber.cancel
         } yield occupied
       }.map(_.toOption.get)
@@ -167,7 +186,7 @@ class RequestNodeBatchSizeTestSuite extends FunSuite with Matchers {
     "handleQueueStat pre-commits up to maxNodes per invocation when many same-shape tasks are queued"
   ) {
     val occupied =
-      RequestNodeBatchSizeTest.run(500.millis).unsafeRunSync()
+      RequestNodeBatchSizeTest.run(30.seconds).unsafeRunSync()
     occupied shouldBe RequestNodeBatchSizeTest.MaxNodes
   }
 
