@@ -1,4 +1,4 @@
-  /*
+/*
  * The MIT License
  *
  * Copyright (c) 2016 Istvan Bartha
@@ -41,9 +41,13 @@ import org.ekrich.config.Config
 import cats.effect.IO
 import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
+import cats.effect.std.Mutex
+import scala.concurrent.duration._
 import tasks.util.message.Node
 
-class BatchShutdown(batch: BatchClient) extends ShutdownNode with ShutdownSelfNode {
+class BatchShutdown(batch: BatchClient)
+    extends ShutdownNode
+    with ShutdownSelfNode {
 
   def shutdownRunningNode(nodeName: RunningJobId): IO[Unit] =
     IO.interruptible {
@@ -87,7 +91,8 @@ class BatchCreateNode(
     masterPrefix: String,
     codeAddress: CodeAddress,
     batch: BatchClient,
-    batchConfig: BatchConfig
+    batchConfig: BatchConfig,
+    requestMutex: Mutex[IO]
 ) extends CreateNode {
 
   def requestOneNewJobFromJobScheduler(
@@ -95,76 +100,86 @@ class BatchCreateNode(
   )(implicit
       config: TasksConfig
   ): IO[Either[String, (PendingJobId, ResourceAvailable)]] =
-    IO.interruptible {
-      Try {
-        val selectedResources = selectResources(requestSize)
+    requestMutex.lock.surround(
+      IO.interruptible {
+        Try {
+          val selectedResources = selectResources(requestSize)
 
-        val targetQueue = selectJobQueue(selectedResources)
+          val targetQueue = selectJobQueue(selectedResources)
+          val targetCes = listComputeEnvironments(targetQueue)
+          val (_, preSubmitDesired) = describeCapacity(targetCes)
 
-        val script = Deployment.script(
-          memory = selectedResources.memory,
-          cpu = selectedResources.cpu,
-          scratch = selectedResources.scratch,
-          gpus = selectedResources.gpu,
-          masterAddress = masterAddress,
-          masterPrefix = masterPrefix,
-          download = Uri(
-            scheme = "http",
-            hostname = codeAddress.address.getHostName,
-            port = codeAddress.address.getPort,
-            path = "/"
-          ),
-          followerHostname = None,
-          followerExternalHostname = None,
-          followerNodeName = None,
-          followerMayUseArbitraryPort = true,
-          background = false,
-          image = None,
-          workerHealthUrlFile =
-            config.workerHealthUrlFile.map(_.getAbsolutePath)
-        )(config)
+          val script = Deployment.script(
+            memory = selectedResources.memory,
+            cpu = selectedResources.cpu,
+            scratch = selectedResources.scratch,
+            gpus = selectedResources.gpu,
+            masterAddress = masterAddress,
+            masterPrefix = masterPrefix,
+            download = Uri(
+              scheme = "http",
+              hostname = codeAddress.address.getHostName,
+              port = codeAddress.address.getPort,
+              path = "/"
+            ),
+            followerHostname = None,
+            followerExternalHostname = None,
+            followerNodeName = None,
+            followerMayUseArbitraryPort = true,
+            background = false,
+            image = None,
+            workerHealthUrlFile =
+              config.workerHealthUrlFile.map(_.getAbsolutePath)
+          )(config)
 
-        val resourceReqs = {
-          val reqs = List(
-            ResourceRequirement.builder
-              .`type`(ResourceType.VCPU)
-              .value(selectedResources.cpu.toString)
-              .build,
-            ResourceRequirement.builder
-              .`type`(ResourceType.MEMORY)
-              .value(selectedResources.memory.toString)
-              .build
-          ) ++ (if (selectedResources.gpu.nonEmpty)
-                  List(
-                    ResourceRequirement.builder
-                      .`type`(ResourceType.GPU)
-                      .value(selectedResources.gpu.size.toString)
-                      .build
-                  )
-                else Nil)
-          reqs.asJava
-        }
+          val resourceReqs = {
+            val reqs = List(
+              ResourceRequirement.builder
+                .`type`(ResourceType.VCPU)
+                .value(selectedResources.cpu.toString)
+                .build,
+              ResourceRequirement.builder
+                .`type`(ResourceType.MEMORY)
+                .value(selectedResources.memory.toString)
+                .build
+            ) ++ (if (selectedResources.gpu.nonEmpty)
+                    List(
+                      ResourceRequirement.builder
+                        .`type`(ResourceType.GPU)
+                        .value(selectedResources.gpu.size.toString)
+                        .build
+                    )
+                  else Nil)
+            reqs.asJava
+          }
 
-        val containerOverrides = ContainerOverrides.builder
-          .resourceRequirements(resourceReqs)
-          .command("/bin/bash", "-c", script)
-          .build
+          val containerOverrides = ContainerOverrides.builder
+            .resourceRequirements(resourceReqs)
+            .command("/bin/bash", "-c", script)
+            .build
 
-        val submitRequest = SubmitJobRequest.builder
-          .jobName(
-            "tasks-worker-" + java.util.UUID.randomUUID.toString.take(8)
-          )
-          .jobQueue(targetQueue)
-          .jobDefinition(batchConfig.jobDefinition)
-          .containerOverrides(containerOverrides)
-          .tags(batchConfig.tags.asJava)
-          .build
+          val submitRequest = SubmitJobRequest.builder
+            .jobName(
+              "tasks-worker-" + java.util.UUID.randomUUID.toString.take(8)
+            )
+            .jobQueue(targetQueue)
+            .jobDefinition(batchConfig.jobDefinition)
+            .containerOverrides(containerOverrides)
+            .tags(batchConfig.tags.asJava)
+            .build
 
-        val result = batch.submitJob(submitRequest)
-        val jobId = PendingJobId(result.jobId)
-        (jobId, selectedResources)
-      }.toEither.left.map(_.getMessage)
-    }
+          val result = batch.submitJob(submitRequest)
+          val jobId = PendingJobId(result.jobId)
+          (jobId, selectedResources, targetCes, preSubmitDesired)
+        }.toEither.left.map(_.getMessage)
+      }.flatMap {
+        case Right((jobId, selected, ces, preDesired)) =>
+          awaitDesiredAtLeast(ces, preDesired + selected.cpu)
+            .as(Right((jobId, selected)))
+        case Left(err) =>
+          IO.pure(Left(err))
+      }
+    )
 
   private def selectJobQueue(selected: ResourceAvailable): String = {
     val chosen =
@@ -237,6 +252,17 @@ class BatchCreateNode(
     }
   }
 
+  private def awaitDesiredAtLeast(
+      computeEnvs: List[String],
+      target: Int
+  ): IO[Unit] =
+    if (computeEnvs.isEmpty) IO.unit
+    else
+      IO.interruptible(describeCapacity(computeEnvs)._2).flatMap { current =>
+        if (current >= target) IO.unit
+        else IO.sleep(2.seconds) >> awaitDesiredAtLeast(computeEnvs, target)
+      }
+
   override def convertRunningToPending(
       p: RunningJobId
   ): IO[Option[PendingJobId]] =
@@ -256,7 +282,8 @@ class BatchCreateNode(
 
 class BatchCreateNodeFactory(
     batchConfig: BatchConfig,
-    batch: BatchClient
+    batch: BatchClient,
+    requestMutex: Mutex[IO]
 ) extends CreateNodeFactory {
   def apply(
       master: SimpleSocketAddress,
@@ -268,7 +295,8 @@ class BatchCreateNodeFactory(
       masterPrefix = masterPrefix,
       codeAddress = codeAddress,
       batch = batch,
-      batchConfig = batchConfig
+      batchConfig = batchConfig,
+      requestMutex = requestMutex
     )
 }
 
@@ -278,12 +306,15 @@ object BatchGetNodeName extends GetNodeName {
     if (nodeName.nonEmpty) RunningJobId(nodeName)
     else {
       val envJobId = Option(System.getenv("AWS_BATCH_JOB_ID"))
-      RunningJobId(envJobId.getOrElse(java.net.InetAddress.getLocalHost.getHostName))
+      RunningJobId(
+        envJobId.getOrElse(java.net.InetAddress.getLocalHost.getHostName)
+      )
     }
   }
 }
 
-class BatchHostConfig(val config: BatchConfig) extends HostConfigurationFromConfig
+class BatchHostConfig(val config: BatchConfig)
+    extends HostConfigurationFromConfig
 
 class BatchConfig(val raw: Config) extends ConfigValuesForHostConfiguration {
 
@@ -351,25 +382,30 @@ class BatchConfig(val raw: Config) extends ConfigValuesForHostConfiguration {
 
 object BatchElasticSupport {
 
-  def apply(config: Option[Config]): cats.effect.Resource[IO, ElasticSupport] = {
+  def apply(
+      config: Option[Config]
+  ): cats.effect.Resource[IO, ElasticSupport] = {
     val batchConfig = new BatchConfig(tasks.util.loadConfig(config))
-    cats.effect.Resource.make {
-      IO {
-        val batch =
-          if (batchConfig.region.isEmpty) BatchClient.create
-          else
-            BatchClient.builder
-              .region(Region.of(batchConfig.region))
-              .build
+    cats.effect.Resource.eval {
+      Mutex[IO].flatMap { requestMutex =>
+        IO {
+          val batch =
+            if (batchConfig.region.isEmpty) BatchClient.create
+            else
+              BatchClient.builder
+                .region(Region.of(batchConfig.region))
+                .build
 
-        new ElasticSupport(
-          hostConfig = Some(new BatchHostConfig(batchConfig)),
-          shutdownFromNodeRegistry = new BatchShutdown(batch),
-          shutdownFromWorker = new BatchShutdown(batch),
-          createNodeFactory = new BatchCreateNodeFactory(batchConfig, batch),
-          getNodeName = BatchGetNodeName
-        )
+          new ElasticSupport(
+            hostConfig = Some(new BatchHostConfig(batchConfig)),
+            shutdownFromNodeRegistry = new BatchShutdown(batch),
+            shutdownFromWorker = new BatchShutdown(batch),
+            createNodeFactory =
+              new BatchCreateNodeFactory(batchConfig, batch, requestMutex),
+            getNodeName = BatchGetNodeName
+          )
+        }
       }
-    } { _ => IO.unit }
+    }
   }
 }
