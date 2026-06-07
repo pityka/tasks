@@ -489,7 +489,7 @@ private[tasks] class QueueImpl(
       )
       val logIO = if (config.logQueueStatus) {
         IO {
-          scribe.debug(
+          scribe.info(
             s"Queue state report.",
             scribe.data(
               Map(
@@ -541,22 +541,26 @@ private[tasks] class QueueImpl(
                 state.nodes.cumulativeRequested < config.maxNodesCumulative
             if (!canRequest) {
               state -> IO(
-                scribe.debug(
-                  "MaxNodesReached",
-                  scribe.data(
-                    Map(
-                      "max-nodes" -> config.maxNodes,
-                      "max-nodes-cumulative" -> config.maxNodesCumulative,
-                      "cumulative-requested" -> state.nodes.cumulativeRequested,
-                      "in-flight-requests" -> state.nodes.inFlightRequests.size,
-                      "pending-nodes" -> state.nodes.pending.size,
-                      "running-nodes" -> state.nodes.running.size,
-                      "explain" -> "New node request will not proceed because pending nodes or reached max nodes."
+                if (config.logQueueStatus) {
+                  scribe.info(
+                    "MaxNodesReached",
+                    scribe.data(
+                      Map(
+                        "max-nodes" -> config.maxNodes,
+                        "max-nodes-cumulative" -> config.maxNodesCumulative,
+                        "cumulative-requested" -> state.nodes.cumulativeRequested,
+                        "in-flight-requests" -> state.nodes.inFlightRequests.size,
+                        "pending-nodes" -> state.nodes.pending.size,
+                        "running-nodes" -> state.nodes.running.size,
+                        "explain" -> "New node request will not proceed because pending nodes or reached max nodes."
+                      )
                     )
                   )
-                )
+                 }
               )
             } else {
+
+              
 
               val allowedNewNodes = math.min(
                 config.maxNodes - activeOrInFlight,

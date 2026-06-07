@@ -47,34 +47,36 @@ private[tasks] final class QueueMetrics(
   private[queue] def attrsFor(taskId: TaskId): IO[Attributes] = {
     val isOverflowMarker: Attributes => Boolean =
       _.get[String](idKey).exists(_.value == otherSentinel)
-    admittedPairs.modify { admitted =>
-      val pair = (taskId.id, taskId.version)
-      if (admitted.contains(pair))
-        (admitted, attrPair(taskId.id, taskId.version.toString))
-      else if (admitted.size < cap)
-        (admitted + pair, attrPair(taskId.id, taskId.version.toString))
-      else
-        (admitted, attrPair(otherSentinel, otherSentinel))
-    }.flatTap { attrs =>
-      if (isOverflowMarker(attrs))
-        overflowWarned.getAndSet(true).flatMap {
-          case true => IO.unit
-          case false =>
-            IO(
-              scribe.warn(
-                "OTel cardinality cap reached; subsequent novel (task.id, task.version) pairs fold into \"_other\". Raise tasks.otel.maxSeries to admit more.",
-                scribe.data(
-                  Map(
-                    "cap" -> cap,
-                    "first-overflow-task-id" -> taskId.id,
-                    "first-overflow-task-version" -> taskId.version
+    admittedPairs
+      .modify { admitted =>
+        val pair = (taskId.id, taskId.version)
+        if (admitted.contains(pair))
+          (admitted, attrPair(taskId.id, taskId.version.toString))
+        else if (admitted.size < cap)
+          (admitted + pair, attrPair(taskId.id, taskId.version.toString))
+        else
+          (admitted, attrPair(otherSentinel, otherSentinel))
+      }
+      .flatTap { attrs =>
+        if (isOverflowMarker(attrs))
+          overflowWarned.getAndSet(true).flatMap {
+            case true => IO.unit
+            case false =>
+              IO(
+                scribe.warn(
+                  "OTel cardinality cap reached; subsequent novel (task.id, task.version) pairs fold into \"_other\". Raise tasks.otel.maxSeries to admit more.",
+                  scribe.data(
+                    Map(
+                      "cap" -> cap,
+                      "first-overflow-task-id" -> taskId.id,
+                      "first-overflow-task-version" -> taskId.version
+                    )
                   )
                 )
               )
-            )
-        }
-      else IO.unit
-    }
+          }
+        else IO.unit
+      }
   }
 
   private def attrPair(id: String, version: String): Attributes =
@@ -89,19 +91,21 @@ private[tasks] final class QueueMetrics(
     }
 
   def onTaskScheduled(description: HashedTaskDescription): IO[Unit] =
-    enqueueTimestamps.modify { ts =>
-      ts.get(description) match {
-        case Some(start) => (ts - description, Some(start))
-        case None        => (ts, None)
-      }
-    }.flatMap {
-      case None => IO.unit
-      case Some(startNanos) =>
-        val elapsedSeconds = (System.nanoTime() - startNanos) / 1e9
-        attrsFor(description.taskId).flatMap { attrs =>
-          queueWaitTime.record(elapsedSeconds, attrs)
+    enqueueTimestamps
+      .modify { ts =>
+        ts.get(description) match {
+          case Some(start) => (ts - description, Some(start))
+          case None        => (ts, None)
         }
-    }
+      }
+      .flatMap {
+        case None => IO.unit
+        case Some(startNanos) =>
+          val elapsedSeconds = (System.nanoTime() - startNanos) / 1e9
+          attrsFor(description.taskId).flatMap { attrs =>
+            queueWaitTime.record(elapsedSeconds, attrs)
+          }
+      }
 
   def onTaskDone(
       description: HashedTaskDescription,
@@ -214,9 +218,9 @@ private[tasks] object QueueMetrics {
               .mapValues(_.size.toLong)
               .toVector
             byTask.foldLeft(IO.unit) { case (acc, (taskId, count)) =>
-              acc *> qm.attrsFor(taskId).flatMap(attrs =>
-                obs.record(count, attrs)
-              )
+              acc *> qm
+                .attrsFor(taskId)
+                .flatMap(attrs => obs.record(count, attrs))
             }
           }
         }
@@ -234,9 +238,9 @@ private[tasks] object QueueMetrics {
               .mapValues(_.size.toLong)
               .toVector
             byTask.foldLeft(IO.unit) { case (acc, (taskId, count)) =>
-              acc *> qm.attrsFor(taskId).flatMap(attrs =>
-                obs.record(count, attrs)
-              )
+              acc *> qm
+                .attrsFor(taskId)
+                .flatMap(attrs => obs.record(count, attrs))
             }
           }
         }
@@ -247,11 +251,9 @@ private[tasks] object QueueMetrics {
         .createWithCallback { obs =>
           stateSnapshot.flatMap { st =>
             val total =
-              st.scheduledTasks.valuesIterator
-                .map { case (_, alloc, _, _) =>
-                  alloc.cpuMemoryAllocated.cpu.toLong
-                }
-                .sum
+              st.scheduledTasks.valuesIterator.map { case (_, alloc, _, _) =>
+                alloc.cpuMemoryAllocated.cpu.toLong
+              }.sum
             obs.record(total)
           }
         }
@@ -265,11 +267,9 @@ private[tasks] object QueueMetrics {
         .createWithCallback { obs =>
           stateSnapshot.flatMap { st =>
             val total =
-              st.scheduledTasks.valuesIterator
-                .map { case (_, alloc, _, _) =>
-                  alloc.cpuMemoryAllocated.memory.toLong
-                }
-                .sum
+              st.scheduledTasks.valuesIterator.map { case (_, alloc, _, _) =>
+                alloc.cpuMemoryAllocated.memory.toLong
+              }.sum
             obs.record(total)
           }
         }
@@ -315,6 +315,276 @@ private[tasks] object QueueMetrics {
             obs.record(st.nodes.cumulativeRequested.toLong)
           )
         }
+
+      _ <- registerNodeRegistryGauges(meter, stateSnapshot)
+      _ <- registerLauncherAvailableGauges(meter, stateSnapshot)
+      _ <- registerQueuedResourceGauges(meter, stateSnapshot, qm)
     } yield qm
+  }
+
+  private def sumResources(
+      rs: Iterable[tasks.shared.ResourceAvailable]
+  ): (Long, Long, Long, Long) = {
+    var cpu = 0L
+    var memory = 0L
+    var scratch = 0L
+    var gpu = 0L
+    rs.foreach { r =>
+      cpu += r.cpu.toLong
+      memory += r.memory.toLong
+      scratch += r.scratch.toLong
+      gpu += r.gpu.size.toLong
+    }
+    (cpu, memory, scratch, gpu)
+  }
+
+  private def registerNodeRegistryGauges(
+      meter: org.typelevel.otel4s.metrics.Meter[IO],
+      stateSnapshot: IO[QueueImpl.State]
+  ): Resource[IO, Unit] = {
+    def gauge(
+        name: String,
+        description: String,
+        unit: Option[String],
+        select: QueueImpl.State => Long
+    ): Resource[IO, Unit] = {
+      val base = meter
+        .observableGauge[Long](name)
+        .withDescription(description)
+      val withUnit = unit.fold(base)(u => base.withUnit(u))
+      withUnit
+        .createWithCallback(obs =>
+          stateSnapshot.flatMap(st => obs.record(select(st)))
+        )
+        .map(_ => ())
+    }
+
+    def fromRunning(st: QueueImpl.State) = sumResources(st.nodes.running.values)
+    def fromPending(st: QueueImpl.State) = sumResources(st.nodes.pending.values)
+    def fromInflight(st: QueueImpl.State) =
+      sumResources(st.nodes.inFlightRequests)
+
+    for {
+      _ <- gauge(
+        "tasks.nodes.running.cpu",
+        "Total CPU provisioned across running worker nodes.",
+        None,
+        fromRunning(_)._1
+      )
+      _ <- gauge(
+        "tasks.nodes.running.memory",
+        "Total memory (MB) provisioned across running worker nodes.",
+        Some("MB"),
+        fromRunning(_)._2
+      )
+      _ <- gauge(
+        "tasks.nodes.running.scratch",
+        "Total scratch space provisioned across running worker nodes.",
+        None,
+        fromRunning(_)._3
+      )
+      _ <- gauge(
+        "tasks.nodes.running.gpu",
+        "Total GPU count provisioned across running worker nodes.",
+        None,
+        fromRunning(_)._4
+      )
+
+      _ <- gauge(
+        "tasks.nodes.pending.cpu",
+        "Total CPU on worker nodes allocated but not yet up.",
+        None,
+        fromPending(_)._1
+      )
+      _ <- gauge(
+        "tasks.nodes.pending.memory",
+        "Total memory (MB) on worker nodes allocated but not yet up.",
+        Some("MB"),
+        fromPending(_)._2
+      )
+      _ <- gauge(
+        "tasks.nodes.pending.scratch",
+        "Total scratch on worker nodes allocated but not yet up.",
+        None,
+        fromPending(_)._3
+      )
+      _ <- gauge(
+        "tasks.nodes.pending.gpu",
+        "Total GPU count on worker nodes allocated but not yet up.",
+        None,
+        fromPending(_)._4
+      )
+
+      _ <- gauge(
+        "tasks.nodes.inflight.cpu",
+        "Total CPU pre-committed for node requests still mid-spawn.",
+        None,
+        fromInflight(_)._1
+      )
+      _ <- gauge(
+        "tasks.nodes.inflight.memory",
+        "Total memory (MB) pre-committed for node requests still mid-spawn.",
+        Some("MB"),
+        fromInflight(_)._2
+      )
+      _ <- gauge(
+        "tasks.nodes.inflight.scratch",
+        "Total scratch pre-committed for node requests still mid-spawn.",
+        None,
+        fromInflight(_)._3
+      )
+      _ <- gauge(
+        "tasks.nodes.inflight.gpu",
+        "Total GPU count pre-committed for node requests still mid-spawn.",
+        None,
+        fromInflight(_)._4
+      )
+    } yield ()
+  }
+
+  private def registerLauncherAvailableGauges(
+      meter: org.typelevel.otel4s.metrics.Meter[IO],
+      stateSnapshot: IO[QueueImpl.State]
+  ): Resource[IO, Unit] = {
+    def allocatedSums(st: QueueImpl.State): (Long, Long, Long, Long) = {
+      var cpu = 0L
+      var memory = 0L
+      var scratch = 0L
+      var gpu = 0L
+      st.scheduledTasks.valuesIterator.foreach { case (_, alloc, _, _) =>
+        val a = alloc.cpuMemoryAllocated
+        cpu += a.cpu.toLong
+        memory += a.memory.toLong
+        scratch += a.scratch.toLong
+        gpu += a.gpu.size.toLong
+      }
+      (cpu, memory, scratch, gpu)
+    }
+
+    def availableFor(st: QueueImpl.State): (Long, Long, Long, Long) = {
+      val (rCpu, rMem, rScr, rGpu) = sumResources(st.nodes.running.values)
+      val (aCpu, aMem, aScr, aGpu) = allocatedSums(st)
+      (rCpu - aCpu, rMem - aMem, rScr - aScr, rGpu - aGpu)
+    }
+
+    def gauge(
+        name: String,
+        description: String,
+        unit: Option[String],
+        select: QueueImpl.State => Long
+    ): Resource[IO, Unit] = {
+      val base = meter
+        .observableGauge[Long](name)
+        .withDescription(description)
+      val withUnit = unit.fold(base)(u => base.withUnit(u))
+      withUnit
+        .createWithCallback(obs =>
+          stateSnapshot.flatMap(st => obs.record(select(st)))
+        )
+        .map(_ => ())
+    }
+
+    for {
+      _ <- gauge(
+        "tasks.launchers.available.cpu",
+        "CPU currently free across launchers (running node total minus allocated).",
+        None,
+        availableFor(_)._1
+      )
+      _ <- gauge(
+        "tasks.launchers.available.memory",
+        "Memory (MB) currently free across launchers (running node total minus allocated).",
+        Some("MB"),
+        availableFor(_)._2
+      )
+      _ <- gauge(
+        "tasks.launchers.available.scratch",
+        "Scratch currently free across launchers (running node total minus allocated).",
+        None,
+        availableFor(_)._3
+      )
+      _ <- gauge(
+        "tasks.launchers.available.gpu",
+        "GPU count currently free across launchers (running node total minus allocated).",
+        None,
+        availableFor(_)._4
+      )
+    } yield ()
+  }
+
+  private def registerQueuedResourceGauges(
+      meter: org.typelevel.otel4s.metrics.Meter[IO],
+      stateSnapshot: IO[QueueImpl.State],
+      qm: QueueMetrics
+  ): Resource[IO, Unit] = {
+
+    def byTaskQueuedSums(
+        st: QueueImpl.State
+    ): Map[TaskId, (Long, Long, Long, Long)] = {
+      val builder =
+        collection.mutable.Map.empty[TaskId, (Long, Long, Long, Long)]
+      st.queuedTasks.valuesIterator.foreach { case (sch, _) =>
+        val taskId = sch.description.taskId
+        val r = sch.resource
+        val cpu = r.cpu._2.toLong
+        val memory = r.memory.toLong
+        val scratch = r.scratch.toLong
+        val gpu = r.cpuMemoryRequest.gpu.toLong
+        val (c, m, s, g) = builder.getOrElse(taskId, (0L, 0L, 0L, 0L))
+        builder.update(taskId, (c + cpu, m + memory, s + scratch, g + gpu))
+      }
+      builder.toMap
+    }
+
+    def gauge(
+        name: String,
+        description: String,
+        unit: Option[String],
+        select: ((Long, Long, Long, Long)) => Long
+    ): Resource[IO, Unit] = {
+      val base = meter
+        .observableGauge[Long](name)
+        .withDescription(description)
+      val withUnit = unit.fold(base)(u => base.withUnit(u))
+      withUnit
+        .createWithCallback { obs =>
+          stateSnapshot.flatMap { st =>
+            val sums = byTaskQueuedSums(st)
+            sums.toVector.foldLeft(IO.unit) { case (acc, (taskId, tuple)) =>
+              acc *> qm
+                .attrsFor(taskId)
+                .flatMap(attrs => obs.record(select(tuple), attrs))
+            }
+          }
+        }
+        .map(_ => ())
+    }
+
+    for {
+      _ <- gauge(
+        "tasks.queued.cpu",
+        "Total max-CPU requested across currently queued tasks, by task name and version.",
+        None,
+        _._1
+      )
+      _ <- gauge(
+        "tasks.queued.memory",
+        "Total memory (MB) requested across currently queued tasks, by task name and version.",
+        Some("MB"),
+        _._2
+      )
+      _ <- gauge(
+        "tasks.queued.scratch",
+        "Total scratch requested across currently queued tasks, by task name and version.",
+        None,
+        _._3
+      )
+      _ <- gauge(
+        "tasks.queued.gpu",
+        "Total GPU count requested across currently queued tasks, by task name and version.",
+        None,
+        _._4
+      )
+    } yield ()
   }
 }
