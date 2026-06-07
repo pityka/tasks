@@ -590,7 +590,15 @@ private[tasks] class QueueImpl(
                         .view
                         .mapValues(_.size)
                         .toMap
-                        .toString
+                        .toString,
+                      "queued-tasks" -> state.queuedTasks.size,
+                      "running-tasks" -> state.scheduledTasks.size,
+                      "running-nodes" -> state.nodes.running.size,
+                      "pending-nodes" -> state.nodes.pending.size,
+                      "in-flight-requests" -> state.nodes.inFlightRequests.size,
+                      "cumulative-requested" -> state.nodes.cumulativeRequested,
+                      "max-nodes" -> config.maxNodes,
+                      "max-nodes-cumulative" -> config.maxNodesCumulative
                     )
                   )
                 )
