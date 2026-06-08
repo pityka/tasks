@@ -630,14 +630,8 @@ private[tasks] class QueueImpl(
                           )
                         ) *> recordFailure
                       case Right((jobId, size)) =>
-                        IO(
-                          scribe.info(
-                            s"NodeRequestSucceeded",
-                            jobId,
-                            size
-                          )
-                        ) *> ref.update(
-                          _.update(
+                        ref.flatModify { state =>
+                          val updated = state.update(
                             NodeEvent(
                               NodeRegistryState.NodeIsPending(
                                 jobId,
@@ -646,7 +640,25 @@ private[tasks] class QueueImpl(
                               )
                             )
                           )
-                        ) *> IO
+                          val logIO = IO(
+                            scribe.info(
+                              "NodeRequestSucceeded",
+                              jobId,
+                              size,
+                              scribe.data(
+                                Map(
+                                  "queued-tasks" -> updated.queuedTasks.size,
+                                  "running-tasks" -> updated.scheduledTasks.size,
+                                  "running-nodes" -> updated.nodes.running.size,
+                                  "pending-nodes" -> updated.nodes.pending.size,
+                                  "in-flight-requests" -> updated.nodes.inFlightRequests.size,
+                                  "cumulative-requested" -> updated.nodes.cumulativeRequested
+                                )
+                              )
+                            )
+                          )
+                          (updated, logIO)
+                        } *> IO
                           .sleep(config.pendingNodeTimeout)
                           .flatMap { initFailed =>
                             ref.flatModify { state =>
@@ -706,7 +718,7 @@ private[tasks] class QueueImpl(
 
   private def handleLauncherStopped(
       launcher: LauncherName
-  ) = IO(scribe.info(s"LauncherStopped", launcher)) *> ref.flatModify { state =>
+  ) = ref.flatModify { state =>
     import tasks.util.eq._
     val msgs =
       state.scheduledTasks.toSeq.filter(_._2._1 === launcher).map(_._1)
@@ -741,7 +753,24 @@ private[tasks] class QueueImpl(
       reEnqueued.foldLeft(IO.unit)((acc, sch) =>
         acc *> metrics.onEnqueued(sch.description)
       )
-    (updated2 -> (recordMetrics *> shutdown))
+    val logIO = IO(
+      scribe.info(
+        "LauncherStopped",
+        launcher,
+        scribe.data(
+          Map(
+            "re-enqueued-tasks" -> reEnqueued.size,
+            "had-node" -> node.isDefined,
+            "queued-tasks-after" -> updated2.queuedTasks.size,
+            "scheduled-tasks-after" -> updated2.scheduledTasks.size,
+            "running-nodes-after" -> updated2.nodes.running.size,
+            "pending-nodes" -> updated2.nodes.pending.size,
+            "in-flight-requests" -> updated2.nodes.inFlightRequests.size
+          )
+        )
+      )
+    )
+    (updated2 -> (logIO *> recordMetrics *> shutdown))
   } *> handleQueueStatIO
 
   def askForWork(
