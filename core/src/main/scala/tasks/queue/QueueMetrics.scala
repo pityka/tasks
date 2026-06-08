@@ -33,6 +33,10 @@ private[tasks] final class QueueMetrics(
     cacheHitCounter: Counter[IO, Long],
     executionDuration: Histogram[IO, Double],
     queueWaitTime: Histogram[IO, Double],
+    cancellationsCounter: Counter[IO, Long],
+    stallsResolvedCounter: Counter[IO, Long],
+    stalledUnresolvableCounter: Counter[IO, Long],
+    naturalCompletionRacesCounter: Counter[IO, Long],
     cap: Int,
     admittedPairs: Ref[IO, Set[(String, Int)]],
     enqueueTimestamps: Ref[IO, Map[HashedTaskDescription, Long]],
@@ -123,6 +127,16 @@ private[tasks] final class QueueMetrics(
 
   def onCacheHit(description: HashedTaskDescription): IO[Unit] =
     attrsFor(description.taskId).flatMap(cacheHitCounter.inc(_))
+
+  def onPreemptionCancellation(description: HashedTaskDescription): IO[Unit] =
+    attrsFor(description.taskId).flatMap(cancellationsCounter.inc(_))
+
+  def onPreemptionStallResolved: IO[Unit] = stallsResolvedCounter.inc()
+
+  def onPreemptionStallUnresolvable: IO[Unit] = stalledUnresolvableCounter.inc()
+
+  def onNaturalCompletionRace: IO[Unit] =
+    naturalCompletionRacesCounter.inc()
 }
 
 private[tasks] object QueueMetrics {
@@ -185,6 +199,38 @@ private[tasks] object QueueMetrics {
           .withExplicitBucketBoundaries(queueWaitTimeBuckets)
           .create
       )
+      cancellations <- Resource.eval(
+        meter
+          .counter[Long]("tasks.queue.preemption.cancellations")
+          .withDescription(
+            "Preemption: cancel requests emitted, one per victim task."
+          )
+          .create
+      )
+      stallsResolved <- Resource.eval(
+        meter
+          .counter[Long]("tasks.queue.preemption.stallsResolved")
+          .withDescription(
+            "Preemption: stall detection ticks that found a viable victim."
+          )
+          .create
+      )
+      stalledUnresolvable <- Resource.eval(
+        meter
+          .counter[Long]("tasks.queue.preemption.stalledUnresolvable")
+          .withDescription(
+            "Preemption: stall detection ticks where no candidate could free enough resource."
+          )
+          .create
+      )
+      naturalCompletionRaces <- Resource.eval(
+        meter
+          .counter[Long]("tasks.queue.preemption.naturalCompletionRaces")
+          .withDescription(
+            "Preemption: CancelTask arrived at launcher but task had already completed naturally."
+          )
+          .create
+      )
       admittedRef <- Resource.eval(Ref.of[IO, Set[(String, Int)]](Set.empty))
       enqueueRef <- Resource.eval(
         Ref.of[IO, Map[HashedTaskDescription, Long]](Map.empty)
@@ -199,6 +245,10 @@ private[tasks] object QueueMetrics {
         cacheHitCounter = cacheHit,
         executionDuration = execution,
         queueWaitTime = waitTime,
+        cancellationsCounter = cancellations,
+        stallsResolvedCounter = stallsResolved,
+        stalledUnresolvableCounter = stalledUnresolvable,
+        naturalCompletionRacesCounter = naturalCompletionRaces,
         cap = cap,
         admittedPairs = admittedRef,
         enqueueTimestamps = enqueueRef,

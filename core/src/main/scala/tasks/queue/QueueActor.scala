@@ -152,6 +152,9 @@ private[tasks] final class QueueActorBehavior(
     case Message(MessageData.TaskFailedMessageToQueue(sch, cause), _, _) =>
       impl.taskFailed(sch, cause)
 
+    case Message(MessageData.TaskPreemptedAck(sch), _, _) =>
+      impl.taskPreempted(sch)
+
     case Message(MessageData.Ping, from, to) =>
       messenger.submit(
         Message(MessageData.Ping, from = address, to = from)

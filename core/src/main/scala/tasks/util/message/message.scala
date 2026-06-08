@@ -185,4 +185,7 @@ private[tasks] object MessageData {
 
   case class MessageFromTask(result: UntypedResult, retrievedFromCache: Boolean)
       extends MessageData
+
+  case class CancelTask(sch: ScheduleTask) extends MessageData
+  case class TaskPreemptedAck(sch: ScheduleTask) extends MessageData
 }
