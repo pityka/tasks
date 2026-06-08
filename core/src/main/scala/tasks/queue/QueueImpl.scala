@@ -760,6 +760,12 @@ private[tasks] class QueueImpl(
         scribe.data(
           Map(
             "re-enqueued-tasks" -> reEnqueued.size,
+            "re-enqueued-tasks-by-id" -> msgs
+              .groupBy(_.description.taskId)
+              .view
+              .mapValues(_.size)
+              .toMap
+              .toString,
             "had-node" -> node.isDefined,
             "queued-tasks-after" -> updated2.queuedTasks.size,
             "scheduled-tasks-after" -> updated2.scheduledTasks.size,
