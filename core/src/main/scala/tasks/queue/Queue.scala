@@ -67,6 +67,8 @@ private[tasks] trait Queue {
       elapsedTime: ElapsedTimeNanoSeconds,
       resourceAllocated: ResourceAllocated
   ): IO[Unit]
+
+  def taskPreempted(sch: ScheduleTask): IO[Unit]
 }
 
 private[tasks] final class QueueFromQueueImpl(
@@ -109,6 +111,9 @@ private[tasks] final class QueueFromQueueImpl(
     elapsedTime,
     resourceAllocated
   )
+
+  def taskPreempted(sch: ScheduleTask): IO[Unit] =
+    queueImpl.taskPreempted(sch)
 }
 
 private[tasks] class QueueWithActor(
@@ -207,6 +212,16 @@ private[tasks] class QueueWithActor(
             elapsedTime,
             resourceAllocated
           )
+        )
+      )
+
+  def taskPreempted(sch: ScheduleTask): IO[Unit] =
+    messenger
+      .submit(
+        Message(
+          from = Address.unknown,
+          to = queueActor.address0,
+          data = MessageData.TaskPreemptedAck(sch)
         )
       )
 }

@@ -47,6 +47,10 @@ object QueueImpl {
   ) extends Event
   case class LauncherJoined(launcher: LauncherName, node: Option[Node])
       extends Event
+  case class LauncherAvailabilityUpdated(
+      launcher: LauncherName,
+      available: VersionedResourceAvailable
+  ) extends Event
   case class TaskScheduled(
       sch: ScheduleTask,
       launcher: LauncherName,
@@ -63,10 +67,197 @@ object QueueImpl {
   case class LauncherCrashed(crashedLauncher: LauncherName) extends Event
   case class CacheHit(sch: ScheduleTask, result: UntypedResult) extends Event
   case class NodeEvent(ev: NodeRegistryState.Event) extends Event
+  case class CancelRequested(sch: ScheduleTask) extends Event
+  case class Preempted(sch: ScheduleTask) extends Event
+
+  /** Outcome of a preemption decision tick. */
+  sealed trait PreemptionDecision
+  object PreemptionDecision {
+
+    /** Either there's no queued work or no scheduled work, or there is
+      * a scheduled task without descendants (so the system isn't fully
+      * blocked on its own children), or some launcher already has free
+      * capacity for at least one queued task. No action needed.
+      */
+    case object NotStalled extends PreemptionDecision
+
+    /** The system is stalled but no candidate ancestor on any single
+      * launcher could free enough resources for any queued task.
+      * Increments `stalledUnresolvable`.
+      */
+    case object Unresolvable extends PreemptionDecision
+
+    /** A viable preemption was found. Caller should emit
+      * `CancelRequested` events and send `CancelTask` messages.
+      */
+    case class Cancel(
+        launcher: LauncherName,
+        victims: List[(ScheduleTaskEqualityProjection, ScheduleTask)]
+    ) extends PreemptionDecision
+  }
+
+  /** Stall: |Q| > 0 ∧ ∀ t ∈ S. ∃ u ∈ Q∪S with invocationId(t) ∈ anc(u).
+    * Guard: skip if any launcher already has free capacity for some
+    * queued task (covers `releaseResourcesEarly`). Pick deepest valid
+    * ancestor first; fall back to multi-victim on one launcher.
+    */
+  def selectPreemptionVictims(state: State): PreemptionDecision = {
+    val stalled =
+      state.queuedTasks.nonEmpty && state.scheduledTasks.nonEmpty
+    val launcherAlreadyHasRoom =
+      state.queuedTasks.valuesIterator.exists { case (q, _) =>
+        state.availableResourcesByLauncher.valuesIterator.exists(
+          _.canFulfillRequest(q.resource)
+        )
+      }
+    if (!stalled || launcherAlreadyHasRoom) PreemptionDecision.NotStalled
+    else {
+      val invocationIdOfScheduled: Map[
+        TaskInvocationId,
+        ScheduleTaskEqualityProjection
+      ] = state.scheduledTasks.iterator.flatMap { case (k, (_, _, _, sch)) =>
+        val invId =
+          TaskInvocationId(sch.description.taskId, sch.description)
+        Iterator.single(invId -> k)
+      }.toMap
+
+      val invocationIdsAppearingInLineage: Set[TaskInvocationId] =
+        (state.queuedTasks.valuesIterator.map(_._1) ++
+          state.scheduledTasks.valuesIterator.map(_._4))
+          .flatMap(_.lineage.lineage.iterator)
+          .toSet
+
+      val everyScheduledHasDescendant = state.scheduledTasks.valuesIterator
+        .forall { case (_, _, _, sch) =>
+          val invId =
+            TaskInvocationId(sch.description.taskId, sch.description)
+          invocationIdsAppearingInLineage.contains(invId)
+        }
+
+      if (!everyScheduledHasDescendant) PreemptionDecision.NotStalled
+      else {
+        val queuedSortedDeepestFirst = state.queuedTasks.valuesIterator
+          .map(_._1)
+          .toList
+          .sortBy(-_.lineage.lineage.length)
+
+        def candidateChain(
+            q: ScheduleTask
+        ): List[
+          (
+              ScheduleTaskEqualityProjection,
+              ScheduleTask,
+              LauncherName,
+              VersionedResourceAllocated
+          )
+        ] =
+          q.lineage.lineage.reverse.iterator
+            .flatMap { invId =>
+              invocationIdOfScheduled.get(invId).iterator.flatMap { k =>
+                state.scheduledTasks.get(k).iterator.map {
+                  case (l, alloc, _, sch) => (k, sch, l, alloc)
+                }
+              }
+            }
+            .filterNot { case (k, _, _, _) =>
+              state.cancelInFlight.contains(k)
+            }
+            .toList
+
+        def stillHoldsResources(
+            available: VersionedResourceAvailable,
+            alloc: VersionedResourceAllocated
+        ): Boolean = {
+          val freeGpus = available.cpuMemoryAvailable.gpu.toSet
+          val taskGpus = alloc.cpuMemoryAllocated.gpu.toSet
+          (freeGpus & taskGpus).isEmpty
+        }
+
+        def trySingleVictim(
+            q: ScheduleTask
+        ): Option[
+          (LauncherName, List[(ScheduleTaskEqualityProjection, ScheduleTask)])
+        ] =
+          candidateChain(q).iterator
+            .flatMap { case (k, sch, l, alloc) =>
+              state.availableResourcesByLauncher.get(l).iterator.flatMap {
+                available =>
+                  val cancellingFreesEnough =
+                    stillHoldsResources(available, alloc) &&
+                      available.addBack(alloc).canFulfillRequest(q.resource)
+                  if (cancellingFreesEnough)
+                    Iterator.single((l, List(k -> sch)))
+                  else Iterator.empty
+              }
+            }
+            .nextOption()
+
+        def tryMultiVictim(
+            q: ScheduleTask
+        ): Option[
+          (LauncherName, List[(ScheduleTaskEqualityProjection, ScheduleTask)])
+        ] =
+          candidateChain(q)
+            .groupBy(_._3)
+            .iterator
+            .flatMap { case (l, entries) =>
+              state.availableResourcesByLauncher.get(l).iterator.flatMap {
+                initialAvailable =>
+                  val (finalAvailable, pickedReverse) =
+                    entries.foldLeft(
+                      (
+                        initialAvailable,
+                        List.empty[
+                          (ScheduleTaskEqualityProjection, ScheduleTask)
+                        ]
+                      )
+                    ) { case ((a, acc), (k, sch, _, alloc)) =>
+                      if (a.canFulfillRequest(q.resource)) (a, acc)
+                      else if (!stillHoldsResources(a, alloc)) (a, acc)
+                      else (a.addBack(alloc), (k -> sch) :: acc)
+                    }
+                  val picked = pickedReverse.reverse
+                  if (
+                    picked.size > 1 &&
+                    finalAvailable.canFulfillRequest(q.resource)
+                  )
+                    Iterator.single((l, picked))
+                  else Iterator.empty
+              }
+            }
+            .nextOption()
+
+        queuedSortedDeepestFirst.iterator
+          .flatMap(q =>
+            trySingleVictim(q).orElse(tryMultiVictim(q)).iterator
+          )
+          .nextOption() match {
+          case None =>
+            PreemptionDecision.Unresolvable
+          case Some((launcher, victims)) =>
+            PreemptionDecision.Cancel(launcher, victims)
+        }
+      }
+    }
+  }
 
   def project(sch: ScheduleTask) =
     ScheduleTaskEqualityProjection(sch.description)
 
+  /** Queue-side state.
+    *
+    * @param availableResourcesByLauncher
+    *   Per-launcher snapshot of free CPU/memory/etc. Overwritten on
+    *   every askForWork from each launcher, and subtracted from on
+    *   TaskScheduled so the view stays close between asks. Not added
+    *   back on TaskDone/Failed/etc. Self-corrects on the
+    *   next askForWork. Used only by preemption decisions, never as
+    *   the source of truth for scheduling.
+    * @param cancelInFlight
+    *   Tasks for which the queue has sent CancelTask to a launcher but
+    *   hasn't yet received TaskPreemptedAck. Prevents repeated cancels
+    *   of the same victim within one preemption decision tick.
+    */
   case class State(
       queuedTasks: Map[
         ScheduleTaskEqualityProjection,
@@ -78,8 +269,21 @@ object QueueImpl {
       ],
       knownLaunchers: Map[LauncherName, Option[Node]],
       counters: Map[LauncherName, Long],
-      nodes: NodeRegistryState.State
+      nodes: NodeRegistryState.State,
+      availableResourcesByLauncher: Map[LauncherName, VersionedResourceAvailable] =
+        Map.empty,
+      cancelInFlight: Set[ScheduleTaskEqualityProjection] = Set.empty
   ) {
+
+    private def availableMinus(
+        launcher: LauncherName,
+        alloc: VersionedResourceAllocated
+    ): Map[LauncherName, VersionedResourceAvailable] =
+      availableResourcesByLauncher.get(launcher) match {
+        case Some(a) =>
+          availableResourcesByLauncher.updated(launcher, a.substract(alloc))
+        case None => availableResourcesByLauncher
+      }
 
     def update(e: Event): State = {
       e match {
@@ -119,27 +323,58 @@ object QueueImpl {
           )
         case LauncherJoined(launcher, node) =>
           copy(knownLaunchers = knownLaunchers + (launcher -> node))
+        case LauncherAvailabilityUpdated(launcher, available) =>
+          copy(
+            availableResourcesByLauncher =
+              availableResourcesByLauncher.updated(launcher, available)
+          )
         case TaskScheduled(sch, launcher, allocated) =>
           val (_, proxies) = queuedTasks(project(sch))
           copy(
             queuedTasks = queuedTasks - project(sch),
             scheduledTasks = scheduledTasks
-              .updated(project(sch), (launcher, allocated, proxies, sch))
+              .updated(project(sch), (launcher, allocated, proxies, sch)),
+            availableResourcesByLauncher = availableMinus(launcher, allocated)
           )
 
         case TaskDone(sch, _, _, _) =>
-          copy(scheduledTasks = scheduledTasks - project(sch))
+          copy(
+            scheduledTasks = scheduledTasks - project(sch),
+            cancelInFlight = cancelInFlight - project(sch)
+          )
         case TaskFailed(sch) =>
-          copy(scheduledTasks = scheduledTasks - project(sch))
+          copy(
+            scheduledTasks = scheduledTasks - project(sch),
+            cancelInFlight = cancelInFlight - project(sch)
+          )
         case TaskLauncherStoppedFor(sch) =>
-          copy(scheduledTasks = scheduledTasks - project(sch))
+          copy(
+            scheduledTasks = scheduledTasks - project(sch),
+            cancelInFlight = cancelInFlight - project(sch)
+          )
         case LauncherCrashed(launcher) =>
+          val crashedKeys = scheduledTasks.iterator
+            .collect { case (k, (l, _, _, _)) if l == launcher => k }
+            .toSet
           copy(
             knownLaunchers = knownLaunchers - launcher,
-            counters = counters - launcher
+            counters = counters - launcher,
+            availableResourcesByLauncher =
+              availableResourcesByLauncher - launcher,
+            cancelInFlight = cancelInFlight -- crashedKeys
           )
         case CacheHit(sch, _) =>
-          copy(scheduledTasks = scheduledTasks - project(sch))
+          copy(
+            scheduledTasks = scheduledTasks - project(sch),
+            cancelInFlight = cancelInFlight - project(sch)
+          )
+        case CancelRequested(sch) =>
+          copy(cancelInFlight = cancelInFlight + project(sch))
+        case Preempted(sch) =>
+          copy(
+            scheduledTasks = scheduledTasks - project(sch),
+            cancelInFlight = cancelInFlight - project(sch)
+          )
 
       }
     }
@@ -341,31 +576,35 @@ private[tasks] class QueueImpl(
   }
 
   private def handleCacheAnwser(
-      a: tasks.caching.AnswerFromCache
+      a: tasks.caching.AnswerFromCache,
+      allProxies: List[Proxy]
   ): IO[Unit] = {
     val message = a.message
-    val proxy = a.sender
     val sch = a.sch
     val num = CorrelationId.make
-    scribe.debug(s"Cache answered.", sch, num, proxy.address)
+    scribe.debug(s"Cache answered.", sch, num, a.sender.address)
     val cacheIO = message match {
       case Right(Some(result)) => {
         scribe.debug(
           s"Result found.",
           sch,
           num,
-          proxy.address,
           scribe.data("explain", "replying with result found in cache")
         )
         ref.flatModify { state =>
-          state.update(CacheHit(sch, result)) ->
-            (metrics.onCacheHit(sch.description) *> messenger.submit(
+          val sends = allProxies.map(p =>
+            messenger.submit(
               Message(
                 MessageData.MessageFromTask(result, retrievedFromCache = true),
                 from = Address.unknown,
-                to = proxy.address
+                to = p.address
               )
-            ))
+            )
+          )
+          state.update(CacheHit(sch, result)) ->
+            (metrics.onCacheHit(sch.description) *> IO
+              .parSequenceN(1)(sends)
+              .void)
 
         }
       }
@@ -374,30 +613,56 @@ private[tasks] class QueueImpl(
           s"NotFound",
           sch,
           num,
-          proxy.address,
           scribe.data("explain", "Task is not found in cache. Enqueue.")
         )
-        ref.update(_.update(Enqueued(sch, List(proxy)))) *> metrics.onEnqueued(
-          sch.description
-        )
+        ref.update(_.update(Enqueued(sch, allProxies))) *> metrics
+          .onEnqueued(sch.description)
       }
       case Left(msg) => {
         scribe.debug(
           s"NotFound",
           sch,
           num,
-          proxy.address,
           scribe.data("explain", "Task is not found in cache. Enqueue."),
           scribe.data("message", msg)
         )
 
-        ref.update(_.update(Enqueued(sch, List(proxy)))) *> metrics.onEnqueued(
-          sch.description
-        )
+        ref.update(_.update(Enqueued(sch, allProxies))) *> metrics
+          .onEnqueued(sch.description)
       }
 
     }
     cacheIO *> handleQueueStatIO
+  }
+
+  
+  private def enqueueOrCacheHit(
+      sch: ScheduleTask,
+      proxies: List[Proxy],
+      state: State
+  ): (State, IO[Unit]) = {
+    if (sch.tryCache && proxies.nonEmpty) {
+      val sender = proxies.head
+      val effect = cache
+        .checkResult(sch, sender)
+        .flatMap(r => handleCacheAnwser(r, proxies))
+        .start
+        .void
+      (state, effect)
+    } else {
+      scribe.debug(
+        "AvoidCache",
+        sch,
+        scribe.data(
+          "explain",
+          "ScheduleTask should not be checked in the cache. Enqueue."
+        )
+      )
+      (
+        state.update(Enqueued(sch, proxies)),
+        metrics.onEnqueued(sch.description)
+      )
+    }
   }
 
   def scheduleTask(sch: ScheduleTask): IO[Unit] = {
@@ -421,26 +686,7 @@ private[tasks] class QueueImpl(
         state.update(ProxyAddedToScheduledMessage(sch, List(proxy))) -> IO.unit
 
       } else {
-        if (sch.tryCache) {
-          state -> cache
-            .checkResult(sch, proxy)
-            .flatMap(r => handleCacheAnwser(r))
-            .start
-            .void
-        } else {
-          scribe.debug(
-            "AvoidCache",
-            sch,
-            scribe.data(
-              "explain",
-              "ScheduleTask should not be checked in the cache. Enqueue. "
-            )
-          )
-          state.update(Enqueued(sch, List(proxy))) -> metrics.onEnqueued(
-            sch.description
-          )
-        }
-
+        enqueueOrCacheHit(sch, List(proxy), state)
       }
     }
     scheduleIO *> handleQueueStatIO
@@ -461,7 +707,7 @@ private[tasks] class QueueImpl(
     }
   }
 
-  private val handleQueueStatIO =
+  private lazy val handleQueueStatIO =
     handleQueueStatMutex.lock.surround(
       createNode
         .flatMap { createNode =>
@@ -470,8 +716,103 @@ private[tasks] class QueueImpl(
               decideNewNode.map { dn => handleQueueStat(shn, dn, createNode) }
             }
         }
-        .getOrElse(IO.unit)
+        .getOrElse(IO.unit) *> tryPreemptIO
     )
+
+  /** Stall detection + victim selection. Runs under handleQueueStatMutex so
+    * reads of Q, S, availableResourcesByLauncher, cancelInFlight are
+    * consistent. 
+    */
+  private lazy val tryPreemptIO: IO[Unit] =
+    ref.flatModify { state =>
+      selectPreemptionVictims(state) match {
+        case PreemptionDecision.NotStalled =>
+          (state, IO.unit)
+        case PreemptionDecision.Unresolvable =>
+          (state, metrics.onPreemptionStallUnresolvable)
+        case PreemptionDecision.Cancel(launcher, victims) =>
+          val newState = victims.foldLeft(state) { case (s, (_, sch)) =>
+            s.update(CancelRequested(sch))
+          }
+          val sendCancels = IO
+            .parSequenceN(1)(victims.map { case (_, sch) =>
+              messenger.submit(
+                Message(
+                  MessageData.CancelTask(sch),
+                  from = Address.unknown,
+                  to = Address(launcher.name)
+                )
+              )
+            })
+            .void
+          val incrementCancellations =
+            victims.foldLeft(IO.unit) { case (acc, (_, sch)) =>
+              acc *> metrics.onPreemptionCancellation(sch.description)
+            }
+          val logIO = IO(
+            scribe.info(
+              "PreemptStall",
+              launcher,
+              scribe.data(
+                Map(
+                  "victims" -> victims.size,
+                  "queued-tasks" -> state.queuedTasks.size,
+                  "scheduled-tasks" -> state.scheduledTasks.size,
+                  "explain" ->
+                    "Detected stall (all scheduled tasks blocked on queued descendants). Cancelling parents to free resources."
+                )
+              )
+            )
+          )
+          (
+            newState,
+            logIO *> sendCancels *> incrementCancellations *>
+              metrics.onPreemptionStallResolved
+          )
+      }
+    }
+
+  /** Handle the launcher's ack of a cancel request. Removes the task from
+    * scheduledTasks and re-enqueues (or delivers a cache hit if the cache
+    * was populated by a concurrent natural completion).
+    */
+  def taskPreempted(sch: ScheduleTask): IO[Unit] = {
+    val preemptedIO = ref.flatModify { state =>
+      state.scheduledTasks.get(project(sch)) match {
+        case None =>
+          scribe.debug(
+            "PreemptAckNoEntry",
+            sch,
+            scribe.data(
+              "explain",
+              "Preempted ack arrived but the scheduled entry is already gone. " +
+                "Most likely a natural completion won the race. " +
+                "Cleared cancelInFlight only."
+            )
+          )
+          state.update(Preempted(sch)) -> IO.unit
+        case Some((_, _, proxies, oldSch)) =>
+          val afterPreempt = state.update(Preempted(oldSch))
+          val (finalState, effect) =
+            enqueueOrCacheHit(oldSch, proxies, afterPreempt)
+          val logIO = IO(
+            scribe.info(
+              "Preempted",
+              sch,
+              scribe.data(
+                Map(
+                  "proxies" -> proxies.size,
+                  "explain" ->
+                    "Launcher acked cancel. Re-routing task through the cache/queue path."
+                )
+              )
+            )
+          )
+          finalState -> (logIO *> effect)
+      }
+    }
+    preemptedIO *> handleQueueStatIO
+  }
 
   private def handleQueueStat(
       shutdownNode: ShutdownNode,
@@ -801,15 +1142,24 @@ private[tasks] class QueueImpl(
         node.map(v => Node.toLogFeature(v)).getOrElse(scribe.data(Map.empty))
       )
 
+      // Tie-break on lineage depth so leaves are picked before parents.      
       var maxPrio = Int.MinValue
+      var maxDepth = Int.MinValue
       var selected = Option.empty[ScheduleTask]
       state.queuedTasks.valuesIterator
         .foreach { case (sch, _) =>
           val ret = availableResource.canFulfillRequest(sch.resource)
-          if (ret && sch.priority.s > maxPrio) {
-            maxPrio = sch.priority.s
-            selected = Some(sch)
-          } else if (!ret) {
+          if (ret) {
+            val prio = sch.priority.s
+            val depth = sch.lineage.lineage.length
+            val better =
+              prio > maxPrio || (prio == maxPrio && depth > maxDepth)
+            if (better) {
+              maxPrio = prio
+              maxDepth = depth
+              selected = Some(sch)
+            }
+          } else {
             scribe.debug(
               s"CantFulfillRequest",
               num,
@@ -821,7 +1171,6 @@ private[tasks] class QueueImpl(
               )
             )
           }
-
         }
 
       // Register the launcher / mark the node up on FIRST contact, regardless of
@@ -831,9 +1180,15 @@ private[tasks] class QueueImpl(
       // entry would hit `pendingNodeTimeout` and trigger `NodeInitFailed` even
       // though the worker was fully alive and polling for work.
       val isNewLauncher = !state.knownLaunchers.contains(launcher)
-      val withJoin =
+      val stateWithJoin =
         if (isNewLauncher) state.update(LauncherJoined(launcher, node))
         else state
+      // Refresh the launcher's free-resource view on every ask so that
+      // tryPreempt has an accurate picture to decide cancellations on.
+      val stateWithRefreshedAvailable =
+        stateWithJoin.update(
+          LauncherAvailabilityUpdated(launcher, availableResource)
+        )
       val joinIO =
         if (isNewLauncher)
           node
@@ -852,7 +1207,9 @@ private[tasks] class QueueImpl(
             availableResource,
             scribe.data("queued-tasks", state.queuedTasks)
           )
-          withJoin -> (joinIO *> IO.pure(Left(MessageData.NothingForSchedule)))
+          stateWithRefreshedAvailable -> (joinIO *> IO.pure(
+            Left(MessageData.NothingForSchedule)
+          ))
 
         case Some(sch) =>
           val allocated = availableResource.maximum(sch.resource)
@@ -865,7 +1222,7 @@ private[tasks] class QueueImpl(
             scribe.data("explain", "Scheduling task to launcher.")
           )
 
-          val newState = withJoin
+          val newState = stateWithRefreshedAvailable
             .update(TaskScheduled(sch, launcher, allocated))
 
           val io =

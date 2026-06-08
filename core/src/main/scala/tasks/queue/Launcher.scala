@@ -74,7 +74,9 @@ private[tasks] object Launcher {
       shutdownInitiated: Ref[IO, Boolean]
   )(implicit config: TasksConfig) = {
     def release(st: Launcher.State): IO[Unit] =
-      IO.parSequenceN(1)(st.fibers.map(_.cancel)).void
+      IO.parSequenceN(1)(st.runningTasks.map { case (_, _, _, _, fiberD) =>
+        fiberD.get.flatMap(_.cancel)
+      }).void
     def derive(
         ref: Ref[IO, Launcher.State]
     ): LauncherHandle =
@@ -106,34 +108,48 @@ private[tasks] object Launcher {
     def schedulers(
         ref: Ref[IO, Launcher.State]
     ): IO[fs2.Stream[IO, Unit]] =
-      IO {
-        val scribeScheduler =
-          fs2.Stream.fixedRate[IO](20 seconds).evalMap { _ =>
-            ref.get.flatMap(state =>
-              IO(
-                scribe.debug(
-                  s"Available resources: ",
-                  state.availableResources,
-                  address
+      messenger.subscribe(tasks.util.message.Address(address.name)).map {
+        inboundMessages =>
+          val scribeScheduler =
+            fs2.Stream.fixedRate[IO](20 seconds).evalMap { _ =>
+              ref.get.flatMap(state =>
+                IO(
+                  scribe.debug(
+                    s"Available resources: ",
+                    state.availableResources,
+                    address
+                  )
                 )
               )
-            )
-          }
-        val askForWorkScheduler =
-          fs2.Stream
-            .fixedRate[IO](refreshInterval)
-            .evalMap(_ =>
-              derive(ref).askForWork(ref, messenger, address, queue)
-            )
+            }
+          val askForWorkScheduler =
+            fs2.Stream
+              .fixedRate[IO](refreshInterval)
+              .evalMap(_ =>
+                derive(ref).askForWork(ref, messenger, address, queue)
+              )
 
-        val incrementStream =
-          fs2.Stream
-            .fixedRate[IO](config.launcherActorHeartBeatInterval)
-            .evalMap(_ => queue.increment(address))
+          val incrementStream =
+            fs2.Stream
+              .fixedRate[IO](config.launcherActorHeartBeatInterval)
+              .evalMap(_ => queue.increment(address))
 
-        scribeScheduler
-          .mergeHaltBoth(askForWorkScheduler)
-          .mergeHaltBoth(incrementStream)
+          val handle = derive(ref)
+          val cancelMessageStream =
+            inboundMessages.evalMap {
+              case tasks.util.message.Message(
+                    tasks.util.message.MessageData.CancelTask(sch),
+                    _,
+                    _
+                  ) =>
+                handle.handleCancelTask(sch)
+              case _ => IO.unit
+            }
+
+          scribeScheduler
+            .mergeHaltBoth(askForWorkScheduler)
+            .mergeHaltBoth(incrementStream)
+            .mergeHaltBoth(cancelMessageStream)
 
       }
 
@@ -179,6 +195,12 @@ private[tasks] object Launcher {
     *   launcher that has not yet executed a task. Used to gate
     *   `idleNodeTimeout`-based self-shutdown so that a freshly started node
     *   gets a full grace window before being eligible to terminate.
+    *
+    * @param runningTasks
+    *   One entry per running task: (Task, ScheduleTask, allocation,
+    *   start nanoTime, Deferred holding the executing fiber). The
+    *   Deferred lets preemption cancel a specific task's fiber without
+    *   maintaining a separate task→fiber map.
     */
   case class State(
       maxResources: VersionedResourceAvailable,
@@ -187,11 +209,16 @@ private[tasks] object Launcher {
       denyWorkBeforeShutdown: Boolean = false,
       waitingForWork: Boolean = false,
       runningTasks: List[
-        (Task, MessageData.ScheduleTask, VersionedResourceAllocated, Long)
+        (
+            Task,
+            MessageData.ScheduleTask,
+            VersionedResourceAllocated,
+            Long,
+            Deferred[IO, FiberIO[Unit]]
+        )
       ] = Nil,
       resourceDeallocatedAt: Map[Task, Long] = Map(),
-      freed: Set[Task] = Set[Task](),
-      fibers: List[FiberIO[Unit]] = Nil
+      freed: Set[Task] = Set[Task]()
   ) {
 
     def isIdle = runningTasks.isEmpty
@@ -222,7 +249,7 @@ private[tasks] object Launcher {
       def launch(
           state: State,
           scheduleTask: MessageData.ScheduleTask,
-          ref: Ref[IO, State]
+          fiberD: Deferred[IO, FiberIO[Unit]]
       ) = {
 
         val allocatedResource =
@@ -246,7 +273,7 @@ private[tasks] object Launcher {
           address
         )
         scribe.debug("RemainsAfterLaunch",scheduleTask,newState.availableResources,address)
-          
+
 
         val task: Task =
           new Task(
@@ -274,27 +301,30 @@ private[tasks] object Launcher {
             messenger = messenger
           )
 
-        val sideEffect = task
-          .start(scheduleTask.input)
-          .attempt
-          .map {
-            case Right(unit) =>
-              unit
-            case Left(value) =>
-              scribe.error("Unexpected failure during task execution.", value)
-              ()
-          }
-          .start
-          .flatMap { fiber =>
-            ref.update(state => state.copy(fibers = fiber :: state.fibers))
-          }
+        val sideEffect =
+          task
+            .start(scheduleTask.input)
+            .attempt
+            .map {
+              case Right(unit) =>
+                unit
+              case Left(value) =>
+                scribe.error(
+                  "Unexpected failure during task execution.",
+                  value
+                )
+                ()
+            }
+            .start
+            .flatMap(fiberD.complete(_).void)
 
         val newState2 = newState.copy(
           runningTasks = (
             task,
             scheduleTask,
             allocatedResource,
-            System.nanoTime
+            System.nanoTime,
+            fiberD
           ) :: newState.runningTasks
         )
 
@@ -358,18 +388,20 @@ private[tasks] object Launcher {
                     state.copy(waitingForWork = false)
                   }
                 case Right(Right(MessageData.Schedule(scheduleTask))) =>
-                  ref.flatModifyFull { case (poll, state) =>
-                    scribe.debug(s"Received Schedule ", scheduleTask,state.availableResources,address)
-                    val st0 = state.copy(waitingForWork = false)
-                    val (newState, sideEffects) =
-                      if (!st0.denyWorkBeforeShutdown) {
+                  Deferred[IO, FiberIO[Unit]].flatMap { fiberD =>
+                    ref.flatModifyFull { case (poll, state) =>
+                      scribe.debug(s"Received Schedule ", scheduleTask,state.availableResources,address)
+                      val st0 = state.copy(waitingForWork = false)
+                      val (newState, sideEffects) =
+                        if (!st0.denyWorkBeforeShutdown) {
 
-                        val st1 = st0
-                        val (allocated, st2, io1) = launch(st1, scheduleTask, ref)
-                        (st2, io1)
-                      } else (st0, IO.unit)
-                    scribe.debug(s"State after Schedule",scheduleTask,newState.availableResources,address)
-                    newState -> sideEffects
+                          val st1 = st0
+                          val (allocated, st2, io1) = launch(st1, scheduleTask, fiberD)
+                          (st2, io1)
+                        } else (st0, IO.unit)
+                      scribe.debug(s"State after Schedule",scheduleTask,newState.availableResources,address)
+                      newState -> sideEffects
+                    }
                   }
               }
 
@@ -438,72 +470,95 @@ private[tasks] object Launcher {
         taskActor: Task,
         receivedResult: UntypedResultWithMetadata
     ) = {
-      val elem = state.runningTasks
-        .find(_._1 == taskActor)
-        .getOrElse(
-          throw new RuntimeException(
-            "Wrong message received. No such taskActor."
-          )
-        )
-      val scheduleTask = elem._2
-      val resourceAllocated = elem._3
-      val elapsedTime = ElapsedTimeNanoSeconds(
-        state.resourceDeallocatedAt
-          .get(taskActor)
-          .getOrElse(System.nanoTime) - elem._4
-      )
-
-      val sideEffect = if (!receivedResult.noCache) {
-
-        cache
-          .saveResult(
-            scheduleTask.description,
-            receivedResult.untypedResult,
-            scheduleTask.fileServicePrefix
-              .append(scheduleTask.description.taskId.id)
-          )
-          .timeout(config.cacheTimeout)
-          .attempt
-          .flatMap {
-            case Left(e) =>
-              IO(scribe.error(e, s"Failed to save", scheduleTask, address))
-            case Right(_) =>
-              queue.taskSuccess(
-                scheduleTask,
-                receivedResult,
-                elapsedTime,
-                resourceAllocated.cpuMemoryAllocated
+      // Missing entry is legitimate when a CancelTask handler has
+      // already removed it. Without preemption this would be a bug;
+      // with it, the cancel path is the one place an entry can be
+      // gone before taskFinished runs.
+      state.runningTasks.find(_._1 == taskActor) match {
+        case None =>
+          scribe.warn(
+            "TaskFinishedNoEntry",
+            scribe.data(
+              Map(
+                "explain" -> "taskFinished called but no entry in runningTasks. Likely a CancelTask raced ahead and cleared the entry."
               )
+            ),
+            address
+          )
+          (state, IO.unit)
+        case Some(elem) =>
+          val scheduleTask = elem._2
+          val resourceAllocated = elem._3
+          val elapsedTime = ElapsedTimeNanoSeconds(
+            state.resourceDeallocatedAt
+              .get(taskActor)
+              .getOrElse(System.nanoTime) - elem._4
+          )
+
+          val sideEffect = if (!receivedResult.noCache) {
+
+            cache
+              .saveResult(
+                scheduleTask.description,
+                receivedResult.untypedResult,
+                scheduleTask.fileServicePrefix
+                  .append(scheduleTask.description.taskId.id)
+              )
+              .timeout(config.cacheTimeout)
+              .attempt
+              .flatMap {
+                case Left(e) =>
+                  IO(
+                    scribe.error(e, s"Failed to save", scheduleTask, address)
+                  )
+                case Right(_) =>
+                  queue.taskSuccess(
+                    scheduleTask,
+                    receivedResult,
+                    elapsedTime,
+                    resourceAllocated.cpuMemoryAllocated
+                  )
+
+              }
+
+          } else {
+            queue.taskSuccess(
+              scheduleTask,
+              receivedResult,
+              elapsedTime,
+              resourceAllocated.cpuMemoryAllocated
+            )
 
           }
 
-      } else {
-        queue.taskSuccess(
-          scheduleTask,
-          receivedResult,
-          elapsedTime,
-          resourceAllocated.cpuMemoryAllocated
-        )
-
+          val st0 = state.copy(
+            runningTasks = state.runningTasks.filterNot(_ == elem)
+          )
+          val st1 = if (!st0.freed.contains(taskActor)) {
+            st0.copy(availableResources =
+              st0.availableResources.addBack(resourceAllocated)
+            )
+          } else {
+            st0.copy(
+              freed = st0.freed - taskActor,
+              resourceDeallocatedAt = st0.resourceDeallocatedAt - taskActor
+            )
+          }
+          val st2 = st1.copy(lastTaskFinished = System.nanoTime)
+          scribe.debug(
+            s"TaskFinishedOld ",
+            scheduleTask,
+            state.availableResources,
+            address
+          )
+          scribe.debug(
+            s"TaskFinished ",
+            scheduleTask,
+            st2.availableResources,
+            address
+          )
+          (st2, sideEffect)
       }
-
-      val st0 = state.copy(
-        runningTasks = state.runningTasks.filterNot(_ == elem)
-      )
-      val st1 = if (!st0.freed.contains(taskActor)) {
-        st0.copy(availableResources =
-          st0.availableResources.addBack(resourceAllocated)
-        )
-      } else {
-        st0.copy(
-          freed = st0.freed - taskActor,
-          resourceDeallocatedAt = st0.resourceDeallocatedAt - taskActor
-        )
-      }
-      val st2 = st1.copy(lastTaskFinished = System.nanoTime)
-      scribe.debug(s"TaskFinishedOld ", scheduleTask,state.availableResources,address)
-      scribe.debug(s"TaskFinished ", scheduleTask,st2.availableResources,address)
-      (st2, sideEffect)
     }
 
     private def taskFailed(
@@ -511,33 +566,106 @@ private[tasks] object Launcher {
         taskActor: Task,
         cause: Throwable
     ) = {
-
-      val elem = state.runningTasks
-        .find(_._1 == taskActor)
-        .getOrElse(
-          throw new RuntimeException(
-            "Wrong message received. No such taskActor."
+      state.runningTasks.find(_._1 == taskActor) match {
+        case None =>
+          scribe.warn(
+            "TaskFailedNoEntry",
+            scribe.data(
+              Map(
+                "explain" -> "taskFailed called but no entry in runningTasks. Likely a CancelTask raced ahead and cleared the entry."
+              )
+            ),
+            address
           )
-        )
-      val sch = elem._2
+          (state, IO.unit)
+        case Some(elem) =>
+          val sch = elem._2
 
-      val st0 =
-        state.copy(runningTasks = state.runningTasks.filterNot(_ == elem))
+          val st0 =
+            state.copy(runningTasks = state.runningTasks.filterNot(_ == elem))
 
-      val st1 = if (!st0.freed.contains(taskActor)) {
-        st0.copy(availableResources = st0.availableResources.addBack(elem._3))
-      } else {
-        st0.copy(
-          freed = st0.freed - taskActor,
-          resourceDeallocatedAt = st0.resourceDeallocatedAt - taskActor
-        )
+          val st1 = if (!st0.freed.contains(taskActor)) {
+            st0.copy(availableResources = st0.availableResources.addBack(elem._3))
+          } else {
+            st0.copy(
+              freed = st0.freed - taskActor,
+              resourceDeallocatedAt = st0.resourceDeallocatedAt - taskActor
+            )
+          }
+
+          val st2 = st1.copy(lastTaskFinished = System.nanoTime)
+          val sideEffect = queue.taskFailed(sch, cause)
+
+          (st2, sideEffect)
       }
+    }
 
-      val st2 = st1.copy(lastTaskFinished = System.nanoTime)
-      val sideEffect = queue.taskFailed(sch, cause)
+    /** Cancel a running task in response to a queue-driven preemption.
+      *
+      * Stall is defined so that every scheduled task has a descendant
+      * in Q ∪ S. The target of a preemption is therefore a parent
+      * blocked on a queued child and cannot complete naturally while
+      * we're cancelling it — neither on this launcher nor on any
+      * other, since "running but not blocked" would violate stall.
+      *
+      * So after `fiberD.get.flatMap(_.cancel)` the body is guaranteed
+      * to have terminated by cancellation, no wrap-up ran, and the
+      * runningTasks entry is still present. The "no entry" branch
+      * below should only trigger on bug or shutdown races; we log and
+      * ack so the queue can still clean up its cancelInFlight set.
+      */
+    private[tasks] def handleCancelTask(
+        sch: MessageData.ScheduleTask
+    ): IO[Unit] = {
+      val key =
+        QueueImpl.ScheduleTaskEqualityProjection(sch.description)
+      def matchesKey(
+          entry: (
+              Task,
+              MessageData.ScheduleTask,
+              VersionedResourceAllocated,
+              Long,
+              Deferred[IO, FiberIO[Unit]]
+          )
+      ): Boolean =
+        QueueImpl.ScheduleTaskEqualityProjection(
+          entry._2.description
+        ) == key
 
-      (st2, sideEffect)
-
+      ref.get.map(_.runningTasks.find(matchesKey)).flatMap {
+        case None =>
+          scribe.warn(
+            "CancelTaskNoEntry",
+            scribe.data(
+              Map(
+                "explain" -> "CancelTask arrived for a task not in runningTasks. Should not happen under stall; check for bugs or a shutdown race."
+              )
+            ),
+            address
+          )
+          queue.taskPreempted(sch)
+        case Some(elem) =>
+          val (_, _, _, _, fiberD) = elem
+          fiberD.get.flatMap(_.cancel) *>
+            ref.flatModify { state =>
+              state.runningTasks.find(matchesKey) match {
+                case None =>
+                  (state, queue.taskPreempted(sch))
+                case Some(matched) =>
+                  val (task, _, alloc, _, _) = matched
+                  val st0 = state.copy(
+                    runningTasks = state.runningTasks.filterNot(_ == matched),
+                    availableResources =
+                      state.availableResources.addBack(alloc),
+                    lastTaskFinished = System.nanoTime,
+                    freed = state.freed - task,
+                    resourceDeallocatedAt =
+                      state.resourceDeallocatedAt - task
+                  )
+                  (st0, queue.taskPreempted(sch))
+              }
+            } *> askForWork(ref, messenger, address, queue)
+      }
     }
   }
 
