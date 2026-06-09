@@ -35,7 +35,6 @@ import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import tasks.releaseResourcesEarly
 import tasks.elastic.process.LocalShellElasticSupport
 import cats.effect.kernel.Resource
 
@@ -76,7 +75,6 @@ object RemoteSpawnTaskTest {
               ResourceRequest(cpu = (1, 1), memory = 1, gpu = 1, scratch = 0)
             )
             for {
-              _ <- releaseResourcesEarly
               r <- IO.both(f1, f2)
 
             } yield {
@@ -135,22 +133,23 @@ class RemoteSpawnTaskTestSuite
     tmp.delete()
 
     s"""
-      
+
 tasks.cache.enabled = false
 tasks.disableRemoting = false
 hosts.numCPU=0
 hosts.gpus = []
+tasks.askInterval = 20 ms
 tasks.fileservice.storageURI=${tmp.getAbsolutePath}
 tasks.worker-main-class = "tasks.TestWorker"
 tasks.elastic.logQueueStatus = false
 tasks.sh.contexts = [
   {
-  context = c1 
+  context = c1
   hostname = localhost
   gpu = [0,1,2,3]
   cpu = 4
   memory = 1000
-  }  
+  }
 ]
       """
 
@@ -180,8 +179,6 @@ tasks.sh.contexts = [
   }
 
   override def afterAll() = {
-    Thread.sleep(1500)
     pair._2.unsafeRunSync()
-
   }
 }

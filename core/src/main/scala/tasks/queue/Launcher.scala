@@ -216,9 +216,7 @@ private[tasks] object Launcher {
             Long,
             Deferred[IO, FiberIO[Unit]]
         )
-      ] = Nil,
-      resourceDeallocatedAt: Map[Task, Long] = Map(),
-      freed: Set[Task] = Set[Task]()
+      ] = Nil
   ) {
 
     def isIdle = runningTasks.isEmpty
@@ -419,32 +417,6 @@ private[tasks] object Launcher {
       }
     }
 
-    def release(task: Task) = {
-      ref.update { state =>
-        
-        val allocated = state.runningTasks.find(_._1 == task).map(_._3)
-        val newState = if (allocated.isEmpty) {
-          scribe.error("Can't find proxy ", task.proxy, address)
-          state
-        } else {
-          state.copy(
-            availableResources =
-              state.availableResources.addBack(allocated.get),
-            freed = state.freed + task,
-            resourceDeallocatedAt = state.resourceDeallocatedAt + (
-              (
-                task,
-                System.nanoTime
-              )
-            )
-          )
-        }
-        scribe.debug("ReleaseLauncherResourceBefore",address,state.availableResources)
-        scribe.debug("ReleaseLauncherResource",address,newState.availableResources)
-        newState
-      } *> askForWork(ref, messenger, address, queue)
-    }
-
     private[tasks] def internalMessageFromTask(
         task: Task,
         result: UntypedResultWithMetadata
@@ -489,11 +461,8 @@ private[tasks] object Launcher {
         case Some(elem) =>
           val scheduleTask = elem._2
           val resourceAllocated = elem._3
-          val elapsedTime = ElapsedTimeNanoSeconds(
-            state.resourceDeallocatedAt
-              .get(taskActor)
-              .getOrElse(System.nanoTime) - elem._4
-          )
+          val elapsedTime =
+            ElapsedTimeNanoSeconds(System.nanoTime - elem._4)
 
           val sideEffect = if (!receivedResult.noCache) {
 
@@ -531,20 +500,12 @@ private[tasks] object Launcher {
 
           }
 
-          val st0 = state.copy(
-            runningTasks = state.runningTasks.filterNot(_ == elem)
+          val st2 = state.copy(
+            runningTasks = state.runningTasks.filterNot(_ == elem),
+            availableResources =
+              state.availableResources.addBack(resourceAllocated),
+            lastTaskFinished = System.nanoTime
           )
-          val st1 = if (!st0.freed.contains(taskActor)) {
-            st0.copy(availableResources =
-              st0.availableResources.addBack(resourceAllocated)
-            )
-          } else {
-            st0.copy(
-              freed = st0.freed - taskActor,
-              resourceDeallocatedAt = st0.resourceDeallocatedAt - taskActor
-            )
-          }
-          val st2 = st1.copy(lastTaskFinished = System.nanoTime)
           scribe.debug(
             s"TaskFinishedOld ",
             scheduleTask,
@@ -581,39 +542,18 @@ private[tasks] object Launcher {
         case Some(elem) =>
           val sch = elem._2
 
-          val st0 =
-            state.copy(runningTasks = state.runningTasks.filterNot(_ == elem))
-
-          val st1 = if (!st0.freed.contains(taskActor)) {
-            st0.copy(availableResources = st0.availableResources.addBack(elem._3))
-          } else {
-            st0.copy(
-              freed = st0.freed - taskActor,
-              resourceDeallocatedAt = st0.resourceDeallocatedAt - taskActor
-            )
-          }
-
-          val st2 = st1.copy(lastTaskFinished = System.nanoTime)
+          val st2 = state.copy(
+            runningTasks = state.runningTasks.filterNot(_ == elem),
+            availableResources =
+              state.availableResources.addBack(elem._3),
+            lastTaskFinished = System.nanoTime
+          )
           val sideEffect = queue.taskFailed(sch, cause)
 
           (st2, sideEffect)
       }
     }
 
-    /** Cancel a running task in response to a queue-driven preemption.
-      *
-      * Stall is defined so that every scheduled task has a descendant
-      * in Q ∪ S. The target of a preemption is therefore a parent
-      * blocked on a queued child and cannot complete naturally while
-      * we're cancelling it — neither on this launcher nor on any
-      * other, since "running but not blocked" would violate stall.
-      *
-      * So after `fiberD.get.flatMap(_.cancel)` the body is guaranteed
-      * to have terminated by cancellation, no wrap-up ran, and the
-      * runningTasks entry is still present. The "no entry" branch
-      * below should only trigger on bug or shutdown races; we log and
-      * ack so the queue can still clean up its cancelInFlight set.
-      */
     private[tasks] def handleCancelTask(
         sch: MessageData.ScheduleTask
     ): IO[Unit] = {
@@ -634,15 +574,6 @@ private[tasks] object Launcher {
 
       ref.get.map(_.runningTasks.find(matchesKey)).flatMap {
         case None =>
-          scribe.warn(
-            "CancelTaskNoEntry",
-            scribe.data(
-              Map(
-                "explain" -> "CancelTask arrived for a task not in runningTasks. Should not happen under stall; check for bugs or a shutdown race."
-              )
-            ),
-            address
-          )
           queue.taskPreempted(sch)
         case Some(elem) =>
           val (_, _, _, _, fiberD) = elem
@@ -652,15 +583,12 @@ private[tasks] object Launcher {
                 case None =>
                   (state, queue.taskPreempted(sch))
                 case Some(matched) =>
-                  val (task, _, alloc, _, _) = matched
+                  val (_, _, alloc, _, _) = matched
                   val st0 = state.copy(
                     runningTasks = state.runningTasks.filterNot(_ == matched),
                     availableResources =
                       state.availableResources.addBack(alloc),
-                    lastTaskFinished = System.nanoTime,
-                    freed = state.freed - task,
-                    resourceDeallocatedAt =
-                      state.resourceDeallocatedAt - task
+                    lastTaskFinished = System.nanoTime
                   )
                   (st0, queue.taskPreempted(sch))
               }
