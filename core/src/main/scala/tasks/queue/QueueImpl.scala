@@ -339,11 +339,15 @@ object QueueImpl {
             cancelInFlight = cancelInFlight - project(sch)
           )
         case LauncherCrashed(launcher) =>
+          val crashedKeys = scheduledTasks.iterator
+            .collect { case (k, (l, _, _, _)) if l == launcher => k }
+            .toSet
           copy(
             knownLaunchers = knownLaunchers - launcher,
             counters = counters - launcher,
             availableResourcesByLauncher =
-              availableResourcesByLauncher - launcher
+              availableResourcesByLauncher - launcher,
+            cancelInFlight = cancelInFlight -- crashedKeys
           )
         case CacheHit(sch, _) =>
           copy(
