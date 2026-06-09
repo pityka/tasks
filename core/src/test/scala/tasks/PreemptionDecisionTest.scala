@@ -27,8 +27,7 @@ import tasks.fileservice.FileServicePrefix
 
 /** Pure unit tests for QueueImpl.selectPreemptionVictims. These cover
   * branches that the system-level PreemptionStallResolveTest doesn't
-  * exercise (multi-victim selection, no-valid-victim) and the
-  * LauncherCrashed event's interaction with cancelInFlight.
+  * exercise (multi-victim selection, no-valid-victim).
   */
 class PreemptionDecisionTest extends FunSuite with Matchers {
 
@@ -220,7 +219,7 @@ class PreemptionDecisionTest extends FunSuite with Matchers {
 
   /** Guard: if any launcher already has free capacity for any queued
     * task, preemption is not needed (the launcher will pick it up on
-    * its next askForWork). Matters for releaseResourcesEarly.
+    * its next askForWork).
     */
   test(
     "not stalled when a launcher already has room for some queued task"
@@ -268,33 +267,5 @@ class PreemptionDecisionTest extends FunSuite with Matchers {
     QueueImpl.selectPreemptionVictims(state) should equal(
       QueueImpl.PreemptionDecision.NotStalled
     )
-  }
-
-  /** When a launcher crashes mid-cancel, the LauncherCrashed event
-    * must drop any in-flight cancellation entries for its scheduled
-    * tasks. Otherwise cancelInFlight leaks and those task projections
-    * stay permanently excluded from future preemption.
-    */
-  test(
-    "LauncherCrashed clears cancelInFlight entries for that launcher's tasks"
-  ) {
-    val schParent = schTask("parent", "h1", lineage = Seq.empty)
-    val keyP = QueueImpl.project(schParent)
-
-    val state = QueueImpl.State.empty.copy(
-      knownLaunchers = Map(launcherA -> None),
-      counters = Map(launcherA -> 1L),
-      scheduledTasks = Map(
-        keyP -> ((launcherA, allocated(1), Nil, schParent))
-      ),
-      availableResourcesByLauncher = Map(launcherA -> available(0)),
-      cancelInFlight = Set(keyP)
-    )
-
-    val after = state.update(QueueImpl.LauncherCrashed(launcherA))
-
-    after.cancelInFlight shouldBe empty
-    after.availableResourcesByLauncher.get(launcherA) shouldBe None
-    after.knownLaunchers.get(launcherA) shouldBe None
   }
 }

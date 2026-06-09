@@ -34,9 +34,6 @@ import cats.effect.unsafe.implicits.global
   * (every running task has descendants queued) and cancels the parent
   * to free its slot for a child. The cancelled parent is re-enqueued
   * and runs later when its dependencies are ready.
-  *
-  * Note: the task body intentionally does NOT call releaseResourcesEarly,
-  * so without preemption the test would deadlock.
   */
 object PreemptionStallResolveTest {
 
@@ -113,7 +110,6 @@ class PreemptionStallResolveTestSuite
   }
 
   override def afterAll() = {
-    Thread.sleep(1500)
     pair._2.unsafeRunSync()
   }
 }

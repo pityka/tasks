@@ -35,7 +35,6 @@ import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import tasks.releaseResourcesEarly
 
 object RecursiveCachedTaskTestSuite {
 
@@ -74,7 +73,6 @@ object RecursiveCachedTaskTestSuite {
               ResourceRequest(1, 1)
             )
             for {
-              _ <- releaseResourcesEarly
               r <- IO.both(f1, f2)
             } yield FibOut(r._1.n + r._2.n)
           }
@@ -101,11 +99,13 @@ class RecursiveCachedTaskTestSuite
     tmp.delete
     ConfigFactory.parseString(
       s"""
-      
+
 tasks.cache.enabled = true
 tasks.createFilePrefixForTaskId = false
 tasks.disableRemoting = true
 hosts.numCPU=4
+tasks.askInterval = 20 ms
+tasks.failuredetector.heartbeat-interval = 200 ms
       tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       """
     )
@@ -122,8 +122,6 @@ hosts.numCPU=4
   }
 
   override def afterAll() = {
-    Thread.sleep(1500)
     pair._2.unsafeRunSync()
-
   }
 }

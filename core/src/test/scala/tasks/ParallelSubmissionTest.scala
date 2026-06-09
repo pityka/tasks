@@ -35,7 +35,6 @@ import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import tasks.releaseResourcesEarly
 import scribe.modify.LogModifier
 
 object ParallelSubmissionTest {
@@ -60,6 +59,9 @@ object ParallelSubmissionTest {
 
   }
 
+  // Per-GPU "in use" flag. Tasks acquire/release it via bracket so the
+  // flag is reset on natural completion AND on cancellation (preemption).
+  // The acquire-time assertion catches double-allocation of any GPU id.
   val externalCounter = new java.util.concurrent.ConcurrentHashMap[Int, Boolean]
   externalCounter.put(0, false)
   externalCounter.put(1, false)
@@ -72,40 +74,32 @@ object ParallelSubmissionTest {
       case FibInput(Some(n), Some(tag)) => { implicit ce =>
         assert(ce.resourceAllocated.gpu.size == 1)
         val gpu = ce.resourceAllocated.gpu.head
-        assert(externalCounter.get(gpu) == false)
-        externalCounter.put(gpu, true)
-        val prg = n match {
-          case 0 =>
-            IO {
-              externalCounter.put(gpu, false)
-            } *> IO.pure(FibOut(0))
-          case 1 =>
-            IO {
-              externalCounter.put(gpu, false)
-            } *> IO.pure(FibOut(1))
-          case n => {
-            val f1 = fibtask(FibInput(Some(n - 1), Some(false :: tag)))(
-              ResourceRequest(cpu = (1, 1), memory = 1, gpu = 1, scratch = 1)
-            )
-            val f2 = fibtask(FibInput(Some(n - 2), Some(true :: tag)))(
-              ResourceRequest(cpu = (1, 1), memory = 1, gpu = 1, scratch = 1)
-            )
-            for {
-              _ <- IO {
-                Thread.sleep(scala.util.Random.nextLong(100))
-              }
-              _ <- IO {
-                externalCounter.put(gpu, false)
-              }
-              _ <- releaseResourcesEarly
-              r <- IO.both(f1, f2)
 
-            } yield FibOut(r._1.n + r._2.n)
-          }
-
+        val acquire = IO {
+          if (externalCounter.get(gpu))
+            throw new AssertionError(
+              s"GPU $gpu allocated concurrently to two tasks"
+            )
+          externalCounter.put(gpu, true)
         }
 
-        prg
+        def release(): IO[Unit] =
+          IO(externalCounter.put(gpu, false)).void
+
+        acquire.bracket { _ =>
+          n match {
+            case 0 => IO.pure(FibOut(0))
+            case 1 => IO.pure(FibOut(1))
+            case nn =>
+              val f1 = fibtask(FibInput(Some(nn - 1), Some(false :: tag)))(
+                ResourceRequest(cpu = (1, 1), memory = 1, gpu = 1, scratch = 1)
+              )
+              val f2 = fibtask(FibInput(Some(nn - 2), Some(true :: tag)))(
+                ResourceRequest(cpu = (1, 1), memory = 1, gpu = 1, scratch = 1)
+              )
+              IO.both(f1, f2).map { case (a, b) => FibOut(a.n + b.n) }
+          }
+        }(_ => release())
       }
 
       case _ => ???
@@ -125,12 +119,14 @@ class RecursiveParallelSubmissionTestSuite
     tmp.delete
     ConfigFactory.parseString(
       s"""
-      
-tasks.cache.enabled = false
+
+tasks.cache.enabled = true
 tasks.disableRemoting = true
 hosts.numCPU=400
 hosts.scratch = 4000
 hosts.gpus = [0,1,2,3]
+tasks.askInterval = 20 ms
+tasks.failuredetector.heartbeat-interval = 200 ms
       tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       """
     )
@@ -147,7 +143,7 @@ hosts.gpus = [0,1,2,3]
   implicit val system: TaskSystemComponents = pair._1._1
   import ParallelSubmissionTest._
 
-  test("parallel submission of recursive fibonacci with 'gpu' counting ") {
+  test("parallel submission of recursive fibonacci with GPU exclusivity") {
     IO.parSequenceN(500)((1 to 3000).toList.map { n0 =>
       {
         val n = math.min(n0,8)
@@ -162,8 +158,6 @@ hosts.gpus = [0,1,2,3]
   }
 
   override def afterAll() = {
-    Thread.sleep(1500)
     pair._2.unsafeRunSync()
-
   }
 }

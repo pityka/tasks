@@ -97,9 +97,8 @@ object QueueImpl {
   }
 
   /** Stall: |Q| > 0 ∧ ∀ t ∈ S. ∃ u ∈ Q∪S with invocationId(t) ∈ anc(u).
-    * Guard: skip if any launcher already has free capacity for some
-    * queued task (covers `releaseResourcesEarly`). Pick deepest valid
-    * ancestor first; fall back to multi-victim on one launcher.
+    * Pick deepest valid ancestor first; fall back to multi-victim on
+    * one launcher.
     */
   def selectPreemptionVictims(state: State): PreemptionDecision = {
     val stalled =
@@ -164,15 +163,6 @@ object QueueImpl {
             }
             .toList
 
-        def stillHoldsResources(
-            available: VersionedResourceAvailable,
-            alloc: VersionedResourceAllocated
-        ): Boolean = {
-          val freeGpus = available.cpuMemoryAvailable.gpu.toSet
-          val taskGpus = alloc.cpuMemoryAllocated.gpu.toSet
-          (freeGpus & taskGpus).isEmpty
-        }
-
         def trySingleVictim(
             q: ScheduleTask
         ): Option[
@@ -182,10 +172,7 @@ object QueueImpl {
             .flatMap { case (k, sch, l, alloc) =>
               state.availableResourcesByLauncher.get(l).iterator.flatMap {
                 available =>
-                  val cancellingFreesEnough =
-                    stillHoldsResources(available, alloc) &&
-                      available.addBack(alloc).canFulfillRequest(q.resource)
-                  if (cancellingFreesEnough)
+                  if (available.addBack(alloc).canFulfillRequest(q.resource))
                     Iterator.single((l, List(k -> sch)))
                   else Iterator.empty
               }
@@ -213,7 +200,6 @@ object QueueImpl {
                       )
                     ) { case ((a, acc), (k, sch, _, alloc)) =>
                       if (a.canFulfillRequest(q.resource)) (a, acc)
-                      else if (!stillHoldsResources(a, alloc)) (a, acc)
                       else (a.addBack(alloc), (k -> sch) :: acc)
                     }
                   val picked = pickedReverse.reverse
@@ -353,15 +339,11 @@ object QueueImpl {
             cancelInFlight = cancelInFlight - project(sch)
           )
         case LauncherCrashed(launcher) =>
-          val crashedKeys = scheduledTasks.iterator
-            .collect { case (k, (l, _, _, _)) if l == launcher => k }
-            .toSet
           copy(
             knownLaunchers = knownLaunchers - launcher,
             counters = counters - launcher,
             availableResourcesByLauncher =
-              availableResourcesByLauncher - launcher,
-            cancelInFlight = cancelInFlight -- crashedKeys
+              availableResourcesByLauncher - launcher
           )
         case CacheHit(sch, _) =>
           copy(
@@ -764,9 +746,25 @@ private[tasks] class QueueImpl(
               )
             )
           )
+          val cacheWarn =
+            if (!config.cacheEnabled)
+              IO(
+                scribe.warn(
+                  "PreemptStallWithCacheDisabled",
+                  launcher,
+                  scribe.data(
+                    "explain",
+                    "Preemption fired while tasks.cache.enabled=false. " +
+                      "Cancelled parents will re-execute their children on " +
+                      "rerun (no cache hit available); enable cache for " +
+                      "release-resources-early-equivalent semantics."
+                  )
+                )
+              )
+            else IO.unit
           (
             newState,
-            logIO *> sendCancels *> incrementCancellations *>
+            cacheWarn *> logIO *> sendCancels *> incrementCancellations *>
               metrics.onPreemptionStallResolved
           )
       }
@@ -1142,14 +1140,23 @@ private[tasks] class QueueImpl(
         node.map(v => Node.toLogFeature(v)).getOrElse(scribe.data(Map.empty))
       )
 
-      // Tie-break on lineage depth so leaves are picked before parents.      
+      val invocationIdsAppearingInLineage: Set[TaskInvocationId] =
+        (state.queuedTasks.valuesIterator.map(_._1) ++
+          state.scheduledTasks.valuesIterator.map(_._4))
+          .flatMap(_.lineage.lineage.iterator)
+          .toSet
+
       var maxPrio = Int.MinValue
       var maxDepth = Int.MinValue
       var selected = Option.empty[ScheduleTask]
       state.queuedTasks.valuesIterator
         .foreach { case (sch, _) =>
+          val invId =
+            TaskInvocationId(sch.description.taskId, sch.description)
+          val hasPendingDescendant =
+            invocationIdsAppearingInLineage.contains(invId)
           val ret = availableResource.canFulfillRequest(sch.resource)
-          if (ret) {
+          if (ret && !hasPendingDescendant) {
             val prio = sch.priority.s
             val depth = sch.lineage.lineage.length
             val better =
@@ -1159,7 +1166,7 @@ private[tasks] class QueueImpl(
               maxDepth = depth
               selected = Some(sch)
             }
-          } else {
+          } else if (!ret) {
             scribe.debug(
               s"CantFulfillRequest",
               num,
@@ -1235,7 +1242,7 @@ private[tasks] class QueueImpl(
       }
     }
 
-    handleQueueStatIO *> askIO
+    askIO <* handleQueueStatIO
 
   }
 

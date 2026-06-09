@@ -36,7 +36,6 @@ private[tasks] final class QueueMetrics(
     cancellationsCounter: Counter[IO, Long],
     stallsResolvedCounter: Counter[IO, Long],
     stalledUnresolvableCounter: Counter[IO, Long],
-    naturalCompletionRacesCounter: Counter[IO, Long],
     cap: Int,
     admittedPairs: Ref[IO, Set[(String, Int)]],
     enqueueTimestamps: Ref[IO, Map[HashedTaskDescription, Long]],
@@ -134,9 +133,6 @@ private[tasks] final class QueueMetrics(
   def onPreemptionStallResolved: IO[Unit] = stallsResolvedCounter.inc()
 
   def onPreemptionStallUnresolvable: IO[Unit] = stalledUnresolvableCounter.inc()
-
-  def onNaturalCompletionRace: IO[Unit] =
-    naturalCompletionRacesCounter.inc()
 }
 
 private[tasks] object QueueMetrics {
@@ -223,14 +219,6 @@ private[tasks] object QueueMetrics {
           )
           .create
       )
-      naturalCompletionRaces <- Resource.eval(
-        meter
-          .counter[Long]("tasks.queue.preemption.naturalCompletionRaces")
-          .withDescription(
-            "Preemption: CancelTask arrived at launcher but task had already completed naturally."
-          )
-          .create
-      )
       admittedRef <- Resource.eval(Ref.of[IO, Set[(String, Int)]](Set.empty))
       enqueueRef <- Resource.eval(
         Ref.of[IO, Map[HashedTaskDescription, Long]](Map.empty)
@@ -248,7 +236,6 @@ private[tasks] object QueueMetrics {
         cancellationsCounter = cancellations,
         stallsResolvedCounter = stallsResolved,
         stalledUnresolvableCounter = stalledUnresolvable,
-        naturalCompletionRacesCounter = naturalCompletionRaces,
         cap = cap,
         admittedPairs = admittedRef,
         enqueueTimestamps = enqueueRef,

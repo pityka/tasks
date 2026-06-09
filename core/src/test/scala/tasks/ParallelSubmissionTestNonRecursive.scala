@@ -35,7 +35,6 @@ import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import tasks.releaseResourcesEarly
 import scribe.modify.LogModifier
 
 object ParallelSubmissionTestNonRecursive {
@@ -97,12 +96,14 @@ class NonRecursiveParallelSubmissionTestSuite
     tmp.delete
     ConfigFactory.parseString(
       s"""
-      
+
 tasks.cache.enabled = false
 tasks.disableRemoting = true
 hosts.numCPU=200
 hosts.scratch = 4000
 hosts.gpus = [0,1,2,3]
+tasks.askInterval = 20 ms
+tasks.failuredetector.heartbeat-interval = 200 ms
       tasks.fileservice.storageURI=${tmp.getAbsolutePath}
       """
     )
@@ -134,8 +135,6 @@ hosts.gpus = [0,1,2,3]
   }
 
   override def afterAll() = {
-    Thread.sleep(1500)
     pair._2.unsafeRunSync()
-
   }
 }
