@@ -29,11 +29,11 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 
 /** Stall-and-resolve: a recursive task on a 1-CPU launcher would deadlock
-  * without preemption because the parent holds the only slot while it
-  * waits for children. With preemption, the queue detects the stall
-  * (every running task has descendants queued) and cancels the parent
-  * to free its slot for a child. The cancelled parent is re-enqueued
-  * and runs later when its dependencies are ready.
+  * without preemption because the parent holds the only slot while it waits for
+  * children. With preemption, the queue detects the stall (every running task
+  * has descendants queued) and cancels the parent to free its slot for a child.
+  * The cancelled parent is re-enqueued and runs later when its dependencies are
+  * ready.
   */
 object PreemptionStallResolveTest {
 
@@ -48,8 +48,8 @@ object PreemptionStallResolveTest {
   }
 
   val fibtask: TaskDefinition[FibIn, FibOut] =
-    Task[FibIn, FibOut]("fib-preempt", 1) { case FibIn(n) =>
-      { implicit ce =>
+    Task[FibIn, FibOut]("fib-preempt", 1) {
+      case FibIn(n) => { implicit ce =>
         n match {
           case 0 => IO.pure(FibOut(0))
           case 1 => IO.pure(FibOut(1))
