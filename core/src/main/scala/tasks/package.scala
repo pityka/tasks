@@ -81,19 +81,19 @@ import tasks.util.message.LauncherName
   *      the task body changes in a way that should produce different output;
   *   1. a hash of the task's serialized input. Inputs are serialized via the
   *      task's `JsonValueCodec` (jsoniter-scala by default; circe and uPickle
-  *      are also supported), so two inputs that serialize to the same bytes
-  *      are treated as the same key.
+  *      are also supported), so two inputs that serialize to the same bytes are
+  *      treated as the same key.
   *
   * In addition, every `ResourceRequest` carries an implicit
   * [[tasks.shared.CodeVersion CodeVersion]] derived from the build, which lets
-  * deployments distinguish results produced by different binary versions of
-  * the worker code when desired.
+  * deployments distinguish results produced by different binary versions of the
+  * worker code when desired.
   *
   * On submission, the queue first asks the cache for an entry under that key.
   *
   *   - On a hit, the stored result (which may include
-  *     [[tasks.fileservice.SharedFile SharedFile]] references pointing into
-  *     the file service) is returned directly to the caller. No worker is
+  *     [[tasks.fileservice.SharedFile SharedFile]] references pointing into the
+  *     file service) is returned directly to the caller. No worker is
   *     allocated, no resources are consumed.
   *   - On a miss, the task is scheduled to a worker. When the worker finishes,
   *     its return value is serialized, any files it produced are uploaded into
@@ -109,23 +109,22 @@ import tasks.util.message.LauncherName
   * ==Files as first-class cached values==
   *
   * Task outputs frequently include large files. Rather than embedding bytes in
-  * the result, user code returns
-  * [[tasks.fileservice.SharedFile SharedFile]] handles. A `SharedFile` is an
-  * opaque, content-addressed reference: the bytes live in the file service,
-  * and the handle is what gets serialized into the cache. This means a cache
-  * hit returns the handle immediately, and the actual bytes are only fetched
-  * if and when downstream code reads them — and remain available to any
-  * worker, on any machine, that asks for them.
+  * the result, user code returns [[tasks.fileservice.SharedFile SharedFile]]
+  * handles. A `SharedFile` is an opaque, content-addressed reference: the bytes
+  * live in the file service, and the handle is what gets serialized into the
+  * cache. This means a cache hit returns the handle immediately, and the actual
+  * bytes are only fetched if and when downstream code reads them — and remain
+  * available to any worker, on any machine, that asks for them.
   *
   * ==Putting it together==
   *
   * The expected flow for a user of this library:
   *
-  *   1. Define a task with a stable name, a version, and a `JsonValueCodec`
-  *      for its input and output.
+  *   1. Define a task with a stable name, a version, and a `JsonValueCodec` for
+  *      its input and output.
   *   1. Stand up a task system with [[withTaskSystem]].
-  *   1. Submit the task with a [[ResourceRequest]]; receive an `IO` that
-  *      yields the (possibly cached) result.
+  *   1. Submit the task with a [[ResourceRequest]]; receive an `IO` that yields
+  *      the (possibly cached) result.
   *   1. When the task body changes in a way that should invalidate stored
   *      results, bump its version.
   */

@@ -25,9 +25,9 @@ import tasks.util.message._
 import tasks.util.message.MessageData.{InputData, ScheduleTask}
 import tasks.fileservice.FileServicePrefix
 
-/** Pure unit tests for QueueImpl.selectPreemptionVictims. These cover
-  * branches that the system-level PreemptionStallResolveTest doesn't
-  * exercise (multi-victim selection, no-valid-victim).
+/** Pure unit tests for QueueImpl.selectPreemptionVictims. These cover branches
+  * that the system-level PreemptionStallResolveTest doesn't exercise
+  * (multi-victim selection, no-valid-victim).
   */
 class PreemptionDecisionTest extends FunSuite with Matchers {
 
@@ -85,10 +85,10 @@ class PreemptionDecisionTest extends FunSuite with Matchers {
   private val launcherA = LauncherName("launcher-A")
   private val launcherB = LauncherName("launcher-B")
 
-  /** Stall constructed with two ancestors of q both on launcher A.
-    * launcher A's free resources can't fit q on its own, and neither
-    * ancestor can alone be added back to fit q. Together they free
-    * enough — multi-victim must select both.
+  /** Stall constructed with two ancestors of q both on launcher A. launcher A's
+    * free resources can't fit q on its own, and neither ancestor can alone be
+    * added back to fit q. Together they free enough — multi-victim must select
+    * both.
     */
   test("multi-victim: two parents on one launcher together free room for q") {
     val parent1 = invocationId("parent1", "h1")
@@ -123,8 +123,8 @@ class PreemptionDecisionTest extends FunSuite with Matchers {
     }
   }
 
-  /** Stall holds but no candidate can free enough resources. Should
-    * report Unresolvable rather than picking something arbitrary.
+  /** Stall holds but no candidate can free enough resources. Should report
+    * Unresolvable rather than picking something arbitrary.
     */
   test("unresolvable: ancestors exist but none free enough room for q") {
     val parent = invocationId("parent", "h1")
@@ -150,10 +150,9 @@ class PreemptionDecisionTest extends FunSuite with Matchers {
     )
   }
 
-  /** Two independent stuck chains on different launchers. The
-    * decision picks one of them; the other will be resolved on a
-    * subsequent tick. Verifies victim selection respects per-launcher
-    * availability.
+  /** Two independent stuck chains on different launchers. The decision picks
+    * one of them; the other will be resolved on a subsequent tick. Verifies
+    * victim selection respects per-launcher availability.
     */
   test("multi-launcher: picks a victim on the launcher whose chain matches") {
     val parentA = invocationId("parentA", "hA1")
@@ -194,8 +193,8 @@ class PreemptionDecisionTest extends FunSuite with Matchers {
     }
   }
 
-  /** Tasks already in cancelInFlight are excluded from victim
-    * selection — otherwise we'd cancel them twice on subsequent ticks.
+  /** Tasks already in cancelInFlight are excluded from victim selection —
+    * otherwise we'd cancel them twice on subsequent ticks.
     */
   test("cancelInFlight tasks are filtered out of victim candidates") {
     val parent = invocationId("parent", "h1")
@@ -217,9 +216,9 @@ class PreemptionDecisionTest extends FunSuite with Matchers {
     )
   }
 
-  /** Guard: if any launcher already has free capacity for any queued
-    * task, preemption is not needed (the launcher will pick it up on
-    * its next askForWork).
+  /** Guard: if any launcher already has free capacity for any queued task,
+    * preemption is not needed (the launcher will pick it up on its next
+    * askForWork).
     */
   test(
     "not stalled when a launcher already has room for some queued task"
@@ -242,9 +241,9 @@ class PreemptionDecisionTest extends FunSuite with Matchers {
     )
   }
 
-  /** A scheduled task with no descendants in Q ∪ S violates the
-    * "every scheduled task has a descendant" condition — system is
-    * making progress, no preemption.
+  /** A scheduled task with no descendants in Q ∪ S violates the "every
+    * scheduled task has a descendant" condition — system is making progress, no
+    * preemption.
     */
   test("not stalled when a scheduled task has no descendants") {
     val schParent = schTask("parent", "h1", lineage = Seq.empty)
@@ -269,10 +268,10 @@ class PreemptionDecisionTest extends FunSuite with Matchers {
     )
   }
 
-  /** When a launcher crashes mid-cancel, the LauncherCrashed event
-    * must drop any in-flight cancellation entries for its scheduled
-    * tasks. Otherwise cancelInFlight leaks and those task projections
-    * stay permanently excluded from future preemption.
+  /** When a launcher crashes mid-cancel, the LauncherCrashed event must drop
+    * any in-flight cancellation entries for its scheduled tasks. Otherwise
+    * cancelInFlight leaks and those task projections stay permanently excluded
+    * from future preemption.
     */
   test(
     "LauncherCrashed clears cancelInFlight entries for that launcher's tasks"

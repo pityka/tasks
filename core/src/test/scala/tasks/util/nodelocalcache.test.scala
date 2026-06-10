@@ -50,11 +50,11 @@ class CatsNodeLocalCacheTest extends FunSuite {
             NodeLocalCache
               .offer(
                 "id" + i / 10,
-                Resource.make(IO {
-                  i
-                }.delayBy(Random.nextInt(5000).millis))(i =>
-                  garbage.update(_ + i)
-                ),
+                Resource.make(
+                  IO {
+                    i
+                  }.delayBy(Random.nextInt(5000).millis)
+                )(i => garbage.update(_ + i)),
                 nlc
               )
               .use(i =>
@@ -70,11 +70,11 @@ class CatsNodeLocalCacheTest extends FunSuite {
             NodeLocalCache
               .offer(
                 "id" + i / 10,
-                Resource.make(IO {
-                  i
-                }.delayBy(Random.nextInt(5000).millis))(i =>
-                  garbage.update(_ + i)
-                ),
+                Resource.make(
+                  IO {
+                    i
+                  }.delayBy(Random.nextInt(5000).millis)
+                )(i => garbage.update(_ + i)),
                 nlc
               )
               .use(i =>

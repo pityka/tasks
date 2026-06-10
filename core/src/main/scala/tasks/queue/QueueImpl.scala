@@ -74,21 +74,21 @@ object QueueImpl {
   sealed trait PreemptionDecision
   object PreemptionDecision {
 
-    /** Either there's no queued work or no scheduled work, or there is
-      * a scheduled task without descendants (so the system isn't fully
-      * blocked on its own children), or some launcher already has free
-      * capacity for at least one queued task. No action needed.
+    /** Either there's no queued work or no scheduled work, or there is a
+      * scheduled task without descendants (so the system isn't fully blocked on
+      * its own children), or some launcher already has free capacity for at
+      * least one queued task. No action needed.
       */
     case object NotStalled extends PreemptionDecision
 
-    /** The system is stalled but no candidate ancestor on any single
-      * launcher could free enough resources for any queued task.
-      * Increments `stalledUnresolvable`.
+    /** The system is stalled but no candidate ancestor on any single launcher
+      * could free enough resources for any queued task. Increments
+      * `stalledUnresolvable`.
       */
     case object Unresolvable extends PreemptionDecision
 
-    /** A viable preemption was found. Caller should emit
-      * `CancelRequested` events and send `CancelTask` messages.
+    /** A viable preemption was found. Caller should emit `CancelRequested`
+      * events and send `CancelTask` messages.
       */
     case class Cancel(
         launcher: LauncherName,
@@ -96,9 +96,8 @@ object QueueImpl {
     ) extends PreemptionDecision
   }
 
-  /** Stall: |Q| > 0 ∧ ∀ t ∈ S. ∃ u ∈ Q∪S with invocationId(t) ∈ anc(u).
-    * Pick deepest valid ancestor first; fall back to multi-victim on
-    * one launcher.
+  /** Stall: |Q| > 0 ∧ ∀ t ∈ S. ∃ u ∈ Q∪S with invocationId(t) ∈ anc(u). Pick
+    * deepest valid ancestor first; fall back to multi-victim on one launcher.
     */
   def selectPreemptionVictims(state: State): PreemptionDecision = {
     val stalled =
@@ -214,9 +213,7 @@ object QueueImpl {
             .nextOption()
 
         queuedSortedDeepestFirst.iterator
-          .flatMap(q =>
-            trySingleVictim(q).orElse(tryMultiVictim(q)).iterator
-          )
+          .flatMap(q => trySingleVictim(q).orElse(tryMultiVictim(q)).iterator)
           .nextOption() match {
           case None =>
             PreemptionDecision.Unresolvable
@@ -233,16 +230,15 @@ object QueueImpl {
   /** Queue-side state.
     *
     * @param availableResourcesByLauncher
-    *   Per-launcher snapshot of free CPU/memory/etc. Overwritten on
-    *   every askForWork from each launcher, and subtracted from on
-    *   TaskScheduled so the view stays close between asks. Not added
-    *   back on TaskDone/Failed/etc. Self-corrects on the
-    *   next askForWork. Used only by preemption decisions, never as
-    *   the source of truth for scheduling.
+    *   Per-launcher snapshot of free CPU/memory/etc. Overwritten on every
+    *   askForWork from each launcher, and subtracted from on TaskScheduled so
+    *   the view stays close between asks. Not added back on
+    *   TaskDone/Failed/etc. Self-corrects on the next askForWork. Used only by
+    *   preemption decisions, never as the source of truth for scheduling.
     * @param cancelInFlight
-    *   Tasks for which the queue has sent CancelTask to a launcher but
-    *   hasn't yet received TaskPreemptedAck. Prevents repeated cancels
-    *   of the same victim within one preemption decision tick.
+    *   Tasks for which the queue has sent CancelTask to a launcher but hasn't
+    *   yet received TaskPreemptedAck. Prevents repeated cancels of the same
+    *   victim within one preemption decision tick.
     */
   case class State(
       queuedTasks: Map[
@@ -256,8 +252,10 @@ object QueueImpl {
       knownLaunchers: Map[LauncherName, Option[Node]],
       counters: Map[LauncherName, Long],
       nodes: NodeRegistryState.State,
-      availableResourcesByLauncher: Map[LauncherName, VersionedResourceAvailable] =
-        Map.empty,
+      availableResourcesByLauncher: Map[
+        LauncherName,
+        VersionedResourceAvailable
+      ] = Map.empty,
       cancelInFlight: Set[ScheduleTaskEqualityProjection] = Set.empty
   ) {
 
@@ -339,9 +337,9 @@ object QueueImpl {
             cancelInFlight = cancelInFlight - project(sch)
           )
         case LauncherCrashed(launcher) =>
-          val crashedKeys = scheduledTasks.iterator
-            .collect { case (k, (l, _, _, _)) if l == launcher => k }
-            .toSet
+          val crashedKeys = scheduledTasks.iterator.collect {
+            case (k, (l, _, _, _)) if l == launcher => k
+          }.toSet
           copy(
             knownLaunchers = knownLaunchers - launcher,
             counters = counters - launcher,
@@ -621,7 +619,6 @@ private[tasks] class QueueImpl(
     cacheIO *> handleQueueStatIO
   }
 
-  
   private def enqueueOrCacheHit(
       sch: ScheduleTask,
       proxies: List[Proxy],
@@ -707,7 +704,7 @@ private[tasks] class QueueImpl(
 
   /** Stall detection + victim selection. Runs under handleQueueStatMutex so
     * reads of Q, S, availableResourcesByLauncher, cancelInFlight are
-    * consistent. 
+    * consistent.
     */
   private lazy val tryPreemptIO: IO[Unit] =
     ref.flatModify { state =>
@@ -775,8 +772,8 @@ private[tasks] class QueueImpl(
     }
 
   /** Handle the launcher's ack of a cancel request. Removes the task from
-    * scheduledTasks and re-enqueues (or delivers a cache hit if the cache
-    * was populated by a concurrent natural completion).
+    * scheduledTasks and re-enqueues (or delivers a cache hit if the cache was
+    * populated by a concurrent natural completion).
     */
   def taskPreempted(sch: ScheduleTask): IO[Unit] = {
     val preemptedIO = ref.flatModify { state =>

@@ -335,9 +335,8 @@ private[tasks] object QueueMetrics {
             "resolved (still mid-spawn)."
         )
         .createWithCallback { obs =>
-          stateSnapshot.flatMap(st =>
-            obs.record(st.nodes.inFlightRequests.size.toLong)
-          )
+          stateSnapshot
+            .flatMap(st => obs.record(st.nodes.inFlightRequests.size.toLong))
         }
 
       _ <- meter
@@ -348,9 +347,8 @@ private[tasks] object QueueMetrics {
             "maxNodesCumulative)."
         )
         .createWithCallback { obs =>
-          stateSnapshot.flatMap(st =>
-            obs.record(st.nodes.cumulativeRequested.toLong)
-          )
+          stateSnapshot
+            .flatMap(st => obs.record(st.nodes.cumulativeRequested.toLong))
         }
 
       _ <- registerNodeRegistryGauges(meter, stateSnapshot)
