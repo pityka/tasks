@@ -86,6 +86,49 @@ object RecursiveCachedTaskTestSuite {
 
     }
 
+  val zeroCpuConcurrent = new java.util.concurrent.atomic.AtomicInteger(0)
+  val zeroCpuPeak = new java.util.concurrent.atomic.AtomicInteger(0)
+
+  val zeroCpuTrackedTask: TaskDefinition[FibInput, FibOut] =
+    Task[FibInput, FibOut]("zero-cpu-tracked", 1) {
+      case FibInput(Some(n)) => { implicit ce =>
+        assert(ce.resourceAllocated.cpu == 0)
+        for {
+          now <- IO(zeroCpuConcurrent.incrementAndGet())
+          _ <- IO(zeroCpuPeak.updateAndGet(p => math.max(p, now)))
+          _ <- IO.sleep(scala.concurrent.duration.DurationInt(100).millis)
+          _ <- IO(zeroCpuConcurrent.decrementAndGet())
+        } yield FibOut(n)
+      }
+      case _ => ???
+    }
+
+  val fibtaskZeroCpu: TaskDefinition[FibInput, FibOut] =
+    Task[FibInput, FibOut]("fib-zero-cpu", 1) {
+
+      case FibInput(Some(n)) => { implicit ce =>
+        assert(
+          ce.resourceAllocated.cpu == 0,
+          s"expected 0 CPU allocation, got ${ce.resourceAllocated.cpu}"
+        )
+        n match {
+          case 0 => IO.pure(FibOut(0))
+          case 1 => IO.pure(FibOut(1))
+          case n =>
+            val f1 = fibtaskZeroCpu(FibInput(Some(n - 1)))(
+              ResourceRequest(0, 1)
+            )
+            val f2 = fibtaskZeroCpu(FibInput(Some(n - 2)))(
+              ResourceRequest(0, 1)
+            )
+            IO.both(f1, f2).map { case (a, b) => FibOut(a.n + b.n) }
+        }
+      }
+
+      case _ => ???
+
+    }
+
 }
 
 class RecursiveCachedTaskTestSuite
@@ -119,6 +162,24 @@ tasks.failuredetector.heartbeat-interval = 200 ms
     val n = 16
     val r = (fibtask(FibInput(n))(ResourceRequest(1, 1))).unsafeRunSync().n
     assertResult(r)(serial(n))
+  }
+
+  test("recursive fibonacci with 0 cpu allocation") {
+    val n = 16
+    val r =
+      (fibtaskZeroCpu(FibInput(n))(ResourceRequest(0, 1))).unsafeRunSync().n
+    assertResult(r)(serial(n))
+  }
+
+  test("many 0 cpu tasks run concurrently beyond numCPU") {
+    val N = 32
+    IO.parSequenceN(N)((1 to N).toList.map { i =>
+      zeroCpuTrackedTask(FibInput(Some(i)))(ResourceRequest(0, 1))
+    }).unsafeRunSync()
+    assert(
+      zeroCpuPeak.get > 4,
+      s"expected peak concurrency > 4 (numCPU), got ${zeroCpuPeak.get}"
+    )
   }
 
   override def afterAll() = {
