@@ -118,7 +118,8 @@ private[tasks] final class QueueFromQueueImpl(
 
 private[tasks] class QueueWithActor(
     queueActor: QueueActor,
-    messenger: Messenger
+    messenger: Messenger,
+    config: TasksConfig
 ) extends Queue {
 
   def initFailed(nodeName: RunningJobId): IO[Unit] =
@@ -162,12 +163,11 @@ private[tasks] class QueueWithActor(
   ): IO[
     Either[Throwable, Either[NothingForSchedule.type, MessageData.Schedule]]
   ] = {
-    import scala.concurrent.duration._
     tasks.util.Ask
       .ask(
         target = queueActor.address0,
         data = MessageData.AskForWork(availableResources, launcherAsking, node),
-        timeout = 1 minutes,
+        timeout = config.askForWorkTimeout,
         messenger = messenger
       )
       .map {

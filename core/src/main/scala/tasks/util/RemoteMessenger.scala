@@ -15,6 +15,7 @@ import tasks.deploy.LocalConfiguration
 import tasks.fileservice.FileServicePrefix
 
 import cats.instances.list
+import scala.concurrent.duration._
 import tasks.util.message._
 private[tasks] class RemoteMessenger(
     client: Client[IO],
@@ -218,7 +219,11 @@ private[tasks] object RemoteMessenger {
       bindPort: Int,
       bindPrefix: String,
       peerUri: org.http4s.Uri,
-      workerHealth: IO[Boolean] = IO.pure(true)
+      workerHealth: IO[Boolean] = IO.pure(true),
+      serverIdleTimeout: FiniteDuration = 30.minutes,
+      serverRequestHeaderReceiveTimeout: FiniteDuration = 60.seconds,
+      clientTimeout: FiniteDuration = 30.minutes,
+      clientIdleConnectionTime: FiniteDuration = 30.minutes
   ) = {
     import com.comcast.ip4s._
 
@@ -241,11 +246,15 @@ private[tasks] object RemoteMessenger {
         .withPort(
           com.comcast.ip4s.Port.fromInt(bindPort).get
         )
+        .withIdleTimeout(serverIdleTimeout)
+        .withRequestHeaderReceiveTimeout(serverRequestHeaderReceiveTimeout)
         .withHttpApp(r.orNotFound)
         .withShutdownTimeout(scala.concurrent.duration.Duration.Zero)
         .build
       val client = EmberClientBuilder
         .default[IO]
+        .withTimeout(clientTimeout)
+        .withIdleConnectionTime(clientIdleConnectionTime)
         .build
       client.flatMap { client =>
         server.map { server =>

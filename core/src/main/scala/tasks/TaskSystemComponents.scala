@@ -470,7 +470,8 @@ object TaskSystemComponents {
                           scribe.info(s"Got remote queue: $value")
                           (new tasks.queue.QueueWithActor(
                             value,
-                            messenger
+                            messenger,
+                            config
                           ): Queue)
                         }
                       case Left(e) =>
@@ -805,7 +806,7 @@ object TaskSystemComponents {
               if (staticHealthOk)
                 shutdownInitiated.get.map(initiated => !initiated)
               else IO.pure(false)
-            messenger <- Messenger.make(hostConfig, workerHealth)
+            messenger <- Messenger.make(hostConfig, config, workerHealth)
             _ <- Resource.eval(
               if (!hostConfig.isApp && hostConfig.isWorker)
                 writeWorkerHealthUrlFile(messenger)

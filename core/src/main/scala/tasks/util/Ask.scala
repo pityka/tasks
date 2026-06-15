@@ -29,8 +29,28 @@ private[tasks] object Ask {
         messenger
           .submit(message)
           .flatMap { _ =>
-            messageStream.take(1).compile.last.timeout(timeout).attempt
-
+            messageStream
+              .take(1)
+              .compile
+              .last
+              .timeout(timeout)
+              .attempt
+              .flatTap {
+                case Left(_: java.util.concurrent.TimeoutException) =>
+                  IO(
+                    scribe.warn(
+                      s"Ask timed out after $timeout waiting for reply from $target (request data class: ${data.getClass.getName})"
+                    )
+                  )
+                case Left(e) =>
+                  IO(
+                    scribe.warn(
+                      e,
+                      s"Ask failed waiting for reply from $target (request data class: ${data.getClass.getName})"
+                    )
+                  )
+                case Right(_) => IO.unit
+              }
           }
       }
     }

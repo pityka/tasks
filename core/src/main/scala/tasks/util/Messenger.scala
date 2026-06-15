@@ -22,6 +22,7 @@ private[tasks] trait Messenger {
 private[tasks] object Messenger {
   def make(
       hostConfig: HostConfiguration,
+      config: TasksConfig,
       workerHealth: IO[Boolean] = IO.pure(true)
   ): Resource[IO, Messenger] = {
     hostConfig match {
@@ -44,7 +45,13 @@ private[tasks] object Messenger {
           bindPort = internalAddress.port,
           bindPrefix = bindPrefix,
           peerUri = peerUri,
-          workerHealth = workerHealth
+          workerHealth = workerHealth,
+          serverIdleTimeout = config.remoteMessengerServerIdleTimeout,
+          serverRequestHeaderReceiveTimeout =
+            config.remoteMessengerServerRequestHeaderReceiveTimeout,
+          clientTimeout = config.remoteMessengerClientTimeout,
+          clientIdleConnectionTime =
+            config.remoteMessengerClientIdleConnectionTime
         )
     }
 

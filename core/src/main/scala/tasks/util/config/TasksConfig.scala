@@ -112,6 +112,21 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   val askInterval: FD = raw.getDuration("tasks.askInterval")
 
+  val askForWorkTimeout: FD =
+    raw.getDuration("tasks.queue.askForWorkTimeout")
+
+  val remoteMessengerServerIdleTimeout: FD =
+    raw.getDuration("tasks.remoteMessenger.serverIdleTimeout")
+
+  val remoteMessengerServerRequestHeaderReceiveTimeout: FD =
+    raw.getDuration("tasks.remoteMessenger.serverRequestHeaderReceiveTimeout")
+
+  val remoteMessengerClientTimeout: FD =
+    raw.getDuration("tasks.remoteMessenger.clientTimeout")
+
+  val remoteMessengerClientIdleConnectionTime: FD =
+    raw.getDuration("tasks.remoteMessenger.clientIdleConnectionTime")
+
   val launcherActorHeartBeatInterval: FD =
     raw.getDuration("tasks.failuredetector.heartbeat-interval")
 
