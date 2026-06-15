@@ -34,6 +34,11 @@ import tasks.deploy._
 
 import software.amazon.awssdk.services.batch.BatchClient
 import software.amazon.awssdk.services.batch.model._
+import software.amazon.awssdk.services.ec2.Ec2Client
+import software.amazon.awssdk.services.ec2.model.{
+  DescribeInstanceTypesRequest,
+  InstanceType => Ec2InstanceType
+}
 import software.amazon.awssdk.regions.Region
 
 import scala.jdk.CollectionConverters._
@@ -89,14 +94,145 @@ class BatchShutdown(batch: BatchClient)
     }
 }
 
+case class InstanceCapacity(vcpus: Int, memoryMib: Int)
+
+object BatchInstanceCapacity {
+
+  def listComputeEnvironments(
+      batch: BatchClient,
+      jobQueueName: String
+  ): IO[List[String]] =
+    IO.interruptible {
+      val resp = batch.describeJobQueues(
+        DescribeJobQueuesRequest.builder.jobQueues(jobQueueName).build
+      )
+      resp.jobQueues.asScala.toList.flatMap { jq =>
+        jq.computeEnvironmentOrder.asScala.toList.map(_.computeEnvironment)
+      }
+    }
+
+  def listInstanceTypesForCEs(
+      batch: BatchClient,
+      computeEnvArns: List[String]
+  ): IO[List[String]] =
+    if (computeEnvArns.isEmpty) IO.pure(Nil)
+    else
+      IO.interruptible {
+        val resp = batch.describeComputeEnvironments(
+          DescribeComputeEnvironmentsRequest.builder
+            .computeEnvironments(computeEnvArns.asJava)
+            .build
+        )
+        resp.computeEnvironments.asScala.toList.flatMap { ce =>
+          Option(ce.computeResources)
+            .flatMap(cr => Option(cr.instanceTypes))
+            .map(_.asScala.toList)
+            .getOrElse(Nil)
+        }.distinct
+      }
+
+  def describeInstanceTypeCapacities(
+      ec2: Ec2Client,
+      cache: Ref[IO, Map[String, InstanceCapacity]],
+      names: List[String]
+  ): IO[Map[String, InstanceCapacity]] = {
+    val unique = names.distinct
+    if (unique.isEmpty) IO.pure(Map.empty)
+    else
+      cache.get.flatMap { cached =>
+        val missing = unique.filterNot(cached.contains)
+        if (missing.isEmpty)
+          IO.pure(cached.view.filterKeys(unique.toSet).toMap)
+        else
+          IO.interruptible {
+            val resp = ec2.describeInstanceTypes(
+              DescribeInstanceTypesRequest.builder
+                .instanceTypes(missing.map(Ec2InstanceType.fromValue).asJava)
+                .build
+            )
+            resp.instanceTypes.asScala.toList.map { it =>
+              it.instanceTypeAsString -> InstanceCapacity(
+                it.vCpuInfo.defaultVCpus,
+                it.memoryInfo.sizeInMiB.toInt
+              )
+            }.toMap
+          }.flatMap { fetched =>
+            cache
+              .update(_ ++ fetched)
+              .as((cached ++ fetched).view.filterKeys(unique.toSet).toMap)
+          }
+      }
+  }
+
+  def largestInstanceForQueue(
+      batch: BatchClient,
+      ec2: Ec2Client,
+      cache: Ref[IO, Map[String, InstanceCapacity]],
+      queue: String
+  ): IO[Option[InstanceCapacity]] =
+    if (queue.isEmpty) IO.pure(None)
+    else
+      listComputeEnvironments(batch, queue).flatMap { ces =>
+        listInstanceTypesForCEs(batch, ces).flatMap { types =>
+          if (types.isEmpty || types.contains("optimal")) IO.pure(None)
+          else
+            describeInstanceTypeCapacities(ec2, cache, types).map { caps =>
+              caps.values.foldLeft(Option.empty[InstanceCapacity]) {
+                case (None, c) => Some(c)
+                case (Some(acc), c) =>
+                  Some(
+                    InstanceCapacity(
+                      math.max(acc.vcpus, c.vcpus),
+                      math.max(acc.memoryMib, c.memoryMib)
+                    )
+                  )
+              }
+            }
+        }
+      }
+
+  def adaptMinimums(
+      batch: BatchClient,
+      ec2: Ec2Client,
+      cache: Ref[IO, Map[String, InstanceCapacity]],
+      queue: String,
+      configMinCpu: Int,
+      configMinMemory: Int
+  ): IO[(Int, Int)] =
+    largestInstanceForQueue(batch, ec2, cache, queue)
+      .map {
+        case Some(cap) =>
+          val effCpu = math.min(configMinCpu, cap.vcpus)
+          val effMem = math.min(configMinMemory, cap.memoryMib)
+          if (effCpu != configMinCpu || effMem != configMinMemory)
+            scribe.info(
+              s"clamping configured minimums (cpu=$configMinCpu, memMiB=$configMinMemory) " +
+                s"to fit queue $queue largest instance (cpu=${cap.vcpus}, memMiB=${cap.memoryMib}): " +
+                s"effective (cpu=$effCpu, memMiB=$effMem)"
+            )
+          (effCpu, effMem)
+        case None =>
+          (configMinCpu, configMinMemory)
+      }
+      .handleErrorWith { e =>
+        IO(
+          scribe.warn(
+            s"Failed to derive CE-based minimums for queue $queue, using configured values: ${e.getMessage}"
+          )
+        ).as((configMinCpu, configMinMemory))
+      }
+}
+
 class BatchCreateNode(
     masterAddress: SimpleSocketAddress,
     masterPrefix: String,
     codeAddress: CodeAddress,
     batch: BatchClient,
+    ec2: Ec2Client,
     batchConfig: BatchConfig,
     requestMutex: Mutex[IO],
-    recentOnDemandSubmissions: Ref[IO, List[(Instant, String)]]
+    recentOnDemandSubmissions: Ref[IO, List[(Instant, String)]],
+    instanceTypeCache: Ref[IO, Map[String, InstanceCapacity]]
 ) extends CreateNode {
 
   def requestOneNewJobFromJobScheduler(
@@ -105,9 +241,18 @@ class BatchCreateNode(
       config: TasksConfig
   ): IO[Either[String, (PendingJobId, ResourceAvailable)]] =
     requestMutex.lock.surround {
-      val selectedResources = selectResources(requestSize)
-      selectJobQueue(selectedResources)
+      val preliminaryResources = selectResources(
+        requestSize,
+        batchConfig.minimumCpu,
+        batchConfig.minimumMemory
+      )
+      selectJobQueue(preliminaryResources)
         .flatMap { targetQueue =>
+          adaptMinimumsToQueue(targetQueue).map { case (minCpu, minMem) =>
+            (targetQueue, selectResources(requestSize, minCpu, minMem))
+          }
+        }
+        .flatMap { case (targetQueue, selectedResources) =>
           val submit = IO.interruptible {
             val script = Deployment.script(
               memory = selectedResources.memory,
@@ -396,22 +541,36 @@ class BatchCreateNode(
     IO.pure(Some(PendingJobId(p.value)))
 
   private def selectResources(
-      requestSize: ResourceRequest
+      requestSize: ResourceRequest,
+      minCpu: Int,
+      minMemory: Int
   ): ResourceAvailable = {
-    val cpu = math.max(requestSize.cpu._2, batchConfig.minimumCpu)
-    val memory = math.max(requestSize.memory, batchConfig.minimumMemory)
+    val cpu = math.max(requestSize.cpu._2, minCpu)
+    val memory = math.max(requestSize.memory, minMemory)
     val scratch = requestSize.scratch
     val gpus = 0 until requestSize.gpu toList
 
     ResourceAvailable(cpu, memory, scratch, gpus, None)
   }
+
+  private def adaptMinimumsToQueue(queue: String): IO[(Int, Int)] =
+    BatchInstanceCapacity.adaptMinimums(
+      batch,
+      ec2,
+      instanceTypeCache,
+      queue,
+      batchConfig.minimumCpu,
+      batchConfig.minimumMemory
+    )
 }
 
 class BatchCreateNodeFactory(
     batchConfig: BatchConfig,
     batch: BatchClient,
+    ec2: Ec2Client,
     requestMutex: Mutex[IO],
-    recentOnDemandSubmissions: Ref[IO, List[(Instant, String)]]
+    recentOnDemandSubmissions: Ref[IO, List[(Instant, String)]],
+    instanceTypeCache: Ref[IO, Map[String, InstanceCapacity]]
 ) extends CreateNodeFactory {
   def apply(
       master: SimpleSocketAddress,
@@ -423,9 +582,11 @@ class BatchCreateNodeFactory(
       masterPrefix = masterPrefix,
       codeAddress = codeAddress,
       batch = batch,
+      ec2 = ec2,
       batchConfig = batchConfig,
       requestMutex = requestMutex,
-      recentOnDemandSubmissions = recentOnDemandSubmissions
+      recentOnDemandSubmissions = recentOnDemandSubmissions,
+      instanceTypeCache = instanceTypeCache
     )
 }
 
@@ -519,11 +680,19 @@ object BatchElasticSupport {
       for {
         requestMutex <- Mutex[IO]
         recentOnDemandSubmissions <- Ref.of[IO, List[(Instant, String)]](Nil)
+        instanceTypeCache <- Ref.of[IO, Map[String, InstanceCapacity]](Map.empty)
         support <- IO {
           val batch =
             if (batchConfig.region.isEmpty) BatchClient.create
             else
               BatchClient.builder
+                .region(Region.of(batchConfig.region))
+                .build
+
+          val ec2 =
+            if (batchConfig.region.isEmpty) Ec2Client.create
+            else
+              Ec2Client.builder
                 .region(Region.of(batchConfig.region))
                 .build
 
@@ -534,8 +703,10 @@ object BatchElasticSupport {
             createNodeFactory = new BatchCreateNodeFactory(
               batchConfig,
               batch,
+              ec2,
               requestMutex,
-              recentOnDemandSubmissions
+              recentOnDemandSubmissions,
+              instanceTypeCache
             ),
             getNodeName = BatchGetNodeName
           )

@@ -196,6 +196,7 @@ lazy val batch = project
     libraryDependencies ++= Seq(
       "software.amazon.awssdk" % "batch" % "2.23.13", // scala-steward:off
       "software.amazon.awssdk" % "cloudwatchlogs" % "2.23.13", // scala-steward:off
+      "software.amazon.awssdk" % "ec2" % "2.23.13", // scala-steward:off
       "io.github.pityka" %% "selfpackage-jib" % "2.1.6"
     )
   )
