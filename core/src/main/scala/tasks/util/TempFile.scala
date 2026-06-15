@@ -49,7 +49,9 @@ object TempFile {
 
   private val id: String = {
     val f = new java.text.SimpleDateFormat("yyyy_MM_dd_HH_mm_ss");
-    f.format(new java.util.Date)
+    val entropy = java.lang.Long
+      .toHexString(java.util.concurrent.ThreadLocalRandom.current().nextLong())
+    f.format(new java.util.Date) + "_" + entropy
   }
 
   private val prefix = "tasks" + id
