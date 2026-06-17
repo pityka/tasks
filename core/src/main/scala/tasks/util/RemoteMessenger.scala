@@ -125,20 +125,44 @@ private[tasks] object RemoteMessenger {
   ) =
     HttpRoutes.of[IO] {
       case request @ POST -> Root / prefix =>
-        request.decode[Message] { message =>
-          IO(
-            scribe.trace(
-              s"HTTP receive",
-              message
-            )
-          ) *>
-            localMessenger
-              .submit(message)
-              .flatMap(_ =>
-                Ok(
-                  s"submitted message"
+        request.attemptAs[Message].value.flatMap {
+          case Right(message) =>
+            IO(
+              scribe.trace(
+                s"HTTP receive",
+                message
+              )
+            ) *>
+              localMessenger
+                .submit(message)
+                .flatMap(_ =>
+                  Ok(
+                    s"submitted message"
+                  )
+                )
+          case Left(failure) =>
+            val causeMsg =
+              failure.cause.map(_.getMessage).getOrElse("none")
+            val responseBody =
+              s"failed to decode Message: ${failure.message}; cause: $causeMsg"
+            IO(
+              scribe.error(
+                s"HTTP receive: failed to decode Message",
+                scribe.data(
+                  Map(
+                    "decode-failure" -> failure.message,
+                    "decode-failure-cause" -> causeMsg,
+                    "content-type" -> request.contentType
+                      .map(_.mediaType.toString)
+                      .getOrElse("none"),
+                    "content-length" -> request.contentLength
+                      .map(_.toString)
+                      .getOrElse("none"),
+                    "request-uri" -> request.uri.renderString
+                  )
                 )
               )
+            ) *> BadRequest(responseBody)
         }
       case GET -> Root / "health" =>
         workerHealth.flatMap {
@@ -177,29 +201,37 @@ private[tasks] object RemoteMessenger {
     IO(
       scribe.trace(s"HTTP request", message, num, requestData)
     ) *>
-      client.expect[String](request).attempt.flatMap {
-        case Right(result) =>
-          IO(
-            scribe.trace(
-              s"HTTP response",
-              num,
-              requestData,
-              message,
-              scribe.data("response-body", result)
+      client
+        .expectOr[String](request) { response =>
+          response.bodyText.compile.string.map { body =>
+            new RuntimeException(
+              s"HTTP ${response.status.code} ${response.status.reason}: $body"
             )
-          )
-            .map(_ => result)
-        case Left(e) =>
-          IO(
-            scribe.error(
-              s"HTTP request failed.",
-              num,
-              requestData,
-              message,
-              e
-            )
-          ) *> IO.pure("")
-      }
+          }
+        }
+        .attempt
+        .flatMap {
+          case Right(result) =>
+            IO(
+              scribe.trace(
+                s"HTTP response",
+                num,
+                requestData,
+                message,
+                scribe.data("response-body", result)
+              )
+            ).map(_ => result)
+          case Left(e) =>
+            IO(
+              scribe.error(
+                s"HTTP request failed.",
+                num,
+                requestData,
+                message,
+                e
+              )
+            ) *> IO.pure("")
+        }
   }
 
   /** Will receive http POST messages on http://$bindHost:$bindPort/$bindPrefix
