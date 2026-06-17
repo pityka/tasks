@@ -87,7 +87,7 @@ private[tasks] object RemoteMessenger {
 
   import org.http4s.headers.`Content-Type`
 
-  implicit private val entityEncoder: EntityEncoder[IO, Message] =
+  implicit private[tasks] val entityEncoder: EntityEncoder[IO, Message] =
     EntityEncoder.encodeBy[IO, Message](
       Headers(`Content-Type`(MediaType.application.json))
     ) {
@@ -98,10 +98,14 @@ private[tasks] object RemoteMessenger {
         )
         .toEntity(_)
     }
-  implicit private val entityDecoder: EntityDecoder[IO, Message] = {
+  implicit private[tasks] val entityDecoder: EntityDecoder[IO, Message] = {
+    val readerConfig = com.github.plokhotnyuk.jsoniter_scala.core.ReaderConfig
+      .withMaxBufSize(2147483645)
+      .withMaxCharBufSize(2147483645)
     def make(bytes: Array[Byte]): IO[Either[DecodeFailure, Message]] =
       IO(
-        com.github.plokhotnyuk.jsoniter_scala.core.readFromArray[Message](bytes)
+        com.github.plokhotnyuk.jsoniter_scala.core
+          .readFromArray[Message](bytes, readerConfig)
       ).attempt.map(either =>
         either.left.map(throwable =>
           MalformedMessageBodyFailure("JSON decoding failed", Option(throwable))

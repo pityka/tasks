@@ -178,7 +178,12 @@ private[tasks] object SharedFileHelper {
                 } else {
 
                   com.github.plokhotnyuk.jsoniter_scala.core
-                    .readFromArray[History](byteArray)
+                    .readFromArray[History](
+                      byteArray,
+                      com.github.plokhotnyuk.jsoniter_scala.core.ReaderConfig
+                        .withMaxBufSize(2147483645)
+                        .withMaxCharBufSize(2147483645)
+                    )
 
                 }
               }

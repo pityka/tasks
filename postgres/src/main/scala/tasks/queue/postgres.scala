@@ -188,7 +188,12 @@ object Postgres {
       raw.map {
         case None => State.empty
         case Some(raw) =>
-          val serializable = readFromString[SerializableState](raw)
+          val serializable = readFromString[SerializableState](
+            raw,
+            ReaderConfig
+              .withMaxBufSize(2147483645)
+              .withMaxCharBufSize(2147483645)
+          )
           serializable.toState
       }
     }
