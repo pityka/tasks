@@ -341,16 +341,6 @@ private[tasks] object Launcher {
             idleTimedOut &&
               node.isDefined && exitCode.isDefined && shutdown.isDefined
 
-          if (
-            idleTimedOut && !shouldShutdown
-          ) {
-            scribe.warn(
-              s"Idle node timeout elapsed but self-shutdown is not configured: " +
-                s"node=${node.isDefined}, exitCode=${exitCode.isDefined}, shutdown=${shutdown.isDefined}",
-              address
-            )
-          }
-
           if (shouldShutdown) {
             scribe.debug(s"IdleShutdown", state.availableResources, address)
             state.copy(denyWorkBeforeShutdown = true) ->
