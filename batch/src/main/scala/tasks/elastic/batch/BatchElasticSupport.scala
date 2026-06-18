@@ -35,10 +35,7 @@ import tasks.deploy._
 import software.amazon.awssdk.services.batch.BatchClient
 import software.amazon.awssdk.services.batch.model._
 import software.amazon.awssdk.services.ec2.Ec2Client
-import software.amazon.awssdk.services.ec2.model.{
-  DescribeInstanceTypesRequest,
-  InstanceType => Ec2InstanceType
-}
+import software.amazon.awssdk.services.ec2.model.DescribeInstanceTypesRequest
 import software.amazon.awssdk.regions.Region
 
 import scala.jdk.CollectionConverters._
@@ -128,6 +125,7 @@ object BatchInstanceCapacity {
             .flatMap(cr => Option(cr.instanceTypes))
             .map(_.asScala.toList)
             .getOrElse(Nil)
+            .filter(t => t != null && t.nonEmpty)
         }.distinct
       }
 
@@ -147,7 +145,7 @@ object BatchInstanceCapacity {
           IO.interruptible {
             val resp = ec2.describeInstanceTypes(
               DescribeInstanceTypesRequest.builder
-                .instanceTypes(missing.map(Ec2InstanceType.fromValue).asJava)
+                .instanceTypesWithStrings(missing.asJava)
                 .build
             )
             resp.instanceTypes.asScala.toList.map { it =>
