@@ -227,7 +227,7 @@ private[tasks] object RemoteMessenger {
             ).map(_ => result)
           case Left(e) =>
             IO(
-              scribe.error(
+              scribe.warn(
                 s"HTTP request failed.",
                 num,
                 requestData,
