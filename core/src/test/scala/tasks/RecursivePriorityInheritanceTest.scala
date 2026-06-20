@@ -14,13 +14,13 @@ object RecursivePriorityInheritanceTest extends TestHelpers {
   val recordedPriorities =
     new java.util.concurrent.ConcurrentHashMap[Int, Int]()
 
-  val chainTask: TaskDefinition[Input, Int] =
-    Task[Input, Int]("recursive-priority-chain", 1) { case input =>
+  val chainTask: ParentTaskDefinition[Input, Int] =
+    ParentTask[Input, Int]("recursive-priority-chain", 1) { case input =>
       implicit ce =>
         recordedPriorities.put(input.i, ce.components.priority.s)
         if (input.i <= 0) IO.pure(input.i)
         else
-          chainTask(Input(input.i - 1))(ResourceRequest(1, 1))
+          chainTask(Input(input.i - 1))
     }
 
   def testConfig2 = {
@@ -37,7 +37,7 @@ object RecursivePriorityInheritanceTest extends TestHelpers {
   def run(depth: Int) = {
     recordedPriorities.clear()
     withTaskSystem(testConfig2) { implicit ts =>
-      chainTask(Input(depth))(ResourceRequest(1, 1)).map { _ =>
+      chainTask(Input(depth)).map { _ =>
         import scala.jdk.CollectionConverters._
         recordedPriorities.asScala.toMap.map { case (k, v) => (k.toInt, v.toInt) }
       }

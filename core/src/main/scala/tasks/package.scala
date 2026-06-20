@@ -203,7 +203,7 @@ package object tasks extends MacroCalls {
     component.launcher.address
 
   implicit def resourceAllocated(implicit
-      component: ComputationEnvironment
+      component: LeafComputationEnvironment
   ): ResourceAllocated =
     component.resourceAllocated
 

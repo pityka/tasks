@@ -58,34 +58,6 @@ object RecursiveCachedTaskTestSuite {
 
   }
 
-  val fibtask: TaskDefinition[FibInput, FibOut] =
-    Task[FibInput, FibOut]("fib", 1) {
-
-      case FibInput(Some(n)) => { implicit ce =>
-        val prg = n match {
-          case 0 => IO.pure(FibOut(0))
-          case 1 => IO.pure(FibOut(1))
-          case n => {
-            val f1 = fibtask(FibInput(Some(n - 1)))(
-              ResourceRequest(1, 1)
-            )
-            val f2 = fibtask(FibInput(Some(n - 2)))(
-              ResourceRequest(1, 1)
-            )
-            for {
-              r <- IO.both(f1, f2)
-            } yield FibOut(r._1.n + r._2.n)
-          }
-
-        }
-
-        prg
-      }
-
-      case _ => ???
-
-    }
-
   val zeroCpuConcurrent = new java.util.concurrent.atomic.AtomicInteger(0)
   val zeroCpuPeak = new java.util.concurrent.atomic.AtomicInteger(0)
 
@@ -103,24 +75,19 @@ object RecursiveCachedTaskTestSuite {
       case _ => ???
     }
 
-  val fibtaskZeroCpu: TaskDefinition[FibInput, FibOut] =
-    Task[FibInput, FibOut]("fib-zero-cpu", 1) {
+  // Recursive fib expressed as a parent task. Parents have zero resource
+  // allocation, so the recursion fans out without occupying CPU slots —
+  // exactly the pattern parents are meant to express.
+  val fibtaskParent: ParentTaskDefinition[FibInput, FibOut] =
+    ParentTask[FibInput, FibOut]("fib-parent", 1) {
 
       case FibInput(Some(n)) => { implicit ce =>
-        assert(
-          ce.resourceAllocated.cpu == 0,
-          s"expected 0 CPU allocation, got ${ce.resourceAllocated.cpu}"
-        )
         n match {
           case 0 => IO.pure(FibOut(0))
           case 1 => IO.pure(FibOut(1))
           case n =>
-            val f1 = fibtaskZeroCpu(FibInput(Some(n - 1)))(
-              ResourceRequest(0, 1)
-            )
-            val f2 = fibtaskZeroCpu(FibInput(Some(n - 2)))(
-              ResourceRequest(0, 1)
-            )
+            val f1 = fibtaskParent(FibInput(Some(n - 1)))
+            val f2 = fibtaskParent(FibInput(Some(n - 2)))
             IO.both(f1, f2).map { case (a, b) => FibOut(a.n + b.n) }
         }
       }
@@ -158,16 +125,9 @@ tasks.failuredetector.heartbeat-interval = 200 ms
   implicit val system: TaskSystemComponents = pair._1._1
   import RecursiveCachedTaskTestSuite._
 
-  test("recursive fibonacci") {
+  test("recursive fibonacci via parent task") {
     val n = 16
-    val r = (fibtask(FibInput(n))(ResourceRequest(1, 1))).unsafeRunSync().n
-    assertResult(r)(serial(n))
-  }
-
-  test("recursive fibonacci with 0 cpu allocation") {
-    val n = 16
-    val r =
-      (fibtaskZeroCpu(FibInput(n))(ResourceRequest(0, 1))).unsafeRunSync().n
+    val r = fibtaskParent(FibInput(n)).unsafeRunSync().n
     assertResult(r)(serial(n))
   }
 

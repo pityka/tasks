@@ -5,7 +5,7 @@ import tasks.queue._
 import cats.effect.IO
 trait MacroCalls {
   inline def Task[A <: AnyRef, C](taskID: String, taskVersion: Int)(
-      comp: A => ComputationEnvironment => IO[C]
+      comp: A => LeafComputationEnvironment => IO[C]
   )(implicit
       inline serA: Serializer[A],
       inline deserA: Deserializer[A],
@@ -15,6 +15,28 @@ trait MacroCalls {
   ): TaskDefinition[A, C] = ${
     TaskDefinitionMacros
       .taskDefinitionFromTree[A, C](
+        serA = 'serA,
+        deserA = 'deserA,
+        serC = 'serC,
+        deserC = 'deserC,
+        filePrefix = 'filePrefix,
+        taskID = 'taskID,
+        taskVersion = 'taskVersion,
+        comp = 'comp
+      )
+  }
+
+  inline def ParentTask[A <: AnyRef, C](taskID: String, taskVersion: Int)(
+      comp: A => ParentComputationEnvironment => IO[C]
+  )(implicit
+      inline serA: Serializer[A],
+      inline deserA: Deserializer[A],
+      inline serC: Serializer[C],
+      inline deserC: Deserializer[C],
+      inline filePrefix: FilePrefix[A]
+  ): ParentTaskDefinition[A, C] = ${
+    TaskDefinitionMacros
+      .parentTaskDefinitionFromTree[A, C](
         serA = 'serA,
         deserA = 'deserA,
         serC = 'serC,

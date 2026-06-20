@@ -669,7 +669,12 @@ object TaskSystemComponents {
               launcherName: LauncherName,
               shutdownInitiated: Ref[IO, Boolean]
           ) =
-            if (hostConfig.availableCPU > 0 && hostConfig.isWorker) {
+            // Create the launcher whenever this node has the Worker role, even
+            // when availableCPU == 0. A zero-CPU launcher still picks up
+            // zero-resource ParentTask submissions via `askForWork`; non-zero
+            // tasks fail its `canFulfillRequest` check and fall through to
+            // elastic as before.
+            if (hostConfig.isWorker) {
               val refreshInterval = config.askInterval
               Launcher
                 .makeHandle(

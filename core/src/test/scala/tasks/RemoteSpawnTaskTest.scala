@@ -60,8 +60,8 @@ object RemoteSpawnTaskTest {
 
   }
 
-  val parent: TaskDefinition[FibInput, FibOut] =
-    Task[FibInput, FibOut]("parent", 1) {
+  val parent: ParentTaskDefinition[FibInput, FibOut] =
+    ParentTask[FibInput, FibOut]("parent", 1) {
 
       case FibInput(Some(n), Some(tag)) => { implicit ce =>
         val prg = n match {
@@ -78,7 +78,6 @@ object RemoteSpawnTaskTest {
               r <- IO.both(f1, f2)
 
             } yield {
-              // scribe.warn(("AAA!!!",r,ce.resourceAllocated).toString)
               FibOut(r._1.n + r._2.n)
             }
           }
@@ -172,9 +171,7 @@ tasks.sh.contexts = [
 
   test("task from parent on remote node") {
     val n = 4
-    val r = (parent(FibInput(n))(
-      ResourceRequest(cpu = (1, 1), memory = 1, gpu = 1, scratch = 0)
-    )).unsafeRunSync().n
+    val r = parent(FibInput(n)).unsafeRunSync().n
     assertResult(r)(6)
   }
 

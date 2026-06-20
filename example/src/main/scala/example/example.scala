@@ -132,16 +132,16 @@ object Fib {
     * The implicit context provides an ExecutionContext in which the Futures and
     * the body of the task is running.
     */
-  val fibtask: TaskDefinition[FibInput, Int] =
-    Task[FibInput, Int]("fib", 1) { case FibInput(n) =>
+  val fibtask: ParentTaskDefinition[FibInput, Int] =
+    ParentTask[FibInput, Int]("fib", 1) { case FibInput(n) =>
       implicit cxt =>
         n match {
           case 0 => IO.pure(0)
           case 1 => IO.pure(1)
           case n => {
 
-            val f1 = fibtask(FibInput(n - 1))(ResourceRequest(1, 1, 1))
-            val f2 = fibtask(FibInput(n - 2))(ResourceRequest(1, 1, 1))
+            val f1 = fibtask(FibInput(n - 1))
+            val f2 = fibtask(FibInput(n - 2))
 
             val f3: IO[Int] = for {
               r1 <- f1
@@ -196,7 +196,7 @@ object PiApp extends App {
     }
 
     /* Start tasks for Fibonacci, subtasks are started by this task. */
-    val fibResult = fibtask(FibInput(4))(ResourceRequest(1, 1000, 1))
+    val fibResult = fibtask(FibInput(4))
 
     /* Block and wait for the futures */
 

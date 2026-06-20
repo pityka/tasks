@@ -152,21 +152,54 @@ private[tasks] object UntypedResult {
     )
 }
 
-class ComputationEnvironment(
+sealed trait ComputationEnvironment {
+  implicit def components: TaskSystemComponents
+  implicit def launcher: LauncherHandle
+  def taskActor: Task
+  def taskHash: HashedTaskDescription
+  def filePrefixValue: String
+
+  def appendLog(l: LogRecord): Boolean
+  def currentLogRecords: List[LogRecord]
+
+  def withFilePrefix[B](
+      prefix: Seq[String]
+  )(fun: ComputationEnvironment => B): B
+  def replaceFilePrefix[B](
+      prefix: Seq[String]
+  )(fun: ComputationEnvironment => B): B
+
+  implicit def fileServiceComponent: FileServiceComponent
+  implicit def filePrefix: FileServicePrefix
+  implicit def queue: Queue
+  implicit def cache: TaskResultCache
+  implicit def prefix: Prefix
+
+  def toTaskSystemComponents: TaskSystemComponents
+}
+
+sealed trait LeafComputationEnvironment extends ComputationEnvironment {
+  def resourceAllocated: ResourceAllocated
+}
+
+sealed trait ParentComputationEnvironment extends ComputationEnvironment
+
+private[tasks] final class RuntimeComputationEnvironment(
     val resourceAllocated: ResourceAllocated,
     implicit val components: TaskSystemComponents,
     implicit val launcher: LauncherHandle,
     val taskActor: Task,
     val taskHash: HashedTaskDescription,
     val filePrefixValue: String
-) {
+) extends LeafComputationEnvironment
+    with ParentComputationEnvironment {
 
   private val logQueue =
     new java.util.concurrent.ConcurrentLinkedQueue[LogRecord]()
 
-  def appendLog(l: LogRecord) = logQueue.add(l)
+  def appendLog(l: LogRecord): Boolean = logQueue.add(l)
 
-  def currentLogRecords = {
+  def currentLogRecords: List[LogRecord] = {
     import scala.jdk.CollectionConverters._
     logQueue.iterator.asScala.toList
   }
@@ -175,7 +208,7 @@ class ComputationEnvironment(
       prefix: Seq[String]
   )(fun: ComputationEnvironment => B): B =
     fun(
-      new ComputationEnvironment(
+      new RuntimeComputationEnvironment(
         resourceAllocated = resourceAllocated,
         components = components.withChildPrefix(prefix),
         launcher = launcher,
@@ -189,7 +222,7 @@ class ComputationEnvironment(
       prefix: Seq[String]
   )(fun: ComputationEnvironment => B): B =
     fun(
-      new ComputationEnvironment(
+      new RuntimeComputationEnvironment(
         resourceAllocated = resourceAllocated,
         components = components.replaceFilePrefix(prefix),
         launcher = launcher,
@@ -210,9 +243,7 @@ class ComputationEnvironment(
   implicit def prefix: Prefix =
     Prefix(if (filePrefixValue.isEmpty) taskHash.dataHash else filePrefixValue)
 
-  def toTaskSystemComponents =
-    components
-
+  def toTaskSystemComponents: TaskSystemComponents = components
 }
 
 private[tasks] class Task(
@@ -290,7 +321,7 @@ private[tasks] class Task(
         codeVersion = tasksConfig.codeVersion.s,
         traceId = Some(lineage.leaf.toString)
       )
-      val ce = new ComputationEnvironment(
+      val ce = new RuntimeComputationEnvironment(
         resourceAllocated = resourceAllocated,
         components = new TaskSystemComponents(
           queue = queue,

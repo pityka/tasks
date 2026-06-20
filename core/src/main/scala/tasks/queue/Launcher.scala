@@ -107,63 +107,45 @@ private[tasks] object Launcher {
 
     def schedulers(
         ref: Ref[IO, Launcher.State]
-    ): IO[fs2.Stream[IO, Unit]] =
-      messenger.subscribe(tasks.util.message.Address(address.name)).map {
-        inboundMessages =>
-          val scribeScheduler =
-            fs2.Stream.fixedRate[IO](20 seconds).evalMap { _ =>
-              ref.get.flatMap(state =>
-                IO(
-                  scribe.debug(
-                    s"Available resources: ",
-                    state.availableResources,
-                    address
-                  )
-                )
+    ): fs2.Stream[IO, Unit] = {
+      val scribeScheduler =
+        fs2.Stream.fixedRate[IO](20 seconds).evalMap { _ =>
+          ref.get.flatMap(state =>
+            IO(
+              scribe.debug(
+                s"Available resources: ",
+                state.availableResources,
+                address
               )
-            }
-          val askForWorkScheduler =
-            fs2.Stream
-              .fixedRate[IO](refreshInterval)
-              .evalMap(_ =>
-                derive(ref).askForWork(ref, messenger, address, queue)
-              )
+            )
+          )
+        }
+      val askForWorkScheduler =
+        fs2.Stream
+          .fixedRate[IO](refreshInterval)
+          .evalMap(_ =>
+            derive(ref).askForWork(ref, messenger, address, queue)
+          )
 
-          val incrementStream =
-            fs2.Stream
-              .fixedRate[IO](config.launcherActorHeartBeatInterval)
-              .evalMap(_ => queue.increment(address))
+      val incrementStream =
+        fs2.Stream
+          .fixedRate[IO](config.launcherActorHeartBeatInterval)
+          .evalMap(_ => queue.increment(address))
 
-          val handle = derive(ref)
-          val cancelMessageStream =
-            inboundMessages.evalMap {
-              case tasks.util.message.Message(
-                    tasks.util.message.MessageData.CancelTask(sch),
-                    _,
-                    _
-                  ) =>
-                handle.handleCancelTask(sch)
-              case _ => IO.unit
-            }
-
-          scribeScheduler
-            .mergeHaltBoth(askForWorkScheduler)
-            .mergeHaltBoth(incrementStream)
-            .mergeHaltBoth(cancelMessageStream)
-
-      }
+      scribeScheduler
+        .mergeHaltBoth(askForWorkScheduler)
+        .mergeHaltBoth(incrementStream)
+    }
 
     Resource.eval(init.flatMap(s => Ref.of[IO, State](s))).flatMap { stateRef =>
-      val schedulerStream =
-        schedulers(stateRef)
+      val stream = schedulers(stateRef)
 
-      val streamFiber = schedulerStream.flatMap { case stream =>
+      val streamFiber =
         stream
           .onFinalize(IO(scribe.debug(s"Stream terminated", address)))
           .compile
           .drain
           .start
-      }
 
       val releaseIO =
         IO(
@@ -199,8 +181,8 @@ private[tasks] object Launcher {
     * @param runningTasks
     *   One entry per running task: (Task, ScheduleTask, allocation,
     *   start nanoTime, Deferred holding the executing fiber). The
-    *   Deferred lets preemption cancel a specific task's fiber without
-    *   maintaining a separate task→fiber map.
+    *   Deferred lets the launcher release cancel each task's fiber on
+    *   shutdown even if the task is still being launched.
     */
   case class State(
       maxResources: VersionedResourceAvailable,
@@ -432,17 +414,13 @@ private[tasks] object Launcher {
         taskActor: Task,
         receivedResult: UntypedResultWithMetadata
     ) = {
-      // Missing entry is legitimate when a CancelTask handler has
-      // already removed it. Without preemption this would be a bug;
-      // with it, the cancel path is the one place an entry can be
-      // gone before taskFinished runs.
       state.runningTasks.find(_._1 == taskActor) match {
         case None =>
           scribe.warn(
             "TaskFinishedNoEntry",
             scribe.data(
               Map(
-                "explain" -> "taskFinished called but no entry in runningTasks. Likely a CancelTask raced ahead and cleared the entry."
+                "explain" -> "taskFinished called but no entry in runningTasks."
               )
             ),
             address
@@ -523,7 +501,7 @@ private[tasks] object Launcher {
             "TaskFailedNoEntry",
             scribe.data(
               Map(
-                "explain" -> "taskFailed called but no entry in runningTasks. Likely a CancelTask raced ahead and cleared the entry."
+                "explain" -> "taskFailed called but no entry in runningTasks."
               )
             ),
             address
@@ -541,48 +519,6 @@ private[tasks] object Launcher {
           val sideEffect = queue.taskFailed(sch, cause)
 
           (st2, sideEffect)
-      }
-    }
-
-    private[tasks] def handleCancelTask(
-        sch: MessageData.ScheduleTask
-    ): IO[Unit] = {
-      val key =
-        QueueImpl.ScheduleTaskEqualityProjection(sch.description)
-      def matchesKey(
-          entry: (
-              Task,
-              MessageData.ScheduleTask,
-              VersionedResourceAllocated,
-              Long,
-              Deferred[IO, FiberIO[Unit]]
-          )
-      ): Boolean =
-        QueueImpl.ScheduleTaskEqualityProjection(
-          entry._2.description
-        ) == key
-
-      ref.get.map(_.runningTasks.find(matchesKey)).flatMap {
-        case None =>
-          queue.taskPreempted(sch)
-        case Some(elem) =>
-          val (_, _, _, _, fiberD) = elem
-          fiberD.get.flatMap(_.cancel) *>
-            ref.flatModify { state =>
-              state.runningTasks.find(matchesKey) match {
-                case None =>
-                  (state, queue.taskPreempted(sch))
-                case Some(matched) =>
-                  val (_, _, alloc, _, _) = matched
-                  val st0 = state.copy(
-                    runningTasks = state.runningTasks.filterNot(_ == matched),
-                    availableResources =
-                      state.availableResources.addBack(alloc),
-                    lastTaskFinished = System.nanoTime
-                  )
-                  (st0, queue.taskPreempted(sch))
-              }
-            } *> askForWork(ref, messenger, address, queue)
       }
     }
   }

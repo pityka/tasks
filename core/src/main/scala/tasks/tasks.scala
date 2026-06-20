@@ -92,10 +92,63 @@ trait HasPersistent[+A] { self: A =>
   def persistent: A
 }
 
+/** Capability witness required by [[TaskDefinition.apply]] and
+  * [[ParentTaskDefinition.apply]]. Provided implicitly in exactly two places:
+  * top-level code (where the user holds a [[TaskSystemComponents]] and no
+  * enclosing leaf body) and parent task bodies (via the implicit
+  * [[ParentComputationEnvironment]]). Leaves see neither, so attempting to
+  * submit a child task from a leaf body fails to compile.
+  */
+final class SubmitContext private[tasks] (
+    private[tasks] val components: TaskSystemComponents
+)
+
+object SubmitContext {
+
+  /** Available inside parent task bodies. */
+  implicit def fromParent(implicit
+      pce: ParentComputationEnvironment
+  ): SubmitContext = new SubmitContext(pce.components)
+
+  /** Available at top-level, i.e. when an implicit [[TaskSystemComponents]] is
+    * in scope but no enclosing [[ComputationEnvironment]] is. The
+    * [[SubmitContext.NotInLeaf]] guard is what excludes leaf bodies: their
+    * implicit `ce: ComputationEnvironment` poisons `NotInLeaf` so this
+    * derivation falls through.
+    */
+  implicit def fromTopLevel(implicit
+      tsc: TaskSystemComponents,
+      ng: NotInLeaf
+  ): SubmitContext = new SubmitContext(tsc)
+
+  /** Marker that's in implicit scope iff no [[ComputationEnvironment]] is.
+    *
+    * The two `ambiguous*` derivations are intentionally ambiguous whenever a
+    * `ComputationEnvironment` is implicitly available, so implicit search for
+    * `NotInLeaf` fails inside any task body. When no CE is around, only
+    * `default` is a candidate and the marker resolves cleanly. Works on both
+    * Scala 2 and Scala 3 with no external dependency.
+    */
+  sealed class NotInLeaf
+  object NotInLeaf {
+    implicit def default: NotInLeaf = new NotInLeaf
+    implicit def ambiguousIfLeaf1(implicit
+        ce: ComputationEnvironment
+    ): NotInLeaf = throw new AssertionError(
+      "NotInLeaf ambiguity instance must never be summoned"
+    )
+    implicit def ambiguousIfLeaf2(implicit
+        ce: ComputationEnvironment
+    ): NotInLeaf = throw new AssertionError(
+      "NotInLeaf ambiguity instance must never be summoned"
+    )
+  }
+}
+
 final class TaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
     private[tasks] val rs: Spore[Unit, Deserializer[A]],
     private[tasks] val ws: Spore[Unit, Serializer[B]],
-    private[tasks] val fs: Spore[A, ComputationEnvironment => IO[B]],
+    private[tasks] val fs: Spore[A, LeafComputationEnvironment => IO[B]],
     private[tasks] val taskId: TaskId
 ) {
 
@@ -107,7 +160,8 @@ final class TaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
       priorityBase: Priority = Priority(0),
       labels: Labels = Labels.empty,
       noCache: Boolean = false
-  )(implicit components: TaskSystemComponents): IO[B] = {
+  )(implicit submit: SubmitContext): IO[B] = {
+    val components = submit.components
     implicit val queue = components.queue
     implicit val cache = components.cache
     implicit val prefix = components.filePrefix
@@ -119,12 +173,80 @@ final class TaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
         taskId = taskId1,
         inputDeserializer = rs,
         outputSerializer = ws,
-        function = fs,
+        function = fs.asInstanceOf[Spore[A, ComputationEnvironment => IO[B]]],
         input = a,
         writer = writer1,
         filePrefix = implicitly[FilePrefix[A]],
         reader = reader2,
         resourceConsumed = resource,
+        queue = queue,
+        fileServicePrefix = prefix,
+        cache = cache,
+        priority = Priority(priorityBase.s + components.priority.s + 1),
+        promise = deferred,
+        labels = components.labels ++ labels,
+        lineage = components.lineage,
+        noCache = noCache,
+        messenger = components.messenger
+      )
+      val r = tasks.util.Actor
+        .makeFromBehavior[Proxy](behavior, components.messenger)
+      r.use { case proxy =>
+        deferred.get.flatMap { value =>
+          IO.fromEither(value)
+        }
+      }
+    }
+
+  }
+
+}
+
+/** A parent task. Submits children but performs no resource-bearing work of
+  * its own — it always runs with a zero ResourceRequest. The body type is
+  * `A => ParentComputationEnvironment => IO[B]`, and the bodies of parent
+  * tasks (alone among task bodies) are eligible to submit children because
+  * [[ParentComputationEnvironment]] is what derives a [[SubmitContext]].
+  */
+final class ParentTaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
+    private[tasks] val rs: Spore[Unit, Deserializer[A]],
+    private[tasks] val ws: Spore[Unit, Serializer[B]],
+    private[tasks] val fs: Spore[A, ParentComputationEnvironment => IO[B]],
+    private[tasks] val taskId: TaskId
+) {
+
+  def writer1 = implicitly[Serializer[A]]
+  def reader2 = implicitly[Deserializer[B]]
+
+  def apply(
+      a: A,
+      priorityBase: Priority = Priority(0),
+      labels: Labels = Labels.empty,
+      noCache: Boolean = false
+  )(implicit submit: SubmitContext): IO[B] = {
+    val components = submit.components
+    implicit val queue = components.queue
+    implicit val cache = components.cache
+    implicit val prefix = components.filePrefix
+    implicit val tasksConfig = components.tasksConfig
+    val zeroResource: ResourceRequest =
+      tasks.ResourceRequest(cpu = (0, 0), memory = 0, scratch = 0, gpu = 0)
+
+    val taskId1 = taskId
+
+    // Same body as TaskDefinition.apply; the only differences are the function
+    // type and the fixed-to-zero resource request.
+    Deferred[IO, Either[Throwable, B]].flatMap { deferred =>
+      val behavior = new ProxyTask[A, B](
+        taskId = taskId1,
+        inputDeserializer = rs,
+        outputSerializer = ws,
+        function = fs.asInstanceOf[Spore[A, ComputationEnvironment => IO[B]]],
+        input = a,
+        writer = writer1,
+        filePrefix = implicitly[FilePrefix[A]],
+        reader = reader2,
+        resourceConsumed = zeroResource,
         queue = queue,
         fileServicePrefix = prefix,
         cache = cache,

@@ -34,7 +34,7 @@ private[tasks] object TaskDefinitionMacros {
       taskID: cxt.Expr[String],
       taskVersion: cxt.Expr[Int]
   )(
-      comp: cxt.Expr[A => ComputationEnvironment => IO[C]]
+      comp: cxt.Expr[A => LeafComputationEnvironment => IO[C]]
   ) = {
     import cxt.universe._
     val a = weakTypeOf[A]
@@ -48,6 +48,30 @@ private[tasks] object TaskDefinitionMacros {
       val $name2 = _root_.tasks.spore{() => implicitly[_root_.tasks.queue.Serializer[$c]]}
       val $name3 = _root_.tasks.spore{$comp}
       new _root_.tasks.TaskDefinition[$a,$c]($name1,$name2,$name3,_root_.tasks.queue.TaskId($taskID,$taskVersion))
+    """
+    r
+  }
+
+  def parentTaskDefinitionFromTree[A: cxt.WeakTypeTag, C: cxt.WeakTypeTag](
+      cxt: Context
+  )(
+      taskID: cxt.Expr[String],
+      taskVersion: cxt.Expr[Int]
+  )(
+      comp: cxt.Expr[A => ParentComputationEnvironment => IO[C]]
+  ) = {
+    import cxt.universe._
+    val a = weakTypeOf[A]
+    val c = weakTypeOf[C]
+    val name1 = cxt.freshName(TermName("task"))
+    val name2 = cxt.freshName(TermName("task"))
+    val name3 = cxt.freshName(TermName("task"))
+
+    val r = q"""
+      val $name1 = _root_.tasks.spore{() => implicitly[_root_.tasks.queue.Deserializer[$a]]}
+      val $name2 = _root_.tasks.spore{() => implicitly[_root_.tasks.queue.Serializer[$c]]}
+      val $name3 = _root_.tasks.spore{$comp}
+      new _root_.tasks.ParentTaskDefinition[$a,$c]($name1,$name2,$name3,_root_.tasks.queue.TaskId($taskID,$taskVersion))
     """
     r
   }

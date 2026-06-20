@@ -38,7 +38,7 @@ private[tasks] object TaskDefinitionMacros {
       filePrefix: Expr[FilePrefix[A]],
       taskID: Expr[String],
       taskVersion: Expr[Int],
-      comp: Expr[A => ComputationEnvironment => IO[C]]
+      comp: Expr[A => LeafComputationEnvironment => IO[C]]
   )(using Quotes) = {
     import quotes.reflect.*
 
@@ -75,6 +75,54 @@ private[tasks] object TaskDefinitionMacros {
       .asExprOf[_root_.tasks.TaskDefinition[A, C]]
 
     // report.info(s"Expanded task def to \n${block.asTerm.show}")
+
+    block
+
+  }
+
+  def parentTaskDefinitionFromTree[A: Type, C: Type](
+      serA: Expr[Serializer[A]],
+      deserA: Expr[Deserializer[A]],
+      serC: Expr[Serializer[C]],
+      deserC: Expr[Deserializer[C]],
+      filePrefix: Expr[FilePrefix[A]],
+      taskID: Expr[String],
+      taskVersion: Expr[Int],
+      comp: Expr[A => ParentComputationEnvironment => IO[C]]
+  )(using Quotes) = {
+    import quotes.reflect.*
+
+    def valdef[T: Type](expr: Expr[T]) = {
+      val name1 = Symbol.freshName("task")
+      val symbol1 = Symbol.newVal(
+        Symbol.spliceOwner,
+        name1,
+        TypeRepr.of[T],
+        Flags.Final,
+        Symbol.noSymbol
+      )
+      val def1 = ValDef(symbol1, Some(expr.asTerm.changeOwner(symbol1)))
+
+      val ident1 = Ref(symbol1)
+
+      (def1, ident1.asExprOf[T])
+    }
+
+    val (d1, i1) = valdef('{ _root_.tasks.spore { (_: Unit) => $deserA } })
+    val (d2, i2) = valdef('{ _root_.tasks.spore { (_: Unit) => $serC } })
+    val (d3, i3) = valdef(tasks.queue.SporeMacros.sporeImpl(comp))
+
+    val td = '{
+      new _root_.tasks.ParentTaskDefinition[A, C](
+        ${ i1 },
+        $i2,
+        $i3,
+        _root_.tasks.queue.TaskId($taskID, $taskVersion)
+      )(using $serA, $filePrefix, $deserC)
+    }
+
+    val block = Block(List(d1, d2, d3), td.asTerm)
+      .asExprOf[_root_.tasks.ParentTaskDefinition[A, C]]
 
     block
 

@@ -5,10 +5,16 @@ import tasks.queue._
 import cats.effect.IO
 trait MacroCalls {
   def Task[A <: AnyRef, C](taskID: String, taskVersion: Int)(
-      comp: A => ComputationEnvironment => IO[C]
+      comp: A => LeafComputationEnvironment => IO[C]
   ): TaskDefinition[A, C] =
     macro TaskDefinitionMacros
       .taskDefinitionFromTree[A, C]
+
+  def ParentTask[A <: AnyRef, C](taskID: String, taskVersion: Int)(
+      comp: A => ParentComputationEnvironment => IO[C]
+  ): ParentTaskDefinition[A, C] =
+    macro TaskDefinitionMacros
+      .parentTaskDefinitionFromTree[A, C]
 
   def spore[A, B](value: A => B): Spore[A, B] =
     macro tasks.queue.SporeMacros
