@@ -112,37 +112,14 @@ object SubmitContext {
 
   /** Available at top-level, i.e. when an implicit [[TaskSystemComponents]] is
     * in scope but no enclosing [[ComputationEnvironment]] is. The
-    * [[SubmitContext.NotInLeaf]] guard is what excludes leaf bodies: their
-    * implicit `ce: ComputationEnvironment` poisons `NotInLeaf` so this
-    * derivation falls through.
+    * [[NotInLeaf]] guard is what excludes leaf bodies: when a
+    * `ComputationEnvironment` is implicitly in scope, `NotInLeaf` does not
+    * resolve, so this derivation falls through.
     */
   implicit def fromTopLevel(implicit
       tsc: TaskSystemComponents,
       ng: NotInLeaf
   ): SubmitContext = new SubmitContext(tsc)
-
-  /** Marker that's in implicit scope iff no [[ComputationEnvironment]] is.
-    *
-    * The two `ambiguous*` derivations are intentionally ambiguous whenever a
-    * `ComputationEnvironment` is implicitly available, so implicit search for
-    * `NotInLeaf` fails inside any task body. When no CE is around, only
-    * `default` is a candidate and the marker resolves cleanly. Works on both
-    * Scala 2 and Scala 3 with no external dependency.
-    */
-  sealed class NotInLeaf
-  object NotInLeaf {
-    implicit def default: NotInLeaf = new NotInLeaf
-    implicit def ambiguousIfLeaf1(implicit
-        ce: ComputationEnvironment
-    ): NotInLeaf = throw new AssertionError(
-      "NotInLeaf ambiguity instance must never be summoned"
-    )
-    implicit def ambiguousIfLeaf2(implicit
-        ce: ComputationEnvironment
-    ): NotInLeaf = throw new AssertionError(
-      "NotInLeaf ambiguity instance must never be summoned"
-    )
-  }
 }
 
 final class TaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
