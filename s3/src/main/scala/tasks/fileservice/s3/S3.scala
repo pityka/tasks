@@ -23,7 +23,7 @@ package tasks.fileservice.s3
 
 import cats.effect._
 import cats.effect.std.Semaphore
-import fs2.{Chunk, Pipe}
+import fs2.{Chunk, Pipe, Pull}
 import software.amazon.awssdk.core.async.{
   AsyncRequestBody,
   AsyncResponseTransformer
@@ -106,6 +106,50 @@ object S3 {
       builder.httpClient(nettyBuilder.build()).build()
     } else builder.build()
   }
+
+  // S3 multipart limits:
+  //   - parts numbered 1..10000
+  //   - each part >= 5 MiB (except the last)
+  //   - each part <= 5 GiB
+  //   - object <= 5 TiB  
+  private[s3] val maxPartSizeBytes: Int = 1900000000
+  private[s3] val partSizeDoublingInterval: Int = 800
+
+  private[s3] def partSizeForIndex(
+      partNum: Long,
+      initialBytes: Int
+  ): Int = {
+    val tier = ((partNum - 1) / partSizeDoublingInterval).toInt
+    val safeTier = math.max(0, math.min(tier, 40))
+    val grown = initialBytes.toLong * (1L << safeTier)
+    math.min(grown, maxPartSizeBytes.toLong).toInt
+  }
+
+  private[s3] def growingChunks(
+      initialBytes: Int
+  ): Pipe[IO, Byte, (Chunk[Byte], Long)] = { in =>
+    def go(
+        stream: fs2.Stream[IO, Byte],
+        buffer: Chunk.Queue[Byte],
+        partNum: Long
+    ): Pull[IO, (Chunk[Byte], Long), Unit] = {
+      val target = partSizeForIndex(partNum, initialBytes)
+      if (buffer.size >= target) {
+        val head = buffer.take(target)
+        val tail = buffer.drop(target)
+        Pull.output1((head, partNum)) >> go(stream, tail, partNum + 1)
+      } else {
+        stream.pull.uncons.flatMap {
+          case Some((c, rest)) =>
+            go(rest, buffer :+ c, partNum)
+          case None =>
+            if (buffer.size > 0) Pull.output1((buffer, partNum))
+            else Pull.done
+        }
+      }
+    }
+    go(in, Chunk.Queue.empty[Byte], 1L).stream
+  }
 }
 
 /** Wrapper of AWS SDK's S3AsyncClient into fs2.Stream and cats.effect.IO
@@ -174,24 +218,20 @@ class S3(
         }
       }
 
-  /** Uploads a file in multiple parts of the specified @partSize per request.
-    * Suitable for big files.
+  /** Uploads a file in multiple parts. Suitable for big files.
     *
-    * It does so in constant memory. So at a given time, only the number of
-    * bytes indicated by @partSize will be loaded in memory.
+    * The part size starts at @partSize MB and doubles every
+    * `S3.partSizeDoublingInterval` parts (capped at `S3.maxPartSizeBytes`).
+    * This keeps the part count under S3's 10000-part limit for streams up to
+    * the 5 TiB object-size ceiling, regardless of the initial @partSize.
+    *
+    * Memory use is proportional to @partSize * @multiPartConcurrency at the
+    * start of the upload, and grows alongside the chunk size as more parts are
+    * uploaded.
     *
     * Note: AWS S3 API does not support uploading empty files via multipart
-    * upload. It does not gracefully respond on attempting to do this and
-    * returns a `400` response with a generic error message. This function
-    * accepts a boolean `uploadEmptyFile` (set to `false` by default) to
-    * determine how to handle this scenario. If set to false (default) and no
-    * data has passed through the stream, it will gracefully abort the
-    * multi-part upload request. If set to true, and no data has passed through
-    * the stream, an empty file will be uploaded on completion. An
-    * `Option[ETag]` of `None` will be emitted on the stream if no file was
-    * uploaded, else a `Some(ETag)` will be emitted. Alternatively, If you need
-    * to create empty files, consider using consider using [[uploadFile]]
-    * instead.
+    * upload. If no data passes through the stream, the multipart upload is
+    * aborted and an empty object is uploaded via a single PutObject instead.
     *
     * For small files, consider using [[uploadFile]] instead.
     *
@@ -200,11 +240,8 @@ class S3(
     * @param key
     *   the target file key
     * @param partSize
-    *   the part size indicated in MBs. It must be at least 5, as required by
-    *   AWS.
-    * @param uploadEmptyFiles
-    *   whether to upload empty files or not, if no data has passed through the
-    *   stream create an empty file default is false
+    *   the initial part size indicated in MBs. It must be at least 5, as
+    *   required by AWS.
     * @param multiPartConcurrency
     *   the number of concurrent parts to upload
     */
@@ -217,7 +254,7 @@ class S3(
       serverSideEncryption: Option[String],
       grantFullControl: List[String]
   ): Pipe[IO, Byte, S3UploadResponse] = {
-    val chunkSizeBytes = math.max(5, partSize) * 1048576
+    val initialChunkBytes = math.max(5, partSize) * 1048576
 
     def initiateMultipartUpload = {
       val base = CreateMultipartUploadRequest
@@ -318,8 +355,7 @@ class S3(
       fs2.Stream
         .eval(initiateMultipartUpload)
         .flatMap { uploadId =>
-          in.chunkN(chunkSizeBytes)
-            .zip(fs2.Stream.iterate(1L)(_ + 1))
+          in.through(S3.growingChunks(initialChunkBytes))
             .through(uploadPart(uploadId))
             .fold[List[(UploadPartResponse, PartId, PartLength)]](List.empty)(
               _ :+ _
@@ -444,5 +480,5 @@ class S3(
           .unchunks
       }
 
-}
+  }
 }
