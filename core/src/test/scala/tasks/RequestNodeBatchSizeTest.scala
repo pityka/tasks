@@ -22,8 +22,8 @@ import scala.concurrent.duration._
   *
   * `handleQueueStat` derives the list of node requests to issue from
   * `neededNodes: Map[ResourceRequest, Int]`, but historically did
-  * `neededNodes.take(allowedNewNodes)` (which takes that many *map entries*
-  * \= distinct resource shapes) and then iterated over the entries dropping the
+  * `neededNodes.take(allowedNewNodes)` (which takes that many *map entries* \=
+  * distinct resource shapes) and then iterated over the entries dropping the
   * count via `case (req, _) => ...`. So for the common case of many tasks of
   * the same shape, exactly **one** node was pre-committed and one AWS submit
   * issued per `handleQueueStat` invocation, regardless of `maxNodes`. Combined

@@ -400,7 +400,6 @@ private[tasks] class QueueImpl(
     cacheIO *> handleQueueStatIO
   }
 
-  
   private def enqueueOrCacheHit(
       sch: ScheduleTask,
       proxies: List[Proxy],
@@ -528,11 +527,9 @@ private[tasks] class QueueImpl(
           val rawNeededNodes: Map[ResourceRequest, Int] =
             if (plannedSpawns.nonEmpty) plannedSpawns
             else if (queueStat.queued.nonEmpty && noWorkerKnown)
-              queueStat.queued.headOption
-                .map { case (_, versioned) =>
-                  versioned.cpuMemoryRequest -> 1
-                }
-                .toMap
+              queueStat.queued.headOption.map { case (_, versioned) =>
+                versioned.cpuMemoryRequest -> 1
+              }.toMap
             else plannedSpawns
 
           def committedResourceFor(req: ResourceRequest): ResourceAvailable =

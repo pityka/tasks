@@ -123,9 +123,7 @@ private[tasks] object Launcher {
       val askForWorkScheduler =
         fs2.Stream
           .fixedRate[IO](refreshInterval)
-          .evalMap(_ =>
-            derive(ref).askForWork(ref, messenger, address, queue)
-          )
+          .evalMap(_ => derive(ref).askForWork(ref, messenger, address, queue))
 
       val incrementStream =
         fs2.Stream
@@ -179,10 +177,10 @@ private[tasks] object Launcher {
     *   gets a full grace window before being eligible to terminate.
     *
     * @param runningTasks
-    *   One entry per running task: (Task, ScheduleTask, allocation,
-    *   start nanoTime, Deferred holding the executing fiber). The
-    *   Deferred lets the launcher release cancel each task's fiber on
-    *   shutdown even if the task is still being launched.
+    *   One entry per running task: (Task, ScheduleTask, allocation, start
+    *   nanoTime, Deferred holding the executing fiber). The Deferred lets the
+    *   launcher release cancel each task's fiber on shutdown even if the task
+    *   is still being launched.
     */
   case class State(
       maxResources: VersionedResourceAvailable,
@@ -252,8 +250,12 @@ private[tasks] object Launcher {
           filePrefix,
           address
         )
-        scribe.debug("RemainsAfterLaunch",scheduleTask,newState.availableResources,address)
-
+        scribe.debug(
+          "RemainsAfterLaunch",
+          scheduleTask,
+          newState.availableResources,
+          address
+        )
 
         val task: Task =
           new Task(
@@ -332,7 +334,7 @@ private[tasks] object Launcher {
               ).void
           } else {
 
-            scribe.debug(s"WillAskForWork ", state.availableResources,address)
+            scribe.debug(s"WillAskForWork ", state.availableResources, address)
             val effect: IO[Unit] = poll(
               queue
                 .askForWork(address, state.availableResources, node)
@@ -349,27 +351,46 @@ private[tasks] object Launcher {
                     )
                   ) *>
                     ref.update { state =>
-                      scribe.debug(s"QueueError ", state.availableResources,address)
+                      scribe.debug(
+                        s"QueueError ",
+                        state.availableResources,
+                        address
+                      )
                       state.copy(waitingForWork = false)
                     }
                 case Right(Left(MessageData.NothingForSchedule)) =>
                   ref.update { state =>
-                    scribe.debug(s"NothingForSchedule ", state.availableResources,address)
+                    scribe.debug(
+                      s"NothingForSchedule ",
+                      state.availableResources,
+                      address
+                    )
                     state.copy(waitingForWork = false)
                   }
                 case Right(Right(MessageData.Schedule(scheduleTask))) =>
                   Deferred[IO, FiberIO[Unit]].flatMap { fiberD =>
                     ref.flatModifyFull { case (poll, state) =>
-                      scribe.debug(s"Received Schedule ", scheduleTask,state.availableResources,address)
+                      scribe.debug(
+                        s"Received Schedule ",
+                        scheduleTask,
+                        state.availableResources,
+                        address
+                      )
                       val st0 = state.copy(waitingForWork = false)
                       val (newState, sideEffects) =
                         if (!st0.denyWorkBeforeShutdown) {
 
                           val st1 = st0
-                          val (allocated, st2, io1) = launch(st1, scheduleTask, fiberD)
+                          val (allocated, st2, io1) =
+                            launch(st1, scheduleTask, fiberD)
                           (st2, io1)
                         } else (st0, IO.unit)
-                      scribe.debug(s"State after Schedule",scheduleTask,newState.availableResources,address)
+                      scribe.debug(
+                        s"State after Schedule",
+                        scheduleTask,
+                        newState.availableResources,
+                        address
+                      )
                       newState -> sideEffects
                     }
                   }
@@ -512,8 +533,7 @@ private[tasks] object Launcher {
 
           val st2 = state.copy(
             runningTasks = state.runningTasks.filterNot(_ == elem),
-            availableResources =
-              state.availableResources.addBack(elem._3),
+            availableResources = state.availableResources.addBack(elem._3),
             lastTaskFinished = System.nanoTime
           )
           val sideEffect = queue.taskFailed(sch, cause)

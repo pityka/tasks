@@ -177,11 +177,11 @@ private[tasks] object QueueMetrics {
   def pairCap(maxSeries: Int): Int =
     math.max(1, (maxSeries - fixedSeries) / seriesPerTaskPair - 1)
 
-  /** Bound on distinct node labels admitted into label-keyed gauges. Carved
-    * out of the same `tasks.otel.maxSeries` budget; novel labels beyond this
-    * cap fold into the [[otherSentinel]] series. ~2% of total series at
-    * default config (5000 → 100), which is plenty for realistic label
-    * schemes (cloud region, queue name, instance class, …).
+  /** Bound on distinct node labels admitted into label-keyed gauges. Carved out
+    * of the same `tasks.otel.maxSeries` budget; novel labels beyond this cap
+    * fold into the [[otherSentinel]] series. ~2% of total series at default
+    * config (5000 → 100), which is plenty for realistic label schemes (cloud
+    * region, queue name, instance class, …).
     */
   def labelCap(maxSeries: Int): Int = math.max(1, maxSeries / 50)
 
@@ -352,9 +352,8 @@ private[tasks] object QueueMetrics {
             "resolved (still mid-spawn)."
         )
         .createWithCallback { obs =>
-          stateSnapshot.flatMap(st =>
-            obs.record(st.nodes.inFlightRequests.size.toLong)
-          )
+          stateSnapshot
+            .flatMap(st => obs.record(st.nodes.inFlightRequests.size.toLong))
         }
 
       _ <- meter
@@ -365,9 +364,8 @@ private[tasks] object QueueMetrics {
             "maxNodesCumulative)."
         )
         .createWithCallback { obs =>
-          stateSnapshot.flatMap(st =>
-            obs.record(st.nodes.cumulativeRequested.toLong)
-          )
+          stateSnapshot
+            .flatMap(st => obs.record(st.nodes.cumulativeRequested.toLong))
         }
 
       _ <- registerNodeRegistryGauges(meter, stateSnapshot)
@@ -382,8 +380,8 @@ private[tasks] object QueueMetrics {
     * `tasks.queued.affinity_label` gauge.
     *
     * For `And` and `Or` this returns the union of the children's positive
-    * labels: a task with `Or(Has(a), Has(b))` contributes a unit count to
-    * BOTH a and b, since the task can be satisfied by either. This is the
+    * labels: a task with `Or(Has(a), Has(b))` contributes a unit count to BOTH
+    * a and b, since the task can be satisfied by either. This is the
     * over-counting compromise needed to keep the gauge label-keyed without
     * fanning out to power-sets.
     */

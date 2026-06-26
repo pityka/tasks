@@ -222,7 +222,7 @@ object BatchInstanceCapacity {
 }
 
 object BatchCreateNode {
-  
+
   val queueLabelPrefix: String = "aws-batch-queue:"
 }
 
@@ -469,11 +469,10 @@ class BatchCreateNode(
 
   private def listAllActiveJobIds: IO[List[String]] = {
     val queue = batchConfig.onDemandJobQueue
-    activeJobStatuses.foldLeft(IO.pure(List.empty[String])) {
-      (accIO, status) =>
-        accIO.flatMap { acc =>
-          listJobIdsInStatus(queue, status).map(acc ::: _)
-        }
+    activeJobStatuses.foldLeft(IO.pure(List.empty[String])) { (accIO, status) =>
+      accIO.flatMap { acc =>
+        listJobIdsInStatus(queue, status).map(acc ::: _)
+      }
     }
   }
 
@@ -487,22 +486,25 @@ class BatchCreateNode(
     if (jobIds.isEmpty) IO.pure(Nil)
     else
       IO.interruptible {
-        jobIds.grouped(100).flatMap { batchIds =>
-          val resp = batch.describeJobs(
-            DescribeJobsRequest.builder.jobs(batchIds.asJava).build
-          )
-          resp.jobs.asScala.toList.map { j =>
-            val vcpus = Option(j.container)
-              .flatMap(c => Option(c.resourceRequirements))
-              .map(_.asScala.toList)
-              .getOrElse(Nil)
-              .find(_.`type` == ResourceType.VCPU)
-              .flatMap(r => Option(r.value))
-              .map(_.toInt)
-              .getOrElse(0)
-            JobDetail(j.jobId, j.status, vcpus)
+        jobIds
+          .grouped(100)
+          .flatMap { batchIds =>
+            val resp = batch.describeJobs(
+              DescribeJobsRequest.builder.jobs(batchIds.asJava).build
+            )
+            resp.jobs.asScala.toList.map { j =>
+              val vcpus = Option(j.container)
+                .flatMap(c => Option(c.resourceRequirements))
+                .map(_.asScala.toList)
+                .getOrElse(Nil)
+                .find(_.`type` == ResourceType.VCPU)
+                .flatMap(r => Option(r.value))
+                .map(_.toInt)
+                .getOrElse(0)
+              JobDetail(j.jobId, j.status, vcpus)
+            }
           }
-        }.toList
+          .toList
       }
 
   private val maxReconcileAttempts: Int = 5
@@ -515,7 +517,8 @@ class BatchCreateNode(
         recentIds <- recentOnDemandIds
         missing = recentIds -- activeIds
         result <-
-          if (missing.isEmpty) describeJobs(activeIds.toList).map(_.map(_.vcpus).sum)
+          if (missing.isEmpty)
+            describeJobs(activeIds.toList).map(_.map(_.vcpus).sum)
           else
             describeJobs(missing.toList).flatMap { details =>
               val terminal =
@@ -688,7 +691,9 @@ object BatchElasticSupport {
       for {
         requestMutex <- Mutex[IO]
         recentOnDemandSubmissions <- Ref.of[IO, List[(Instant, String)]](Nil)
-        instanceTypeCache <- Ref.of[IO, Map[String, InstanceCapacity]](Map.empty)
+        instanceTypeCache <- Ref.of[IO, Map[String, InstanceCapacity]](
+          Map.empty
+        )
         support <- IO {
           val batch =
             if (batchConfig.region.isEmpty) BatchClient.create

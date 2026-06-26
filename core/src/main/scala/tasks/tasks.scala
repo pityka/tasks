@@ -111,10 +111,10 @@ object SubmitContext {
   ): SubmitContext = new SubmitContext(pce.components)
 
   /** Available at top-level, i.e. when an implicit [[TaskSystemComponents]] is
-    * in scope but no enclosing [[ComputationEnvironment]] is. The
-    * [[NotInLeaf]] guard is what excludes leaf bodies: when a
-    * `ComputationEnvironment` is implicitly in scope, `NotInLeaf` does not
-    * resolve, so this derivation falls through.
+    * in scope but no enclosing [[ComputationEnvironment]] is. The [[NotInLeaf]]
+    * guard is what excludes leaf bodies: when a `ComputationEnvironment` is
+    * implicitly in scope, `NotInLeaf` does not resolve, so this derivation
+    * falls through.
     */
   implicit def fromTopLevel(implicit
       tsc: TaskSystemComponents,
@@ -179,10 +179,10 @@ final class TaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
 
 }
 
-/** A parent task. Submits children but performs no resource-bearing work of
-  * its own — it always runs with a zero ResourceRequest. The body type is
-  * `A => ParentComputationEnvironment => IO[B]`, and the bodies of parent
-  * tasks (alone among task bodies) are eligible to submit children because
+/** A parent task. Submits children but performs no resource-bearing work of its
+  * own — it always runs with a zero ResourceRequest. The body type is
+  * `A => ParentComputationEnvironment => IO[B]`, and the bodies of parent tasks
+  * (alone among task bodies) are eligible to submit children because
   * [[ParentComputationEnvironment]] is what derives a [[SubmitContext]].
   */
 final class ParentTaskDefinition[A: Serializer: FilePrefix, B: Deserializer](

@@ -111,7 +111,7 @@ object S3 {
   //   - parts numbered 1..10000
   //   - each part >= 5 MiB (except the last)
   //   - each part <= 5 GiB
-  //   - object <= 5 TiB  
+  //   - object <= 5 TiB
   private[s3] val maxPartSizeBytes: Int = 1900000000
   private[s3] val partSizeDoublingInterval: Int = 800
 

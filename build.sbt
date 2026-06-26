@@ -99,7 +99,10 @@ lazy val commonSettings = Seq(
   ThisBuild / parallelExecution := false,
   cancelable in Global := true,
   scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
-  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings")),  
+  scalacOptions in (
+    Compile,
+    console
+  ) ~= (_ filterNot (_ == "-Xfatal-warnings")),
   Compile / doc / sources := Seq.empty
 )
 
