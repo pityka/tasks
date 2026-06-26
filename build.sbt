@@ -308,7 +308,6 @@ lazy val root = (project in file("."))
     ec2,
     batch,
     s3,
-    postgres,
     kubernetes,
     kubernetesTest,
     example
