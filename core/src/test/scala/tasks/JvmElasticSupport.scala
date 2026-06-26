@@ -89,7 +89,8 @@ object JvmElasticSupport {
       externalQueueState: Option[Ref[IO, tasks.queue.QueueImpl.State]],
       masterAddress: SimpleSocketAddress,
       masterPrefix: String,
-      extraWorkerConfig: String
+      extraWorkerConfig: String,
+      labelsForRequest: tasks.shared.ResourceRequest => Set[String]
   ) extends CreateNode {
 
     def requestOneNewJobFromJobScheduler(
@@ -99,6 +100,12 @@ object JvmElasticSupport {
     ): IO[Either[String, (PendingJobId, ResourceAvailable)]] = {
       val jobid =
         java.util.UUID.randomUUID.toString.replace("-", "")
+
+      val workerLabels = labelsForRequest(requestSize)
+      val labelsConfig =
+        if (workerLabels.nonEmpty)
+          s"""hosts.labelsAsCommaString = "${workerLabels.toList.sorted.mkString(",")}""""
+        else ""
 
       val ts = {
 
@@ -112,6 +119,7 @@ object JvmElasticSupport {
     tasks.elastic.nodename = $jobid
     tasks.addShutdownHook = false
     tasks.fileservice.storageURI="${config.storageURI.toString}"
+    $labelsConfig
     $extraWorkerConfig
     """,
           s3Client = Resource.pure(None),
@@ -126,7 +134,8 @@ object JvmElasticSupport {
                 createNodeFactory = new JvmCreateNodeFactory(
                   state,
                   externalQueueState,
-                  extraWorkerConfig
+                  extraWorkerConfig,
+                  labelsForRequest
                 ),
                 getNodeName = JvmGetNodeName
               )
@@ -150,7 +159,8 @@ object JvmElasticSupport {
               memory = requestSize.memory,
               scratch = requestSize.scratch,
               gpu = 0 until requestSize.gpu toList,
-              image = None
+              image = None,
+              labels = workerLabels
             )
           )
         )
@@ -163,7 +173,8 @@ object JvmElasticSupport {
   class JvmCreateNodeFactory(
       ref: Ref[IO, State],
       externalQueueState: Option[Ref[IO, tasks.queue.QueueImpl.State]],
-      extraWorkerConfig: String
+      extraWorkerConfig: String,
+      labelsForRequest: tasks.shared.ResourceRequest => Set[String]
   ) extends CreateNodeFactory {
     def apply(
         master: SimpleSocketAddress,
@@ -175,7 +186,8 @@ object JvmElasticSupport {
         externalQueueState,
         master,
         masterPrefix,
-        extraWorkerConfig
+        extraWorkerConfig,
+        labelsForRequest
       )
   }
 
@@ -210,7 +222,9 @@ object JvmElasticSupport {
 
     def make(
         externalQueueState: Option[Ref[IO, tasks.queue.QueueImpl.State]],
-        extraWorkerConfig: String = ""
+        extraWorkerConfig: String = "",
+        labelsForRequest: tasks.shared.ResourceRequest => Set[String] = _ =>
+          Set.empty
     ): Resource[IO, (JvmNodeControl, ElasticSupport)] =
       stateResource.map { state =>
         val controller = new JvmNodeControl(state)
@@ -220,8 +234,12 @@ object JvmElasticSupport {
             hostConfig = None,
             shutdownFromNodeRegistry = new Shutdown(state),
             shutdownFromWorker = new ShutdownSelf(state),
-            createNodeFactory =
-              new JvmCreateNodeFactory(state, externalQueueState, extraWorkerConfig),
+            createNodeFactory = new JvmCreateNodeFactory(
+              state,
+              externalQueueState,
+              extraWorkerConfig,
+              labelsForRequest
+            ),
             getNodeName = JvmGetNodeName
           )
 

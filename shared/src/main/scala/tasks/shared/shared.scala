@@ -29,12 +29,51 @@ import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 import java.time.Instant
 
+/** Predicate evaluated against the labels advertised by a worker
+  * ([[ResourceAvailable.labels]]) to decide whether a task can be scheduled on
+  * it.
+  *
+  * [[NodeSelector.Has]] expresses affinity, [[NodeSelector.Not]] expresses
+  * avoidance, and [[NodeSelector.And]] / [[NodeSelector.Or]] compose them.
+  * Labels are opaque strings; callers can encode key/value pairs with their
+  * own convention (e.g. "region:us-east").
+  */
+sealed trait NodeSelector
+
+object NodeSelector {
+
+  /** No constraint — every worker matches. Default for [[ResourceRequest]]. */
+  case object Always extends NodeSelector
+
+  /** Worker must advertise `label`. */
+  case class Has(label: String) extends NodeSelector
+
+  case class Not(selector: NodeSelector) extends NodeSelector
+
+  case class And(selectors: List[NodeSelector]) extends NodeSelector
+
+  case class Or(selectors: List[NodeSelector]) extends NodeSelector
+
+  def matches(selector: NodeSelector, available: Set[String]): Boolean =
+    selector match {
+      case Always     => true
+      case Has(label) => available.contains(label)
+      case Not(s)     => !matches(s, available)
+      case And(xs)    => xs.forall(matches(_, available))
+      case Or(xs)     => xs.exists(matches(_, available))
+    }
+
+  implicit val codec: JsonValueCodec[NodeSelector] =
+    JsonCodecMaker.make(CodecMakerConfig.withAllowRecursiveTypes(true))
+}
+
 case class ResourceRequest(
     cpu: (Int, Int),
     memory: Int,
     scratch: Int,
     gpu: Int,
-    image: Option[String]
+    image: Option[String],
+    nodeSelector: Option[NodeSelector]
 )
 
 object ResourceRequest {
@@ -48,14 +87,26 @@ object ResourceRequest {
         "resource-request-scratch" -> rm.scratch,
         "resource-request-image" -> rm.image.getOrElse(
           "none"
-        )
+        ),
+        "resource-request-node-selector" -> rm.nodeSelector
+          .fold("any")(_.toString)
       )
     )
 
   def apply(cpu: Int, memory: Int, scratch: Int, gpu: Int): ResourceRequest =
-    ResourceRequest((cpu, cpu), memory, scratch, gpu, None)
+    ResourceRequest((cpu, cpu), memory, scratch, gpu, None, None)
 
-  implicit val codec: JsonValueCodec[ResourceRequest] = JsonCodecMaker.make
+  def apply(
+      cpu: (Int, Int),
+      memory: Int,
+      scratch: Int,
+      gpu: Int,
+      image: Option[String]
+  ): ResourceRequest =
+    ResourceRequest(cpu, memory, scratch, gpu, image, None)
+
+  implicit val codec: JsonValueCodec[ResourceRequest] =
+    JsonCodecMaker.make(CodecMakerConfig.withAllowRecursiveTypes(true))
 
 }
 
@@ -78,7 +129,8 @@ case class ResourceAvailable(
     memory: Int,
     scratch: Int,
     gpu: List[Int],
-    image: Option[String]
+    image: Option[String],
+    labels: Set[String] = Set.empty
 ) {
 
   val gpuWithMultiplicities = ResourceAvailable.zipMultiplicities(gpu)
@@ -92,7 +144,8 @@ case class ResourceAvailable(
   def canFulfillRequest(r: ResourceRequest) =
     cpu >= r.cpu._1 && memory >= r.memory && scratch >= r.scratch && numGpu >= r.gpu && r.image
       .map(requestedImage => image.exists(_ == requestedImage))
-      .getOrElse(true)
+      .getOrElse(true) &&
+      r.nodeSelector.forall(NodeSelector.matches(_, labels))
 
   def substract(r: ResourceRequest) = {
     val remainingCPU = math.max((cpu - r.cpu._2), 0)
@@ -101,7 +154,8 @@ case class ResourceAvailable(
       memory - r.memory,
       scratch - r.scratch,
       gpu = gpu.drop(r.gpu),
-      image = image
+      image = image,
+      labels = labels
     )
   }
 
@@ -113,7 +167,8 @@ case class ResourceAvailable(
       gpuWithMultiplicities
         .filterNot(avail => r.gpuWithMultiplicities.contains(avail))
         .map(_._1),
-      image
+      image,
+      labels
     )
 
   def substractAll = ResourceAvailable(
@@ -121,18 +176,20 @@ case class ResourceAvailable(
     memory = 0,
     scratch = 0,
     gpu = Nil,
-    image
+    image = image,
+    labels = labels
   )
 
   def addBack(r: ResourceAllocated) =
    {
-    assert((gpu.toSet & r.gpu.toSet).isEmpty,s"$gpu + ${r.gpu}") 
+    assert((gpu.toSet & r.gpu.toSet).isEmpty,s"$gpu + ${r.gpu}")
     ResourceAvailable(
-      cpu + r.cpu,
-      memory + r.memory,
-      scratch + r.scratch,
-      gpu ++ r.gpu,
-      image
+      cpu = cpu + r.cpu,
+      memory = memory + r.memory,
+      scratch = scratch + r.scratch,
+      gpu = gpu ++ r.gpu,
+      image = image,
+      labels = labels
     )}
 
   def all =
@@ -180,7 +237,8 @@ object ResourceAvailable {
         "available-resource-memory" -> rm.memory,
         "available-resource-gpu" -> rm.gpu.mkString(","),
         "available-resource-scratch" -> rm.scratch,
-        "available-resource-image" -> rm.image.getOrElse("none")
+        "available-resource-image" -> rm.image.getOrElse("none"),
+        "available-resource-labels" -> rm.labels.toList.sorted.mkString(",")
       )
     )
   val empty = ResourceAvailable(0, 0, 0, Nil, None)
@@ -294,7 +352,9 @@ object VersionedResourceAvailable {
         "available-resource-scratch" -> rm.cpuMemoryAvailable.scratch,
         "available-resource-image" -> rm.cpuMemoryAvailable.image.getOrElse(
           "none"
-        )
+        ),
+        "available-resource-labels" -> rm.cpuMemoryAvailable.labels.toList.sorted
+          .mkString(",")
       )
     )
   implicit val codec: JsonValueCodec[VersionedResourceAvailable] =

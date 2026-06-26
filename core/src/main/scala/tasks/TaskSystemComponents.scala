@@ -687,7 +687,8 @@ object TaskSystemComponents {
                       memory = hostConfig.availableMemory,
                       scratch = hostConfig.availableScratch,
                       gpu = hostConfig.availableGPU,
-                      image = hostConfig.image
+                      image = hostConfig.image,
+                      labels = hostConfig.labels
                     )
                   ),
                   refreshInterval = refreshInterval,
@@ -767,7 +768,8 @@ object TaskSystemComponents {
                       hostConfig.availableMemory,
                       hostConfig.availableScratch,
                       hostConfig.availableGPU,
-                      hostConfig.image
+                      hostConfig.image,
+                      hostConfig.labels
                     ),
                     launcherName
                   )

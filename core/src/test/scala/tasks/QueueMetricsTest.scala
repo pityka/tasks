@@ -370,7 +370,8 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
   // allocation tuple on scheduled tasks; everything else is irrelevant for these
   // tests.
   private def stubScheduleTask(
-      description: HashedTaskDescription
+      description: HashedTaskDescription,
+      nodeSelector: Option[tasks.shared.NodeSelector] = None
   ): tasks.util.message.MessageData.ScheduleTask = {
     val emptySpore = tasks.queue.Spore[AnyRef, AnyRef](
       fqcn = "",
@@ -383,11 +384,14 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
       function = emptySpore,
       resource = tasks.shared.VersionedResourceRequest(
         tasks.shared.CodeVersion("v1"),
-        cpu = 1,
-        memory = 100,
-        scratch = 0,
-        gpu = 0,
-        image = None
+        tasks.shared.ResourceRequest(
+          cpu = (1, 1),
+          memory = 100,
+          scratch = 0,
+          gpu = 0,
+          image = None,
+          nodeSelector = nodeSelector
+        )
       ),
       input = tasks.util.message.MessageData.InputData(
         tasks.queue.Base64Data(""),
@@ -400,5 +404,230 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
       lineage = tasks.queue.TaskLineage.root,
       proxy = tasks.util.message.Address("test")
     )
+  }
+
+  private def labelGaugePoints(
+      m: MetricData
+  ): Map[String, Long] = m.data match {
+    case g: MetricPoints.Gauge =>
+      g.points.toVector.flatMap {
+        case p: PointData.LongNumber =>
+          attr(p.attributes, QueueMetrics.labelKey).map(_ -> p.value)
+        case _ => None
+      }.toMap
+    case other => fail(s"expected gauge for ${m.name}, got $other")
+  }
+
+  test("by_label gauges break down running/pending nodes per advertised label") {
+    val a = tasks.shared.ResourceAvailable(
+      cpu = 4,
+      memory = 1024,
+      scratch = 0,
+      gpu = Nil,
+      image = None,
+      labels = Set("aws-batch-queue:prod", "zone:us-east-1a")
+    )
+    val b = tasks.shared.ResourceAvailable(
+      cpu = 4,
+      memory = 1024,
+      scratch = 0,
+      gpu = Nil,
+      image = None,
+      labels = Set("aws-batch-queue:prod")
+    )
+    val c = tasks.shared.ResourceAvailable(
+      cpu = 4,
+      memory = 1024,
+      scratch = 0,
+      gpu = Nil,
+      image = None,
+      labels = Set("aws-batch-queue:spot")
+    )
+
+    val node1 = tasks.util.message.Node(
+      tasks.shared.RunningJobId("r1"),
+      a,
+      tasks.util.message.LauncherName("l1")
+    )
+    val node2 = tasks.util.message.Node(
+      tasks.shared.RunningJobId("r2"),
+      b,
+      tasks.util.message.LauncherName("l2")
+    )
+
+    val nodeRegistry = tasks.elastic.NodeRegistryState.State.empty
+      // Two running with shared "aws-batch-queue:prod"; one of them also has "zone:us-east-1a".
+      .update(tasks.elastic.NodeRegistryState.NodeRequested(a))
+      .update(
+        tasks.elastic.NodeRegistryState.NodeIsPending(
+          tasks.shared.PendingJobId("p1"),
+          a,
+          a
+        )
+      )
+      .update(
+        tasks.elastic.NodeRegistryState.NodeIsUp(node1, tasks.shared.PendingJobId("p1"))
+      )
+      .update(tasks.elastic.NodeRegistryState.NodeRequested(b))
+      .update(
+        tasks.elastic.NodeRegistryState.NodeIsPending(
+          tasks.shared.PendingJobId("p2"),
+          b,
+          b
+        )
+      )
+      .update(
+        tasks.elastic.NodeRegistryState.NodeIsUp(node2, tasks.shared.PendingJobId("p2"))
+      )
+      // One pending with "aws-batch-queue:spot" — still waiting to come up.
+      .update(tasks.elastic.NodeRegistryState.NodeRequested(c))
+      .update(
+        tasks.elastic.NodeRegistryState.NodeIsPending(
+          tasks.shared.PendingJobId("p3"),
+          c,
+          c
+        )
+      )
+
+    val state = QueueImpl.State(
+      queuedTasks = Map.empty,
+      scheduledTasks = Map.empty,
+      knownLaunchers = Map.empty,
+      counters = Map.empty,
+      nodes = nodeRegistry
+    )
+
+    val metrics = collect(IO.pure(state))(_ => IO.unit)
+
+    labelGaugePoints(find(metrics, "tasks.nodes.running.by_label")) shouldBe Map(
+      "aws-batch-queue:prod" -> 2L,
+      "zone:us-east-1a" -> 1L
+    )
+    labelGaugePoints(find(metrics, "tasks.nodes.pending.by_label")) shouldBe Map(
+      "aws-batch-queue:spot" -> 1L
+    )
+  }
+
+  test("affinity_label gauge counts queued tasks per positive Has(label) clause") {
+    val schA = stubScheduleTask(
+      descA,
+      nodeSelector = Some(tasks.shared.NodeSelector.Has("aws-batch-queue:prod"))
+    )
+    val schB = stubScheduleTask(
+      descB,
+      nodeSelector = Some(
+        tasks.shared.NodeSelector.And(
+          List(
+            tasks.shared.NodeSelector.Has("aws-batch-queue:prod"),
+            tasks.shared.NodeSelector.Not(tasks.shared.NodeSelector.Has("spot"))
+          )
+        )
+      )
+    )
+    val schC = stubScheduleTask(
+      HashedTaskDescription(TaskId("third", 1), "hash-c"),
+      nodeSelector = None // no selector — should NOT contribute to affinity_label.
+    )
+
+    val state = QueueImpl.State(
+      queuedTasks = Map(
+        QueueImpl.ScheduleTaskEqualityProjection(schA.description) ->
+          ((schA, Nil)),
+        QueueImpl.ScheduleTaskEqualityProjection(schB.description) ->
+          ((schB, Nil)),
+        QueueImpl.ScheduleTaskEqualityProjection(schC.description) ->
+          ((schC, Nil))
+      ),
+      scheduledTasks = Map.empty,
+      knownLaunchers = Map.empty,
+      counters = Map.empty,
+      nodes = tasks.elastic.NodeRegistryState.State.empty
+    )
+
+    val metrics = collect(IO.pure(state))(_ => IO.unit)
+
+    // schA and schB both have Has("aws-batch-queue:prod"); schC has no selector.
+    // The Not(Has("spot")) inside schB does NOT contribute (avoidance only).
+    labelGaugePoints(find(metrics, "tasks.queued.affinity_label")) shouldBe Map(
+      "aws-batch-queue:prod" -> 2L
+    )
+
+    // The scalar with_selector gauge counts schA + schB (both have a selector).
+    find(metrics, "tasks.queued.with_selector.count").data match {
+      case g: MetricPoints.Gauge =>
+        g.points.toVector.head.asInstanceOf[PointData.LongNumber].value shouldBe 2L
+      case other => fail(s"expected gauge, got $other")
+    }
+  }
+
+  test("label cardinality cap folds overflow labels into the _other sentinel") {
+    val capOverrideConfig = tasks.util.config.parse(() =>
+      ConfigFactory
+        // labelCap = max(1, 50 / 50) = 1 — exactly one distinct label admitted.
+        .parseString("tasks.otel.maxSeries = 50")
+        .withFallback(ConfigFactory.load())
+    )
+    QueueMetrics.labelCap(capOverrideConfig.otelMaxSeries) shouldBe 1
+
+    def labeled(label: String) = tasks.shared.ResourceAvailable(
+      cpu = 1,
+      memory = 1,
+      scratch = 0,
+      gpu = Nil,
+      image = None,
+      labels = Set(label)
+    )
+
+    def node(id: String, r: tasks.shared.ResourceAvailable) =
+      tasks.util.message.Node(
+        tasks.shared.RunningJobId(id),
+        r,
+        tasks.util.message.LauncherName(s"launcher-$id")
+      )
+
+    val registry = List("a", "b", "c").foldLeft(
+      tasks.elastic.NodeRegistryState.State.empty
+    ) { (st, l) =>
+      val r = labeled(l)
+      st.update(tasks.elastic.NodeRegistryState.NodeRequested(r))
+        .update(
+          tasks.elastic.NodeRegistryState.NodeIsPending(
+            tasks.shared.PendingJobId(s"p-$l"),
+            r,
+            r
+          )
+        )
+        .update(
+          tasks.elastic.NodeRegistryState.NodeIsUp(
+            node(s"r-$l", r),
+            tasks.shared.PendingJobId(s"p-$l")
+          )
+        )
+    }
+
+    val state = QueueImpl.State(
+      queuedTasks = Map.empty,
+      scheduledTasks = Map.empty,
+      knownLaunchers = Map.empty,
+      counters = Map.empty,
+      nodes = registry
+    )
+
+    val metrics = MetricsTestkit
+      .inMemory[IO]()
+      .use { testkit =>
+        QueueMetrics
+          .make(testkit.meterProvider, IO.pure(state))(capOverrideConfig)
+          .use(_ => testkit.collectMetrics)
+      }
+      .unsafeRunSync()
+
+    val points = labelGaugePoints(find(metrics, "tasks.nodes.running.by_label"))
+    // Exactly one of {a,b,c} is admitted (whichever was seen first by the
+    // gauge callback); the other two fold into _other.
+    val admitted = points.view.filterKeys(_ != QueueMetrics.otherSentinel).toMap
+    admitted.size shouldBe 1
+    admitted.values.head shouldBe 1L
+    points.get(QueueMetrics.otherSentinel) shouldBe Some(2L)
   }
 }

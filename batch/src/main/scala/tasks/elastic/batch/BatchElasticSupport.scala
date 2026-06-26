@@ -221,6 +221,11 @@ object BatchInstanceCapacity {
       }
 }
 
+object BatchCreateNode {
+  
+  val queueLabelPrefix: String = "aws-batch-queue:"
+}
+
 class BatchCreateNode(
     masterAddress: SimpleSocketAddress,
     masterPrefix: String,
@@ -251,12 +256,16 @@ class BatchCreateNode(
           }
         }
         .flatMap { case (targetQueue, selectedResources) =>
+          val labeledResources = selectedResources.copy(
+            labels = selectedResources.labels +
+              s"${BatchCreateNode.queueLabelPrefix}$targetQueue"
+          )
           val submit = IO.interruptible {
             val script = Deployment.script(
-              memory = selectedResources.memory,
-              cpu = selectedResources.cpu,
-              scratch = selectedResources.scratch,
-              gpus = selectedResources.gpu,
+              memory = labeledResources.memory,
+              cpu = labeledResources.cpu,
+              scratch = labeledResources.scratch,
+              gpus = labeledResources.gpu,
               masterAddress = masterAddress,
               masterPrefix = masterPrefix,
               download = Uri(
@@ -272,24 +281,25 @@ class BatchCreateNode(
               background = false,
               image = None,
               workerHealthUrlFile =
-                config.workerHealthUrlFile.map(_.getAbsolutePath)
+                config.workerHealthUrlFile.map(_.getAbsolutePath),
+              labels = labeledResources.labels
             )(config)
 
             val resourceReqs = {
               val reqs = List(
                 ResourceRequirement.builder
                   .`type`(ResourceType.VCPU)
-                  .value(selectedResources.cpu.toString)
+                  .value(labeledResources.cpu.toString)
                   .build,
                 ResourceRequirement.builder
                   .`type`(ResourceType.MEMORY)
-                  .value(selectedResources.memory.toString)
+                  .value(labeledResources.memory.toString)
                   .build
-              ) ++ (if (selectedResources.gpu.nonEmpty)
+              ) ++ (if (labeledResources.gpu.nonEmpty)
                       List(
                         ResourceRequirement.builder
                           .`type`(ResourceType.GPU)
-                          .value(selectedResources.gpu.size.toString)
+                          .value(labeledResources.gpu.size.toString)
                           .build
                       )
                     else Nil)
@@ -313,7 +323,7 @@ class BatchCreateNode(
 
             val result = batch.submitJob(submitRequest)
             val jobId = PendingJobId(result.jobId)
-            (jobId, selectedResources)
+            (jobId, labeledResources)
           }
           val recordIfOnDemand =
             if (targetQueue == batchConfig.onDemandJobQueue)

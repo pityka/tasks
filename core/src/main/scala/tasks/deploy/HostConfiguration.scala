@@ -67,6 +67,8 @@ trait HostConfiguration {
 
   def image: Option[String]
 
+  def labels: Set[String] = Set.empty
+
   def myRoles: Set[Role]
 
   def isWorker = myRoles.contains(Worker)
@@ -103,6 +105,8 @@ trait HostConfigurationFromConfig
   lazy val availableMemory = config.hostRAM
 
   lazy val image = config.hostImage
+
+  override lazy val labels: Set[String] = config.hostLabels
 
   lazy val availableScratch = config.hostScratch
 

@@ -36,9 +36,12 @@ private[tasks] final class QueueMetrics(
     cap: Int,
     admittedPairs: Ref[IO, Set[(String, Int)]],
     enqueueTimestamps: Ref[IO, Map[HashedTaskDescription, Long]],
-    overflowWarned: Ref[IO, Boolean]
+    overflowWarned: Ref[IO, Boolean],
+    labelCap: Int,
+    admittedLabels: Ref[IO, Set[String]],
+    labelOverflowWarned: Ref[IO, Boolean]
 ) {
-  import QueueMetrics.{idKey, versionKey, otherSentinel}
+  import QueueMetrics.{idKey, versionKey, labelKey, otherSentinel}
 
   // Returns the (task.id, task.version) attribute pair, applying the cardinality cap.
   // First `cap` distinct (id, version) pairs are admitted; subsequent novel pairs
@@ -81,6 +84,42 @@ private[tasks] final class QueueMetrics(
 
   private def attrPair(id: String, version: String): Attributes =
     Attributes(Attribute(idKey, id), Attribute(versionKey, version))
+
+  // Admittance for the `tasks.node.label` attribute used by the by_label
+  // gauges. Same pattern as attrsFor — overflow folds into `_other`, with a
+  // single WARN the first time the cap is hit.
+  private[queue] def labelAttrsFor(label: String): IO[Attributes] = {
+    val isOverflowMarker: Attributes => Boolean =
+      _.get[String](labelKey).exists(_.value == otherSentinel)
+    admittedLabels
+      .modify { admitted =>
+        if (admitted.contains(label))
+          (admitted, Attributes(Attribute(labelKey, label)))
+        else if (admitted.size < labelCap)
+          (admitted + label, Attributes(Attribute(labelKey, label)))
+        else
+          (admitted, Attributes(Attribute(labelKey, otherSentinel)))
+      }
+      .flatTap { attrs =>
+        if (isOverflowMarker(attrs))
+          labelOverflowWarned.getAndSet(true).flatMap {
+            case true => IO.unit
+            case false =>
+              IO(
+                scribe.warn(
+                  "OTel node-label cardinality cap reached; subsequent novel labels fold into \"_other\". Raise tasks.otel.maxSeries to admit more.",
+                  scribe.data(
+                    Map(
+                      "label-cap" -> labelCap,
+                      "first-overflow-label" -> label
+                    )
+                  )
+                )
+              )
+          }
+        else IO.unit
+      }
+  }
 
   // Always (re)sets the enqueue timestamp. Called on both initial enqueue and
   // re-enqueue after launcher crash or task failure (with resubmitFailedTask).
@@ -129,6 +168,7 @@ private[tasks] object QueueMetrics {
 
   val idKey = "task.id"
   val versionKey = "task.version"
+  val labelKey = "tasks.node.label"
   val otherSentinel = "_other"
 
   private val seriesPerTaskPair = 21
@@ -136,6 +176,14 @@ private[tasks] object QueueMetrics {
 
   def pairCap(maxSeries: Int): Int =
     math.max(1, (maxSeries - fixedSeries) / seriesPerTaskPair - 1)
+
+  /** Bound on distinct node labels admitted into label-keyed gauges. Carved
+    * out of the same `tasks.otel.maxSeries` budget; novel labels beyond this
+    * cap fold into the [[otherSentinel]] series. ~2% of total series at
+    * default config (5000 → 100), which is plenty for realistic label
+    * schemes (cloud region, queue name, instance class, …).
+    */
+  def labelCap(maxSeries: Int): Int = math.max(1, maxSeries / 50)
 
   val executionDurationBuckets: BucketBoundaries =
     BucketBoundaries(1.0, 10.0, 60.0, 600.0, 3600.0)
@@ -148,6 +196,7 @@ private[tasks] object QueueMetrics {
       stateSnapshot: IO[QueueImpl.State]
   )(implicit config: TasksConfig): Resource[IO, QueueMetrics] = {
     val cap = pairCap(config.otelMaxSeries)
+    val labelsCap = labelCap(config.otelMaxSeries)
 
     for {
       meter <- Resource.eval(meterProvider.get("tasks-core"))
@@ -190,6 +239,8 @@ private[tasks] object QueueMetrics {
         Ref.of[IO, Map[HashedTaskDescription, Long]](Map.empty)
       )
       overflowWarnedRef <- Resource.eval(Ref.of[IO, Boolean](false))
+      admittedLabelsRef <- Resource.eval(Ref.of[IO, Set[String]](Set.empty))
+      labelOverflowWarnedRef <- Resource.eval(Ref.of[IO, Boolean](false))
 
       // The QueueMetrics instance is needed for attrsFor — declared here so the
       // gauge callbacks can call it and share the same admittance set.
@@ -202,7 +253,10 @@ private[tasks] object QueueMetrics {
         cap = cap,
         admittedPairs = admittedRef,
         enqueueTimestamps = enqueueRef,
-        overflowWarned = overflowWarnedRef
+        overflowWarned = overflowWarnedRef,
+        labelCap = labelsCap,
+        admittedLabels = admittedLabelsRef,
+        labelOverflowWarned = labelOverflowWarnedRef
       )
 
       _ <- meter
@@ -319,7 +373,125 @@ private[tasks] object QueueMetrics {
       _ <- registerNodeRegistryGauges(meter, stateSnapshot)
       _ <- registerLauncherAvailableGauges(meter, stateSnapshot)
       _ <- registerQueuedResourceGauges(meter, stateSnapshot, qm)
+      _ <- registerLabelGauges(meter, stateSnapshot, qm)
     } yield qm
+  }
+
+  /** Walk a [[tasks.shared.NodeSelector]] and collect every label that appears
+    * in a positive [[tasks.shared.NodeSelector.Has]] clause. Used by the
+    * `tasks.queued.affinity_label` gauge.
+    *
+    * For `And` and `Or` this returns the union of the children's positive
+    * labels: a task with `Or(Has(a), Has(b))` contributes a unit count to
+    * BOTH a and b, since the task can be satisfied by either. This is the
+    * over-counting compromise needed to keep the gauge label-keyed without
+    * fanning out to power-sets.
+    */
+  private[queue] def positiveSelectorLabels(
+      sel: tasks.shared.NodeSelector
+  ): Set[String] = sel match {
+    case tasks.shared.NodeSelector.Always     => Set.empty
+    case tasks.shared.NodeSelector.Has(label) => Set(label)
+    case tasks.shared.NodeSelector.Not(_)     => Set.empty
+    case tasks.shared.NodeSelector.And(xs) =>
+      xs.iterator.flatMap(positiveSelectorLabels).toSet
+    case tasks.shared.NodeSelector.Or(xs) =>
+      xs.iterator.flatMap(positiveSelectorLabels).toSet
+  }
+
+  private def registerLabelGauges(
+      meter: org.typelevel.otel4s.metrics.Meter[IO],
+      stateSnapshot: IO[QueueImpl.State],
+      qm: QueueMetrics
+  ): Resource[IO, Unit] = {
+
+    def countByLabel(
+        labelSources: QueueImpl.State => Iterator[Set[String]]
+    ): QueueImpl.State => Map[String, Long] = { st =>
+      val builder =
+        collection.mutable.Map.empty[String, Long].withDefaultValue(0L)
+      labelSources(st).foreach { labels =>
+        labels.foreach(l => builder.update(l, builder(l) + 1L))
+      }
+      builder.toMap
+    }
+
+    def labelGauge(
+        name: String,
+        description: String,
+        select: QueueImpl.State => Map[String, Long]
+    ): Resource[IO, Unit] =
+      meter
+        .observableGauge[Long](name)
+        .withDescription(description)
+        .createWithCallback { obs =>
+          stateSnapshot.flatMap { st =>
+            val counts = select(st)
+            // Resolve admittance first (some labels may fold into _other),
+            // then SUM counts per resolved attribute set so a gauge point
+            // labelled _other reflects the aggregate of all overflowed
+            // labels rather than the last one recorded (OTel gauges are
+            // last-wins per attribute set).
+            counts.toVector
+              .foldLeft(IO.pure(Map.empty[Attributes, Long])) {
+                case (accIO, (label, count)) =>
+                  accIO.flatMap { acc =>
+                    qm.labelAttrsFor(label).map { attrs =>
+                      acc.updated(attrs, acc.getOrElse(attrs, 0L) + count)
+                    }
+                  }
+              }
+              .flatMap { byAttrs =>
+                byAttrs.toVector.foldLeft(IO.unit) {
+                  case (acc, (attrs, count)) =>
+                    acc *> obs.record(count, attrs)
+                }
+              }
+          }
+        }
+        .map(_ => ())
+
+    for {
+      _ <- labelGauge(
+        "tasks.nodes.running.by_label",
+        "Worker nodes currently running, broken down by every label they advertise. " +
+          "A node with N labels contributes one point per label.",
+        countByLabel(_.nodes.running.valuesIterator.map(_.labels))
+      )
+      _ <- labelGauge(
+        "tasks.nodes.pending.by_label",
+        "Worker nodes allocated but not yet up, broken down by every label they " +
+          "advertise. A node with N labels contributes one point per label.",
+        countByLabel(_.nodes.pending.valuesIterator.map(_.labels))
+      )
+      _ <- labelGauge(
+        "tasks.queued.affinity_label",
+        "Queued tasks whose ResourceRequest.nodeSelector references the given label " +
+          "via a Has(...) clause. A task whose selector mentions K positive labels " +
+          "contributes one point per label.",
+        countByLabel { st =>
+          st.queuedTasks.valuesIterator.map { case (sch, _) =>
+            sch.resource.cpuMemoryRequest.nodeSelector
+              .fold(Set.empty[String])(positiveSelectorLabels)
+          }
+        }
+      )
+
+      _ <- meter
+        .observableGauge[Long]("tasks.queued.with_selector.count")
+        .withDescription(
+          "Queued tasks whose ResourceRequest.nodeSelector is set (any " +
+            "affinity or avoidance constraint)."
+        )
+        .createWithCallback { obs =>
+          stateSnapshot.flatMap { st =>
+            val n = st.queuedTasks.valuesIterator.count { case (sch, _) =>
+              sch.resource.cpuMemoryRequest.nodeSelector.isDefined
+            }
+            obs.record(n.toLong)
+          }
+        }
+    } yield ()
   }
 
   private def sumResources(

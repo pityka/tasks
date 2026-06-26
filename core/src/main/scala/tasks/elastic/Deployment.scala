@@ -54,7 +54,8 @@ object Deployment {
       followerNodeName: Option[String],
       background: Boolean,
       image: Option[String],
-      workerHealthUrlFile: Option[String] = None
+      workerHealthUrlFile: Option[String] = None,
+      labels: Set[String] = Set.empty
   )(implicit config: TasksConfig): String = {
     val packageFileFolder = config.workerWorkingDirectory
     val packageFileName = config.workerPackageName
@@ -95,8 +96,13 @@ object Deployment {
       case Some(path) => s"-Dtasks.worker.healthUrlFile=$path"
     }
 
+    val labelsString =
+      if (labels.nonEmpty)
+        s"-Dhosts.labelsAsCommaString=${labels.toList.sorted.mkString(",")}"
+      else ""
+
     val edited =
-      s"./$packageFileName -J-Xmx{RAM}M {EXTRA} -Dhosts.master={MASTER} -Dhosts.masterprefix=$masterPrefix  -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString $hostImageString $externalHostnameString  $mayUseArbitraryPortString $followerNodeNameString $connectToProxyFileService $workerHealthUrlFileString -Dtasks.disableRemoting=false"
+      s"./$packageFileName -J-Xmx{RAM}M {EXTRA} -Dhosts.master={MASTER} -Dhosts.masterprefix=$masterPrefix  -Dhosts.app=false -Dtasks.fileservice.storageURI={STORAGE} -Dhosts.numCPU=$cpu -Dhosts.RAM=$memory -Dhosts.scratch=$scratch $gpuString $hostnameString $hostImageString $externalHostnameString  $mayUseArbitraryPortString $followerNodeNameString $connectToProxyFileService $workerHealthUrlFileString $labelsString -Dtasks.disableRemoting=false"
         .replace(
           "{RAM}",
           math

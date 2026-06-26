@@ -38,6 +38,24 @@ trait ConfigValuesForHostConfiguration {
   def hostImage =
     if (raw.hasPath("hosts.image")) Some(raw.getString("hosts.image")) else None
 
+  def hostLabels: Set[String] = {
+    val list =
+      if (raw.hasPath("hosts.labels"))
+        raw.getStringList("hosts.labels").asScala.toSet
+      else Set.empty[String]
+    val commaSeparated =
+      if (raw.hasPath("hosts.labelsAsCommaString"))
+        raw
+          .getString("hosts.labelsAsCommaString")
+          .split(",")
+          .iterator
+          .map(_.trim)
+          .filter(_.nonEmpty)
+          .toSet
+      else Set.empty[String]
+    list ++ commaSeparated
+  }
+
   def hostNumCPU = raw.getInt("hosts.numCPU")
 
   def hostGPU = raw.getIntList("hosts.gpus").asScala.toList.map(_.toInt) ++ raw

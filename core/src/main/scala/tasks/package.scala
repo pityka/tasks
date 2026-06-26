@@ -178,6 +178,39 @@ package object tasks extends MacroCalls {
       tasks.shared.ResourceRequest(cpu, memory, scratch, 0)
     )
 
+  /** Build a ResourceRequest with an explicit
+    * [[tasks.shared.NodeSelector]] for node affinity / avoidance.
+    */
+  def ResourceRequest(
+      cpu: (Int, Int),
+      memory: Int,
+      scratch: Int,
+      gpu: Int,
+      nodeSelector: tasks.shared.NodeSelector
+  )(implicit codeVersion: CodeVersion) =
+    tasks.shared.VersionedResourceRequest(
+      codeVersion,
+      tasks.shared
+        .ResourceRequest(cpu, memory, scratch, gpu, None, Some(nodeSelector))
+    )
+
+  def ResourceRequest(
+      cpu: Int,
+      memory: Int,
+      nodeSelector: tasks.shared.NodeSelector
+  )(implicit codeVersion: CodeVersion) =
+    tasks.shared.VersionedResourceRequest(
+      codeVersion,
+      tasks.shared.ResourceRequest(
+        (cpu, cpu),
+        memory,
+        0,
+        0,
+        None,
+        Some(nodeSelector)
+      )
+    )
+
   implicit def tasksConfig(implicit
       component: TaskSystemComponents
   ): TasksConfig =
