@@ -25,7 +25,11 @@ import org.scalatest.matchers.should.Matchers
 import org.typelevel.otel4s.context.LocalProvider
 import org.typelevel.otel4s.sdk.common.Diagnostic
 import org.typelevel.otel4s.sdk.context.{Context, LocalContextProvider}
-import org.typelevel.otel4s.sdk.metrics.data.{MetricData, MetricPoints, PointData}
+import org.typelevel.otel4s.sdk.metrics.data.{
+  MetricData,
+  MetricPoints,
+  PointData
+}
 import org.typelevel.otel4s.sdk.testkit.metrics.MetricsTestkit
 import tasks.queue.{HashedTaskDescription, QueueImpl, QueueMetrics, TaskId}
 
@@ -66,7 +70,9 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
     metrics
       .find(_.name == name)
       .getOrElse(
-        fail(s"metric $name not found; got: ${metrics.map(_.name).mkString(", ")}")
+        fail(
+          s"metric $name not found; got: ${metrics.map(_.name).mkString(", ")}"
+        )
       )
 
   private def sumPointsByTask(
@@ -104,13 +110,31 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
       } yield ()
     }
 
-    sumPointsByTask(find(metrics, "tasks.completed.count"), "alignment", "3") shouldBe 2L
-    sumPointsByTask(find(metrics, "tasks.completed.count"), "variant_call", "1") shouldBe 1L
-    sumPointsByTask(find(metrics, "tasks.failed.count"), "alignment", "3") shouldBe 1L
-    sumPointsByTask(find(metrics, "tasks.cache_hit.count"), "alignment", "3") shouldBe 1L
+    sumPointsByTask(
+      find(metrics, "tasks.completed.count"),
+      "alignment",
+      "3"
+    ) shouldBe 2L
+    sumPointsByTask(
+      find(metrics, "tasks.completed.count"),
+      "variant_call",
+      "1"
+    ) shouldBe 1L
+    sumPointsByTask(
+      find(metrics, "tasks.failed.count"),
+      "alignment",
+      "3"
+    ) shouldBe 1L
+    sumPointsByTask(
+      find(metrics, "tasks.cache_hit.count"),
+      "alignment",
+      "3"
+    ) shouldBe 1L
   }
 
-  test("execution.duration histogram records seconds with buckets [1,10,60,600,3600]") {
+  test(
+    "execution.duration histogram records seconds with buckets [1,10,60,600,3600]"
+  ) {
     val metrics = collect() { qm =>
       qm.onTaskDone(descA, elapsedNanos = 5_000_000_000L) *>
         qm.onTaskDone(descA, elapsedNanos = 30_000_000_000L)
@@ -123,7 +147,9 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
         val pt = h.points.toVector
           .collectFirst {
             case p: PointData.Histogram
-                if attr(p.attributes, QueueMetrics.idKey).contains("alignment") =>
+                if attr(p.attributes, QueueMetrics.idKey).contains(
+                  "alignment"
+                ) =>
               p
           }
           .getOrElse(fail("no histogram point for alignment"))
@@ -135,7 +161,9 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
     }
   }
 
-  test("queue.wait_time records elapsed between onEnqueued and onTaskScheduled") {
+  test(
+    "queue.wait_time records elapsed between onEnqueued and onTaskScheduled"
+  ) {
     val metrics = collect() { qm =>
       for {
         _ <- qm.onEnqueued(descA)
@@ -184,7 +212,9 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
   test("cardinality cap folds overflow pairs to (_other, _other)") {
     val capOverrideConfig = tasks.util.config.parse(() =>
       ConfigFactory
-        .parseString("tasks.otel.maxSeries = 47") // pairCap = floor((47-2)/21)-1 = 1
+        .parseString(
+          "tasks.otel.maxSeries = 47"
+        ) // pairCap = floor((47-2)/21)-1 = 1
         .withFallback(ConfigFactory.load())
     )
 
@@ -310,7 +340,12 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
           shape
         )
       )
-      .update(tasks.elastic.NodeRegistryState.NodeIsUp(node1, tasks.shared.PendingJobId("p1")))
+      .update(
+        tasks.elastic.NodeRegistryState.NodeIsUp(
+          node1,
+          tasks.shared.PendingJobId("p1")
+        )
+      )
       .update(tasks.elastic.NodeRegistryState.NodeRequested(shape))
       .update(
         tasks.elastic.NodeRegistryState.NodeIsPending(
@@ -319,7 +354,10 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
           shape
         )
       )
-      .update(tasks.elastic.NodeRegistryState.NodeIsUp(node2, tasks.shared.PendingJobId("p2")))
+      .update(
+        tasks.elastic.NodeRegistryState
+          .NodeIsUp(node2, tasks.shared.PendingJobId("p2"))
+      )
       .update(tasks.elastic.NodeRegistryState.NodeRequested(shape))
       .update(
         tasks.elastic.NodeRegistryState.NodeIsPending(
@@ -359,7 +397,9 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
 
     find(metrics, "tasks.nodes.cumulative_requested").data match {
       case s: MetricPoints.Sum =>
-        s.points.toVector.head.asInstanceOf[PointData.LongNumber].value shouldBe 5L
+        s.points.toVector.head
+          .asInstanceOf[PointData.LongNumber]
+          .value shouldBe 5L
       case other =>
         fail(s"expected sum for tasks.nodes.cumulative_requested, got $other")
     }
@@ -418,7 +458,9 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
     case other => fail(s"expected gauge for ${m.name}, got $other")
   }
 
-  test("by_label gauges break down running/pending nodes per advertised label") {
+  test(
+    "by_label gauges break down running/pending nodes per advertised label"
+  ) {
     val a = tasks.shared.ResourceAvailable(
       cpu = 4,
       memory = 1024,
@@ -466,7 +508,8 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
         )
       )
       .update(
-        tasks.elastic.NodeRegistryState.NodeIsUp(node1, tasks.shared.PendingJobId("p1"))
+        tasks.elastic.NodeRegistryState
+          .NodeIsUp(node1, tasks.shared.PendingJobId("p1"))
       )
       .update(tasks.elastic.NodeRegistryState.NodeRequested(b))
       .update(
@@ -477,7 +520,8 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
         )
       )
       .update(
-        tasks.elastic.NodeRegistryState.NodeIsUp(node2, tasks.shared.PendingJobId("p2"))
+        tasks.elastic.NodeRegistryState
+          .NodeIsUp(node2, tasks.shared.PendingJobId("p2"))
       )
       // One pending with "aws-batch-queue:spot" — still waiting to come up.
       .update(tasks.elastic.NodeRegistryState.NodeRequested(c))
@@ -499,16 +543,22 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
 
     val metrics = collect(IO.pure(state))(_ => IO.unit)
 
-    labelGaugePoints(find(metrics, "tasks.nodes.running.by_label")) shouldBe Map(
+    labelGaugePoints(
+      find(metrics, "tasks.nodes.running.by_label")
+    ) shouldBe Map(
       "aws-batch-queue:prod" -> 2L,
       "zone:us-east-1a" -> 1L
     )
-    labelGaugePoints(find(metrics, "tasks.nodes.pending.by_label")) shouldBe Map(
+    labelGaugePoints(
+      find(metrics, "tasks.nodes.pending.by_label")
+    ) shouldBe Map(
       "aws-batch-queue:spot" -> 1L
     )
   }
 
-  test("affinity_label gauge counts queued tasks per positive Has(label) clause") {
+  test(
+    "affinity_label gauge counts queued tasks per positive Has(label) clause"
+  ) {
     val schA = stubScheduleTask(
       descA,
       nodeSelector = Some(tasks.shared.NodeSelector.Has("aws-batch-queue:prod"))
@@ -526,7 +576,8 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
     )
     val schC = stubScheduleTask(
       HashedTaskDescription(TaskId("third", 1), "hash-c"),
-      nodeSelector = None // no selector — should NOT contribute to affinity_label.
+      nodeSelector =
+        None // no selector — should NOT contribute to affinity_label.
     )
 
     val state = QueueImpl.State(
@@ -555,7 +606,9 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
     // The scalar with_selector gauge counts schA + schB (both have a selector).
     find(metrics, "tasks.queued.with_selector.count").data match {
       case g: MetricPoints.Gauge =>
-        g.points.toVector.head.asInstanceOf[PointData.LongNumber].value shouldBe 2L
+        g.points.toVector.head
+          .asInstanceOf[PointData.LongNumber]
+          .value shouldBe 2L
       case other => fail(s"expected gauge, got $other")
     }
   }

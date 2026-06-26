@@ -143,7 +143,13 @@ object TaskSystemComponents {
 
           val streamHelper = httpClient.flatMap { http =>
             s3Client.map { s3 =>
-              new StreamHelper(s3Client = s3, httpClient = http, s3DownloadPartSizeMB = config.s3DownloadPartSizeMB, s3DownloadParallelism = config.s3DownloadParallelism, s3MultipartThreshold = config.s3MultipartThreshold)
+              new StreamHelper(
+                s3Client = s3,
+                httpClient = http,
+                s3DownloadPartSizeMB = config.s3DownloadPartSizeMB,
+                s3DownloadParallelism = config.s3DownloadParallelism,
+                s3MultipartThreshold = config.s3MultipartThreshold
+              )
             }
           }
 
@@ -614,7 +620,9 @@ object TaskSystemComponents {
                       val baseUrl = org.http4s.Uri
                         .fromString(addr)
                         .toOption
-                        .map(u => u.copy(path = org.http4s.Uri.Path.Root).renderString)
+                        .map(u =>
+                          u.copy(path = org.http4s.Uri.Path.Root).renderString
+                        )
                         .getOrElse(addr)
                       Option(file.getParentFile).foreach(_.mkdirs())
                       val tmp = new java.io.File(

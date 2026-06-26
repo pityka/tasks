@@ -35,8 +35,8 @@ import java.time.Instant
   *
   * [[NodeSelector.Has]] expresses affinity, [[NodeSelector.Not]] expresses
   * avoidance, and [[NodeSelector.And]] / [[NodeSelector.Or]] compose them.
-  * Labels are opaque strings; callers can encode key/value pairs with their
-  * own convention (e.g. "region:us-east").
+  * Labels are opaque strings; callers can encode key/value pairs with their own
+  * convention (e.g. "region:us-east").
   */
 sealed trait NodeSelector
 
@@ -78,7 +78,7 @@ case class ResourceRequest(
 
 object ResourceRequest {
 
-   implicit def toLogFeature(rm: ResourceRequest): scribe.LogFeature =
+  implicit def toLogFeature(rm: ResourceRequest): scribe.LogFeature =
     scribe.data(
       Map(
         "resource-request-cpu" -> rm.cpu,
@@ -180,9 +180,8 @@ case class ResourceAvailable(
     labels = labels
   )
 
-  def addBack(r: ResourceAllocated) =
-   {
-    assert((gpu.toSet & r.gpu.toSet).isEmpty,s"$gpu + ${r.gpu}")
+  def addBack(r: ResourceAllocated) = {
+    assert((gpu.toSet & r.gpu.toSet).isEmpty, s"$gpu + ${r.gpu}")
     ResourceAvailable(
       cpu = cpu + r.cpu,
       memory = memory + r.memory,
@@ -190,7 +189,8 @@ case class ResourceAvailable(
       gpu = gpu ++ r.gpu,
       image = image,
       labels = labels
-    )}
+    )
+  }
 
   def all =
     ResourceAllocated(
