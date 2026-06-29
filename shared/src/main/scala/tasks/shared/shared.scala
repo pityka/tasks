@@ -35,8 +35,8 @@ import java.time.Instant
   *
   * [[NodeSelector.Has]] expresses affinity, [[NodeSelector.Not]] expresses
   * avoidance, and [[NodeSelector.And]] / [[NodeSelector.Or]] compose them.
-  * Labels are opaque strings; callers can encode key/value pairs with their
-  * own convention (e.g. "region:us-east").
+  * Labels are opaque strings; callers can encode key/value pairs with their own
+  * convention (e.g. "region:us-east").
   */
 sealed trait NodeSelector
 
@@ -78,7 +78,7 @@ case class ResourceRequest(
 
 object ResourceRequest {
 
-   implicit def toLogFeature(rm: ResourceRequest): scribe.LogFeature =
+  implicit def toLogFeature(rm: ResourceRequest): scribe.LogFeature =
     scribe.data(
       Map(
         "resource-request-cpu" -> rm.cpu,
@@ -117,7 +117,10 @@ case class ResourceAllocated(
     gpu: List[Int],
     image: Option[String]
 ) {
-  val gpuWithMultiplicities = ResourceAvailable.zipMultiplicities(gpu)
+  require(
+    gpu == gpu.distinct && gpu == gpu.sorted,
+    s"gpu must be sorted and unique, got $gpu"
+  )
 }
 
 object ResourceAllocated {
@@ -133,13 +136,15 @@ case class ResourceAvailable(
     labels: Set[String] = Set.empty
 ) {
 
-  val gpuWithMultiplicities = ResourceAvailable.zipMultiplicities(gpu)
+  require(
+    gpu == gpu.distinct && gpu == gpu.sorted,
+    s"gpu must be sorted and unique, got $gpu"
+  )
   val numGpu = gpu.size
 
   def canFulfillRequest(r: ResourceAllocated) =
     cpu >= r.cpu && memory >= r.memory && scratch >= r.scratch &&
-      r.gpuWithMultiplicities
-        .forall(g => gpuWithMultiplicities.contains(g))
+      r.gpu.forall(gpu.contains)
 
   def canFulfillRequest(r: ResourceRequest) =
     cpu >= r.cpu._1 && memory >= r.memory && scratch >= r.scratch && numGpu >= r.gpu && r.image
@@ -159,17 +164,17 @@ case class ResourceAvailable(
     )
   }
 
-  def substract(r: ResourceAllocated) =
+  def substract(r: ResourceAllocated) = {
+    val rGpu = r.gpu.toSet
     ResourceAvailable(
       cpu - r.cpu,
       memory - r.memory,
       scratch - r.scratch,
-      gpuWithMultiplicities
-        .filterNot(avail => r.gpuWithMultiplicities.contains(avail))
-        .map(_._1),
+      gpu.filterNot(rGpu.contains),
       image,
       labels
     )
+  }
 
   def substractAll = ResourceAvailable(
     cpu = 0,
@@ -180,17 +185,17 @@ case class ResourceAvailable(
     labels = labels
   )
 
-  def addBack(r: ResourceAllocated) =
-   {
-    assert((gpu.toSet & r.gpu.toSet).isEmpty,s"$gpu + ${r.gpu}")
+  def addBack(r: ResourceAllocated) = {
+    assert((gpu.toSet & r.gpu.toSet).isEmpty, s"$gpu + ${r.gpu}")
     ResourceAvailable(
       cpu = cpu + r.cpu,
       memory = memory + r.memory,
       scratch = scratch + r.scratch,
-      gpu = gpu ++ r.gpu,
+      gpu = (gpu ++ r.gpu).sorted,
       image = image,
       labels = labels
-    )}
+    )
+  }
 
   def all =
     ResourceAllocated(
@@ -242,14 +247,6 @@ object ResourceAvailable {
       )
     )
   val empty = ResourceAvailable(0, 0, 0, Nil, None)
-  private[tasks] def zipMultiplicities(l: List[Int]) =
-    l.sorted.foldLeft(List.empty[(Int, Int)]) { case (acc, next) =>
-      acc match {
-        case (last, i) :: _ if last == next => (next, i + 1) :: acc
-        case _                              => (next, 0) :: acc
-
-      }
-    }
   implicit val codec: JsonValueCodec[ResourceAvailable] = JsonCodecMaker.make
 }
 

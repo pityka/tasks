@@ -58,12 +58,16 @@ trait ConfigValuesForHostConfiguration {
 
   def hostNumCPU = raw.getInt("hosts.numCPU")
 
-  def hostGPU = raw.getIntList("hosts.gpus").asScala.toList.map(_.toInt) ++ raw
-    .getString("hosts.gpusAsCommaString")
-    .split(",")
-    .toList
-    .filter(_.nonEmpty)
-    .map(_.toInt)
+  def hostGPU = {
+    val list = raw.getIntList("hosts.gpus").asScala.toList.map(_.toInt)
+    val commaSeparated = raw
+      .getString("hosts.gpusAsCommaString")
+      .split(",")
+      .toList
+      .filter(_.nonEmpty)
+      .map(_.toInt)
+    (list ++ commaSeparated).distinct.sorted
+  }
 
   def hostRAM = raw.getInt("hosts.RAM")
 
