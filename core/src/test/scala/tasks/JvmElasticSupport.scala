@@ -107,6 +107,11 @@ object JvmElasticSupport {
           s"""hosts.labelsAsCommaString = "${workerLabels.toList.sorted.mkString(",")}""""
         else ""
 
+      val imageConfig = requestSize.image match {
+        case Some(img) => s"""hosts.image = "$img""""
+        case None      => ""
+      }
+
       val ts = {
 
         defaultTaskSystem(
@@ -120,6 +125,7 @@ object JvmElasticSupport {
     tasks.addShutdownHook = false
     tasks.fileservice.storageURI="${config.storageURI.toString}"
     $labelsConfig
+    $imageConfig
     $extraWorkerConfig
     """,
           s3Client = Resource.pure(None),
@@ -159,7 +165,7 @@ object JvmElasticSupport {
               memory = requestSize.memory,
               scratch = requestSize.scratch,
               gpu = 0 until requestSize.gpu toList,
-              image = None,
+              image = requestSize.image,
               labels = workerLabels
             )
           )

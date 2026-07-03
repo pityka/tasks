@@ -243,6 +243,17 @@ class BatchCreateNode(
   )(implicit
       config: TasksConfig
   ): IO[Either[String, (PendingJobId, ResourceAvailable)]] =
+    batchConfig.resolveJobDefinition(requestSize.image) match {
+      case Left(err) => IO.pure(Left(err))
+      case Right(jobDefinition) => submitJob(requestSize, jobDefinition)
+    }
+
+  private def submitJob(
+      requestSize: ResourceRequest,
+      jobDefinition: String
+  )(implicit
+      config: TasksConfig
+  ): IO[Either[String, (PendingJobId, ResourceAvailable)]] =
     requestMutex.lock.surround {
       val preliminaryResources = selectResources(
         requestSize,
@@ -279,7 +290,7 @@ class BatchCreateNode(
               followerNodeName = None,
               followerMayUseArbitraryPort = true,
               background = false,
-              image = None,
+              image = requestSize.image,
               workerHealthUrlFile =
                 config.workerHealthUrlFile.map(_.getAbsolutePath),
               labels = labeledResources.labels
@@ -316,7 +327,7 @@ class BatchCreateNode(
                 "tasks-worker-" + java.util.UUID.randomUUID.toString.take(8)
               )
               .jobQueue(targetQueue)
-              .jobDefinition(batchConfig.jobDefinition)
+              .jobDefinition(jobDefinition)
               .containerOverrides(containerOverrides)
               .tags(batchConfig.tags.asJava)
               .build
@@ -558,7 +569,7 @@ class BatchCreateNode(
     val scratch = requestSize.scratch
     val gpus = 0 until requestSize.gpu toList
 
-    ResourceAvailable(cpu, memory, scratch, gpus, None)
+    ResourceAvailable(cpu, memory, scratch, gpus, requestSize.image)
   }
 
   private def adaptMinimumsToQueue(queue: String): IO[(Int, Int)] =
@@ -660,6 +671,25 @@ class BatchConfig(val raw: Config) extends ConfigValuesForHostConfiguration {
     )
     v
   }
+
+  val jobDefinitionsByImage: Map[String, String] = {
+    val path = "tasks.elastic.batch.jobDefinitionsByImage"
+    val entries =
+      if (raw.hasPath(path)) raw.getConfigList(path).asScala.toList else Nil
+    entries.map { c =>
+      c.getString("image") -> c.getString("jobDefinition")
+    }.toMap
+  }
+
+  def resolveJobDefinition(image: Option[String]): Either[String, String] =
+    image match {
+      case None => Right(jobDefinition)
+      case Some(img) =>
+        jobDefinitionsByImage.get(img).toRight(
+          s"No AWS Batch job definition configured for image '$img'. " +
+            "Register one under tasks.elastic.batch.jobDefinitionsByImage."
+        )
+    }
 
   val minimumCpu: Int = raw.getInt("tasks.elastic.batch.minimumCpu")
 

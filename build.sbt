@@ -198,7 +198,8 @@ lazy val batch = project
       "software.amazon.awssdk" % "batch" % "2.23.13", // scala-steward:off
       "software.amazon.awssdk" % "cloudwatchlogs" % "2.23.13", // scala-steward:off
       "software.amazon.awssdk" % "ec2" % "2.23.13", // scala-steward:off
-      "io.github.pityka" %% "selfpackage-jib" % "2.1.6"
+      "io.github.pityka" %% "selfpackage-jib" % "2.1.6",
+      "org.scalatest" %% "scalatest" % "3.2.19" % "test"
     )
   )
   .dependsOn(core)

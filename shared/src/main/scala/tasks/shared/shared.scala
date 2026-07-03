@@ -144,7 +144,8 @@ case class ResourceAvailable(
 
   def canFulfillRequest(r: ResourceAllocated) =
     cpu >= r.cpu && memory >= r.memory && scratch >= r.scratch &&
-      r.gpu.forall(gpu.contains)
+      r.gpu.forall(gpu.contains) &&
+      r.image.forall(reqImage => image.contains(reqImage))
 
   def canFulfillRequest(r: ResourceRequest) =
     cpu >= r.cpu._1 && memory >= r.memory && scratch >= r.scratch && numGpu >= r.gpu && r.image
