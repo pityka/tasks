@@ -161,13 +161,14 @@ object Bootstrap {
       val jobName =
         "tasks-master-" + java.util.UUID.randomUUID.toString.take(8)
 
-      val mainQueue =
-        if (batchConfig.jobQueue.nonEmpty) batchConfig.jobQueue
-        else batchConfig.onDemandJobQueue
+      require(
+        batchConfig.jobQueue.nonEmpty,
+        "tasks.elastic.batch.jobQueue must be set to submit the main app job from Bootstrap."
+      )
 
       val submitRequest = SubmitJobRequest.builder
         .jobName(jobName)
-        .jobQueue(mainQueue)
+        .jobQueue(batchConfig.jobQueue)
         .jobDefinition(batchConfig.jobDefinition)
         .containerOverrides(containerOverrides)
         .tags(batchConfig.tags.asJava)

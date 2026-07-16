@@ -12,11 +12,7 @@ class BatchJobDefinitionResolutionTest extends AnyFunSuite with Matchers {
          |tasks.elastic.batch {
          |  region = ""
          |  jobQueue = "default-queue"
-         |  gpuJobQueue = ""
-         |  onDemandJobQueue = ""
-         |  spotJobQueue = ""
-         |  onDemandHeadroomVcpu = 0
-         |  onDemandMaxVcpu = 2147483647
+         |  queues = []
          |  jobDefinition = "default-jd"
          |  minimumCpu = 1
          |  minimumMemory = 512

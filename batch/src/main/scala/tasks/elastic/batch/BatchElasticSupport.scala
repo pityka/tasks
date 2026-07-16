@@ -45,6 +45,7 @@ import cats.effect.Ref
 import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
 import cats.effect.std.Mutex
+import cats.syntax.parallel._
 import tasks.util.message.Node
 
 import java.time.{Instant, Duration => JDuration}
@@ -91,7 +92,14 @@ class BatchShutdown(batch: BatchClient)
     }
 }
 
-case class InstanceCapacity(vcpus: Int, memoryMib: Int)
+case class InstanceCapacity(vcpus: Int, memoryMib: Int, gpus: Int)
+
+case class BatchQueueInfo(
+    name: String,
+    spot: Boolean,
+    maxVcpus: Int,
+    instances: List[InstanceCapacity]
+)
 
 object BatchInstanceCapacity {
 
@@ -108,26 +116,48 @@ object BatchInstanceCapacity {
       }
     }
 
-  def listInstanceTypesForCEs(
+  private case class ComputeEnvironmentDetails(
+      provisioning: CRType,
+      maxVcpus: Int,
+      instanceTypes: List[String]
+  )
+
+  private def describeComputeEnvironmentDetails(
       batch: BatchClient,
       computeEnvArns: List[String]
-  ): IO[List[String]] =
+  ): IO[List[ComputeEnvironmentDetails]] =
     if (computeEnvArns.isEmpty) IO.pure(Nil)
     else
       IO.interruptible {
-        val resp = batch.describeComputeEnvironments(
+        val response = batch.describeComputeEnvironments(
           DescribeComputeEnvironmentsRequest.builder
             .computeEnvironments(computeEnvArns.asJava)
             .build
         )
-        resp.computeEnvironments.asScala.toList.flatMap { ce =>
-          Option(ce.computeResources)
+        response.computeEnvironments.asScala.toList.map { computeEnv =>
+          val computeResources = Option(computeEnv.computeResources)
+          val provisioning = computeResources
+            .map(_.`type`)
+            .getOrElse(CRType.UNKNOWN_TO_SDK_VERSION)
+          val maxVcpus = computeResources
+            .flatMap(cr => Option(cr.maxvCpus))
+            .map(_.intValue)
+            .getOrElse(0)
+          val instanceTypes = computeResources
             .flatMap(cr => Option(cr.instanceTypes))
             .map(_.asScala.toList)
             .getOrElse(Nil)
             .filter(t => t != null && t.nonEmpty)
-        }.distinct
+          ComputeEnvironmentDetails(provisioning, maxVcpus, instanceTypes)
+        }
       }
+
+  def listInstanceTypesForCEs(
+      batch: BatchClient,
+      computeEnvArns: List[String]
+  ): IO[List[String]] =
+    describeComputeEnvironmentDetails(batch, computeEnvArns)
+      .map(_.flatMap(_.instanceTypes).distinct)
 
   def describeInstanceTypeCapacities(
       ec2: Ec2Client,
@@ -148,10 +178,14 @@ object BatchInstanceCapacity {
                 .instanceTypesWithStrings(missing.asJava)
                 .build
             )
-            resp.instanceTypes.asScala.toList.map { it =>
-              it.instanceTypeAsString -> InstanceCapacity(
-                it.vCpuInfo.defaultVCpus,
-                it.memoryInfo.sizeInMiB.toInt
+            resp.instanceTypes.asScala.toList.map { instanceType =>
+              val gpuCount = Option(instanceType.gpuInfo)
+                .map(_.gpus.asScala.toList.map(_.count.intValue).sum)
+                .getOrElse(0)
+              instanceType.instanceTypeAsString -> InstanceCapacity(
+                instanceType.vCpuInfo.defaultVCpus,
+                instanceType.memoryInfo.sizeInMiB.toInt,
+                gpuCount
               )
             }.toMap
           }.flatMap { fetched =>
@@ -162,6 +196,42 @@ object BatchInstanceCapacity {
       }
   }
 
+  def describeQueueInfo(
+      batch: BatchClient,
+      ec2: Ec2Client,
+      cache: Ref[IO, Map[String, InstanceCapacity]],
+      queue: String
+  ): IO[BatchQueueInfo] =
+    listComputeEnvironments(batch, queue).flatMap { computeEnvArns =>
+      if (computeEnvArns.isEmpty)
+        IO.raiseError(
+          new RuntimeException(
+            s"AWS Batch queue '$queue' resolves to no compute environments. " +
+              "The queue may not exist, may be misspelled, or may have no CEs attached. " +
+              "Fix tasks.elastic.batch.queues."
+          )
+        )
+      else
+        describeComputeEnvironmentDetails(batch, computeEnvArns).flatMap {
+          computeEnvDetails =>
+            val usesSpot = computeEnvDetails.exists(ce =>
+              ce.provisioning == CRType.SPOT ||
+                ce.provisioning == CRType.FARGATE_SPOT
+            )
+            val queueMaxVcpus = computeEnvDetails.map(_.maxVcpus).sum
+            val allInstanceTypes =
+              computeEnvDetails.flatMap(_.instanceTypes).distinct
+            val instancesIO: IO[List[InstanceCapacity]] =
+              if (
+                allInstanceTypes.isEmpty || allInstanceTypes.contains("optimal")
+              ) IO.pure(Nil)
+              else
+                describeInstanceTypeCapacities(ec2, cache, allInstanceTypes)
+                  .map(_.values.toList)
+            instancesIO.map(BatchQueueInfo(queue, usesSpot, queueMaxVcpus, _))
+        }
+    }
+
   def largestInstanceForQueue(
       batch: BatchClient,
       ec2: Ec2Client,
@@ -170,22 +240,17 @@ object BatchInstanceCapacity {
   ): IO[Option[InstanceCapacity]] =
     if (queue.isEmpty) IO.pure(None)
     else
-      listComputeEnvironments(batch, queue).flatMap { ces =>
-        listInstanceTypesForCEs(batch, ces).flatMap { types =>
-          if (types.isEmpty || types.contains("optimal")) IO.pure(None)
-          else
-            describeInstanceTypeCapacities(ec2, cache, types).map { caps =>
-              caps.values.foldLeft(Option.empty[InstanceCapacity]) {
-                case (None, c) => Some(c)
-                case (Some(acc), c) =>
-                  Some(
-                    InstanceCapacity(
-                      math.max(acc.vcpus, c.vcpus),
-                      math.max(acc.memoryMib, c.memoryMib)
-                    )
-                  )
-              }
-            }
+      describeQueueInfo(batch, ec2, cache, queue).map { info =>
+        info.instances.foldLeft(Option.empty[InstanceCapacity]) {
+          case (None, c) => Some(c)
+          case (Some(acc), c) =>
+            Some(
+              InstanceCapacity(
+                math.max(acc.vcpus, c.vcpus),
+                math.max(acc.memoryMib, c.memoryMib),
+                math.max(acc.gpus, c.gpus)
+              )
+            )
         }
       }
 
@@ -222,8 +287,40 @@ object BatchInstanceCapacity {
 }
 
 object BatchCreateNode {
-  
+
   val queueLabelPrefix: String = "aws-batch-queue:"
+
+  private[batch] def canHostRequest(
+      queue: BatchQueueInfo,
+      request: ResourceAvailable
+  ): Boolean =
+    queue.instances.isEmpty ||
+      queue.instances.exists(instance =>
+        instance.vcpus >= request.cpu &&
+          instance.memoryMib >= request.memory &&
+          instance.gpus >= request.gpu.size
+      )
+
+  private[batch] def largestInstanceVcpus(queue: BatchQueueInfo): Int =
+    if (queue.instances.isEmpty) Int.MaxValue
+    else queue.instances.map(_.vcpus).max
+
+  private[batch] def chooseQueue(
+      queueInfos: List[BatchQueueInfo],
+      request: ResourceAvailable,
+      onDemandHasRoom: Boolean
+  ): Option[BatchQueueInfo] = {
+    val fitting = queueInfos.filter(canHostRequest(_, request))
+    val routed =
+      if (request.gpu.nonEmpty) fitting
+      else {
+        val (onDemand, spot) = fitting.partition(!_.spot)
+        val preferred = if (onDemandHasRoom) onDemand else spot
+        val fallback = if (onDemandHasRoom) spot else onDemand
+        if (preferred.nonEmpty) preferred else fallback
+      }
+    routed.sortBy(largestInstanceVcpus).headOption
+  }
 }
 
 class BatchCreateNode(
@@ -261,12 +358,13 @@ class BatchCreateNode(
         batchConfig.minimumMemory
       )
       selectJobQueue(preliminaryResources)
-        .flatMap { targetQueue =>
-          adaptMinimumsToQueue(targetQueue).map { case (minCpu, minMem) =>
-            (targetQueue, selectResources(requestSize, minCpu, minMem))
+        .flatMap { targetQueueInfo =>
+          adaptMinimumsToQueue(targetQueueInfo.name).map { case (minCpu, minMem) =>
+            (targetQueueInfo, selectResources(requestSize, minCpu, minMem))
           }
         }
-        .flatMap { case (targetQueue, selectedResources) =>
+        .flatMap { case (targetQueueInfo, selectedResources) =>
+          val targetQueue = targetQueueInfo.name
           val labeledResources = selectedResources.copy(
             labels = selectedResources.labels +
               s"${BatchCreateNode.queueLabelPrefix}$targetQueue"
@@ -337,7 +435,7 @@ class BatchCreateNode(
             (jobId, labeledResources)
           }
           val recordIfOnDemand =
-            if (targetQueue == batchConfig.onDemandJobQueue)
+            if (!targetQueueInfo.spot)
               submit.flatTap { case (jobId, _) =>
                 recordOnDemandSubmission(jobId.value)
               }
@@ -370,76 +468,60 @@ class BatchCreateNode(
     else
       recentOnDemandSubmissions.update(_.filterNot(t => ids.contains(t._2)))
 
-  private def selectJobQueue(selected: ResourceAvailable): IO[String] = {
-    val chosenIO: IO[String] =
-      if (selected.gpu.nonEmpty) IO.pure(batchConfig.gpuJobQueue)
-      else if (batchConfig.spotJobQueue == batchConfig.onDemandJobQueue)
-        IO.pure(batchConfig.onDemandJobQueue)
-      else {
-        val onDemandHasRoom: IO[Boolean] = (for {
-          computeEnvs <- listComputeEnvironments(batchConfig.onDemandJobQueue)
-          maxVcpus <- describeMaxVcpus(computeEnvs)
-          inUseVcpus <- sumOnDemandJobVcpus
-          cap = math.min(
-            maxVcpus - batchConfig.onDemandHeadroomVcpu,
-            batchConfig.onDemandMaxVcpu
-          )
-          _ <- IO(
-            scribe.info(
-              s"on-demand queue ${batchConfig.onDemandJobQueue} CEs=[${computeEnvs.mkString(",")}] inUseVcpus=$inUseVcpus max=$maxVcpus headroom=${batchConfig.onDemandHeadroomVcpu} onDemandMaxVcpu=${batchConfig.onDemandMaxVcpu} cap=$cap ask=${selected.cpu}"
-            )
-          )
-        } yield inUseVcpus + selected.cpu <= cap).handleErrorWith { e =>
-          IO(
-            scribe.warn(
-              s"Failed to query on-demand queue capacity, defaulting to on-demand: ${e.getMessage}"
-            )
-          ).as(true)
-        }
-        onDemandHasRoom.map { onDemandHasRoom =>
-          if (onDemandHasRoom) batchConfig.onDemandJobQueue
-          else batchConfig.spotJobQueue
-        }
-      }
-    chosenIO.flatTap { chosen =>
-      IO(
+  private def describeWorkerQueues: IO[List[BatchQueueInfo]] =
+    batchConfig.queues.parTraverse { queueName =>
+      BatchInstanceCapacity
+        .describeQueueInfo(batch, ec2, instanceTypeCache, queueName)
+    }
+
+  private def onDemandHasAggregateHeadroom(
+      onDemandCandidates: List[BatchQueueInfo],
+      request: ResourceAvailable
+  ): IO[Boolean] =
+    if (onDemandCandidates.isEmpty) IO.pure(false)
+    else {
+      val aggregateMaxVcpus = onDemandCandidates.map(_.maxVcpus.toLong).sum
+      sumOnDemandJobVcpus(onDemandCandidates.map(_.name)).map { inUseVcpus =>
         scribe.info(
-          s"routing worker request cpu=${selected.cpu} gpu=${selected.gpu.size} -> queue=$chosen"
+          s"on-demand aggregate cap=$aggregateMaxVcpus inUseVcpus=$inUseVcpus ask=${request.cpu} queues=[${onDemandCandidates.map(_.name).mkString(",")}]"
         )
-      )
-    }
-  }
-
-  private def listComputeEnvironments(
-      jobQueueName: String
-  ): IO[List[String]] =
-    IO.interruptible {
-      val resp = batch.describeJobQueues(
-        DescribeJobQueuesRequest.builder.jobQueues(jobQueueName).build
-      )
-      resp.jobQueues.asScala.toList.flatMap { jq =>
-        jq.computeEnvironmentOrder.asScala.toList.map(_.computeEnvironment)
+        inUseVcpus.toLong + request.cpu.toLong <= aggregateMaxVcpus
+      }.handleErrorWith { e =>
+        IO(
+          scribe.warn(
+            s"Failed to compute on-demand headroom, defaulting to on-demand: ${e.getMessage}"
+          )
+        ).as(true)
       }
     }
 
-  private def describeMaxVcpus(
-      computeEnvArns: List[String]
-  ): IO[Int] =
-    if (computeEnvArns.isEmpty) IO.pure(0)
-    else
-      IO.interruptible {
-        val resp = batch.describeComputeEnvironments(
-          DescribeComputeEnvironmentsRequest.builder
-            .computeEnvironments(computeEnvArns.asJava)
-            .build
-        )
-        resp.computeEnvironments.asScala.toList.map { ce =>
-          Option(ce.computeResources)
-            .flatMap(cr => Option(cr.maxvCpus))
-            .map(_.intValue)
-            .getOrElse(0)
-        }.sum
+  private def selectJobQueue(
+      request: ResourceAvailable
+  ): IO[BatchQueueInfo] =
+    describeWorkerQueues.flatMap { queueInfos =>
+      val fittingOnDemand = queueInfos
+        .filter(BatchCreateNode.canHostRequest(_, request))
+        .filter(!_.spot)
+      val hasRoomIO =
+        if (request.gpu.nonEmpty || fittingOnDemand.isEmpty) IO.pure(false)
+        else onDemandHasAggregateHeadroom(fittingOnDemand, request)
+      hasRoomIO.flatMap { hasRoom =>
+        BatchCreateNode.chooseQueue(queueInfos, request, hasRoom) match {
+          case Some(chosen) =>
+            IO(
+              scribe.info(
+                s"routing worker request cpu=${request.cpu} gpu=${request.gpu.size} memMiB=${request.memory} -> queue=${chosen.name} spot=${chosen.spot}"
+              )
+            ).as(chosen)
+          case None =>
+            IO.raiseError(
+              new RuntimeException(
+                s"No Batch queue in tasks.elastic.batch.queues can host request cpu=${request.cpu} memMiB=${request.memory} gpus=${request.gpu.size}. Configured queues=[${batchConfig.queues.mkString(",")}]"
+              )
+            )
+        }
       }
+    }
 
   private val activeJobStatuses: List[JobStatus] = List(
     JobStatus.SUBMITTED,
@@ -478,15 +560,14 @@ class BatchCreateNode(
     loop(Nil, None)
   }
 
-  private def listAllActiveJobIds: IO[List[String]] = {
-    val queue = batchConfig.onDemandJobQueue
-    activeJobStatuses.foldLeft(IO.pure(List.empty[String])) {
-      (accIO, status) =>
-        accIO.flatMap { acc =>
-          listJobIdsInStatus(queue, status).map(acc ::: _)
-        }
-    }
-  }
+  private def listActiveJobIds(queues: List[String]): IO[List[String]] =
+    queues
+      .parTraverse { queue =>
+        activeJobStatuses
+          .parTraverse(status => listJobIdsInStatus(queue, status))
+          .map(_.flatten)
+      }
+      .map(_.flatten)
 
   private case class JobDetail(
       id: String,
@@ -519,39 +600,43 @@ class BatchCreateNode(
   private val maxReconcileAttempts: Int = 5
   private val reconcileBackoff: FiniteDuration = 1500.millis
 
-  private def sumOnDemandJobVcpus: IO[Int] = {
-    def loop(attempt: Int): IO[Int] =
-      for {
-        activeIds <- listAllActiveJobIds.map(_.toSet)
-        recentIds <- recentOnDemandIds
-        missing = recentIds -- activeIds
-        result <-
-          if (missing.isEmpty) describeJobs(activeIds.toList).map(_.map(_.vcpus).sum)
-          else
-            describeJobs(missing.toList).flatMap { details =>
-              val terminal =
-                details.filter(d => !activeJobStatuses.contains(d.status))
-              val stillActive =
-                details.filter(d => activeJobStatuses.contains(d.status))
-              val terminalIds = terminal.map(_.id).toSet
-              val unknownIds = missing -- details.map(_.id).toSet
-              dropRecentIds(terminalIds) *> {
-                if (stillActive.isEmpty && unknownIds.isEmpty)
-                  describeJobs(activeIds.toList).map(_.map(_.vcpus).sum)
-                else if (attempt >= maxReconcileAttempts)
-                  IO(
-                    scribe.warn(
-                      s"listJobs eventual consistency: ${stillActive.size} active + ${unknownIds.size} unknown ids still missing after $maxReconcileAttempts attempts; counting them optimistically"
-                    )
-                  ) *> describeJobs(activeIds.toList).map { ds =>
-                    ds.map(_.vcpus).sum + stillActive.map(_.vcpus).sum
-                  }
-                else IO.sleep(reconcileBackoff) *> loop(attempt + 1)
+  private def sumOnDemandJobVcpus(onDemandQueues: List[String]): IO[Int] = {
+    if (onDemandQueues.isEmpty) IO.pure(0)
+    else {
+      def loop(attempt: Int): IO[Int] =
+        for {
+          activeIds <- listActiveJobIds(onDemandQueues).map(_.toSet)
+          recentIds <- recentOnDemandIds
+          missing = recentIds -- activeIds
+          result <-
+            if (missing.isEmpty)
+              describeJobs(activeIds.toList).map(_.map(_.vcpus).sum)
+            else
+              describeJobs(missing.toList).flatMap { details =>
+                val terminal =
+                  details.filter(d => !activeJobStatuses.contains(d.status))
+                val stillActive =
+                  details.filter(d => activeJobStatuses.contains(d.status))
+                val terminalIds = terminal.map(_.id).toSet
+                val unknownIds = missing -- details.map(_.id).toSet
+                dropRecentIds(terminalIds) *> {
+                  if (stillActive.isEmpty && unknownIds.isEmpty)
+                    describeJobs(activeIds.toList).map(_.map(_.vcpus).sum)
+                  else if (attempt >= maxReconcileAttempts)
+                    IO(
+                      scribe.warn(
+                        s"listJobs eventual consistency: ${stillActive.size} active + ${unknownIds.size} unknown ids still missing after $maxReconcileAttempts attempts; counting them optimistically"
+                      )
+                    ) *> describeJobs(activeIds.toList).map { ds =>
+                      ds.map(_.vcpus).sum + stillActive.map(_.vcpus).sum
+                    }
+                  else IO.sleep(reconcileBackoff) *> loop(attempt + 1)
+                }
               }
-            }
-      } yield result
+        } yield result
 
-    loop(0)
+      loop(0)
+    }
   }
 
   override def convertRunningToPending(
@@ -631,35 +716,16 @@ class BatchConfig(val raw: Config) extends ConfigValuesForHostConfiguration {
 
   val jobQueue: String = raw.getString("tasks.elastic.batch.jobQueue")
 
-  private def readQueue(path: String, fallback: String): String = {
-    val v = if (raw.hasPath(path)) raw.getString(path) else ""
-    if (v.nonEmpty) v else fallback
+  val queues: List[String] = {
+    val path = "tasks.elastic.batch.queues"
+    if (raw.hasPath(path)) raw.getStringList(path).asScala.toList
+    else Nil
   }
 
-  val gpuJobQueue: String =
-    readQueue("tasks.elastic.batch.gpuJobQueue", jobQueue)
-
-  val onDemandJobQueue: String =
-    readQueue("tasks.elastic.batch.onDemandJobQueue", jobQueue)
-
-  val spotJobQueue: String =
-    readQueue("tasks.elastic.batch.spotJobQueue", onDemandJobQueue)
-
-  val onDemandHeadroomVcpu: Int =
-    if (raw.hasPath("tasks.elastic.batch.onDemandHeadroomVcpu"))
-      raw.getInt("tasks.elastic.batch.onDemandHeadroomVcpu")
-    else 0
-
-  val onDemandMaxVcpu: Int =
-    if (raw.hasPath("tasks.elastic.batch.onDemandMaxVcpu"))
-      raw.getInt("tasks.elastic.batch.onDemandMaxVcpu")
-    else Int.MaxValue
-
   require(
-    gpuJobQueue.nonEmpty && onDemandJobQueue.nonEmpty && spotJobQueue.nonEmpty,
-    "At least one of tasks.elastic.batch.{jobQueue, gpuJobQueue, onDemandJobQueue, spotJobQueue} " +
-      "must be set to a non-empty queue name or ARN. An empty value yields IAM errors like " +
-      "\"not authorized on resource job-queue/\""
+    queues.forall(_.nonEmpty),
+    "tasks.elastic.batch.queues entries must be non-empty queue names or ARNs. " +
+      "An empty value yields IAM errors like \"not authorized on resource job-queue/\""
   )
 
   val jobDefinition: String = {
