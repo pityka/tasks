@@ -1,4 +1,5 @@
 import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
+import smithy4s.codegen.Smithy4sCodegenPlugin.autoImport._
 
 // new setting for the Central Portal
 ThisBuild / publishTo := {
@@ -110,6 +111,7 @@ lazy val otel4sCoreVersion = "1.0.0"
 lazy val http4sVersion = "0.23.27"
 lazy val scribeVersion = "3.16.1"
 lazy val fs2Version = "3.12.0"
+lazy val awsSdkV2Version = "2.23.13"
 
 lazy val shared = crossProject(JVMPlatform)
   .crossType(sbtcrossproject.CrossPlugin.autoImport.CrossType.Pure)
@@ -180,11 +182,24 @@ lazy val core = project
 
 lazy val ec2 = project
   .in(file("ec2"))
+  .enablePlugins(Smithy4sCodegenPlugin)
   .settings(commonSettings: _*)
   .settings(
     name := "tasks-ec2",
+    // smithy4s regenerates the entire EC2 model including references to
+    // AWS-deprecated fields (Elastic GPU, Elastic Inference, ec2Query trait etc.).
+    // We can't control what's generated; suppress fatal-warnings and deprecation
+    // for the whole module rather than only src_managed.
+    scalacOptions ~= (_.filterNot(o =>
+      o == "-Xfatal-warnings" || o == "-deprecation"
+    )),
     libraryDependencies ++= Seq(
-      "com.amazonaws" % "aws-java-sdk-ec2" % "1.12.244" // scala-steward:off
+      "com.disneystreaming.smithy4s" %% "smithy4s-aws-http4s" % smithy4sVersion.value,
+      "software.amazon.api.models" % AWS.ec2._1 % AWS.ec2._2 % Smithy4s,
+      "org.http4s" %% "http4s-ember-client" % http4sVersion,
+      "software.amazon.awssdk" % "auth" % awsSdkV2Version, // scala-steward:off
+      "software.amazon.awssdk" % "regions" % awsSdkV2Version, // scala-steward:off
+      "org.scalatest" %% "scalatest" % "3.2.19" % "test"
     )
   )
   .dependsOn(core)
