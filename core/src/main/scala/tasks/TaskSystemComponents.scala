@@ -407,6 +407,9 @@ object TaskSystemComponents {
               meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO]
           ): Resource[IO, Queue] = {
 
+            val onFatalError: IO[Unit] =
+              exitCode.complete(ExitCode.Error).void
+
             val io: IO[Resource[IO, Queue]] = IO {
               if (externalQueueState.isDefined) {
                 scribe.debug(
@@ -422,7 +425,8 @@ object TaskSystemComponents {
                     decideNewNode,
                     createNode,
                     unmanagedResource,
-                    meterProvider
+                    meterProvider,
+                    onFatalError
                   )(config)
                   .map { queueImpl =>
                     (new QueueFromQueueImpl(
@@ -443,7 +447,8 @@ object TaskSystemComponents {
                     decideNewNode,
                     createNode,
                     unmanagedResource,
-                    meterProvider
+                    meterProvider,
+                    onFatalError
                   )(config)
                   .flatMap { impl =>
                     QueueActor

@@ -243,6 +243,14 @@ package object tasks extends MacroCalls {
   def audit(data: String)(implicit component: ComputationEnvironment): Boolean =
     component.appendLog(LogRecord(data, java.time.Instant.now))
 
+  def rendezvous(
+      groupId: String,
+      rank: Int,
+      worldSize: Int,
+      payload: String
+  )(implicit component: ComputationEnvironment): IO[List[String]] =
+    component.rendezvous(groupId, rank, worldSize, payload)
+
   def withTaskSystem[T](
       f: TaskSystemComponents => IO[T]
   ): IO[Either[ExitCode, T]] =

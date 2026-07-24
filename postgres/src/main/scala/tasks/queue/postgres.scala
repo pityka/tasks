@@ -2,6 +2,7 @@ package tasks.queue
 import tasks.queue.QueueImpl._
 import tasks.util.message.MessageData.ScheduleTask
 import tasks.util.message.LauncherName
+import tasks.util.message.RendezvousGroupId
 import tasks.shared.VersionedResourceAllocated
 
 import cats.effect._
@@ -34,14 +35,16 @@ object Postgres {
       ],
       knownLaunchers: List[(LauncherName, Option[Node])],
       counters: List[(LauncherName, Long)],
-      nodes: NodeRegistryState.State
+      nodes: NodeRegistryState.State,
+      rendezvous: List[(RendezvousGroupId, QueueImpl.RendezvousGroup)] = Nil
   ) {
     def toState = QueueImpl.State(
       queuedTasks = queuedTasks.toMap,
       scheduledTasks = scheduledTasks.toMap,
       knownLaunchers = knownLaunchers.toMap,
       counters = counters.toMap,
-      nodes = nodes
+      nodes = nodes,
+      rendezvous = rendezvous.toMap
     )
   }
   private[tasks] object SerializableState {
@@ -50,7 +53,8 @@ object Postgres {
       scheduledTasks = state.scheduledTasks.toList,
       knownLaunchers = state.knownLaunchers.toList,
       counters = state.counters.toList,
-      nodes = state.nodes
+      nodes = state.nodes,
+      rendezvous = state.rendezvous.toList
     )
     import com.github.plokhotnyuk.jsoniter_scala.core._
     import com.github.plokhotnyuk.jsoniter_scala.macros._

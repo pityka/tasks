@@ -14,6 +14,7 @@ import tasks.shared.ResourceAvailable
 import tasks.shared.ResourceRequest
 import tasks.util.config.TasksConfig
 import tasks.util.message.LauncherName
+import tasks.util.message.RendezvousGroupId
 import tasks.shared.VersionedResourceAvailable
 import tasks.util.HeartBeatIO
 import tasks.util.eq._
@@ -63,6 +64,17 @@ object QueueImpl {
   case class LauncherCrashed(crashedLauncher: LauncherName) extends Event
   case class CacheHit(sch: ScheduleTask, result: UntypedResult) extends Event
   case class NodeEvent(ev: NodeRegistryState.Event) extends Event
+  case class RendezvousJoined(
+      groupId: RendezvousGroupId,
+      rank: Int,
+      worldSize: Int,
+      payload: String
+  ) extends Event
+
+  case class RendezvousGroup(
+      worldSize: Int,
+      joiners: Map[Int, String]
+  )
 
   def project(sch: ScheduleTask) =
     ScheduleTaskEqualityProjection(sch.description)
@@ -78,13 +90,23 @@ object QueueImpl {
       ],
       knownLaunchers: Map[LauncherName, Option[Node]],
       counters: Map[LauncherName, Long],
-      nodes: NodeRegistryState.State
+      nodes: NodeRegistryState.State,
+      rendezvous: Map[RendezvousGroupId, RendezvousGroup] = Map.empty
   ) {
 
     def update(e: Event): State = {
       e match {
         case NodeEvent(ev) =>
           copy(nodes = nodes.update(ev))
+        case RendezvousJoined(groupId, rank, worldSize, payload) =>
+          val group = rendezvous
+            .getOrElse(groupId, RendezvousGroup(worldSize, Map.empty))
+          copy(rendezvous =
+            rendezvous.updated(
+              groupId,
+              group.copy(joiners = group.joiners.updated(rank, payload))
+            )
+          )
         case Incremented(launcher) =>
           copy(counters = counters.get(launcher) match {
             case None        => counters.updated(launcher, 1L)
@@ -160,7 +182,7 @@ object QueueImpl {
 
   object State {
     def empty =
-      State(Map(), Map(), Map(), Map(), NodeRegistryState.State.empty)
+      State(Map(), Map(), Map(), Map(), NodeRegistryState.State.empty, Map())
 
   }
 
@@ -172,7 +194,8 @@ object QueueImpl {
       decideNewNode: Option[tasks.elastic.DecideNewNode],
       createNode: Option[tasks.elastic.CreateNode],
       unmanagedResource: tasks.shared.ResourceAvailable,
-      meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO]
+      meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO],
+      onFatalError: IO[Unit] = IO.unit
   )(implicit config: TasksConfig): Resource[IO, QueueImpl] = {
     QueueMetrics.make(meterProvider, transaction.get).flatMap { metrics =>
       Resource.make(
@@ -188,7 +211,8 @@ object QueueImpl {
               createNode = createNode,
               unmanagedResource = unmanagedResource,
               metrics = metrics,
-              handleQueueStatMutex = handleQueueStatMutex
+              handleQueueStatMutex = handleQueueStatMutex,
+              onFatalError = onFatalError
             )
             q.startCounterLoops.map(_ => q)
           }
@@ -204,7 +228,8 @@ object QueueImpl {
       decideNewNode: Option[tasks.elastic.DecideNewNode],
       createNode: Option[tasks.elastic.CreateNode],
       unmanagedResource: tasks.shared.ResourceAvailable,
-      meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO]
+      meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO],
+      onFatalError: IO[Unit] = IO.unit
   )(implicit
       config: TasksConfig
   ) =
@@ -224,7 +249,8 @@ object QueueImpl {
                   createNode = createNode,
                   unmanagedResource = unmanagedResource,
                   metrics = metrics,
-                  handleQueueStatMutex = handleQueueStatMutex
+                  handleQueueStatMutex = handleQueueStatMutex,
+                  onFatalError = onFatalError
                 )
                 q.startCounterLoops.map(_ => q)
               }
@@ -244,7 +270,8 @@ private[tasks] class QueueImpl(
     createNode: Option[tasks.elastic.CreateNode],
     unmanagedResource: tasks.shared.ResourceAvailable,
     metrics: QueueMetrics,
-    handleQueueStatMutex: Mutex[IO]
+    handleQueueStatMutex: Mutex[IO],
+    onFatalError: IO[Unit] = IO.unit
 )(implicit config: TasksConfig) {
   import QueueImpl._
 
@@ -455,6 +482,74 @@ private[tasks] class QueueImpl(
       }
     }
     scheduleIO *> handleQueueStatIO
+  }
+
+  def rendezvous(
+      groupId: RendezvousGroupId,
+      rank: Int,
+      worldSize: Int,
+      payload: String
+  ): IO[List[String]] = {
+    def loop: IO[List[String]] =
+      rendezvousStep(groupId, rank, worldSize, payload).flatMap {
+        case Some(peers) => IO.pure(peers)
+        case None        => IO.sleep(config.rendezvousPollInterval) *> loop
+      }
+    loop
+  }
+
+  def rendezvousStep(
+      groupId: RendezvousGroupId,
+      rank: Int,
+      worldSize: Int,
+      payload: String
+  ): IO[Option[List[String]]] = ref.flatModify { state =>
+    def fatal(reason: String): (State, IO[Option[List[String]]]) = {
+      scribe.error(
+        s"RendezvousInvariantViolation",
+        scribe.data(
+          Map(
+            "group-id" -> groupId.value,
+            "offending-rank" -> rank,
+            "offending-world-size" -> worldSize,
+            "offending-payload" -> payload,
+            "reason" -> reason
+          )
+        )
+      )
+      (
+        state,
+        onFatalError *> IO.raiseError(new RuntimeException(reason))
+      )
+    }
+
+    def readyOrNot(s: State): (State, IO[Option[List[String]]]) = {
+      val g = s.rendezvous(groupId)
+      if (g.joiners.size == worldSize) {
+        val peers = (0 until worldSize).toList.map(g.joiners(_))
+        (s, IO.pure(Some(peers)))
+      } else (s, IO.pure(None))
+    }
+
+    if (worldSize <= 0)
+      fatal(s"worldSize must be positive, got $worldSize")
+    else if (rank < 0 || rank >= worldSize)
+      fatal(s"rank $rank out of range for worldSize $worldSize")
+    else
+      state.rendezvous.get(groupId) match {
+        case Some(existing) if existing.worldSize != worldSize =>
+          fatal(
+            s"worldSize mismatch on group ${groupId.value}: existing=${existing.worldSize} new=$worldSize"
+          )
+        case Some(existing) if existing.joiners.get(rank).exists(_ != payload) =>
+          fatal(s"duplicate rank $rank in group ${groupId.value}")
+        case Some(existing) if existing.joiners.contains(rank) =>
+          readyOrNot(state)
+        case _ =>
+          readyOrNot(
+            state.update(RendezvousJoined(groupId, rank, worldSize, payload))
+          )
+      }
   }
 
   private def handleNewNode(node: Node, createNode: CreateNode): IO[Unit] = {

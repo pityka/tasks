@@ -152,6 +152,35 @@ private[tasks] final class QueueActorBehavior(
     case Message(MessageData.TaskFailedMessageToQueue(sch, cause), _, _) =>
       impl.taskFailed(sch, cause)
 
+    case Message(
+          MessageData.RendezvousStep(groupId, rank, worldSize, payload),
+          from,
+          _
+        ) =>
+      impl
+        .rendezvousStep(groupId, rank, worldSize, payload)
+        .attempt
+        .flatMap {
+          case Right(peersOpt) =>
+            messenger.submit(
+              Message(
+                MessageData.RendezvousStepResponse(peersOpt),
+                from = address,
+                to = from
+              )
+            )
+          case Left(e) =>
+            messenger.submit(
+              Message(
+                MessageData.RendezvousStepFailed(
+                  Option(e.getMessage).getOrElse(e.toString)
+                ),
+                from = address,
+                to = from
+              )
+            )
+        }
+
     case Message(MessageData.Ping, from, to) =>
       messenger.submit(
         Message(MessageData.Ping, from = address, to = from)

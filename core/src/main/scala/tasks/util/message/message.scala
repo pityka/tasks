@@ -33,6 +33,12 @@ object LauncherName {
   )
 }
 
+private[tasks] case class RendezvousGroupId(value: String)
+private[tasks] object RendezvousGroupId {
+  implicit def toLogFeature(g: RendezvousGroupId): scribe.LogFeature =
+    scribe.data(Map("rendezvous-group-id" -> g.value))
+}
+
 case class Address(value: String, listeningUri: Option[String]) {
   private[util] def withoutUri = Address(value, None)
   def withAddress(s: Option[String]) =
@@ -185,4 +191,14 @@ private[tasks] object MessageData {
 
   case class MessageFromTask(result: UntypedResult, retrievedFromCache: Boolean)
       extends MessageData
+
+  case class RendezvousStep(
+      groupId: RendezvousGroupId,
+      rank: Int,
+      worldSize: Int,
+      payload: String
+  ) extends MessageData
+  case class RendezvousStepResponse(peers: Option[List[String]])
+      extends MessageData
+  case class RendezvousStepFailed(reason: String) extends MessageData
 }

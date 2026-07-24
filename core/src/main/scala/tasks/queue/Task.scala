@@ -176,6 +176,14 @@ sealed trait ComputationEnvironment {
   implicit def prefix: Prefix
 
   def toTaskSystemComponents: TaskSystemComponents
+
+  def rendezvous(
+      groupId: String,
+      rank: Int,
+      worldSize: Int,
+      payload: String
+  ): IO[List[String]] =
+    queue.rendezvous(RendezvousGroupId(groupId), rank, worldSize, payload)
 }
 
 sealed trait LeafComputationEnvironment extends ComputationEnvironment {
