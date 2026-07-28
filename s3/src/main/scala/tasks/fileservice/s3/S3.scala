@@ -39,6 +39,9 @@ import scala.jdk.CollectionConverters._
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider
 import software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain
 import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient
+import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration
+import software.amazon.awssdk.core.retry.RetryMode
+import software.amazon.awssdk.core.retry.RetryPolicy
 import java.time.Duration
 import scala.concurrent.duration.FiniteDuration
 import S3Client.{S3UploadResponse, ObjectMetaData}
@@ -49,7 +52,8 @@ object S3 {
       httpMaxConcurrency: Option[Int],
       httpMaxPendingConnectionAcquires: Option[Int],
       httpConnectionAcquisitionTimeout: Option[FiniteDuration],
-      maxConcurrentRequests: Option[Int]
+      maxConcurrentRequests: Option[Int],
+      numRetries: Option[Int] = Some(10)
   ) = {
     val rateLimiter: Resource[IO, Option[Semaphore[IO]]] =
       maxConcurrentRequests match {
@@ -66,7 +70,8 @@ object S3 {
               regionProfileName,
               httpMaxConcurrency,
               httpMaxPendingConnectionAcquires,
-              httpConnectionAcquisitionTimeout
+              httpConnectionAcquisitionTimeout,
+              numRetries
             )
 
         new tasks.fileservice.s3.S3(s3AWSSDKClient, sem)
@@ -78,7 +83,8 @@ object S3 {
       regionProfileName: Option[String],
       httpMaxConcurrency: Option[Int],
       httpMaxPendingConnectionAcquires: Option[Int],
-      httpConnectionAcquisitionTimeout: Option[FiniteDuration]
+      httpConnectionAcquisitionTimeout: Option[FiniteDuration],
+      numRetries: Option[Int] = Some(10)
   ) = {
     val builder = S3AsyncClient
       .builder()
@@ -90,6 +96,15 @@ object S3 {
           .build
           .getRegion()
       })
+    numRetries.foreach { n =>
+      val retryPolicy = RetryPolicy
+        .builder(RetryMode.STANDARD)
+        .numRetries(n)
+        .build()
+      builder.overrideConfiguration(
+        ClientOverrideConfiguration.builder().retryPolicy(retryPolicy).build()
+      )
+    }
     if (
       httpMaxConcurrency.isDefined ||
       httpMaxPendingConnectionAcquires.isDefined ||

@@ -225,6 +225,8 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   val s3MultipartThreshold = raw.getLong("tasks.s3.multipartThreshold")
 
+  val s3RetryMaxAttempts = raw.getInt("tasks.s3.retryMaxAttempts")
+
   val httpRemoteEnabled = raw.getBoolean("tasks.fileservice.remote.http")
   val s3RemoteEnabled = raw.getBoolean("tasks.fileservice.remote.s3")
 

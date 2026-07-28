@@ -152,7 +152,7 @@ private[tasks] class S3Storage(
         .through(sinkWithPartSize(path, minPartSizeMB))
         .compile
         .lastOrError,
-      4
+      config.s3RetryMaxAttempts
     )(scribe.Logger[ManagedFileStorage])
   }
 
@@ -217,7 +217,10 @@ private[tasks] class S3Storage(
               }
         }
 
-      downloadAndVerify
+      tasks.util.retryIO(s"download of $assembledPath")(
+        downloadAndVerify,
+        config.s3RetryMaxAttempts
+      )(scribe.Logger[ManagedFileStorage])
 
     }(file => IO(file.delete))
 
