@@ -263,9 +263,6 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   val parallelismOfReadingHistoryFiles =
     raw.getInt("tasks.queue.track-data-flow-history-file-read-parallelism")
 
-  val saveTaskDescriptionInCache =
-    raw.getBoolean("tasks.cache.saveTaskDescription")
-
   val writeFileHistories =
     raw.getBoolean("tasks.fileservice.writeFileHistories")
 
