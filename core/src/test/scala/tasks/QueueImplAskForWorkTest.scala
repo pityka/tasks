@@ -38,6 +38,7 @@ class QueueImplAskForWorkTestSuite extends FunSuite with Matchers {
           shutdownNode = None,
           decideNewNode = None,
           createNode = None,
+          convertRunningToPending = None,
           unmanagedResource = ResourceAvailable.empty,
           meterProvider =
             org.typelevel.otel4s.metrics.MeterProvider.noop[cats.effect.IO]

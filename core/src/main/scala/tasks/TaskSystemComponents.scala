@@ -400,6 +400,9 @@ object TaskSystemComponents {
               shutdownNode: Option[tasks.elastic.ShutdownNode],
               decideNewNode: Option[tasks.elastic.DecideNewNode],
               createNode: Option[tasks.elastic.CreateNode],
+              convertRunningToPending: Option[
+                tasks.elastic.ConvertRunningToPending
+              ],
               unmanagedResource: tasks.shared.ResourceAvailable,
               shutdownSelf: Option[tasks.elastic.ShutdownSelfNode],
               exitCode: Deferred[IO, ExitCode],
@@ -424,6 +427,7 @@ object TaskSystemComponents {
                     shutdownNode,
                     decideNewNode,
                     createNode,
+                    convertRunningToPending,
                     unmanagedResource,
                     meterProvider,
                     onFatalError
@@ -446,6 +450,7 @@ object TaskSystemComponents {
                     shutdownNode,
                     decideNewNode,
                     createNode,
+                    convertRunningToPending,
                     unmanagedResource,
                     meterProvider,
                     onFatalError
@@ -850,6 +855,8 @@ object TaskSystemComponents {
                   case _ => None
                 }
               ),
+              convertRunningToPending =
+                elasticSupport.map(_.convertRunningToPending),
               unmanagedResource = ResourceAvailable.empty,
               shutdownSelf = elasticSupport.map(_.shutdownFromWorker),
               exitCode = exitCode,

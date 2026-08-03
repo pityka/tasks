@@ -75,6 +75,24 @@ class EC2Shutdown(ec2: AmazonEC2) extends ShutdownNode with ShutdownSelfNode {
 
 }
 
+class EC2ConvertRunningToPending(ec2: AmazonEC2)
+    extends ConvertRunningToPending {
+  override def convertRunningToPending(
+      p: RunningJobId
+  ): IO[Option[PendingJobId]] = IO.interruptible {
+    val describeResult = ec2.describeSpotInstanceRequests();
+    val spotInstanceRequests = describeResult.getSpotInstanceRequests();
+
+    spotInstanceRequests.asScala
+      .filter(_.getInstanceId == p.value)
+      .headOption
+      .map { x =>
+        PendingJobId(x.getSpotInstanceRequestId)
+      }
+
+  }
+}
+
 class EC2CreateNode(
     masterAddress: SimpleSocketAddress,
     masterPrefix: String,
@@ -118,20 +136,11 @@ class EC2CreateNode(
 
   }
 
+  private val converter = new EC2ConvertRunningToPending(ec2)
+
   override def convertRunningToPending(
       p: RunningJobId
-  ): IO[Option[PendingJobId]] = IO.interruptible {
-    val describeResult = ec2.describeSpotInstanceRequests();
-    val spotInstanceRequests = describeResult.getSpotInstanceRequests();
-
-    spotInstanceRequests.asScala
-      .filter(_.getInstanceId == p.value)
-      .headOption
-      .map { x =>
-        PendingJobId(x.getSpotInstanceRequestId)
-      }
-
-  }
+  ): IO[Option[PendingJobId]] = converter.convertRunningToPending(p)
 
   private def requestSpotInstance(
       requestSize: ResourceRequest,
@@ -335,7 +344,8 @@ object EC2ElasticSupport {
           shutdownFromNodeRegistry = new EC2Shutdown(ec2),
           shutdownFromWorker = new EC2Shutdown(ec2),
           createNodeFactory = new EC2CreateNodeFactory(ec2Config, ec2),
-          getNodeName = EC2GetNodeName
+          getNodeName = EC2GetNodeName,
+          convertRunningToPending = new EC2ConvertRunningToPending(ec2)
         )
       }
     } { release =>

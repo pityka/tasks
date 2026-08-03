@@ -29,6 +29,7 @@ import tasks.elastic.NodeRegistryState
 import tasks.elastic.ShutdownNode
 import tasks.elastic.DecideNewNode
 import tasks.elastic.CreateNode
+import tasks.elastic.ConvertRunningToPending
 import tasks.shared.RunningJobId
 import tasks.util.CorrelationId
 import scribe.LogFeature
@@ -193,6 +194,7 @@ object QueueImpl {
       shutdownNode: Option[tasks.elastic.ShutdownNode],
       decideNewNode: Option[tasks.elastic.DecideNewNode],
       createNode: Option[tasks.elastic.CreateNode],
+      convertRunningToPending: Option[tasks.elastic.ConvertRunningToPending],
       unmanagedResource: tasks.shared.ResourceAvailable,
       meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO],
       onFatalError: IO[Unit] = IO.unit
@@ -209,6 +211,7 @@ object QueueImpl {
               shutdownNode = shutdownNode,
               decideNewNode = decideNewNode,
               createNode = createNode,
+              convertRunningToPending = convertRunningToPending,
               unmanagedResource = unmanagedResource,
               metrics = metrics,
               handleQueueStatMutex = handleQueueStatMutex,
@@ -227,6 +230,7 @@ object QueueImpl {
       shutdownNode: Option[tasks.elastic.ShutdownNode],
       decideNewNode: Option[tasks.elastic.DecideNewNode],
       createNode: Option[tasks.elastic.CreateNode],
+      convertRunningToPending: Option[tasks.elastic.ConvertRunningToPending],
       unmanagedResource: tasks.shared.ResourceAvailable,
       meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO],
       onFatalError: IO[Unit] = IO.unit
@@ -247,6 +251,7 @@ object QueueImpl {
                   shutdownNode = shutdownNode,
                   decideNewNode = decideNewNode,
                   createNode = createNode,
+                  convertRunningToPending = convertRunningToPending,
                   unmanagedResource = unmanagedResource,
                   metrics = metrics,
                   handleQueueStatMutex = handleQueueStatMutex,
@@ -268,6 +273,7 @@ private[tasks] class QueueImpl(
     shutdownNode: Option[tasks.elastic.ShutdownNode],
     decideNewNode: Option[tasks.elastic.DecideNewNode],
     createNode: Option[tasks.elastic.CreateNode],
+    convertRunningToPending: Option[tasks.elastic.ConvertRunningToPending],
     unmanagedResource: tasks.shared.ResourceAvailable,
     metrics: QueueMetrics,
     handleQueueStatMutex: Mutex[IO],
@@ -552,9 +558,12 @@ private[tasks] class QueueImpl(
       }
   }
 
-  private def handleNewNode(node: Node, createNode: CreateNode): IO[Unit] = {
+  private def handleNewNode(
+      node: Node,
+      convert: ConvertRunningToPending
+  ): IO[Unit] = {
     val runningId = node.name
-    createNode.convertRunningToPending(runningId).flatMap {
+    convert.convertRunningToPending(runningId).flatMap {
       case Some(convertedRunningId) =>
         ref.update { state =>
           state.update(
@@ -975,7 +984,7 @@ private[tasks] class QueueImpl(
         if (isNewLauncher)
           node
             .flatMap(n =>
-              createNode.map(createNode => handleNewNode(n, createNode))
+              convertRunningToPending.map(convert => handleNewNode(n, convert))
             )
             .getOrElse(IO.unit)
         else IO.unit

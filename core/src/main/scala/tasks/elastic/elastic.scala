@@ -58,15 +58,21 @@ trait ShutdownNode extends ShutdownRunningNode {
   def shutdownPendingNode(nodeName: PendingJobId): IO[Unit]
 }
 
-trait CreateNode {
+trait ConvertRunningToPending {
+  def convertRunningToPending(p: RunningJobId): IO[Option[PendingJobId]] =
+    IO.pure(Some(PendingJobId(p.value)))
+}
+
+object ConvertRunningToPending {
+  val identity: ConvertRunningToPending = new ConvertRunningToPending {}
+}
+
+trait CreateNode extends ConvertRunningToPending {
   def requestOneNewJobFromJobScheduler(
       k: ResourceRequest
   )(implicit
       taskConfig: TasksConfig
   ): IO[Either[String, (PendingJobId, ResourceAvailable)]]
-
-  def convertRunningToPending(p: RunningJobId): IO[Option[PendingJobId]] =
-    IO.pure(Some(PendingJobId(p.value)))
 
   def initializeNode(node: Node): IO[Unit] = {
     val _ = node // suppress warning

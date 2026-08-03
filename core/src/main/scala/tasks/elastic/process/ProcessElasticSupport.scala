@@ -98,7 +98,8 @@ object ProcessElasticSupport {
           settings = settings,
           spawnProcessCommand = spawnProcessCommand
         ),
-        getNodeName = ProcessGetNodeName
+        getNodeName = ProcessGetNodeName,
+        convertRunningToPending = new ProcessConvertRunningToPending(ref)
       )
     }
   }
@@ -272,16 +273,9 @@ trait SpawnProcessCommand {
   def background: Boolean
 }
 
-private final class ProcessCreateNode(
-    masterAddress: SimpleSocketAddress,
-    masterPrefix: String,
-    codeAddress: CodeAddress,
-    nodeNamesToContainerIds: Ref[IO, Map[RunningJobId, ProcessId]],
-    config: ProcessConfig,
-    settings: ProcessSettings,
-    spawnProcessCommand: SpawnProcessCommand
-) extends CreateNode {
-
+private final class ProcessConvertRunningToPending(
+    nodeNamesToContainerIds: Ref[IO, Map[RunningJobId, ProcessId]]
+) extends ConvertRunningToPending {
   override def convertRunningToPending(
       p: RunningJobId
   ): IO[Option[PendingJobId]] = {
@@ -304,6 +298,24 @@ private final class ProcessCreateNode(
       )
 
   }
+}
+
+private final class ProcessCreateNode(
+    masterAddress: SimpleSocketAddress,
+    masterPrefix: String,
+    codeAddress: CodeAddress,
+    nodeNamesToContainerIds: Ref[IO, Map[RunningJobId, ProcessId]],
+    config: ProcessConfig,
+    settings: ProcessSettings,
+    spawnProcessCommand: SpawnProcessCommand
+) extends CreateNode {
+
+  private val converter =
+    new ProcessConvertRunningToPending(nodeNamesToContainerIds)
+
+  override def convertRunningToPending(
+      p: RunningJobId
+  ): IO[Option[PendingJobId]] = converter.convertRunningToPending(p)
 
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest

@@ -41,5 +41,7 @@ final class ElasticSupport(
     val shutdownFromNodeRegistry: ShutdownNode,
     val shutdownFromWorker: ShutdownSelfNode,
     val createNodeFactory: CreateNodeFactory,
-    val getNodeName: GetNodeName
+    val getNodeName: GetNodeName,
+    val convertRunningToPending: ConvertRunningToPending =
+      ConvertRunningToPending.identity
 ) { self => }
