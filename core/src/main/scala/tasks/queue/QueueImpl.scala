@@ -433,7 +433,6 @@ private[tasks] class QueueImpl(
     cacheIO *> handleQueueStatIO
   }
 
-  
   private def enqueueOrCacheHit(
       sch: ScheduleTask,
       proxies: List[Proxy],
@@ -547,7 +546,8 @@ private[tasks] class QueueImpl(
           fatal(
             s"worldSize mismatch on group ${groupId.value}: existing=${existing.worldSize} new=$worldSize"
           )
-        case Some(existing) if existing.joiners.get(rank).exists(_ != payload) =>
+        case Some(existing)
+            if existing.joiners.get(rank).exists(_ != payload) =>
           fatal(s"duplicate rank $rank in group ${groupId.value}")
         case Some(existing) if existing.joiners.contains(rank) =>
           readyOrNot(state)
@@ -563,7 +563,22 @@ private[tasks] class QueueImpl(
       convert: ConvertRunningToPending
   ): IO[Unit] = {
     val runningId = node.name
-    convert.convertRunningToPending(runningId).flatMap {
+    val initializeIO = createNode.fold(IO.unit) { createNode =>
+      createNode.initializeNode(node).handleErrorWith { e =>
+        IO(
+          scribe.error(
+            "InitializeNodeFailed",
+            runningId,
+            scribe.data(
+              "explain",
+              "The elastic backend failed to initialize the node which just came up. The node stays in use."
+            ),
+            e
+          )
+        )
+      }
+    }
+    initializeIO *> convert.convertRunningToPending(runningId).flatMap {
       case Some(convertedRunningId) =>
         ref.update { state =>
           state.update(
@@ -632,11 +647,9 @@ private[tasks] class QueueImpl(
           val rawNeededNodes: Map[ResourceRequest, Int] =
             if (plannedSpawns.nonEmpty) plannedSpawns
             else if (queueStat.queued.nonEmpty && noWorkerKnown)
-              queueStat.queued.headOption
-                .map { case (_, versioned) =>
-                  versioned.cpuMemoryRequest -> 1
-                }
-                .toMap
+              queueStat.queued.headOption.map { case (_, versioned) =>
+                versioned.cpuMemoryRequest -> 1
+              }.toMap
             else plannedSpawns
 
           def committedResourceFor(req: ResourceRequest): ResourceAvailable =

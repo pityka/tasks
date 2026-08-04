@@ -7,6 +7,7 @@ package tasks.elastic.ec2
 
 import cats.effect._
 import cats.effect.kernel.Deferred
+import cats.effect.kernel.Ref
 import cats.syntax.all._
 import com.amazonaws.ec2._
 import org.ekrich.config.Config
@@ -20,16 +21,16 @@ import tasks.util.message.Node
 /** EC2 Elastic Support — smithy4s-based backend using AWS spot instances.
   *
   * Master-side behaviour:
-  *   - Discovers its own sizing via `DescribeInstances` / `DescribeInstanceTypes`
-  *     — no hardware sizes declared in config.
+  *   - Discovers its own sizing via `DescribeInstances` /
+  *     `DescribeInstanceTypes` — no hardware sizes declared in config.
   *   - When creating a worker, picks the first configured candidate instance
   *     type that fits the request and submits a spot request.
   *   - Cancelling a pending spot request also terminates the instance if the
   *     spot request has been fulfilled.
   *
   * Worker-side behaviour:
-  *   - The user-data script (see [[EC2UserData]]) mounts instance-store NVMe
-  *     to `tasks.elastic.aws.instanceStorageMountPoint` and points the JVM's
+  *   - The user-data script (see [[EC2UserData]]) mounts instance-store NVMe to
+  *     `tasks.elastic.aws.instanceStorageMountPoint` and points the JVM's
   *     `java.io.tmpdir` there. `availableScratch` in the host config is then
   *     derived from `File.getUsableSpace` on that mount.
   *   - Self-shutdown completes the exit `Deferred` — the wrapping user-data
@@ -44,7 +45,8 @@ object EC2ElasticSupport {
         IO(scribe.info(s"EC2 elastic backend initialising: $ec2Config"))
       )
       ec2Client <- EC2ClientBuilder.make(ec2Config.awsRegion)
-      ops = new EC2Operations(ec2Client)
+      ops = EC2Operations.fromClient(ec2Client)
+      registeredInstances <- Resource.eval(Ref.of[IO, Set[String]](Set.empty))
       // Discover candidate instance-type sizing once at startup.
       typeInfoList <- Resource.eval(
         ops.describeInstanceTypes(ec2Config.candidateInstanceTypes)
@@ -60,13 +62,12 @@ object EC2ElasticSupport {
         .map(t => t.instanceType.map(_.stringValue).getOrElse("") -> t)
         .toMap
       hostConfig = new EC2MasterFollower(ec2Config, ops)
-      support = new ElasticSupport(
-        hostConfig = Some(hostConfig),
-        shutdownFromNodeRegistry = new EC2Shutdown(ops),
-        shutdownFromWorker = new EC2SelfShutdown,
-        createNodeFactory =
-          new EC2CreateNodeFactory(ec2Config, ops, typeMap),
-        getNodeName = EC2GetNodeName
+      support = assemble(
+        ec2Config,
+        ops,
+        typeMap,
+        registeredInstances,
+        Some(hostConfig)
       )
       _ <- Resource.make(IO.pure(support)) { _ =>
         if (ec2Config.terminateMaster)
@@ -85,11 +86,75 @@ object EC2ElasticSupport {
       }
     } yield support
   }
+
+  private[ec2] def assemble(
+      ec2Config: EC2Config,
+      ops: EC2Operations,
+      typeMap: Map[String, InstanceTypeInfo],
+      registeredInstances: Ref[IO, Set[String]],
+      hostConfig: Option[tasks.deploy.HostConfiguration]
+  ): ElasticSupport = {
+    val converter = new EC2ConvertRunningToPending(ops)
+    new ElasticSupport(
+      hostConfig = hostConfig,
+      shutdownFromNodeRegistry = new EC2Shutdown(ops, registeredInstances),
+      shutdownFromWorker = new EC2SelfShutdown,
+      createNodeFactory = new EC2CreateNodeFactory(
+        ec2Config,
+        ops,
+        typeMap,
+        converter,
+        registeredInstances
+      ),
+      getNodeName = EC2GetNodeName,
+      convertRunningToPending = converter
+    )
+  }
+}
+
+class EC2ConvertRunningToPending(ops: EC2Operations)
+    extends ConvertRunningToPending {
+
+  override def convertRunningToPending(
+      p: RunningJobId
+  ): IO[Option[PendingJobId]] =
+    ops
+      .describeSpotRequestByInstance(p.value)
+      .map(_.flatMap(_.spotInstanceRequestId))
+      .flatMap {
+        case Some(spotRequestId) =>
+          IO.pure(Some(PendingJobId(spotRequestId)))
+        case None =>
+          IO(
+            scribe.warn(
+              "NoSpotRequestForInstance",
+              p,
+              scribe.data(
+                "explain",
+                "No spot request is associated with this instance. Using the instance id as pending id."
+              )
+            )
+          ).as(Some(PendingJobId(p.value)))
+      }
+      .handleErrorWith { e =>
+        IO(
+          scribe.error(
+            "SpotRequestLookupFailed",
+            p,
+            scribe.data(
+              "explain",
+              "Using the instance id as pending id."
+            ),
+            e
+          )
+        ).as(Some(PendingJobId(p.value)))
+      }
 }
 
 /** Self-shutdown from within the worker JVM: signal the JVM to exit cleanly.
   * The wrapping user-data script terminates the instance once the process is
-  * gone (see [[EC2UserData]]). */
+  * gone (see [[EC2UserData]]).
+  */
 class EC2SelfShutdown extends ShutdownSelfNode {
   def shutdownRunningNode(
       exitCode: Deferred[IO, ExitCode],
@@ -101,15 +166,65 @@ class EC2SelfShutdown extends ShutdownSelfNode {
 
 /** Master-initiated shutdown. `shutdownRunningNode` terminates the running
   * instance; `shutdownPendingNode` cancels the spot request AND terminates the
-  * instance if the request was already fulfilled. */
-class EC2Shutdown(ops: EC2Operations) extends ShutdownNode {
+  * instance if the request was already fulfilled.
+  */
+class EC2Shutdown(
+    ops: EC2Operations,
+    registeredInstances: Ref[IO, Set[String]]
+) extends ShutdownNode {
+
   def shutdownRunningNode(nodeName: RunningJobId): IO[Unit] =
     IO(scribe.info(s"EC2 master shutdown of running $nodeName")) *>
+      registeredInstances.update(_ - nodeName.value) *>
       ops.terminateInstance(nodeName.value)
 
   def shutdownPendingNode(nodeName: PendingJobId): IO[Unit] =
-    IO(scribe.info(s"EC2 master cancel of pending $nodeName")) *>
-      ops.cancelSpotAndTerminate(nodeName.value)
+    registeredInstances.get.flatMap { registered =>
+      if (registered.contains(nodeName.value))
+        IO(
+          scribe.warn(
+            "SkipShutdownOfRegisteredWorker",
+            nodeName,
+            scribe.data(
+              "explain",
+              "This pending id is the instance id of a worker which already registered. Not terminating it."
+            )
+          )
+        )
+      else
+        IO(scribe.info(s"EC2 master cancel of pending $nodeName")) *>
+          ops.cancelSpotRequest(nodeName.value) *>
+          terminateInstanceLeftBehindBy(nodeName.value)
+    }
+
+  private def terminateInstanceLeftBehindBy(spotRequestId: String): IO[Unit] =
+    ops.describeSpotRequestById(spotRequestId).flatMap { request =>
+      request.flatMap(_.instanceId).map(InstanceId.value) match {
+        case None => IO.unit
+        case Some(instanceId) =>
+          registeredInstances.get.flatMap { registered =>
+            if (registered.contains(instanceId))
+              IO(
+                scribe.warn(
+                  "SkipShutdownOfRegisteredWorker",
+                  scribe.data(
+                    Map(
+                      "instance-id" -> instanceId,
+                      "spot-request-id" -> spotRequestId,
+                      "explain" -> "The cancelled spot request spawned an instance which already registered as a worker. Not terminating it."
+                    )
+                  )
+                )
+              )
+            else
+              IO(
+                scribe.info(
+                  s"spot $spotRequestId already spawned $instanceId — terminating"
+                )
+              ) *> ops.terminateInstance(instanceId)
+          }
+      }
+    }
 }
 
 object EC2GetNodeName extends GetNodeName {
@@ -120,14 +235,25 @@ object EC2GetNodeName extends GetNodeName {
 class EC2CreateNodeFactory(
     ec2Config: EC2Config,
     ops: EC2Operations,
-    typeMap: Map[String, InstanceTypeInfo]
+    typeMap: Map[String, InstanceTypeInfo],
+    converter: ConvertRunningToPending,
+    registeredInstances: Ref[IO, Set[String]]
 ) extends CreateNodeFactory {
   def apply(
       master: SimpleSocketAddress,
       masterPrefix: String,
       codeAddress: CodeAddress
   ): CreateNode =
-    new EC2CreateNode(master, masterPrefix, codeAddress, ec2Config, ops, typeMap)
+    new EC2CreateNode(
+      master,
+      masterPrefix,
+      codeAddress,
+      ec2Config,
+      ops,
+      typeMap,
+      converter,
+      registeredInstances
+    )
 }
 
 class EC2CreateNode(
@@ -136,20 +262,19 @@ class EC2CreateNode(
     codeAddress: CodeAddress,
     ec2Config: EC2Config,
     ops: EC2Operations,
-    typeMap: Map[String, InstanceTypeInfo]
+    typeMap: Map[String, InstanceTypeInfo],
+    converter: ConvertRunningToPending,
+    registeredInstances: Ref[IO, Set[String]]
 ) extends CreateNode {
 
   override def convertRunningToPending(
       p: RunningJobId
   ): IO[Option[PendingJobId]] =
-    ops
-      .describeSpotRequestByInstance(p.value)
-      .map { req =>
-        req.flatMap(_.spotInstanceRequestId).map(PendingJobId.apply)
-      }
+    converter.convertRunningToPending(p)
 
   override def initializeNode(node: Node): IO[Unit] =
-    ops.createTags(List(node.name.value), ec2Config.instanceTags)
+    registeredInstances.update(_ + node.name.value) *>
+      ops.createTags(List(node.name.value), ec2Config.instanceTags)
 
   def requestOneNewJobFromJobScheduler(
       requestSize: ResourceRequest
@@ -230,8 +355,7 @@ class EC2CreateNode(
       keyName = ec2Config.keyName.map(KeyPairNameWithResolver.apply),
       placement = placement,
       subnetId = Some(SubnetId(ec2Config.subnetId)),
-      userData =
-        Some(SensitiveUserData(EC2CreateNode.gzipBase64(userData)))
+      userData = Some(SensitiveUserData(EC2CreateNode.gzipBase64(userData)))
     )
   }
 
@@ -274,13 +398,23 @@ object EC2CreateNode {
       .getOrElse(Nil)
       .flatMap(_.count.map(_.value))
       .sum
-    vcpu >= req.cpu._1 && memMib >= req.memory.toLong && gpuCount >= req.gpu
+    vcpu >= req.cpu._1 && memMib >= req.memory.toLong &&
+    gpuCount >= req.gpu && scratchMiB(info) >= req.scratch
+  }
+
+  private[ec2] def scratchMiB(info: InstanceTypeInfo): Int = {
+    val gb = info.instanceStorageInfo
+      .flatMap(_.totalSizeInGB)
+      .map(_.value)
+      .getOrElse(0L)
+    (gb.toDouble * 1000d * 1000d * 1000d / (1024d * 1024d)).toInt
   }
 
   /** Derive a `ResourceAvailable` reflecting the actual instance-type sizing.
     * Scratch is the sum of instance-store disks (MiB); if the instance has no
     * instance store, scratch reports 0 — the master should choose an
-    * instance-type that includes storage if it wants scratch. */
+    * instance-type that includes storage if it wants scratch.
+    */
   def resourceAvailable(
       info: InstanceTypeInfo,
       image: Option[String]
@@ -293,15 +427,10 @@ object EC2CreateNode {
       .getOrElse(Nil)
       .flatMap(_.count.map(_.value))
       .sum
-    val scratchMib = info.instanceStorageInfo
-      .flatMap(_.totalSizeInGB)
-      .map(_.value)
-      .map(gb => (gb * 1024L).toInt)
-      .getOrElse(0)
     ResourceAvailable(
       cpu = vcpu,
       memory = memMib,
-      scratch = scratchMib,
+      scratch = scratchMiB(info),
       gpu = (0 until gpuCount).toList,
       image = image,
       labels = Set.empty
@@ -312,8 +441,8 @@ object EC2CreateNode {
     case NodeSelector.Always     => Set.empty
     case NodeSelector.Has(label) => Set(label)
     case NodeSelector.Not(_)     => Set.empty
-    case NodeSelector.And(xs)    => xs.iterator.flatMap(labelsFromSelector).toSet
-    case NodeSelector.Or(xs)     => xs.iterator.flatMap(labelsFromSelector).toSet
+    case NodeSelector.And(xs) => xs.iterator.flatMap(labelsFromSelector).toSet
+    case NodeSelector.Or(xs)  => xs.iterator.flatMap(labelsFromSelector).toSet
   }
 
   def gzipBase64(str: String): String = {
@@ -332,7 +461,8 @@ object EC2CreateNode {
   * scratch via `DescribeInstanceTypes` (no config-declared sizing).
   *
   * The IMDS + DescribeInstanceTypes calls happen once at construction inside
-  * `lazy val`s — same pattern as the previous implementation. */
+  * `lazy val`s — same pattern as the previous implementation.
+  */
 class EC2MasterFollower(val config: EC2Config, ops: EC2Operations)
     extends HostConfigurationFromConfig {
 
@@ -352,7 +482,9 @@ class EC2MasterFollower(val config: EC2Config, ops: EC2Operations)
   private lazy val info: InstanceTypeInfo = runSync(
     for {
       _ <- IO(
-        scribe.info(s"EC2MasterFollower: describing instance-type $instanceType")
+        scribe.info(
+          s"EC2MasterFollower: describing instance-type $instanceType"
+        )
       )
       list <- ops.describeInstanceTypes(List(instanceType))
       first <- list.headOption match {
@@ -376,10 +508,11 @@ class EC2MasterFollower(val config: EC2Config, ops: EC2Operations)
   override lazy val availableMemory: Int =
     info.memoryInfo.flatMap(_.sizeInMiB).map(_.value.toInt).getOrElse(1024)
 
-  /** Scratch space reported to the queue is the size of the volume backing
-    * the JVM's temp dir. On workers this is `/instancestorage` (set by the
-    * user-data script). On the master it defaults to whatever the OS's temp
-    * dir is on. */
+  /** Scratch space reported to the queue is the size of the volume backing the
+    * JVM's temp dir. On workers this is `/instancestorage` (set by the
+    * user-data script). On the master it defaults to whatever the OS's temp dir
+    * is on.
+    */
   override lazy val availableScratch: Int = {
     val dir = new java.io.File(sys.props.getOrElse("java.io.tmpdir", "/tmp"))
     val bytes = dir.getUsableSpace

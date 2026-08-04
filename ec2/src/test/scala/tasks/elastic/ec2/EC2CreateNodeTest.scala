@@ -37,13 +37,14 @@ class EC2CreateNodeTest extends AnyFunSuite with Matchers {
       cpu: Int,
       mem: Int,
       gpu: Int = 0,
+      scratch: Int = 0,
       image: Option[String] = None,
       selector: Option[NodeSelector] = None
   ): ResourceRequest =
     ResourceRequest(
       cpu = (cpu, cpu),
       memory = mem,
-      scratch = 0,
+      scratch = scratch,
       gpu = gpu,
       image = image,
       nodeSelector = selector
@@ -75,13 +76,46 @@ class EC2CreateNodeTest extends AnyFunSuite with Matchers {
     ) shouldBe true
   }
 
+  test("fits rejects an instance without instance store when scratch is asked") {
+    EC2CreateNode.fits(
+      typeInfo(8, 16000),
+      req(2, 4000, scratch = 1)
+    ) shouldBe false
+  }
+
+  test("fits rejects when the instance store is smaller than the request") {
+    EC2CreateNode.fits(
+      typeInfo(8, 16000, scratchGb = 100),
+      req(2, 4000, scratch = 200000)
+    ) shouldBe false
+  }
+
+  test("fits accepts when the instance store covers the request") {
+    EC2CreateNode.fits(
+      typeInfo(8, 16000, scratchGb = 900),
+      req(2, 4000, scratch = 200000)
+    ) shouldBe true
+  }
+
+  test("fits and resourceAvailable agree on scratch") {
+    val info = typeInfo(8, 16000, scratchGb = 474)
+    val scratch = EC2CreateNode.resourceAvailable(info, None).scratch
+    EC2CreateNode.fits(info, req(2, 4000, scratch = scratch)) shouldBe true
+    EC2CreateNode.fits(info, req(2, 4000, scratch = scratch + 1)) shouldBe false
+  }
+
+  test("scratch is converted from decimal GB to MiB") {
+    EC2CreateNode.scratchMiB(typeInfo(2, 8000, scratchGb = 1)) shouldBe 953
+    EC2CreateNode.scratchMiB(typeInfo(2, 8000, scratchGb = 900)) shouldBe 858306
+  }
+
   test("resourceAvailable exposes the actual sizing") {
     val a = EC2CreateNode
       .resourceAvailable(typeInfo(8, 32000, gpuCount = 2, scratchGb = 900), None)
     a.cpu shouldBe 8
     a.memory shouldBe 32000
     a.gpu should have size 2
-    a.scratch shouldBe (900 * 1024)
+    a.scratch shouldBe 858306
   }
 
   test("resourceAvailable threads the image through") {
