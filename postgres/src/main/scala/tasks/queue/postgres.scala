@@ -1,9 +1,5 @@
 package tasks.queue
 import tasks.queue.QueueImpl._
-import tasks.util.message.MessageData.ScheduleTask
-import tasks.util.message.LauncherName
-import tasks.util.message.RendezvousGroupId
-import tasks.shared.VersionedResourceAllocated
 
 import cats.effect._
 import skunk._
@@ -11,72 +7,8 @@ import natchez.Trace.Implicits.noop
 import skunk.util.Origin
 import skunk.data.TransactionIsolationLevel
 import skunk.data.TransactionAccessMode
-import skunk.data.Completion
-import tasks.elastic.NodeRegistryState
-import tasks.util.message.Node
-import tasks.shared.PendingJobId
-import tasks.shared.RunningJobId
 
 object Postgres {
-  private[tasks] case class SerializableState(
-      queuedTasks: List[
-        (ScheduleTaskEqualityProjection, (ScheduleTask, List[Proxy]))
-      ],
-      scheduledTasks: List[
-        (
-            ScheduleTaskEqualityProjection,
-            (
-                LauncherName,
-                VersionedResourceAllocated,
-                List[Proxy],
-                ScheduleTask
-            )
-        )
-      ],
-      knownLaunchers: List[(LauncherName, Option[Node])],
-      counters: List[(LauncherName, Long)],
-      nodes: NodeRegistryState.State,
-      rendezvous: List[(RendezvousGroupId, QueueImpl.RendezvousGroup)] = Nil
-  ) {
-    def toState = QueueImpl.State(
-      queuedTasks = queuedTasks.toMap,
-      scheduledTasks = scheduledTasks.toMap,
-      knownLaunchers = knownLaunchers.toMap,
-      counters = counters.toMap,
-      nodes = nodes,
-      rendezvous = rendezvous.toMap
-    )
-  }
-  private[tasks] object SerializableState {
-    def fromState(state: QueueImpl.State) = SerializableState(
-      queuedTasks = state.queuedTasks.toList,
-      scheduledTasks = state.scheduledTasks.toList,
-      knownLaunchers = state.knownLaunchers.toList,
-      counters = state.counters.toList,
-      nodes = state.nodes,
-      rendezvous = state.rendezvous.toList
-    )
-    import com.github.plokhotnyuk.jsoniter_scala.core._
-    import com.github.plokhotnyuk.jsoniter_scala.macros._
-    implicit val keyCodec1: JsonKeyCodec[PendingJobId] =
-      new JsonKeyCodec[PendingJobId] {
-        def decodeKey(in: JsonReader): PendingJobId = PendingJobId(
-          in.readKeyAsString()
-        )
-        def encodeKey(x: PendingJobId, out: JsonWriter): Unit =
-          out.writeKey(x.value)
-      }
-    implicit val keyCodec2: JsonKeyCodec[RunningJobId] =
-      new JsonKeyCodec[RunningJobId] {
-        def decodeKey(in: JsonReader): RunningJobId = RunningJobId(
-          in.readKeyAsString()
-        )
-        def encodeKey(x: RunningJobId, out: JsonWriter): Unit =
-          out.writeKey(x.value)
-      }
-    implicit val codec: JsonValueCodec[SerializableState] = JsonCodecMaker.make
-    val emptyStr = writeToString(fromState(State.empty))
-  }
 
   def makeTransaction(
       table: String,
@@ -131,7 +63,7 @@ object Postgres {
                 varchar
               )
             )
-            .flatMap(_.execute(SerializableState.emptyStr))
+            .flatMap(_.execute(SerializableQueueState.emptyStateAsString))
         else IO.unit
       )
 
@@ -147,7 +79,6 @@ object Postgres {
   ) extends tasks.util.Transaction[tasks.queue.QueueImpl.State] {
     import skunk.implicits._
     import skunk.codec.all._
-    import com.github.plokhotnyuk.jsoniter_scala.core._
 
     override def flatModify[B](update: State => (State, IO[B])): IO[B] = {
       val tx = session
@@ -158,7 +89,10 @@ object Postgres {
         .use { _ =>
           val io = get.flatMap { state =>
             val (updated, sideEffect) = update(state)
-            val str = writeToString(SerializableState.fromState(updated))
+            val str = new String(
+              SerializableQueueState.encode(updated),
+              java.nio.charset.StandardCharsets.UTF_8
+            )
             val command =
               Command(s"UPDATE $table SET value = $$1", Origin.unknown, text)
             session.prepare(command).flatMap(_.execute(str)).map { _ =>
@@ -190,15 +124,8 @@ object Postgres {
       )
       val raw = session.option(query)
       raw.map {
-        case None => State.empty
-        case Some(raw) =>
-          val serializable = readFromString[SerializableState](
-            raw,
-            ReaderConfig
-              .withMaxBufSize(2147483645)
-              .withMaxCharBufSize(2147483645)
-          )
-          serializable.toState
+        case None      => State.empty
+        case Some(raw) => SerializableQueueState.decode(raw)
       }
     }
 
