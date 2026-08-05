@@ -75,10 +75,12 @@ object QueueImpl {
   case class ResultStoredForProxy(proxy: Address, result: ProxyResult)
       extends Event
   case class ResultDeliveredToProxy(proxy: Address) extends Event
+  case class RendezvousRead(groupId: RendezvousGroupId, rank: Int) extends Event
 
   case class RendezvousGroup(
       worldSize: Int,
-      joiners: Map[Int, String]
+      joiners: Map[Int, String],
+      readers: Set[Int]
   )
 
   sealed trait ProxyResult
@@ -113,13 +115,23 @@ object QueueImpl {
           copy(nodes = nodes.update(ev))
         case RendezvousJoined(groupId, rank, worldSize, payload) =>
           val group = rendezvous
-            .getOrElse(groupId, RendezvousGroup(worldSize, Map.empty))
+            .getOrElse(groupId, RendezvousGroup(worldSize, Map.empty, Set.empty))
           copy(rendezvous =
             rendezvous.updated(
               groupId,
               group.copy(joiners = group.joiners.updated(rank, payload))
             )
           )
+
+        case RendezvousRead(groupId, rank) =>
+          rendezvous.get(groupId) match {
+            case None => this
+            case Some(group) =>
+              val withReader = group.copy(readers = group.readers + rank)
+              if (withReader.readers.size >= group.worldSize)
+                copy(rendezvous = rendezvous - groupId)
+              else copy(rendezvous = rendezvous.updated(groupId, withReader))
+          }
         case Incremented(launcher) =>
           copy(counters = counters.get(launcher) match {
             case None        => counters.updated(launcher, 1L)
@@ -556,7 +568,7 @@ private[tasks] class QueueImpl(
       val g = s.rendezvous(groupId)
       if (g.joiners.size == worldSize) {
         val peers = (0 until worldSize).toList.map(g.joiners(_))
-        (s, IO.pure(Some(peers)))
+        (s.update(RendezvousRead(groupId, rank)), IO.pure(Some(peers)))
       } else (s, IO.pure(None))
     }
 
