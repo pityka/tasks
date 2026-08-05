@@ -64,7 +64,8 @@ private[tasks] class ProxyTask[Input, Output](
     labels: Labels,
     lineage: TaskLineage,
     noCache: Boolean,
-    messenger: Messenger
+    messenger: Messenger,
+    config: tasks.util.config.TasksConfig
 ) extends tasks.util.Actor.ActorBehavior[Proxy](messenger) {
   val address: Address = Address(
     s"ProxyTask-$taskId-${input.hashCode()}-${scala.util.Random.alphanumeric.take(256).mkString}"
@@ -119,12 +120,51 @@ private[tasks] class ProxyTask[Input, Output](
 
   }
 
+  private def handleResult(
+      result: QueueImpl.ProxyResult,
+      stopQueue: Actor.StopQueue
+  ): IO[Unit] = result match {
+    case QueueImpl.ProxyResultFailure(cause) =>
+      IO(scribe.error(cause, "Execution failed. ")) *>
+        notifyListenersOnFailure(cause) *> stopProcessingMessages(stopQueue)
+    case QueueImpl.ProxyResultSuccess(untypedOutput, retrievedFromCache) =>
+      reader(Base64DataHelpers.toBytes(untypedOutput.data)) match {
+        case Right(output) =>
+          IO(
+            scribe.debug(s"Result polled from queue. $untypedOutput, $output")
+          ) *> distributeResult(output) *> stopProcessingMessages(stopQueue)
+        case Left(error) if retrievedFromCache =>
+          IO(
+            scribe.error(
+              s"Result from cache failed to decode: $untypedOutput, $error. Task is rescheduled without caching."
+            )
+          ) *> startTask(cache = false)
+        case Left(error) =>
+          IO(
+            scribe.error(
+              error,
+              s"Result not from cache failed to decode: $untypedOutput, $error. Execution failed."
+            )
+          ) *> notifyListenersOnFailure(new RuntimeException(error)) *>
+            stopProcessingMessages(stopQueue)
+      }
+  }
+
   override def schedulers(
       stopQueue: Actor.StopQueue
   ): Option[IO[fs2.Stream[IO, Unit]]] = Some(IO {
-    (fs2.Stream.unit ++ fs2.Stream.never[IO]).evalMap(_ =>
+    val submit = (fs2.Stream.unit ++ fs2.Stream.never[IO]).evalMap(_ =>
       startTask(cache = true)
     )
+    val poll = fs2.Stream
+      .fixedDelay[IO](config.askInterval)
+      .evalMap(_ =>
+        queue.pollResult(address).flatMap {
+          case None         => IO.unit
+          case Some(result) => handleResult(result, stopQueue)
+        }
+      )
+    submit.merge(poll)
   })
 
   def receive = (stopQueue) => {

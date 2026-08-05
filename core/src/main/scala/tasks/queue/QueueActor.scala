@@ -152,6 +152,17 @@ private[tasks] final class QueueActorBehavior(
     case Message(MessageData.TaskFailedMessageToQueue(sch, cause), _, _) =>
       impl.taskFailed(sch, cause)
 
+    case Message(MessageData.PollProxyResult(proxy), from, _) =>
+      impl.pollResult(proxy).flatMap { result =>
+        messenger.submit(
+          Message(
+            MessageData.ProxyResultResponse(result),
+            from = address,
+            to = from
+          )
+        )
+      }
+
     case Message(
           MessageData.RendezvousStep(groupId, rank, worldSize, payload),
           from,

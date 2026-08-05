@@ -249,7 +249,8 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
       ),
       knownLaunchers = Map.empty,
       counters = Map.empty,
-      nodes = tasks.elastic.NodeRegistryState.State.empty
+      nodes = tasks.elastic.NodeRegistryState.State.empty,
+      completedResults = Map.empty
     )
 
     val metrics = collect(IO.pure(state))(_ => IO.unit)
@@ -341,7 +342,8 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
       scheduledTasks = Map.empty,
       knownLaunchers = Map.empty,
       counters = Map.empty,
-      nodes = nodeRegistry
+      nodes = nodeRegistry,
+      completedResults = Map.empty
     )
 
     val metrics = collect(IO.pure(state))(_ => IO.unit)
@@ -494,7 +496,8 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
       scheduledTasks = Map.empty,
       knownLaunchers = Map.empty,
       counters = Map.empty,
-      nodes = nodeRegistry
+      nodes = nodeRegistry,
+      completedResults = Map.empty
     )
 
     val metrics = collect(IO.pure(state))(_ => IO.unit)
@@ -541,7 +544,8 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
       scheduledTasks = Map.empty,
       knownLaunchers = Map.empty,
       counters = Map.empty,
-      nodes = tasks.elastic.NodeRegistryState.State.empty
+      nodes = tasks.elastic.NodeRegistryState.State.empty,
+      completedResults = Map.empty
     )
 
     val metrics = collect(IO.pure(state))(_ => IO.unit)
@@ -610,7 +614,8 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
       scheduledTasks = Map.empty,
       knownLaunchers = Map.empty,
       counters = Map.empty,
-      nodes = registry
+      nodes = registry,
+      completedResults = Map.empty
     )
 
     val metrics = MetricsTestkit

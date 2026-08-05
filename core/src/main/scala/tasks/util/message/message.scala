@@ -144,6 +144,11 @@ private[tasks] object MessageData {
       cause: Throwable
   ) extends MessageData
 
+  case class PollProxyResult(proxy: Address) extends MessageData
+  case class ProxyResultResponse(
+      result: Option[QueueImpl.ProxyResult]
+  ) extends MessageData
+
   case class InputData(b64: Base64Data, noCache: Boolean)
   case class ScheduleTask(
       description: HashedTaskDescription,

@@ -72,10 +72,21 @@ object QueueImpl {
       payload: String
   ) extends Event
 
+  case class ResultStoredForProxy(proxy: Address, result: ProxyResult)
+      extends Event
+  case class ResultDeliveredToProxy(proxy: Address) extends Event
+
   case class RendezvousGroup(
       worldSize: Int,
       joiners: Map[Int, String]
   )
+
+  sealed trait ProxyResult
+  case class ProxyResultSuccess(
+      result: UntypedResult,
+      retrievedFromCache: Boolean
+  ) extends ProxyResult
+  case class ProxyResultFailure(cause: Throwable) extends ProxyResult
 
   def project(sch: ScheduleTask) =
     ScheduleTaskEqualityProjection(sch.description)
@@ -92,7 +103,8 @@ object QueueImpl {
       knownLaunchers: Map[LauncherName, Option[Node]],
       counters: Map[LauncherName, Long],
       nodes: NodeRegistryState.State,
-      rendezvous: Map[RendezvousGroupId, RendezvousGroup] = Map.empty
+      rendezvous: Map[RendezvousGroupId, RendezvousGroup] = Map.empty,
+      completedResults: Map[Address, ProxyResult]
   ) {
 
     def update(e: Event): State = {
@@ -164,6 +176,12 @@ object QueueImpl {
         case CacheHit(sch, _) =>
           copy(scheduledTasks = scheduledTasks - project(sch))
 
+        case ResultStoredForProxy(proxy, result) =>
+          copy(completedResults = completedResults.updated(proxy, result))
+
+        case ResultDeliveredToProxy(proxy) =>
+          copy(completedResults = completedResults - proxy)
+
       }
     }
 
@@ -183,7 +201,15 @@ object QueueImpl {
 
   object State {
     def empty =
-      State(Map(), Map(), Map(), Map(), NodeRegistryState.State.empty, Map())
+      State(
+        Map(),
+        Map(),
+        Map(),
+        Map(),
+        NodeRegistryState.State.empty,
+        Map(),
+        Map()
+      )
 
   }
 
@@ -390,19 +416,16 @@ private[tasks] class QueueImpl(
           scribe.data("explain", "replying with result found in cache")
         )
         ref.flatModify { state =>
-          val sends = allProxies.map(p =>
-            messenger.submit(
-              Message(
-                MessageData.MessageFromTask(result, retrievedFromCache = true),
-                from = Address.unknown,
-                to = p.address
+          val stored = allProxies.foldLeft(state.update(CacheHit(sch, result))) {
+            case (acc, p) =>
+              acc.update(
+                ResultStoredForProxy(
+                  p.address,
+                  ProxyResultSuccess(result, retrievedFromCache = true)
+                )
               )
-            )
-          )
-          state.update(CacheHit(sch, result)) ->
-            (metrics.onCacheHit(sch.description) *> IO
-              .parSequenceN(1)(sends)
-              .void)
+          }
+          stored -> metrics.onCacheHit(sch.description)
 
         }
       }
@@ -1054,37 +1077,44 @@ private[tasks] class QueueImpl(
           )
         )
       }
-      val io = IO
-        .parSequenceN(1)(
-          state.scheduledTasks
-            .get(project(sch))
-            .toList
-            .flatMap { case (_, _, proxies, _) =>
-              proxies.toList.map { pr =>
-                messenger.submit(
-                  Message(
-                    MessageData.MessageFromTask(
-                      resultWithMetadata.untypedResult,
-                      retrievedFromCache = false
-                    ),
-                    from = Address.unknown,
-                    to = pr.address
-                  )
-                )
+      val proxies = state.scheduledTasks
+        .get(project(sch))
+        .toList
+        .flatMap { case (_, _, proxies, _) => proxies.toList }
 
-              }
-
-            }
-            .toList
-        )
-        .void
-
-      state.update(
+      val done = state.update(
         TaskDone(sch, resultWithMetadata, elapsedTime, resourceAllocated)
-      ) -> (recordMetric *> io)
+      )
+
+      val stored = proxies.foldLeft(done) { case (acc, pr) =>
+        acc.update(
+          ResultStoredForProxy(
+            pr.address,
+            ProxyResultSuccess(
+              resultWithMetadata.untypedResult,
+              retrievedFromCache = false
+            )
+          )
+        )
+      }
+
+      stored -> recordMetric
     }
     taskSuccessIO *> handleQueueStatIO
   }
+
+  def pollResult(proxy: Address): IO[Option[ProxyResult]] =
+    ref.flatModify { state =>
+      state.completedResults.get(proxy) match {
+        case None => state -> IO.pure(Option.empty[ProxyResult])
+        case Some(result) =>
+          scribe.debug(
+            s"ResultPolled",
+            scribe.data("proxy", proxy.toString)
+          )
+          state.update(ResultDeliveredToProxy(proxy)) -> IO.pure(Some(result))
+      }
+    }
 
   def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit] = {
     val taskFailedIO = ref.flatModify { state =>
@@ -1111,15 +1141,11 @@ private[tasks] class QueueImpl(
                 sideEffectAcc :+ metrics.onEnqueued(sch.description)
               )
             } else {
-              val sideEffects = proxies.map(pr =>
-                messenger.submit(
-                  Message(
-                    MessageData.TaskFailedMessageToProxy(sch, cause),
-                    from = Address.unknown,
-                    to = pr.address
-                  )
+              val stored = proxies.foldLeft(removed) { case (acc, pr) =>
+                acc.update(
+                  ResultStoredForProxy(pr.address, ProxyResultFailure(cause))
                 )
-              )
+              }
               scribe.error(
                 cause,
                 "TaskExecutionFailed",
@@ -1129,7 +1155,7 @@ private[tasks] class QueueImpl(
                   "configuration tasks.resubmitFailedTask=true can resubmit automatically"
                 )
               )
-              (removed, sideEffectAcc ++ sideEffects)
+              (stored, sideEffectAcc)
             }
         }
       updated -> (recordMetric *> IO.parSequenceN(1)(sideEffects).void)

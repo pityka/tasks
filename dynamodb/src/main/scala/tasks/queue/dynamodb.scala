@@ -194,18 +194,25 @@ object DynamoDb {
       def loop(attempt: Int): IO[IO[B]] =
         readVersionedState.flatMap { case (state, version) =>
           val (updated, sideEffect) = update(state)
-          writeIfUnchanged(updated, version).flatMap { committed =>
-            if (committed) IO.pure(sideEffect)
-            else
-              IO(
-                scribe.debug(
-                  "Conditional write of the queue state failed because another process committed first. Try again.",
-                  scribe.data(
-                    Map("expected-version" -> version, "attempt" -> attempt)
+          if (updated == state)
+            IO(
+              scribe.trace(
+                "Queue state unchanged by this update, skipping the write."
+              )
+            ).as(sideEffect)
+          else
+            writeIfUnchanged(updated, version).flatMap { committed =>
+              if (committed) IO.pure(sideEffect)
+              else
+                IO(
+                  scribe.debug(
+                    "Conditional write of the queue state failed because another process committed first. Try again.",
+                    scribe.data(
+                      Map("expected-version" -> version, "attempt" -> attempt)
+                    )
                   )
-                )
-              ) *> backoff(attempt) *> loop(attempt + 1)
-          }
+                ) *> backoff(attempt) *> loop(attempt + 1)
+            }
         }
 
       IO.uncancelable { poll =>

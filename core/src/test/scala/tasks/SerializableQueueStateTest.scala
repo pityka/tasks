@@ -82,7 +82,8 @@ class SerializableQueueStateTest extends FunSuite with Matchers {
     rendezvous = Map(
       RendezvousGroupId("group-1") -> QueueImpl
         .RendezvousGroup(worldSize = 2, joiners = Map(0 -> "a", 1 -> "b"))
-    )
+    ),
+    completedResults = Map.empty
   )
 
   test("a populated queue state survives an encode/decode round trip") {
@@ -105,6 +106,24 @@ class SerializableQueueStateTest extends FunSuite with Matchers {
     decoded.queuedTasks.values.map(_._1.proxy.listeningUri).toList shouldBe List(
       Some("http://worker:1234/prefix")
     )
+  }
+
+  test("a completed failure result round trips with message and stack trace") {
+    val cause = new RuntimeException("boom")
+    val withResult = state.copy(completedResults =
+      Map(proxyAddress -> QueueImpl.ProxyResultFailure(cause))
+    )
+
+    val decoded =
+      SerializableQueueState.decode(SerializableQueueState.encode(withResult))
+
+    decoded.completedResults.keySet shouldBe Set(proxyAddress)
+    decoded.completedResults(proxyAddress) match {
+      case QueueImpl.ProxyResultFailure(decodedCause) =>
+        decodedCause.getMessage shouldBe "boom"
+        decodedCause.getStackTrace.toList should not be empty
+      case other => fail(s"expected a failure result, got $other")
+    }
   }
 
   test("the empty state round trips") {

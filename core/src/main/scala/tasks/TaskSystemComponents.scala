@@ -415,7 +415,7 @@ object TaskSystemComponents {
 
             val io: IO[Resource[IO, Queue]] = IO {
               if (externalQueueState.isDefined) {
-                scribe.debug(
+                scribe.info(
                   s"Using direct connection to external queue: ${externalQueueState.get}"
                 )
 
@@ -532,20 +532,24 @@ object TaskSystemComponents {
 
           def makeCodeAddress(
               t: RemotingHostConfiguration,
-              server: Option[Server]
+              server: Option[Server],
+              needsPackageServer: Boolean
           ): Resource[IO, Option[CodeAddress]] =
-            Resource.eval(IO.pure(server.map { _ =>
-              (
-                elastic.CodeAddress(
-                  SimpleSocketAddress(
-                    packageServerHostname(t),
-                    packageServerPort(t)
-                  ),
-                  config.codeVersion
+            Resource.eval(IO.pure {
+              val enabled =
+                if (needsPackageServer) server.isDefined else hostConfig.isApp
+              if (enabled)
+                Some(
+                  elastic.CodeAddress(
+                    SimpleSocketAddress(
+                      packageServerHostname(t),
+                      packageServerPort(t)
+                    ),
+                    config.codeVersion
+                  )
                 )
-              )
-
-            }))
+              else None
+            })
 
           def makePackageServer(
               t: RemotingHostConfiguration,
@@ -802,8 +806,10 @@ object TaskSystemComponents {
             codeAddress <- {
               hostConfig match {
                 case t: RemotingHostConfiguration =>
-                  makePackageServer(t, elasticSupport.isDefined)
-                    .flatMap(x => makeCodeAddress(t, x))
+                  val needsPackageServer =
+                    elasticSupport.exists(_.needsPackageServer)
+                  makePackageServer(t, needsPackageServer)
+                    .flatMap(x => makeCodeAddress(t, x, needsPackageServer))
                 case _ => Resource.eval(IO.pure(None))
               }
             }
@@ -823,7 +829,19 @@ object TaskSystemComponents {
               if (staticHealthOk)
                 shutdownInitiated.get.map(initiated => !initiated)
               else IO.pure(false)
-            messenger <- Messenger.make(hostConfig, config, workerHealth)
+            externalQueueState <- externalQueueState
+            messenger <-
+              if (externalQueueState.isDefined)
+                Resource
+                  .eval(
+                    IO(
+                      scribe.info(
+                        "External queue state is in use: all coordination goes through the shared state, so this process uses a local messenger and binds no remote endpoint."
+                      )
+                    )
+                  )
+                  .flatMap(_ => LocalMessenger.make)
+              else Messenger.make(hostConfig, config, workerHealth)
             _ <- Resource.eval(
               if (!hostConfig.isApp && hostConfig.isWorker)
                 writeWorkerHealthUrlFile(messenger)
@@ -833,7 +851,6 @@ object TaskSystemComponents {
             fileServiceComponent <- fileServiceComponent
             cache <- cache(fileServiceComponent)
             _ <- Resource.eval(IO(scribe.info(s"Cache: $cache")))
-            externalQueueState <- externalQueueState
             queue <- makeQueue(
               cache = cache,
               messenger = messenger,

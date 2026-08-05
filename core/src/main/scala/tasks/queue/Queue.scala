@@ -74,6 +74,8 @@ private[tasks] trait Queue {
       worldSize: Int,
       payload: String
   ): IO[List[String]]
+
+  def pollResult(proxy: Address): IO[Option[QueueImpl.ProxyResult]]
 }
 
 private[tasks] final class QueueFromQueueImpl(
@@ -110,6 +112,9 @@ private[tasks] final class QueueFromQueueImpl(
     Either[Throwable, Either[NothingForSchedule.type, MessageData.Schedule]]
   ] =
     queueImpl.askForWork(launcherAsking, availableResources, node).attempt
+
+  def pollResult(proxy: Address): IO[Option[QueueImpl.ProxyResult]] =
+    queueImpl.pollResult(proxy)
 
   def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit] =
     queueImpl.taskFailed(sch, cause)
@@ -224,6 +229,27 @@ private[tasks] class QueueWithActor(
           )
         )
       )
+
+  def pollResult(proxy: Address): IO[Option[QueueImpl.ProxyResult]] =
+    tasks.util.Ask
+      .ask(
+        target = queueActor.address0,
+        data = MessageData.PollProxyResult(proxy),
+        timeout = config.askForWorkTimeout,
+        messenger = messenger
+      )
+      .flatMap {
+        case Right(
+              Some(Message(MessageData.ProxyResultResponse(result), _, _))
+            ) =>
+          IO.pure(result)
+        case Right(Some(Message(other, _, _))) =>
+          IO.raiseError(
+            new RuntimeException(s"Unexpected pollResult reply: $other")
+          )
+        case Right(None) => IO.pure(None)
+        case Left(e)     => IO.raiseError(e)
+      }
 
   def rendezvous(
       groupId: RendezvousGroupId,
