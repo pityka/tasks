@@ -148,7 +148,9 @@ class DynamoDbTransactionTest extends FunSuite with Matchers {
       .use(tx =>
         tx.flatModify(state =>
           (
-            state,
+            state.update(
+              QueueImpl.LauncherJoined(LauncherName("launcher-1"), None)
+            ),
             IO {
               putsAtSideEffect.set(client.putCount.get)
               sideEffectRan.incrementAndGet()
@@ -160,6 +162,30 @@ class DynamoDbTransactionTest extends FunSuite with Matchers {
 
     sideEffectRan.get shouldBe 1
     putsAtSideEffect.get shouldBe 1
+  }
+
+  test("an update that leaves the state unchanged does not write") {
+    val client = new FakeDynamoDb(new AtomicReference(None))
+    val sideEffectRan = new AtomicInteger(0)
+
+    val result = transactionFor(client)
+      .use(tx =>
+        tx.flatModify(state =>
+          (
+            state,
+            IO {
+              sideEffectRan.incrementAndGet()
+              3
+            }
+          )
+        )
+      )
+      .unsafeRunSync()
+
+    result shouldBe 3
+    sideEffectRan.get shouldBe 1
+    client.putCount.get shouldBe 0
+    client.stored.get shouldBe None
   }
 
   test("a competing commit forces a retry and the update is reapplied") {

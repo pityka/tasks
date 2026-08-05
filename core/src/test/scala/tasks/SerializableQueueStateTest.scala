@@ -81,7 +81,11 @@ class SerializableQueueStateTest extends FunSuite with Matchers {
     ),
     rendezvous = Map(
       RendezvousGroupId("group-1") -> QueueImpl
-        .RendezvousGroup(worldSize = 2, joiners = Map(0 -> "a", 1 -> "b"))
+        .RendezvousGroup(
+          worldSize = 2,
+          joiners = Map(0 -> "a", 1 -> "b"),
+          readers = Set(0)
+        )
     ),
     completedResults = Map.empty
   )
