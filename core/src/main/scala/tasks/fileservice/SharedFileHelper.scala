@@ -77,21 +77,40 @@ private[tasks] object SharedFileHelper {
 
   def getPathToFile(sf: SharedFile)(implicit
       service: FileServiceComponent,
-      nlc: NodeLocalCache.State
+      nlc: NodeLocalCache.State,
+      config: TasksConfig
+  ): Resource[IO, File] = getPathToFile(sf, keepLocalCache = false)
+
+  def getPathToFile(sf: SharedFile, keepLocalCache: Boolean)(implicit
+      service: FileServiceComponent,
+      nlc: NodeLocalCache.State,
+      config: TasksConfig
   ): Resource[IO, File] =
     tasks.util.concurrent.NodeLocalCache
-      .offer("fs::" + sf, getPathToFileNonCachedFile(sf), nlc)
+      .offer(
+        (if (keepLocalCache) "fs-persistent::" else "fs::") + sf,
+        getPathToFileNonCachedFile(sf, keepLocalCache),
+        nlc
+      )
       .map(_.asInstanceOf[File])
 
   def getPathToFileNonCachedFile(sf: SharedFile)(implicit
-      service: FileServiceComponent
-  ): Resource[IO, File] =
-    sf.path match {
+      service: FileServiceComponent,
+      config: TasksConfig
+  ): Resource[IO, File] = getPathToFileNonCachedFile(sf, keepLocalCache = false)
+
+  def getPathToFileNonCachedFile(sf: SharedFile, keepLocalCache: Boolean)(implicit
+      service: FileServiceComponent,
+      config: TasksConfig
+  ): Resource[IO, File] = {
+    val download = sf.path match {
       case p: RemoteFilePath => service.remote.exportFile(p)
       case p: ManagedFilePath =>
         service.storage.exportFile(p)
 
     }
+    LocalFileCache.wrap(sf, keepLocalCache, download)
+  }
 
   def isAccessible(sf: SharedFile, verifyContent: Boolean)(implicit
       service: FileServiceComponent

@@ -81,6 +81,9 @@ case class SharedFile(
   def file(implicit tsc: TaskSystemComponents): Resource[IO, File] =
     SharedFileHelper.getPathToFile(this)
 
+  def filePersistent(implicit tsc: TaskSystemComponents): Resource[IO, File] =
+    SharedFileHelper.getPathToFile(this, keepLocalCache = true)
+
   def fileNonCached(implicit tsc: TaskSystemComponents): Resource[IO, File] =
     SharedFileHelper.getPathToFileNonCachedFile(this)
 
