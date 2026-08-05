@@ -43,5 +43,6 @@ final class ElasticSupport(
     val createNodeFactory: CreateNodeFactory,
     val getNodeName: GetNodeName,
     val convertRunningToPending: ConvertRunningToPending =
-      ConvertRunningToPending.identity
+      ConvertRunningToPending.identity,
+    val needsPackageServer: Boolean = true
 ) { self => }

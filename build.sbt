@@ -204,6 +204,19 @@ lazy val batch = project
   )
   .dependsOn(core)
 
+lazy val ecs = project
+  .in(file("ecs"))
+  .settings(commonSettings: _*)
+  .settings(
+    name := "tasks-ecs",
+    libraryDependencies ++= Seq(
+      "software.amazon.awssdk" % "ecs" % "2.23.13", // scala-steward:off
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
+      "org.scalatest" %% "scalatest" % "3.2.19" % "test"
+    )
+  )
+  .dependsOn(core)
+
 lazy val s3 = project
   .in(file("s3"))
   .settings(commonSettings: _*)
@@ -320,6 +333,7 @@ lazy val root = (project in file("."))
     // sharedJS,
     ec2,
     batch,
+    ecs,
     s3,
     kubernetes,
     kubernetesTest,
@@ -339,5 +353,7 @@ lazy val testables = (project in file("testables"))
     circe,
     sharedJVM,
     s3,
-    dynamodb
+    dynamodb,
+    batch,
+    ecs
   )

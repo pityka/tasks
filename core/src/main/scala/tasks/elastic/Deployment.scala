@@ -123,4 +123,51 @@ object Deployment {
     s"""$downloadScript && $runPackage"""
 
   }
+
+  def workerEnvironment(
+      memory: Int,
+      cpu: Int,
+      scratch: Int,
+      gpus: List[Int],
+      masterAddress: SimpleSocketAddress,
+      masterPrefix: String,
+      followerHostname: Option[String],
+      followerExternalHostname: Option[String],
+      followerMayUseArbitraryPort: Boolean,
+      followerNodeName: Option[String],
+      image: Option[String],
+      workerHealthUrlFile: Option[String] = None,
+      labels: Set[String] = Set.empty
+  )(implicit config: TasksConfig): Map[String, String] = {
+    val required = Map(
+      "HOSTS_MASTER" -> (masterAddress.getHostName + ":" + masterAddress.getPort),
+      "HOSTS_MASTERPREFIX" -> masterPrefix,
+      "HOSTS_APP" -> "false",
+      "TASKS_FILESERVICE_STORAGEURI" -> config.storageURI.toString,
+      "HOSTS_NUMCPU" -> cpu.toString,
+      "HOSTS_RAM" -> memory.toString,
+      "HOSTS_SCRATCH" -> scratch.toString,
+      "HOSTS_MAYUSEARBITRARYPORT" -> followerMayUseArbitraryPort.toString,
+      "TASKS_DISABLEREMOTING" -> "false"
+    )
+
+    val optional = List(
+      followerHostname.map("HOSTS_HOSTNAME" -> _),
+      followerExternalHostname.map("HOSTS_HOSTNAMEEXTERNAL" -> _),
+      followerNodeName.map("TASKS_ELASTIC_NODENAME" -> _),
+      if (gpus.nonEmpty)
+        Some("HOSTS_GPUSASCOMMASTRING" -> gpus.map(_.toString).mkString(","))
+      else None,
+      image.map("HOSTS_IMAGE" -> _),
+      if (config.connectToProxyFileServiceOnMain)
+        Some("TASKS_FILESERVICE_CONNECTTOPROXY" -> "true")
+      else None,
+      workerHealthUrlFile.map("TASKS_WORKER_HEALTHURLFILE" -> _),
+      if (labels.nonEmpty)
+        Some("HOSTS_LABELSASCOMMASTRING" -> labels.toList.sorted.mkString(","))
+      else None
+    ).flatten.toMap
+
+    required ++ optional
+  }
 }
