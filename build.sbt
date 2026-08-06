@@ -143,7 +143,7 @@ lazy val spores = project
         )
       case _ => Seq.empty
     }) ++ List(
-      "org.scalatest" %% "scalatest" % "3.2.19" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.20" % "test"
     )
   )
 
@@ -160,7 +160,7 @@ lazy val core = project
       "org.ekrich" %% "sconfig" % "1.8.1",
       "org.typelevel" %% "cats-effect" % "3.6.3",
       "io.github.pityka" %% "selfpackage" % "2.1.6",
-      "org.scalatest" %% "scalatest" % "3.2.19" % "test",
+      "org.scalatest" %% "scalatest" % "3.2.20" % "test",
       "com.outr" %% "scribe" % scribeVersion,
       "com.outr" %% "scribe-slf4j" % scribeVersion,
       "org.typelevel" %% "otel4s-core" % otel4sCoreVersion,
@@ -223,7 +223,7 @@ lazy val postgres = project
     name := "tasks-postgres",
     libraryDependencies ++= Seq(
       "org.tpolecat" %% "skunk-core" % "0.6.4",
-      "org.scalatest" %% "scalatest" % "3.2.19" % "test",
+      "org.scalatest" %% "scalatest" % "3.2.20" % "test",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
     )
   )
@@ -298,7 +298,7 @@ lazy val circe = project
       "io.circe" %% "circe-core" % circeVersion,
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,
-      "org.scalatest" %% "scalatest" % "3.2.19" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.20" % "test"
     )
   )
   .dependsOn(core)
