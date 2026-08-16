@@ -79,6 +79,31 @@ class EcsConfigTest extends AnyFunSuite with Matchers {
     minimal.resolveTaskDefinition(Some("my-image:v1")).isLeft shouldBe true
   }
 
+  test("a task arn of the configured cluster is owned") {
+    minimal.ownsNodeId(
+      "arn:aws:ecs:us-east-1:1:task/workers/0123456789abcdef"
+    ) shouldBe true
+  }
+
+  test("a task arn of another cluster is not owned") {
+    minimal.ownsNodeId(
+      "arn:aws:ecs:us-east-1:1:task/other-cluster/0123456789abcdef"
+    ) shouldBe false
+  }
+
+  test("the cluster may be configured as an arn") {
+    minimal
+      .copy(cluster = "arn:aws:ecs:us-east-1:1:cluster/workers")
+      .ownsNodeId(
+        "arn:aws:ecs:us-east-1:1:task/workers/0123456789abcdef"
+      ) shouldBe true
+  }
+
+  test("a node id of another backend is not owned") {
+    minimal.ownsNodeId("default/podname") shouldBe false
+    minimal.ownsNodeId("context:1234") shouldBe false
+  }
+
   test("resolveRegion returns the configured region when it is set") {
     EcsConfig.resolveRegion(Some("eu-west-1")) shouldBe "eu-west-1"
   }

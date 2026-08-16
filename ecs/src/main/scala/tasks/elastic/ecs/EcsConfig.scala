@@ -68,6 +68,11 @@ final case class EcsConfig(
   def withTags(entries: (String, String)*): EcsConfig =
     copy(tags = tags ++ entries)
 
+  def ownsNodeId(nodeId: String): Boolean = {
+    val clusterName = cluster.split('/').last
+    nodeId.split('/').toList.lift(1).contains(clusterName)
+  }
+
   def resolveTaskDefinition(image: Option[String]): Either[String, String] =
     image match {
       case None => Right(taskDefinition)

@@ -90,7 +90,8 @@ object JvmElasticSupport {
       masterAddress: SimpleSocketAddress,
       masterPrefix: String,
       extraWorkerConfig: String,
-      labelsForRequest: tasks.shared.ResourceRequest => Set[String]
+      labelsForRequest: tasks.shared.ResourceRequest => Set[String],
+      nodeNamePrefix: String
   ) extends CreateNode {
 
     def requestOneNewJobFromJobScheduler(
@@ -99,7 +100,7 @@ object JvmElasticSupport {
         config: TasksConfig
     ): IO[Either[String, (PendingJobId, ResourceAvailable)]] = {
       val jobid =
-        java.util.UUID.randomUUID.toString.replace("-", "")
+        nodeNamePrefix + java.util.UUID.randomUUID.toString.replace("-", "")
 
       val workerLabels = labelsForRequest(requestSize)
       val labelsConfig =
@@ -141,7 +142,8 @@ object JvmElasticSupport {
                   state,
                   externalQueueState,
                   extraWorkerConfig,
-                  labelsForRequest
+                  labelsForRequest,
+                  nodeNamePrefix
                 ),
                 getNodeName = JvmGetNodeName
               )
@@ -180,7 +182,8 @@ object JvmElasticSupport {
       ref: Ref[IO, State],
       externalQueueState: Option[Ref[IO, tasks.queue.QueueImpl.State]],
       extraWorkerConfig: String,
-      labelsForRequest: tasks.shared.ResourceRequest => Set[String]
+      labelsForRequest: tasks.shared.ResourceRequest => Set[String],
+      nodeNamePrefix: String
   ) extends CreateNodeFactory {
     def apply(
         master: SimpleSocketAddress,
@@ -193,7 +196,8 @@ object JvmElasticSupport {
         master,
         masterPrefix,
         extraWorkerConfig,
-        labelsForRequest
+        labelsForRequest,
+        nodeNamePrefix
       )
   }
 
@@ -232,6 +236,19 @@ object JvmElasticSupport {
         labelsForRequest: tasks.shared.ResourceRequest => Set[String] = _ =>
           Set.empty
     ): Resource[IO, (JvmNodeControl, ElasticSupport)] =
+      makeWithPrefix(
+        nodeNamePrefix = "",
+        externalQueueState = externalQueueState,
+        extraWorkerConfig = extraWorkerConfig,
+        labelsForRequest = labelsForRequest
+      )
+
+    def makeWithPrefix(
+        nodeNamePrefix: String,
+        externalQueueState: Option[Ref[IO, tasks.queue.QueueImpl.State]],
+        extraWorkerConfig: String,
+        labelsForRequest: tasks.shared.ResourceRequest => Set[String]
+    ): Resource[IO, (JvmNodeControl, ElasticSupport)] =
       stateResource.map { state =>
         val controller = new JvmNodeControl(state)
 
@@ -244,7 +261,8 @@ object JvmElasticSupport {
               state,
               externalQueueState,
               extraWorkerConfig,
-              labelsForRequest
+              labelsForRequest,
+              nodeNamePrefix
             ),
             getNodeName = JvmGetNodeName
           )

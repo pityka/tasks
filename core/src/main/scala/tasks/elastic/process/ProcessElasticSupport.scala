@@ -36,14 +36,6 @@ import cats.effect.kernel.Resource
 import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
 
-/** A host on which worker processes may be spawned.
-  *
-  * `name` is the handle which is passed to the spawn and shutdown commands.
-  *
-  * `hostname` is the hostname to which the spawned process will bind.
-  * `externalHostname` is the hostname under which that process is reachable
-  * from outside of the system. This is relevant if there are multiple NICs.
-  */
 final case class ProcessContext(
     name: String,
     hostname: String,
@@ -96,6 +88,9 @@ trait ProcessConfig {
   def contexts: List[ProcessContext]
 
   def minimumResourceAllocation: Boolean
+
+  def ownsNodeId(nodeId: String): Boolean =
+    contexts.exists(context => nodeId.startsWith(context.name + ":"))
 
 }
 

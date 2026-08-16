@@ -535,9 +535,14 @@ object TaskSystemComponents {
               server: Option[Server],
               needsPackageServer: Boolean
           ): Resource[IO, Option[CodeAddress]] =
-            Resource.eval(IO.pure {
+            Resource.eval(IO {
               val enabled =
                 if (needsPackageServer) server.isDefined else hostConfig.isApp
+              if (needsPackageServer && server.isEmpty && hostConfig.isApp) {
+                scribe.error(
+                  "The elastic support needs a package server but none could be started. No new nodes will be requested."
+                )
+              }
               if (enabled)
                 Some(
                   elastic.CodeAddress(

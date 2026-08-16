@@ -123,7 +123,48 @@ The worker role:
 The worker and application roles may be present in the same process, i.e. an application process can act as a worker and consume its own queue. 
 
 ## Management of worker process life cycle
-Worker processes can be spawned and stopped externally, or there is support for a simple demand based scheduling of them via ssh, kubernetes and EC2.
+Worker processes can be spawned and stopped externally, or there is support for a simple demand based scheduling of them via ssh, docker, kubernetes, AWS Batch and Amazon ECS.
+
+Each backend is configured with an immutable Scala value which the application builds and passes to the task system constructor, the same way the S3 client is passed in:
+
+```scala
+withTaskSystem(
+  config = ConfigFactory.parseString("tasks.fileservice.storageURI=s3://my-bucket/prefix"),
+  s3Client = tasks.fileservice.s3.S3.makeS3ClientResource(...),
+  elasticSupport = EcsElasticSupport(
+    EcsConfig("my-cluster", "my-capacity-provider", "worker", "my-task-definition")
+      .withRegion("us-east-1")
+      .withTaskDefinitionForImage("my-image:v1", "my-task-definition-v1")
+  ).map(Some(_))
+)(system => ???)
+```
+
+The backend specific settings types are `tasks.elastic.ecs.EcsConfig`, `tasks.elastic.batch.BatchConfig`, `tasks.elastic.kubernetes.K8SConfig`, and `tasks.elastic.process.{DockerConfig, ShellConfig, SecureShellConfig}`. Keys under `tasks.elastic.*` in the configuration file are backend independent: they are read by the queue and the launcher, and some of them are set on each worker process by the bootstrap script.
+
+### Several backends in one application
+
+`CompositeElasticSupport` combines backends. A node request is offered to each member which `accepts` it, in order, and the first one which can create a node wins:
+
+```scala
+val elastic = CompositeElasticSupport(
+  List(
+    CompositeMember("gpu", k8s, k8sConfig.ownsNodeId).accepting(_.gpu > 0),
+    CompositeMember("ecs", ecs, ecsConfig.ownsNodeId),
+    CompositeMember.catchAll("local", docker)
+  )
+)
+```
+
+Every other decision — which backend shuts a node down, converts a running node id back to a pending one, names this node, or supplies its host configuration — is made by evaluating each member's `owns` predicate against the node id string. Nothing is remembered between calls, so routing survives a restart of the application process, and two instances of the same backend (two ECS clusters, two kubernetes namespaces) are told apart just as well as two different backends.
+
+Rules to follow when assembling one:
+
+- `owns` must recognize the ids that backend hands out. Ready made recognizers: `EcsConfig.ownsNodeId` (matches the cluster inside the task ARN), `K8SConfig.ownsNodeId` (matches the namespace prefix), and `ProcessConfig.ownsNodeId` for docker, ssh and local shell (matches the context name prefix).
+- AWS Batch job ids are opaque, so a Batch member can only be a `catchAll` member.
+- At most one member may be a `catchAll`, and it must be last. This is checked at construction.
+- Two process family members must not share a `ProcessContext` name: their node ids are `context:processId` and process ids are not unique across machines.
+- `accepts` should cover every request shape the application submits. A request no member accepts still consumes one unit of `tasks.elastic.maxNodesCumulative`.
+- Members are tried one at a time while the queue is held, so put slow backends last.
 
 ## File abstraction
 Opaque binary blobs of data (files) in the input and output types are managed by the `tasks.SharedFile` type.

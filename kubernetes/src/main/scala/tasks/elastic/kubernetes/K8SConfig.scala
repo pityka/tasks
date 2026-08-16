@@ -56,6 +56,9 @@ final case class K8SConfig(
   def withMinimumLimits(cpu: Int, ram: Int): K8SConfig =
     copy(minimumCpu = cpu, minimumRam = ram)
 
+  def ownsNodeId(nodeId: String): Boolean =
+    nodeId.startsWith(namespace + "/")
+
   def resolveImage(requested: Option[String]): Either[String, String] =
     requested
       .filter(_.nonEmpty)
