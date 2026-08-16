@@ -1,24 +1,43 @@
 package tasks.elastic.process
 
-import org.ekrich.config.Config
 import cats.effect._
 import tasks.elastic.ElasticSupport
-import scala.jdk.CollectionConverters._
 import tasks.shared.ResourceAllocated
 
+final case class DockerConfig(
+    image: Option[String],
+    network: String,
+    environment: Map[String, String],
+    contexts: List[ProcessContext]
+) extends ProcessConfig {
+
+  val minimumResourceAllocation = true
+
+  def withImage(value: String): DockerConfig = copy(image = Some(value))
+
+  def withNetwork(value: String): DockerConfig = copy(network = value)
+
+  def withEnvironment(entries: (String, String)*): DockerConfig =
+    copy(environment = environment ++ entries)
+
+  def withContext(value: ProcessContext): DockerConfig =
+    copy(contexts = contexts :+ value)
+}
+
+object DockerConfig {
+
+  val defaultImage = "eclipse-temurin:17.0.13_11-jre-ubi9-minimal"
+
+  def apply(contexts: List[ProcessContext]): DockerConfig =
+    DockerConfig(
+      image = None,
+      network = "host",
+      environment = Map.empty,
+      contexts = contexts
+    )
+}
+
 object DockerElasticSupport {
-
-  private class DockerConfig(raw: Config) extends ProcessConfig {
-    val dockerImageName = raw.getString("tasks.docker.image")
-    val minimumResourceAllocation = true
-
-    val dockerEnvVars =
-      raw.getStringList("tasks.docker.env").asScala.grouped(2).map { g =>
-        (g(0), g(1))
-      }
-    val contexts = raw.getConfigList("tasks.docker.contexts").asScala.toList
-    val dockerNetwork = raw.getString("tasks.docker.network")
-  }
 
   private object DockerShutdownCommand extends RemoteShutdownCommand {
     def apply(contextName: String, processId: ProcessId): List[String] =
@@ -44,16 +63,16 @@ object DockerElasticSupport {
         context,
         "run",
         "-d",
-        s"--network=${config.dockerNetwork}"
-      ) ++ config.dockerEnvVars.toList.flatMap { case (k, v) =>
+        s"--network=${config.network}"
+      ) ++ config.environment.toList.flatMap { case (k, v) =>
         List("--env", s"$k=$v")
       } ++ (if (allocated.gpu.nonEmpty)
               List("--gpus", allocated.gpu.mkString(","))
             else Nil) ++
         List(
           allocated.image
-            .orElse(Option(config.dockerImageName).filter(_.nonEmpty))
-            .getOrElse("eclipse-temurin:17.0.13_11-jre-ubi9-minimal"),
+            .orElse(config.image.filter(_.nonEmpty))
+            .getOrElse(DockerConfig.defaultImage),
           "/bin/bash",
           "-c",
           script
@@ -61,14 +80,10 @@ object DockerElasticSupport {
 
   }
 
-  def make(config: Option[Config]): IO[ElasticSupport] = {
-    IO(tasks.util.loadConfig(config)).flatMap { config =>
-      val dockerConfig = new DockerConfig(config)
-      ProcessElasticSupport.make(
-        processConfig = dockerConfig,
-        shutdownCommand = DockerShutdownCommand,
-        spawnProcessCommand = new DockerSpawnProcessCommand(dockerConfig)
-      )
-    }
-  }
+  def make(dockerConfig: DockerConfig): IO[ElasticSupport] =
+    ProcessElasticSupport.make(
+      processConfig = dockerConfig,
+      shutdownCommand = DockerShutdownCommand,
+      spawnProcessCommand = new DockerSpawnProcessCommand(dockerConfig)
+    )
 }

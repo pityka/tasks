@@ -25,11 +25,6 @@
 
 package tasks.elastic.process
 
-import scala.util._
-
-import scala.jdk.CollectionConverters._
-import java.io.File
-import org.ekrich.config.{Config, ConfigObject}
 import tasks.elastic._
 import tasks.shared._
 import tasks.util.config._
@@ -38,29 +33,67 @@ import tasks.util.Uri
 import cats.effect.kernel.Ref
 import cats.effect.IO
 import cats.effect.kernel.Resource
-import org.ekrich.config.ConfigFactory
 import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
 
+/** A host on which worker processes may be spawned.
+  *
+  * `name` is the handle which is passed to the spawn and shutdown commands.
+  *
+  * `hostname` is the hostname to which the spawned process will bind.
+  * `externalHostname` is the hostname under which that process is reachable
+  * from outside of the system. This is relevant if there are multiple NICs.
+  */
+final case class ProcessContext(
+    name: String,
+    hostname: String,
+    externalHostname: Option[String],
+    resources: ResourceAvailable
+) {
+
+  require(name.nonEmpty, "ProcessContext.name must be non-empty")
+
+  require(hostname.nonEmpty, "ProcessContext.hostname must be non-empty")
+
+  def withExternalHostname(value: String): ProcessContext =
+    copy(externalHostname = Some(value))
+
+  def withCpu(value: Int): ProcessContext =
+    copy(resources = resources.copy(cpu = value))
+
+  def withMemory(value: Int): ProcessContext =
+    copy(resources = resources.copy(memory = value))
+
+  def withScratch(value: Int): ProcessContext =
+    copy(resources = resources.copy(scratch = value))
+
+  def withGpu(value: List[Int]): ProcessContext =
+    copy(resources = resources.copy(gpu = value.distinct.sorted))
+
+  def withLabels(value: Set[String]): ProcessContext =
+    copy(resources = resources.copy(labels = value))
+}
+
+object ProcessContext {
+
+  def apply(name: String, hostname: String): ProcessContext =
+    ProcessContext(
+      name = name,
+      hostname = hostname,
+      externalHostname = None,
+      resources = ResourceAvailable(
+        cpu = 1,
+        memory = 2000,
+        scratch = 20000,
+        gpu = Nil,
+        image = None
+      )
+    )
+}
+
 trait ProcessConfig {
 
-  /** The Config object must have the following fields:
-    *   - context: String
-    *   - hostname: String,
-    *   - externalHostname: String, optional, defaults to None
-    *   - cpu: Int, optional, defaults to 1
-    *   - memory: Int, optional defaults to 2000
-    *   - scratch: Int, optional, defaults to 20000
-    *   - gpu: Seq[Int], optional, defaults to Nil
-    *
-    * context is the handle which is passed to the spawn and shutdown commands
-    *
-    * hostname is the hostname to which the spawn process will bind
-    * externalHostname is the hostname to which the spawn process will bind and
-    * is reachable from outside of the system. This is relevant if there are
-    * multiple NICs
-    */
-  def contexts: Seq[Config]
+  def contexts: List[ProcessContext]
 
   def minimumResourceAllocation: Boolean
 
@@ -84,7 +117,7 @@ object ProcessElasticSupport {
       spawnProcessCommand: SpawnProcessCommand
   ): IO[ElasticSupport] = {
     for {
-      settings <- ProcessSettings.fromConfig(processConfig)
+      settings <- ProcessSettings.make(processConfig)
       ref <- Ref.of[IO, Map[RunningJobId, ProcessId]](Map.empty)
     } yield {
       new ElasticSupport(
@@ -106,43 +139,15 @@ object ProcessElasticSupport {
 }
 
 private object ProcessSettings {
-  case class Host(
-      context: String,
-      resourceAvailable: ResourceAvailable,
-      hostname: String,
-      externalHostname: Option[String]
-  )
-  object Host {
-    def fromConfig(config: Config) = {
-      val context = config.getString("context")
-      val memory = Try(config.getInt("memory")).toOption.getOrElse(2000)
-      val cpu = Try(config.getInt("cpu")).toOption.getOrElse(1)
-      val scratch =
-        Try(config.getInt("scratch")).toOption.getOrElse(20000)
-      val gpu =
-        Try(config.getIntList("gpu").asScala.map(_.toInt).toList).toOption
-          .getOrElse(Nil)
-      Host(
-        context,
-        ResourceAvailable(cpu, memory, scratch, gpu, image = None),
-        config.getString("hostname"),
-        Try(config.getString("externalHostname")).toOption
-      )
-    }
-  }
 
-  def fromConfig(
+  def make(
       config: ProcessConfig
   ): IO[ProcessSettings] = {
 
-    val hosts =
-      config.contexts.map { case config =>
-        Host.fromConfig(config)
+    val hosts = config.contexts
+    scribe.info(s"Available contexts: $hosts")
 
-      }.toList
-    scribe.info(s"Available contexts: $hosts ${config.contexts}")
-
-    Ref.of[IO, List[Host]](hosts).map { r =>
+    Ref.of[IO, List[ProcessContext]](hosts).map { r =>
       new ProcessSettings(r, config)
     }
   }
@@ -150,42 +155,41 @@ private object ProcessSettings {
 }
 
 private class ProcessSettings(
-    hosts: Ref[IO, List[ProcessSettings.Host]],
+    hosts: Ref[IO, List[ProcessContext]],
     config: ProcessConfig
 ) {
-  import ProcessSettings._
 
   def allocate(h: ResourceRequest) = hosts.modify { hosts =>
-    hosts.find(_.resourceAvailable.canFulfillRequest(h)) match {
+    hosts.find(_.resources.canFulfillRequest(h)) match {
       case None => (hosts, None)
       case Some(value) =>
         if (config.minimumResourceAllocation) {
-          val list = hosts.filterNot(_.context == value.context) ++ List(
-            value.copy(resourceAvailable = value.resourceAvailable.substract(h))
+          val list = hosts.filterNot(_.name == value.name) ++ List(
+            value.copy(resources = value.resources.substract(h))
           )
 
           (
             list,
-            Option((value.context, value.resourceAvailable.minimum(h), value))
+            Option((value.name, value.resources.minimum(h), value))
           )
         } else {
-          val list = hosts.filterNot(_.context == value.context) ++ List(
-            value.copy(resourceAvailable = value.resourceAvailable.substractAll)
+          val list = hosts.filterNot(_.name == value.name) ++ List(
+            value.copy(resources = value.resources.substractAll)
           )
 
           (
             list,
-            Option((value.context, value.resourceAvailable.all, value))
+            Option((value.name, value.resources.all, value))
           )
         }
     }
   }
 
   def deallocate(h: ResourceAllocated, context: String) = hosts.update { list =>
-    list.filterNot(_.context == context) ++ List(
+    list.filterNot(_.name == context) ++ List(
       {
-        val ho = list.find(_.context == context).get
-        ho.copy(resourceAvailable = ho.resourceAvailable.addBack(h))
+        val ho = list.find(_.name == context).get
+        ho.copy(resources = ho.resources.addBack(h))
       }
     )
   }

@@ -29,6 +29,10 @@ import org.ekrich.config.ConfigFactory
 import cats.effect.IO
 import cats.effect.IOApp
 import tasks.elastic.kubernetes.Bootstrap
+import tasks.elastic.kubernetes.K8SConfig
+import io.k8s.api.core.v1.PodSpec
+import io.k8s.api.core.v1.Container
+import io.k8s.api.core.v1.EnvVar
 import cats.effect.kernel.Resource.ExitCase
 import com.google.cloud.tools.jib.api.Containerizer
 import com.google.cloud.tools.jib.api.DockerDaemonImage
@@ -58,27 +62,26 @@ object KubernetesTest extends IOApp {
       hosts.hostname="$hostname"
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
-      tasks.kubernetes.image = "eclipse-temurin:17.0.13_11-jre-ubi9-minimal"
-      tasks.kubernetes.image-pull-policy = "IfNotPresent"
-      
-      tasks.kubernetes.podSpec = {
-        automountServiceAccountToken = false
-        containers = [
-          {
-            name = "xyz"
-            env = [ 
-              {
-                name = "xyzenv"
-                value = "xyzvalue"
-              }
-            ]
-          }
-        ]
-      }
-      
       """
     )
   }
+
+  val k8sConfig = K8SConfig()
+    .withImage("eclipse-temurin:17.0.13_11-jre-ubi9-minimal")
+    .withImagePullPolicy("IfNotPresent")
+    .withPodSpec(
+      PodSpec(
+        automountServiceAccountToken = Some(false),
+        containers = List(
+          Container(
+            name = "xyz",
+            env = Some(
+              List(EnvVar(name = "xyzenv", value = Some("xyzvalue")))
+            )
+          )
+        )
+      )
+    )
 
   def useTs(implicit ts: TaskSystemComponents): IO[Unit] = {
     val f1 = testTask(("1"))(ResourceRequest(1, 500))
@@ -124,7 +127,8 @@ object KubernetesTest extends IOApp {
         config = Some(testConfig2),
         containerizer = containerizer,
         k8sClientResource = kubernetesClient,
-        mainClassName = "KubernetesTest"
+        mainClassName = "KubernetesTest",
+        k8sConfig = k8sConfig
       )(ts => useTs(ts))
 
     resultOrBlock.flatMap { x =>

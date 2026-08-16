@@ -178,17 +178,6 @@ lazy val core = project
   )
   .dependsOn(sharedJVM, spores)
 
-lazy val ec2 = project
-  .in(file("ec2"))
-  .settings(commonSettings: _*)
-  .settings(
-    name := "tasks-ec2",
-    libraryDependencies ++= Seq(
-      "com.amazonaws" % "aws-java-sdk-ec2" % "1.12.244" // scala-steward:off
-    )
-  )
-  .dependsOn(core)
-
 lazy val batch = project
   .in(file("batch"))
   .settings(commonSettings: _*)
@@ -331,7 +320,6 @@ lazy val root = (project in file("."))
     circe,
     sharedJVM,
     // sharedJS,
-    ec2,
     batch,
     ecs,
     s3,

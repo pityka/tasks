@@ -2,107 +2,113 @@ package tasks.elastic.ecs
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
-import org.ekrich.config.ConfigFactory
 import tasks.shared.ResourceRequest
 
 class EcsConfigTest extends AnyFunSuite with Matchers {
 
-  private def raw(extra: String) = {
-    val hocon =
-      s"""
-         |tasks.elastic.ecs {
-         |  region = "us-east-1"
-         |  cluster = "workers"
-         |  capacityProvider = "workers-managed-instances"
-         |  capacityProviderBase = 0
-         |  capacityProviderWeight = 1
-         |  containerName = "worker"
-         |  taskDefinition = "default-td"
-         |  minimumCpu = 1
-         |  minimumMemory = 512
-         |  startedBy = "tasks-elastic"
-         |  stopReason = "stopped"
-         |  environment = []
-         |  tags = []
-         |  $extra
-         |}
-         |""".stripMargin
-    ConfigFactory.parseString(hocon)
-  }
-
-  private def cfg(extra: String): EcsConfig = new EcsConfig(raw(extra))
+  private val minimal =
+    EcsConfig(
+      cluster = "workers",
+      capacityProvider = "workers-managed-instances",
+      containerName = "worker",
+      taskDefinition = "default-td"
+    )
 
   test("a non-empty cluster and capacityProvider are accepted") {
-    val c = cfg("")
-    c.cluster shouldBe "workers"
-    c.capacityProvider shouldBe "workers-managed-instances"
+    minimal.cluster shouldBe "workers"
+    minimal.capacityProvider shouldBe "workers-managed-instances"
+  }
+
+  test("the short constructor fills in the defaults") {
+    minimal.region shouldBe None
+    minimal.capacityProviderBase shouldBe 0
+    minimal.capacityProviderWeight shouldBe 1
+    minimal.minimumCpu shouldBe 1
+    minimal.minimumMemory shouldBe 512
+    minimal.startedBy shouldBe "tasks-elastic"
+    minimal.taskDefinitionsByImage shouldBe empty
+    minimal.extraEnvironment shouldBe empty
+    minimal.tags shouldBe empty
   }
 
   test("an empty cluster is rejected") {
-    an[IllegalArgumentException] should be thrownBy cfg("""cluster = """"")
+    an[IllegalArgumentException] should be thrownBy minimal.copy(cluster = "")
   }
 
   test("an empty capacityProvider is rejected") {
-    an[IllegalArgumentException] should be thrownBy cfg(
-      """capacityProvider = """""
+    an[IllegalArgumentException] should be thrownBy minimal.copy(
+      capacityProvider = ""
+    )
+  }
+
+  test("an empty containerName is rejected") {
+    an[IllegalArgumentException] should be thrownBy minimal.copy(
+      containerName = ""
+    )
+  }
+
+  test("an empty taskDefinition is rejected") {
+    an[IllegalArgumentException] should be thrownBy minimal.copy(
+      taskDefinition = ""
     )
   }
 
   test("resolveTaskDefinition(None) returns the default taskDefinition") {
-    cfg("").resolveTaskDefinition(None) shouldBe Right("default-td")
+    minimal.resolveTaskDefinition(None) shouldBe Right("default-td")
   }
 
   test("resolveTaskDefinition(Some(x)) returns the mapped task definition") {
-    val c = cfg(
-      """
-        |taskDefinitionsByImage = [
-        |  { image = "my-image:v1", taskDefinition = "my-td-v1" },
-        |  { image = "my-image:v2", taskDefinition = "my-td-v2" }
-        |]
-        |""".stripMargin
-    )
+    val c = minimal
+      .withTaskDefinitionForImage("my-image:v1", "my-td-v1")
+      .withTaskDefinitionForImage("my-image:v2", "my-td-v2")
     c.resolveTaskDefinition(Some("my-image:v1")) shouldBe Right("my-td-v1")
     c.resolveTaskDefinition(Some("my-image:v2")) shouldBe Right("my-td-v2")
+    c.resolveTaskDefinition(None) shouldBe Right("default-td")
   }
 
   test("resolveTaskDefinition(Some(x)) fails fast when image is not mapped") {
-    val c = cfg(
-      """
-        |taskDefinitionsByImage = [
-        |  { image = "my-image:v1", taskDefinition = "my-td-v1" }
-        |]
-        |""".stripMargin
-    )
+    val c = minimal.withTaskDefinitionForImage("my-image:v1", "my-td-v1")
     val result = c.resolveTaskDefinition(Some("unknown:tag"))
     result.isLeft shouldBe true
     val err = result.left.getOrElse(fail("expected Left"))
     err should include("unknown:tag")
-    err should include("tasks.elastic.ecs.taskDefinitionsByImage")
+    err should include("withTaskDefinitionForImage")
+  }
+
+  test("resolveTaskDefinition(Some(x)) fails when no image is mapped") {
+    minimal.resolveTaskDefinition(Some("my-image:v1")).isLeft shouldBe true
   }
 
   test("resolveRegion returns the configured region when it is set") {
-    EcsConfig.resolveRegion("eu-west-1") shouldBe "eu-west-1"
+    EcsConfig.resolveRegion(Some("eu-west-1")) shouldBe "eu-west-1"
   }
 
   test("a startedBy longer than 36 characters is rejected") {
-    an[IllegalArgumentException] should be thrownBy cfg(
-      s"""startedBy = "${"x" * 37}""""
+    an[IllegalArgumentException] should be thrownBy minimal.withStartedBy(
+      "x" * 37
     )
   }
 
-  test("an odd number of tag entries is rejected") {
-    an[IllegalArgumentException] should be thrownBy cfg(
-      """tags = ["only-a-key"]"""
-    )
-  }
-
-  test("environment parses as alternating key value pairs") {
-    cfg(
-      """environment = ["OTEL_ENDPOINT", "http://x", "FOO", "bar"]"""
-    ).extraEnvironment shouldBe Map(
+  test("withEnvironment accumulates entries") {
+    minimal
+      .withEnvironment("OTEL_ENDPOINT" -> "http://x")
+      .withEnvironment("FOO" -> "bar")
+      .extraEnvironment shouldBe Map(
       "OTEL_ENDPOINT" -> "http://x",
       "FOO" -> "bar"
     )
+  }
+
+  test("withTags accumulates entries") {
+    minimal
+      .withTags("team" -> "platform", "env" -> "prod")
+      .tags shouldBe Map("team" -> "platform", "env" -> "prod")
+  }
+
+  test("toString does not leak environment values") {
+    minimal
+      .withEnvironment("SECRET" -> "hunter2")
+      .toString should not include ("hunter2")
   }
 }
 

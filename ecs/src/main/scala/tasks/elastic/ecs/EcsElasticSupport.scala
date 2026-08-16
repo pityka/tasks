@@ -3,7 +3,6 @@ package tasks.elastic.ecs
 import cats.effect.IO
 import cats.effect.ExitCode
 import cats.effect.kernel.Deferred
-import org.ekrich.config.Config
 import software.amazon.awssdk.services.ecs.EcsClient
 import software.amazon.awssdk.regions.Region
 import com.github.plokhotnyuk.jsoniter_scala.core._
@@ -14,8 +13,6 @@ import tasks.elastic._
 import tasks.shared._
 import tasks.util._
 import tasks.util.config._
-
-class EcsHostConfig(val config: EcsConfig) extends HostConfigurationFromConfig
 
 class EcsShutdown(ops: EcsOperations, stopReason: String)
     extends ShutdownNode
@@ -294,12 +291,11 @@ object EcsGetNodeName extends GetNodeName {
 object EcsElasticSupport {
 
   def apply(
-      config: Option[Config]
+      ecsConfig: EcsConfig
   ): cats.effect.Resource[IO, ElasticSupport] = {
-    val ecsConfig = new EcsConfig(tasks.util.loadConfig(config))
     cats.effect.Resource.eval {
       IO {
-        val region = EcsConfig.resolveRegion(ecsConfig.configuredRegion)
+        val region = EcsConfig.resolveRegion(ecsConfig.region)
         val client = EcsClient.builder.region(Region.of(region)).build
         val ops = EcsOperations.fromClient(client, ecsConfig)
         val shutdown = new EcsShutdown(ops, ecsConfig.stopReason)
@@ -307,7 +303,9 @@ object EcsElasticSupport {
         scribe.info(s"ECS elastic backend: $ecsConfig")
 
         new ElasticSupport(
-          hostConfig = Some(new EcsHostConfig(ecsConfig)),
+          hostConfig = Some((tasksConfig: TasksConfig) =>
+            new DefaultHostConfigurationFromConfig()(tasksConfig)
+          ),
           shutdownFromNodeRegistry = shutdown,
           shutdownFromWorker = shutdown,
           createNodeFactory = new EcsCreateNodeFactory(ops, ecsConfig, region),

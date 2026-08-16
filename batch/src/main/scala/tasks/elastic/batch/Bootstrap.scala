@@ -70,6 +70,7 @@ object Bootstrap {
   def entrypoint[T](
       containerizer: Containerizer,
       mainClassName: String,
+      batchConfig: BatchConfig,
       s3Resource: Resource[IO, Option[S3Client]] = Resource.pure(None),
       config: Option[Config] = None,
       batchRequestCpu: Int = 1,
@@ -77,8 +78,6 @@ object Bootstrap {
   )(
       useTs: TaskSystemComponents => IO[T]
   ): IO[Either[ExitCode, T]] = {
-
-    val batchConfig = new BatchConfig(tasks.util.loadConfig(config))
 
     val batchJobId = Option(System.getenv("AWS_BATCH_JOB_ID"))
 
@@ -102,7 +101,7 @@ object Bootstrap {
       withTaskSystem(
         cfg,
         s3Resource,
-        BatchElasticSupport(Some(cfg)).map(Some(_))
+        BatchElasticSupport(batchConfig).map(Some(_))
       )(useTs)
     } else {
       scribe.info(
@@ -123,18 +122,18 @@ object Bootstrap {
       val imageName = container.getTargetImage().toString
 
       val batch =
-        if (batchConfig.region.isEmpty) BatchClient.create
-        else
+        batchConfig.region.fold(BatchClient.create)(region =>
           BatchClient.builder
-            .region(Region.of(batchConfig.region))
+            .region(Region.of(region))
             .build
+        )
 
       val logs =
-        if (batchConfig.region.isEmpty) CloudWatchLogsClient.create
-        else
+        batchConfig.region.fold(CloudWatchLogsClient.create)(region =>
           CloudWatchLogsClient.builder
-            .region(Region.of(batchConfig.region))
+            .region(Region.of(region))
             .build
+        )
 
       val cpu = math.max(batchRequestCpu, batchConfig.minimumCpu)
       val memory = math.max(batchRequestMemoryMB, batchConfig.minimumMemory)
@@ -161,14 +160,15 @@ object Bootstrap {
       val jobName =
         "tasks-master-" + java.util.UUID.randomUUID.toString.take(8)
 
-      require(
-        batchConfig.jobQueue.nonEmpty,
-        "tasks.elastic.batch.jobQueue must be set to submit the main app job from Bootstrap."
+      val jobQueue = batchConfig.jobQueue.getOrElse(
+        throw new RuntimeException(
+          "BatchConfig.jobQueue must be set to submit the main app job from Bootstrap."
+        )
       )
 
       val submitRequest = SubmitJobRequest.builder
         .jobName(jobName)
-        .jobQueue(batchConfig.jobQueue)
+        .jobQueue(jobQueue)
         .jobDefinition(batchConfig.jobDefinition)
         .containerOverrides(containerOverrides)
         .tags(batchConfig.tags.asJava)

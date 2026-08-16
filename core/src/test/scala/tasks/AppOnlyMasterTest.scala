@@ -32,6 +32,8 @@ import cats.effect.unsafe.implicits.global
 import tasks.deploy._
 import tasks.elastic.ElasticSupport
 import tasks.elastic.process.LocalShellElasticSupport
+import tasks.elastic.process.ProcessContext
+import tasks.elastic.process.ShellConfig
 import tasks.util.config.TasksConfig
 
 object AppOnlyMasterTest {
@@ -65,15 +67,13 @@ tasks.askInterval = 20 ms
 tasks.fileservice.storageURI=${tmp.getAbsolutePath}
 tasks.worker-main-class = "tasks.TestWorker"
 tasks.elastic.logQueueStatus = false
-tasks.sh.contexts = [
-  {
-    context = c1
-    hostname = localhost
-    cpu = 1
-    memory = 1000
-  }
-]
 """
+
+  private val shellConfig = ShellConfig(
+    List(
+      ProcessContext("c1", "localhost").withCpu(1).withMemory(1000)
+    )
+  )
 
   private val rawConfig: Config = ConfigFactory.parseString(testConfigString)
 
@@ -87,7 +87,7 @@ tasks.sh.contexts = [
 
   private def withAppOnlyHostConfig(base: ElasticSupport): ElasticSupport =
     new ElasticSupport(
-      hostConfig = Some(appAndQueueOnlyHostConfig),
+      hostConfig = Some((_: TasksConfig) => appAndQueueOnlyHostConfig),
       shutdownFromNodeRegistry = base.shutdownFromNodeRegistry,
       shutdownFromWorker = base.shutdownFromWorker,
       createNodeFactory = base.createNodeFactory,
@@ -96,7 +96,7 @@ tasks.sh.contexts = [
 
   private val elasticResource: Resource[IO, Option[ElasticSupport]] =
     Resource
-      .eval(LocalShellElasticSupport.make(Some(rawConfig)))
+      .eval(LocalShellElasticSupport.make(shellConfig))
       .map(base => Some(withAppOnlyHostConfig(base)))
 
   private val pair = defaultTaskSystem(

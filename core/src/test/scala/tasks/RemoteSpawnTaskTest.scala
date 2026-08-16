@@ -36,6 +36,8 @@ import com.github.plokhotnyuk.jsoniter_scala.core._
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import tasks.elastic.process.LocalShellElasticSupport
+import tasks.elastic.process.ProcessContext
+import tasks.elastic.process.ShellConfig
 import cats.effect.kernel.Resource
 
 object RemoteSpawnTaskTest {
@@ -141,29 +143,25 @@ tasks.askInterval = 20 ms
 tasks.fileservice.storageURI=${tmp.getAbsolutePath}
 tasks.worker-main-class = "tasks.TestWorker"
 tasks.elastic.logQueueStatus = false
-tasks.sh.contexts = [
-  {
-  context = c1
-  hostname = localhost
-  gpu = [0,1,2,3]
-  cpu = 4
-  memory = 1000
-  }
-]
       """
 
   }
+
+  val shellConfig = ShellConfig(
+    List(
+      ProcessContext("c1", "localhost")
+        .withCpu(4)
+        .withMemory(1000)
+        .withGpu(List(0, 1, 2, 3))
+    )
+  )
   import scala.sys.process._
   println("pwd".!!)
   val pair = defaultTaskSystem(
     testConfig2,
     Resource.pure(None),
     Resource
-      .eval(
-        LocalShellElasticSupport.make(
-          Some(ConfigFactory.parseString(testConfig2))
-        )
-      )
+      .eval(LocalShellElasticSupport.make(shellConfig))
       .map(Some(_))
   ).allocated.unsafeRunSync()
   implicit val system: TaskSystemComponents = pair._1._1

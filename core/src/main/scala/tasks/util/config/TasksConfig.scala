@@ -266,8 +266,6 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   val writeFileHistories =
     raw.getBoolean("tasks.fileservice.writeFileHistories")
 
-  val shWorkDir = raw.getString("tasks.elastic.sh.workdir")
-
   val connectToProxyFileServiceOnMain =
     raw.getBoolean("tasks.fileservice.connectToProxy")
 

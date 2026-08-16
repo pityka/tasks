@@ -1,23 +1,30 @@
 package tasks.elastic.process
 
-import org.ekrich.config.Config
 import cats.effect._
 import tasks.elastic.ElasticSupport
-import scala.jdk.CollectionConverters._
 import tasks.shared.ResourceAllocated
 
+final case class SecureShellConfig(
+    environment: Map[String, String],
+    contexts: List[ProcessContext]
+) extends ProcessConfig {
+
+  val minimumResourceAllocation = false
+
+  def withEnvironment(entries: (String, String)*): SecureShellConfig =
+    copy(environment = environment ++ entries)
+
+  def withContext(value: ProcessContext): SecureShellConfig =
+    copy(contexts = contexts :+ value)
+}
+
+object SecureShellConfig {
+
+  def apply(contexts: List[ProcessContext]): SecureShellConfig =
+    SecureShellConfig(environment = Map.empty, contexts = contexts)
+}
+
 object SecureShellElasticSupport {
-
-  private class PConfig(raw: Config) extends ProcessConfig {
-
-    val minimumResourceAllocation = false
-
-    val envVars =
-      raw.getStringList("tasks.ssh.env").asScala.grouped(2).map { g =>
-        (g(0), g(1))
-      }
-    val contexts = raw.getConfigList("tasks.ssh.contexts").asScala.toList
-  }
 
   private object SSHShutdownCommand extends RemoteShutdownCommand {
     def apply(contextName: String, processId: ProcessId): List[String] =
@@ -28,7 +35,7 @@ object SecureShellElasticSupport {
         processId.s
       )
   }
-  private class SSHSpawnProcessCommand(config: PConfig)
+  private class SSHSpawnProcessCommand(config: SecureShellConfig)
       extends SpawnProcessCommand {
 
     val background = true
@@ -38,7 +45,7 @@ object SecureShellElasticSupport {
         allocated: ResourceAllocated,
         script: String
     ): List[String] = {
-      val scriptWithEnv = s"${config.envVars.toList
+      val scriptWithEnv = s"${config.environment.toList
           .map { case (k, v) =>
             s"$k=$v"
           }
@@ -52,14 +59,10 @@ object SecureShellElasticSupport {
 
   }
 
-  def make(config: Option[Config]): IO[ElasticSupport] = {
-    IO(tasks.util.loadConfig(config)).flatMap { config =>
-      val c = new PConfig(config)
-      ProcessElasticSupport.make(
-        processConfig = c,
-        shutdownCommand = SSHShutdownCommand,
-        spawnProcessCommand = new SSHSpawnProcessCommand(c)
-      )
-    }
-  }
+  def make(sshConfig: SecureShellConfig): IO[ElasticSupport] =
+    ProcessElasticSupport.make(
+      processConfig = sshConfig,
+      shutdownCommand = SSHShutdownCommand,
+      spawnProcessCommand = new SSHSpawnProcessCommand(sshConfig)
+    )
 }

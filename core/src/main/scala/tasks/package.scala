@@ -451,7 +451,9 @@ package object tasks extends MacroCalls {
 
     val hostConfig = elasticSupport
       .map(
-        _.flatMap(_.hostConfig).getOrElse(hostConfigChosenFromConfig)
+        _.flatMap(_.hostConfig)
+          .map(_.apply(tconfig))
+          .getOrElse(hostConfigChosenFromConfig)
       )
 
     TaskSystemComponents.make(

@@ -39,6 +39,8 @@ import tasks._
 import org.ekrich.config.ConfigFactory
 import cats.effect.IO
 import tasks.elastic.process.LocalShellElasticSupport
+import tasks.elastic.process.ProcessContext
+import tasks.elastic.process.ShellConfig
 import cats.effect.kernel.Resource
 
 object TestWorker {
@@ -62,7 +64,7 @@ object TestWorker {
     withTaskSystem(
       ConfigFactory.empty(),
       Resource.pure(None),
-      Resource.eval(LocalShellElasticSupport.make(None).map(Some(_)))
+      Resource.eval(LocalShellElasticSupport.make(ShellConfig(Nil)).map(Some(_)))
     ) { _ =>
       IO.unit
     }.unsafeRunSync()
@@ -192,20 +194,16 @@ object SHResultWithSharedFilesTest extends TestHelpers {
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 5 s
       tasks.worker-main-class = "tasks.TestWorker"
-      tasks.sh.contexts = [
-       {
-        context = c1 
-        hostname = localhost
-        }  
-      ]
       """
       )
+
+    val shellConfig = ShellConfig(List(ProcessContext("c1", "localhost")))
 
     withTaskSystem(
       testConfig2.withFallback(testConfig),
       Resource.pure(None),
       Resource
-        .eval(LocalShellElasticSupport.make(Some(testConfig2)))
+        .eval(LocalShellElasticSupport.make(shellConfig))
         .map(Some(_))
     ) { implicit ts =>
       val tmpfile = java.io.File.createTempFile("dsfsdf", "dfs")

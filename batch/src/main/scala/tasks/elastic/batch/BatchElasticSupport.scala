@@ -39,7 +39,6 @@ import software.amazon.awssdk.services.ec2.model.DescribeInstanceTypesRequest
 import software.amazon.awssdk.regions.Region
 
 import scala.jdk.CollectionConverters._
-import org.ekrich.config.Config
 import cats.effect.IO
 import cats.effect.Ref
 import cats.effect.kernel.Deferred
@@ -208,7 +207,7 @@ object BatchInstanceCapacity {
           new RuntimeException(
             s"AWS Batch queue '$queue' resolves to no compute environments. " +
               "The queue may not exist, may be misspelled, or may have no CEs attached. " +
-              "Fix tasks.elastic.batch.queues."
+              "Fix BatchConfig.queues."
           )
         )
       else
@@ -516,7 +515,7 @@ class BatchCreateNode(
           case None =>
             IO.raiseError(
               new RuntimeException(
-                s"No Batch queue in tasks.elastic.batch.queues can host request cpu=${request.cpu} memMiB=${request.memory} gpus=${request.gpu.size}. Configured queues=[${batchConfig.queues.mkString(",")}]"
+                s"No Batch queue in BatchConfig.queues can host request cpu=${request.cpu} memMiB=${request.memory} gpus=${request.gpu.size}. Configured queues=[${batchConfig.queues.mkString(",")}]"
               )
             )
         }
@@ -707,79 +706,11 @@ object BatchGetNodeName extends GetNodeName {
   }
 }
 
-class BatchHostConfig(val config: BatchConfig)
-    extends HostConfigurationFromConfig
-
-class BatchConfig(val raw: Config) extends ConfigValuesForHostConfiguration {
-
-  val region: String = raw.getString("tasks.elastic.batch.region")
-
-  val jobQueue: String = raw.getString("tasks.elastic.batch.jobQueue")
-
-  val queues: List[String] = {
-    val path = "tasks.elastic.batch.queues"
-    if (raw.hasPath(path)) raw.getStringList(path).asScala.toList
-    else Nil
-  }
-
-  require(
-    queues.forall(_.nonEmpty),
-    "tasks.elastic.batch.queues entries must be non-empty queue names or ARNs. " +
-      "An empty value yields IAM errors like \"not authorized on resource job-queue/\""
-  )
-
-  val jobDefinition: String = {
-    val v = raw.getString("tasks.elastic.batch.jobDefinition")
-    require(
-      v.nonEmpty,
-      "tasks.elastic.batch.jobDefinition must be set to a non-empty job-definition name or ARN. " +
-        "An empty value yields IAM errors like \"not authorized on resource job-definition/\""
-    )
-    v
-  }
-
-  val jobDefinitionsByImage: Map[String, String] = {
-    val path = "tasks.elastic.batch.jobDefinitionsByImage"
-    val entries =
-      if (raw.hasPath(path)) raw.getConfigList(path).asScala.toList else Nil
-    entries.map { c =>
-      c.getString("image") -> c.getString("jobDefinition")
-    }.toMap
-  }
-
-  def resolveJobDefinition(image: Option[String]): Either[String, String] =
-    image match {
-      case None => Right(jobDefinition)
-      case Some(img) =>
-        jobDefinitionsByImage.get(img).toRight(
-          s"No AWS Batch job definition configured for image '$img'. " +
-            "Register one under tasks.elastic.batch.jobDefinitionsByImage."
-        )
-    }
-
-  val minimumCpu: Int = raw.getInt("tasks.elastic.batch.minimumCpu")
-
-  val minimumMemory: Int = raw.getInt("tasks.elastic.batch.minimumMemory")
-
-  val logGroup: String = raw.getString("tasks.elastic.batch.logGroup")
-
-  val tags: Map[String, String] = {
-    val list: List[String] =
-      raw.getStringList("tasks.elastic.batch.tags").asScala.toList
-    list
-      .grouped(2)
-      .collect { case k :: v :: Nil => k -> v }
-      .toMap
-  }
-
-}
-
 object BatchElasticSupport {
 
   def apply(
-      config: Option[Config]
+      batchConfig: BatchConfig
   ): cats.effect.Resource[IO, ElasticSupport] = {
-    val batchConfig = new BatchConfig(tasks.util.loadConfig(config))
     cats.effect.Resource.eval {
       for {
         requestMutex <- Mutex[IO]
@@ -787,21 +718,25 @@ object BatchElasticSupport {
         instanceTypeCache <- Ref.of[IO, Map[String, InstanceCapacity]](Map.empty)
         support <- IO {
           val batch =
-            if (batchConfig.region.isEmpty) BatchClient.create
-            else
+            batchConfig.region.fold(BatchClient.create)(region =>
               BatchClient.builder
-                .region(Region.of(batchConfig.region))
+                .region(Region.of(region))
                 .build
+            )
 
           val ec2 =
-            if (batchConfig.region.isEmpty) Ec2Client.create
-            else
+            batchConfig.region.fold(Ec2Client.create)(region =>
               Ec2Client.builder
-                .region(Region.of(batchConfig.region))
+                .region(Region.of(region))
                 .build
+            )
+
+          scribe.info(s"AWS Batch elastic backend: $batchConfig")
 
           new ElasticSupport(
-            hostConfig = Some(new BatchHostConfig(batchConfig)),
+            hostConfig = Some((tasksConfig: TasksConfig) =>
+              new DefaultHostConfigurationFromConfig()(tasksConfig)
+            ),
             shutdownFromNodeRegistry = new BatchShutdown(batch),
             shutdownFromWorker = new BatchShutdown(batch),
             createNodeFactory = new BatchCreateNodeFactory(

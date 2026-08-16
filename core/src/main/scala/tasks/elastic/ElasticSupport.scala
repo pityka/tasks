@@ -37,7 +37,7 @@ import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
 
 final class ElasticSupport(
-    val hostConfig: Option[HostConfiguration],
+    val hostConfig: Option[TasksConfig => HostConfiguration],
     val shutdownFromNodeRegistry: ShutdownNode,
     val shutdownFromWorker: ShutdownSelfNode,
     val createNodeFactory: CreateNodeFactory,
