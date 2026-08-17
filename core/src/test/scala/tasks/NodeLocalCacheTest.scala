@@ -31,14 +31,19 @@ import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
 import cats.effect.IO
+import org.ekrich.config.ConfigFactory
 
 object NodeLocalCacheTest extends TestHelpers {
+
+  val configWithoutEagerCrashDetection = ConfigFactory
+    .parseString("tasks.failuredetector.heartbeat-interval = 30 s")
+    .withFallback(testConfig)
 
   val sideEffect = scala.collection.mutable.ArrayBuffer[String]()
 
   def cachedFunction(tag: String) = synchronized {
     sideEffect += "execution of nodelocalcache factory " + tag
-    Thread.sleep(1000)
+    Thread.sleep(200)
 
     1
   }
@@ -46,7 +51,7 @@ object NodeLocalCacheTest extends TestHelpers {
   val testTask = Task[Input, Int]("nodelocalcachetest", 1) {
     input => implicit computationEnvironment =>
       synchronized {
-        sideEffect += "execution of task"
+        sideEffect += s"execution of task ${input.i}"
       }
       tasks.queue.NodeLocalCache
         .cacheSync("key" + input.i % 2, cachedFunction((input.i % 2).toString))
@@ -56,7 +61,7 @@ object NodeLocalCacheTest extends TestHelpers {
   }
 
   def run = {
-    withTaskSystem(testConfig) { implicit ts =>
+    withTaskSystem(configWithoutEagerCrashDetection) { implicit ts =>
       val f1 = tasks.queue.NodeLocalCache
         .cacheSync("key0", cachedFunction(0.toString))
         .use { _ =>
@@ -84,14 +89,19 @@ class NodeLocalCacheTestSuite extends FunSuite with Matchers {
   test(
     "node local cache should not execute the same key twice, unless dropped"
   ) {
-    NodeLocalCacheTest.run.unsafeRunSync().toOption.get should equal(4)
-    NodeLocalCacheTest.sideEffect.count(_ == "execution of task") shouldBe 4
-    NodeLocalCacheTest.sideEffect.count(
-      _ == "execution of nodelocalcache factory 1"
-    ) shouldBe 2
-    NodeLocalCacheTest.sideEffect.count(
-      _ == "execution of nodelocalcache factory 0"
-    ) shouldBe 2
+    val result = NodeLocalCacheTest.run.unsafeRunSync()
+    withClue(NodeLocalCacheTest.sideEffect.mkString("\n", "\n", "\n")) {
+      result.toOption.get should equal(4)
+      NodeLocalCacheTest.sideEffect.count(
+        _.startsWith("execution of task")
+      ) shouldBe 4
+      NodeLocalCacheTest.sideEffect.count(
+        _ == "execution of nodelocalcache factory 1"
+      ) shouldBe 2
+      NodeLocalCacheTest.sideEffect.count(
+        _ == "execution of nodelocalcache factory 0"
+      ) shouldBe 2
+    }
   }
 
 }
