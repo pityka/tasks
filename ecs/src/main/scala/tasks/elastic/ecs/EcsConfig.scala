@@ -5,9 +5,7 @@ import software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain
 final case class EcsConfig(
     region: Option[String],
     cluster: String,
-    capacityProvider: String,
-    capacityProviderBase: Int,
-    capacityProviderWeight: Int,
+    capacityProviders: List[String],
     containerName: String,
     taskDefinition: String,
     taskDefinitionsByImage: Map[String, String],
@@ -25,9 +23,18 @@ final case class EcsConfig(
   )
 
   require(
-    capacityProvider.nonEmpty,
-    s"capacityProvider must name a capacity provider already associated " +
-      s"with $cluster"
+    capacityProviders.forall(_.nonEmpty),
+    s"capacityProviders entries must each name a capacity provider already " +
+      s"associated with $cluster. Leave the list empty to place workers on " +
+      s"the container instances registered to $cluster without a capacity " +
+      s"provider"
+  )
+
+  require(
+    capacityProviders.distinct.size == capacityProviders.size,
+    "capacityProviders must not repeat an entry: entries are tried one " +
+      "after the other, so a repeat is a second RunTask against a provider " +
+      s"which already refused the task ([${capacityProviders.mkString(",")}])"
   )
 
   require(
@@ -49,8 +56,8 @@ final case class EcsConfig(
 
   def withRegion(value: String): EcsConfig = copy(region = Some(value))
 
-  def withCapacityProviderStrategy(base: Int, weight: Int): EcsConfig =
-    copy(capacityProviderBase = base, capacityProviderWeight = weight)
+  def withCapacityProviders(entries: String*): EcsConfig =
+    copy(capacityProviders = capacityProviders ++ entries)
 
   def withTaskDefinitionForImage(image: String, value: String): EcsConfig =
     copy(taskDefinitionsByImage = taskDefinitionsByImage + (image -> value))
@@ -89,7 +96,8 @@ final case class EcsConfig(
 
   override def toString: String =
     s"EcsConfig(region=${region.getOrElse("<default-chain>")}, " +
-      s"cluster=$cluster, capacityProvider=$capacityProvider, " +
+      s"cluster=$cluster, " +
+      s"capacityProviders=[${capacityProviders.mkString(",")}], " +
       s"taskDefinition=$taskDefinition, container=$containerName, " +
       s"imagesMapped=${taskDefinitionsByImage.size})"
 }
@@ -98,16 +106,29 @@ object EcsConfig {
 
   def apply(
       cluster: String,
+      containerName: String,
+      taskDefinition: String
+  ): EcsConfig =
+    apply(cluster, Nil, containerName, taskDefinition)
+
+  def apply(
+      cluster: String,
       capacityProvider: String,
+      containerName: String,
+      taskDefinition: String
+  ): EcsConfig =
+    apply(cluster, List(capacityProvider), containerName, taskDefinition)
+
+  def apply(
+      cluster: String,
+      capacityProviders: List[String],
       containerName: String,
       taskDefinition: String
   ): EcsConfig =
     EcsConfig(
       region = None,
       cluster = cluster,
-      capacityProvider = capacityProvider,
-      capacityProviderBase = 0,
-      capacityProviderWeight = 1,
+      capacityProviders = capacityProviders,
       containerName = containerName,
       taskDefinition = taskDefinition,
       taskDefinitionsByImage = Map.empty,

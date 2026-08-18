@@ -16,13 +16,11 @@ class EcsConfigTest extends AnyFunSuite with Matchers {
 
   test("a non-empty cluster and capacityProvider are accepted") {
     minimal.cluster shouldBe "workers"
-    minimal.capacityProvider shouldBe "workers-managed-instances"
+    minimal.capacityProviders shouldBe List("workers-managed-instances")
   }
 
   test("the short constructor fills in the defaults") {
     minimal.region shouldBe None
-    minimal.capacityProviderBase shouldBe 0
-    minimal.capacityProviderWeight shouldBe 1
     minimal.minimumCpu shouldBe 1
     minimal.minimumMemory shouldBe 512
     minimal.startedBy shouldBe "tasks-elastic"
@@ -35,9 +33,44 @@ class EcsConfigTest extends AnyFunSuite with Matchers {
     an[IllegalArgumentException] should be thrownBy minimal.copy(cluster = "")
   }
 
-  test("an empty capacityProvider is rejected") {
+  test("capacityProviders keeps the configured order") {
+    EcsConfig(
+      cluster = "workers",
+      capacityProviders = List("spot", "on-demand", "reserved"),
+      containerName = "worker",
+      taskDefinition = "default-td"
+    ).capacityProviders shouldBe List("spot", "on-demand", "reserved")
+  }
+
+  test("no capacityProvider is accepted: workers go to container instances") {
+    EcsConfig(
+      cluster = "workers",
+      containerName = "worker",
+      taskDefinition = "default-td"
+    ).capacityProviders shouldBe empty
+  }
+
+  test("an empty capacityProviders entry is rejected") {
     an[IllegalArgumentException] should be thrownBy minimal.copy(
-      capacityProvider = ""
+      capacityProviders = List("spot", "")
+    )
+  }
+
+  test("a repeated capacityProviders entry is rejected") {
+    an[IllegalArgumentException] should be thrownBy minimal.copy(
+      capacityProviders = List("spot", "on-demand", "spot")
+    )
+  }
+
+  test("withCapacityProviders appends to the end of the order") {
+    minimal
+      .withCapacityProviders("spot")
+      .withCapacityProviders("on-demand", "reserved")
+      .capacityProviders shouldBe List(
+      "workers-managed-instances",
+      "spot",
+      "on-demand",
+      "reserved"
     )
   }
 
@@ -135,9 +168,37 @@ class EcsConfigTest extends AnyFunSuite with Matchers {
       .withEnvironment("SECRET" -> "hunter2")
       .toString should not include ("hunter2")
   }
+
+  test("toString lists every capacity provider in order") {
+    minimal
+      .withCapacityProviders("spot")
+      .toString should include("[workers-managed-instances,spot]")
+  }
 }
 
 class EcsPlacementTest extends AnyFunSuite with Matchers {
+
+  test("targetOrder tries external instances before any capacity provider") {
+    EcsCreateNode.targetOrder(List("spot", "on-demand")) shouldBe List(
+      PlacementTarget.External,
+      PlacementTarget.CapacityProvider("spot"),
+      PlacementTarget.CapacityProvider("on-demand")
+    )
+  }
+
+  test("targetOrder keeps the capacity providers in the configured order") {
+    EcsCreateNode.targetOrder(List("c", "a", "b")).collect {
+      case PlacementTarget.CapacityProvider(name) => name
+    } shouldBe List("c", "a", "b")
+  }
+
+  test("targetOrder without a capacity provider is external instances only") {
+    EcsCreateNode.targetOrder(Nil) shouldBe List(PlacementTarget.External)
+  }
+
+  test("a capacity provider target renders its name") {
+    PlacementTarget.CapacityProvider("spot").toString should include("spot")
+  }
 
   test("one vCPU is 1024 ECS CPU units") {
     EcsOperations.vcpuToCpuUnits(1) shouldBe 1024

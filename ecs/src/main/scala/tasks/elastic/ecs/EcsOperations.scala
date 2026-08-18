@@ -1,7 +1,10 @@
 package tasks.elastic.ecs
 
 import cats.effect.IO
+import cats.effect.Ref
 import scala.jdk.CollectionConverters._
+import software.amazon.awssdk.services.autoscaling.AutoScalingClient
+import software.amazon.awssdk.services.ec2.Ec2Client
 import software.amazon.awssdk.services.ecs.EcsClient
 import software.amazon.awssdk.services.ecs.model._
 
@@ -9,7 +12,9 @@ sealed trait PlacementTarget
 
 object PlacementTarget {
   case object External extends PlacementTarget
-  case object CapacityProvider extends PlacementTarget
+  final case class CapacityProvider(name: String) extends PlacementTarget {
+    override def toString: String = s"capacity-provider:$name"
+  }
 }
 
 final case class ContainerInstanceCapacity(
@@ -35,15 +40,15 @@ final case class WorkerTaskSpec(
     cpuUnits: Int,
     memoryMib: Int,
     gpus: Int,
-    environment: Map[String, String],
-    clientToken: String
+    environment: Map[String, String]
 )
 
 trait EcsOperations {
 
   def runTask(
       spec: WorkerTaskSpec,
-      target: PlacementTarget
+      target: PlacementTarget,
+      clientToken: String
   ): IO[Either[List[TaskPlacementFailure], String]]
 
   def stopTask(taskArn: String, reason: String): IO[Unit]
@@ -51,6 +56,10 @@ trait EcsOperations {
   def placeableCapacity(
       target: PlacementTarget
   ): IO[List[ContainerInstanceCapacity]]
+
+  def capacityProviderInfo(
+      capacityProvider: String
+  ): IO[CapacityProviderInfo]
 }
 
 object EcsOperations {
@@ -64,8 +73,14 @@ object EcsOperations {
 
   def cpuUnitsToVcpu(units: Int): Int = units / CpuUnitsPerVcpu
 
-  def fromClient(ecs: EcsClient, ecsConfig: EcsConfig): EcsOperations =
-    new FromSdkClient(ecs, ecsConfig)
+  def fromClient(
+      ecs: EcsClient,
+      autoscaling: AutoScalingClient,
+      ec2: Ec2Client,
+      instanceTypeCache: Ref[IO, Map[String, InstanceTypeCapacity]],
+      ecsConfig: EcsConfig
+  ): EcsOperations =
+    new FromSdkClient(ecs, autoscaling, ec2, instanceTypeCache, ecsConfig)
 
   private[ecs] def resourceInt(resources: List[Resource], name: String): Int =
     resources
@@ -80,16 +95,34 @@ object EcsOperations {
       .map(r => r.stringSetValue.asScala.size)
       .getOrElse(0)
 
-  private final class FromSdkClient(ecs: EcsClient, ecsConfig: EcsConfig)
-      extends EcsOperations {
+  private final class FromSdkClient(
+      ecs: EcsClient,
+      autoscaling: AutoScalingClient,
+      ec2: Ec2Client,
+      instanceTypeCache: Ref[IO, Map[String, InstanceTypeCapacity]],
+      ecsConfig: EcsConfig
+  ) extends EcsOperations {
 
     private val cluster = ecsConfig.cluster
 
-    private val strategy: List[CapacityProviderStrategyItem] = List(
+    def capacityProviderInfo(
+        capacityProvider: String
+    ): IO[CapacityProviderInfo] =
+      EcsCapacityDiscovery.describeCapacityProviderInfo(
+        ecs = ecs,
+        autoscaling = autoscaling,
+        ec2 = ec2,
+        cache = instanceTypeCache,
+        capacityProvider = capacityProvider
+      )
+
+    private def strategy(
+        capacityProvider: String
+    ): List[CapacityProviderStrategyItem] = List(
       CapacityProviderStrategyItem.builder
-        .capacityProvider(ecsConfig.capacityProvider)
-        .base(ecsConfig.capacityProviderBase)
-        .weight(ecsConfig.capacityProviderWeight)
+        .capacityProvider(capacityProvider)
+        .base(0)
+        .weight(1)
         .build
     )
 
@@ -100,7 +133,8 @@ object EcsOperations {
 
     def runTask(
         spec: WorkerTaskSpec,
-        target: PlacementTarget
+        target: PlacementTarget,
+        clientToken: String
     ): IO[Either[List[TaskPlacementFailure], String]] = {
       val gpuRequirement =
         if (spec.gpus > 0)
@@ -133,7 +167,7 @@ object EcsOperations {
         .taskDefinition(spec.taskDefinition)
         .count(1)
         .startedBy(ecsConfig.startedBy)
-        .clientToken(spec.clientToken)
+        .clientToken(clientToken)
         .overrides(
           TaskOverride.builder.containerOverrides(containerOverride).build
         )
@@ -152,8 +186,10 @@ object EcsOperations {
                 .expression(EcsOperations.externalInstanceFilter)
                 .build
             )
-        case PlacementTarget.CapacityProvider =>
-          requestBuilderBase.capacityProviderStrategy(strategy.asJava)
+        case PlacementTarget.CapacityProvider(capacityProvider) =>
+          requestBuilderBase.capacityProviderStrategy(
+            strategy(capacityProvider).asJava
+          )
       }
 
       val request =
@@ -220,7 +256,7 @@ object EcsOperations {
           val filtered = target match {
             case PlacementTarget.External =>
               unfiltered.filter(EcsOperations.externalInstanceFilter)
-            case PlacementTarget.CapacityProvider =>
+            case PlacementTarget.CapacityProvider(_) =>
               unfiltered
           }
           val request =
@@ -258,9 +294,9 @@ object EcsOperations {
                   .filter { instance =>
                     target match {
                       case PlacementTarget.External => true
-                      case PlacementTarget.CapacityProvider =>
+                      case PlacementTarget.CapacityProvider(capacityProvider) =>
                         Option(instance.capacityProviderName)
-                          .contains(ecsConfig.capacityProvider)
+                          .contains(capacityProvider)
                     }
                   }
                   .map { instance =>

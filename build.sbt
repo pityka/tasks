@@ -200,6 +200,8 @@ lazy val ecs = project
     name := "tasks-ecs",
     libraryDependencies ++= Seq(
       "software.amazon.awssdk" % "ecs" % "2.23.13", // scala-steward:off
+      "software.amazon.awssdk" % "autoscaling" % "2.23.13", // scala-steward:off
+      "software.amazon.awssdk" % "ec2" % "2.23.13", // scala-steward:off
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "org.scalatest" %% "scalatest" % "3.2.19" % "test"
     )

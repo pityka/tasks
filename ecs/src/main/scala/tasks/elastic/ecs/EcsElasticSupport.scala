@@ -2,7 +2,11 @@ package tasks.elastic.ecs
 
 import cats.effect.IO
 import cats.effect.ExitCode
+import cats.effect.Ref
 import cats.effect.kernel.Deferred
+import cats.syntax.parallel._
+import software.amazon.awssdk.services.autoscaling.AutoScalingClient
+import software.amazon.awssdk.services.ec2.Ec2Client
 import software.amazon.awssdk.services.ecs.EcsClient
 import software.amazon.awssdk.regions.Region
 import com.github.plokhotnyuk.jsoniter_scala.core._
@@ -33,8 +37,10 @@ class EcsShutdown(ops: EcsOperations, stopReason: String)
 
 object EcsCreateNode {
 
-  val targetOrder: List[PlacementTarget] =
-    List(PlacementTarget.External, PlacementTarget.CapacityProvider)
+  def targetOrder(capacityProviders: List[String]): List[PlacementTarget] =
+    PlacementTarget.External :: capacityProviders.map(
+      PlacementTarget.CapacityProvider(_)
+    )
 
   def selectResources(
       requestSize: ResourceRequest,
@@ -58,6 +64,27 @@ object EcsCreateNode {
             s",memMiB=${c.remainingMemoryMib},gpu=${c.remainingGpus}]"
         }
         .mkString(", ")
+
+  private[ecs] def canHostRequest(
+      info: CapacityProviderInfo,
+      request: ResourceAvailable
+  ): Boolean =
+    info.instanceTypes.isEmpty ||
+      info.instanceTypes.exists(instanceType =>
+        instanceType.vcpus >= request.cpu &&
+          instanceType.memoryMib >= request.memory &&
+          instanceType.gpus >= request.gpu.size
+      )
+
+  private[ecs] def hasRoomFor(
+      capacity: List[ContainerInstanceCapacity],
+      request: ResourceAvailable
+  ): Boolean =
+    capacity.exists(instance =>
+      EcsOperations.cpuUnitsToVcpu(instance.remainingCpuUnits) >= request.cpu &&
+        instance.remainingMemoryMib >= request.memory &&
+        instance.remainingGpus >= request.gpu.size
+    )
 }
 
 class EcsCreateNode(
@@ -117,12 +144,96 @@ class EcsCreateNode(
       cpuUnits = EcsOperations.vcpuToCpuUnits(resources.cpu),
       memoryMib = resources.memory,
       gpus = resources.gpu.size,
-      environment = environment,
-      clientToken = java.util.UUID.randomUUID.toString
+      environment = environment
     )
 
-    attempt(spec, EcsCreateNode.targetOrder, resources)
+    screen(
+      EcsCreateNode.targetOrder(ecsConfig.capacityProviders),
+      resources
+    ).attempt.flatMap {
+      case Left(e) =>
+        val msg =
+          "ECS could not discover the capacity of " +
+            s"[${ecsConfig.capacityProviders.mkString(",")}] on cluster " +
+            s"${ecsConfig.cluster}, so no worker task was placed: " +
+            s"${e.getClass.getSimpleName}: " +
+            Option(e.getMessage).getOrElse("<no message>") +
+            ". Discovery needs ecs:DescribeCapacityProviders, " +
+            "autoscaling:DescribeAutoScalingGroups, ec2:DescribeInstanceTypes " +
+            "and ec2:DescribeLaunchTemplateVersions. This request will be retried."
+        IO(scribe.error(msg, e)).as(
+          Left(msg): Either[String, (PendingJobId, ResourceAvailable)]
+        )
+      case Right((attemptable, skipped)) =>
+        attempt(spec, attemptable, resources).map {
+          case Left(msg) if skipped.nonEmpty =>
+            Left(s"$msg. Skipped: ${skipped.mkString("; ")}")
+          case other => other
+        }
+    }
   }
+
+  private def screen(
+      targets: List[PlacementTarget],
+      request: ResourceAvailable
+  ): IO[(List[PlacementTarget], List[String])] =
+    targets
+      .parTraverse {
+        case PlacementTarget.External =>
+          IO.pure(
+            (
+              Some(PlacementTarget.External: PlacementTarget),
+              Option.empty[String]
+            )
+          )
+        case target @ PlacementTarget.CapacityProvider(_) =>
+          skipReason(target, request).map {
+            case Some(reason) => (None, Some(reason))
+            case None => (Some(target: PlacementTarget), Option.empty[String])
+          }
+      }
+      .flatTap { screened =>
+        val skipped = screened.flatMap(_._2)
+        if (skipped.isEmpty) IO.unit
+        else
+          IO(
+            scribe.info(
+              s"ECS skipping ${skipped.size} capacity provider(s) for request " +
+                s"vcpu=${request.cpu} memMiB=${request.memory} " +
+                s"gpu=${request.gpu.size}: ${skipped.mkString("; ")}"
+            )
+          )
+      }
+      .map(screened => (screened.flatMap(_._1), screened.flatMap(_._2)))
+
+  private def skipReason(
+      target: PlacementTarget.CapacityProvider,
+      request: ResourceAvailable
+  ): IO[Option[String]] =
+    ops
+      .capacityProviderInfo(target.name)
+      .flatMap[Option[String]] { info =>
+        if (!EcsCreateNode.canHostRequest(info, request))
+          IO.pure(
+            Some(
+              s"${target.name} scales instance types " +
+                s"${EcsCapacityDiscovery.renderInstanceTypes(info.instanceTypes)} " +
+                s"and none of them can host vcpu=${request.cpu} " +
+                s"memMiB=${request.memory} gpu=${request.gpu.size}"
+            )
+          )
+        else if (info.canScaleOut) IO.pure(None)
+        else
+          ops.placeableCapacity(target).map { capacity =>
+            if (EcsCreateNode.hasRoomFor(capacity, request)) None
+            else
+              Some(
+                s"${target.name} is at its auto scaling group maximum and " +
+                  s"none of its container instances has room " +
+                  s"(${EcsCreateNode.renderCapacity(capacity)})"
+              )
+          }
+      }
 
   // External (on-prem/ECS-Anywhere, a fixed pool that doesn't autoscale) is
   // tried first; RunTask against it fails fast when nothing there fits, no
@@ -144,8 +255,8 @@ class EcsCreateNode(
           ]
         )
       case target :: rest =>
-        ops
-          .runTask(spec, target)
+        IO(java.util.UUID.randomUUID.toString)
+          .flatMap(clientToken => ops.runTask(spec, target, clientToken))
           .flatMap {
             case Right(taskArn) =>
               IO(scribe.info(s"ECS worker task started: $taskArn")).as(
@@ -157,7 +268,7 @@ class EcsCreateNode(
             case Left(failures) if rest.nonEmpty =>
               IO(
                 scribe.info(
-                  s"ECS placement via $target failed (${failures.map(_.render).mkString("; ")}); trying $rest"
+                  s"ECS placement via $target failed (${failures.map(_.render).mkString("; ")}); trying ${rest.mkString(", ")}"
                 )
               ) *> attempt(spec, rest, resources)
             case Left(failures) => classify(target, failures, resources)
@@ -294,25 +405,40 @@ object EcsElasticSupport {
       ecsConfig: EcsConfig
   ): cats.effect.Resource[IO, ElasticSupport] = {
     cats.effect.Resource.eval {
-      IO {
-        val region = EcsConfig.resolveRegion(ecsConfig.region)
-        val client = EcsClient.builder.region(Region.of(region)).build
-        val ops = EcsOperations.fromClient(client, ecsConfig)
-        val shutdown = new EcsShutdown(ops, ecsConfig.stopReason)
-
-        scribe.info(s"ECS elastic backend: $ecsConfig")
-
-        new ElasticSupport(
-          hostConfig = Some((tasksConfig: TasksConfig) =>
-            new DefaultHostConfigurationFromConfig()(tasksConfig)
-          ),
-          shutdownFromNodeRegistry = shutdown,
-          shutdownFromWorker = shutdown,
-          createNodeFactory = new EcsCreateNodeFactory(ops, ecsConfig, region),
-          getNodeName = EcsGetNodeName,
-          needsPackageServer = false
+      for {
+        instanceTypeCache <- Ref.of[IO, Map[String, InstanceTypeCapacity]](
+          Map.empty
         )
-      }
+        support <- IO {
+          val region = EcsConfig.resolveRegion(ecsConfig.region)
+          val client = EcsClient.builder.region(Region.of(region)).build
+          val autoscaling =
+            AutoScalingClient.builder.region(Region.of(region)).build
+          val ec2 = Ec2Client.builder.region(Region.of(region)).build
+          val ops = EcsOperations.fromClient(
+            client,
+            autoscaling,
+            ec2,
+            instanceTypeCache,
+            ecsConfig
+          )
+          val shutdown = new EcsShutdown(ops, ecsConfig.stopReason)
+
+          scribe.info(s"ECS elastic backend: $ecsConfig")
+
+          new ElasticSupport(
+            hostConfig = Some((tasksConfig: TasksConfig) =>
+              new DefaultHostConfigurationFromConfig()(tasksConfig)
+            ),
+            shutdownFromNodeRegistry = shutdown,
+            shutdownFromWorker = shutdown,
+            createNodeFactory =
+              new EcsCreateNodeFactory(ops, ecsConfig, region),
+            getNodeName = EcsGetNodeName,
+            needsPackageServer = false
+          )
+        }
+      } yield support
     }
   }
 }
