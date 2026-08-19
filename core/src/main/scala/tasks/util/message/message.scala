@@ -182,6 +182,7 @@ private[tasks] object MessageData {
       )
   }
   case class InitFailed(nodename: RunningJobId) extends MessageData
+  case class LauncherStopped(launcher: LauncherName) extends MessageData
   case class TaskFailedMessageToQueue(
       sch: ScheduleTask,
       cause: Throwable

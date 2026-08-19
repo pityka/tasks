@@ -52,6 +52,8 @@ private[tasks] trait Queue {
 
   def initFailed(nodeName: RunningJobId): IO[Unit]
 
+  def launcherStopped(launcher: LauncherName): IO[Unit]
+
   def askForWork(
       launcherAsking: LauncherName,
       availableResources: VersionedResourceAvailable,
@@ -84,6 +86,9 @@ private[tasks] final class QueueFromQueueImpl(
 
   def initFailed(nodeName: RunningJobId): IO[Unit] =
     queueImpl.initFailed(nodeName)
+
+  def launcherStopped(launcher: LauncherName): IO[Unit] =
+    queueImpl.handleLauncherStopped(launcher, false)
 
   def knownLaunchers = queueImpl.knownLaunchers.map(_.keySet)
 
@@ -141,6 +146,15 @@ private[tasks] class QueueWithActor(
     messenger.submit(
       Message(
         MessageData.InitFailed(nodeName),
+        from = Address.unknown,
+        to = queueActor.address0
+      )
+    )
+
+  def launcherStopped(launcher: LauncherName): IO[Unit] =
+    messenger.submit(
+      Message(
+        MessageData.LauncherStopped(launcher),
         from = Address.unknown,
         to = queueActor.address0
       )

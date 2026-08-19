@@ -176,9 +176,15 @@ object QueueImpl {
           )
 
         case TaskDone(sch, _, _, _) =>
-          copy(scheduledTasks = scheduledTasks - project(sch))
+          copy(
+            scheduledTasks = scheduledTasks - project(sch),
+            queuedTasks = queuedTasks - project(sch)
+          )
         case TaskFailed(sch) =>
-          copy(scheduledTasks = scheduledTasks - project(sch))
+          copy(
+            scheduledTasks = scheduledTasks - project(sch),
+            queuedTasks = queuedTasks - project(sch)
+          )
         case TaskLauncherStoppedFor(sch) =>
           copy(scheduledTasks = scheduledTasks - project(sch))
         case LauncherCrashed(launcher) =>
@@ -212,6 +218,18 @@ object QueueImpl {
           copy(completedResults = completedResults - proxy)
 
       }
+    }
+
+    def proxiesOf(sch: ScheduleTask): List[Proxy] = {
+      val scheduled = scheduledTasks
+        .get(project(sch))
+        .toList
+        .flatMap { case (_, _, proxies, _) => proxies }
+      val queued = queuedTasks
+        .get(project(sch))
+        .toList
+        .flatMap { case (_, proxies) => proxies }
+      (scheduled ::: queued).distinct
     }
 
     def queuedButSentByADifferentProxy(sch: ScheduleTask, proxy: Proxy) =
@@ -897,9 +915,14 @@ private[tasks] class QueueImpl(
       newState -> logIO *> io
     }
 
-  private def handleLauncherStopped(
+  private[tasks] def handleLauncherStopped(
       launcher: LauncherName
-  ) = ref.flatModify { state =>
+  ): IO[Unit] = handleLauncherStopped(launcher, true)
+
+  private[tasks] def handleLauncherStopped(
+      launcher: LauncherName,
+      requestReplacementNodes: Boolean
+  ): IO[Unit] = ref.flatModify { state =>
     import tasks.util.eq._
     val msgs =
       state.scheduledTasks.toSeq.filter(_._2._1 === launcher).map(_._1)
@@ -960,7 +983,7 @@ private[tasks] class QueueImpl(
       )
     )
     (updated2 -> (logIO *> recordMetrics *> shutdown))
-  } *> handleQueueStatIO
+  } *> (if (requestReplacementNodes) handleQueueStatIO else IO.unit)
 
   def askForWork(
       launcher: LauncherName,
@@ -1094,11 +1117,11 @@ private[tasks] class QueueImpl(
       scribe.debug(s"TaskDone", sch, resultWithMetadata)
       val recordMetric = metrics.onTaskDone(sch.description, elapsedTime.s)
       if (state.queuedTasks.contains(project(sch))) {
-        scribe.error(
-          s"ShouldNotBeQueued.",
+        scribe.warn(
+          s"CompletedWhileQueued",
           scribe.data(
             "explain",
-            "This completed task is in the list of queued tasks. It was removed from the list of queued tasks when it was scheduled. Thus it was submitted twice to the queue."
+            "This completed task was back in the queue, most likely because its launcher was reported stopped while the task was finishing. The result is delivered to the waiting proxies and the queued entry is dropped, so the task is not executed a second time."
           ),
           state.queuedTasks(project(sch))._1,
           scribe.data(
@@ -1108,10 +1131,7 @@ private[tasks] class QueueImpl(
           )
         )
       }
-      val proxies = state.scheduledTasks
-        .get(project(sch))
-        .toList
-        .flatMap { case (_, _, proxies, _) => proxies.toList }
+      val proxies = state.proxiesOf(sch)
 
       val done = state.update(
         TaskDone(sch, resultWithMetadata, elapsedTime, resourceAllocated)
@@ -1150,44 +1170,46 @@ private[tasks] class QueueImpl(
   def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit] = {
     val taskFailedIO = ref.flatModify { state =>
       val recordMetric = metrics.onTaskFailed(sch.description)
-      val (updated, sideEffects) = state.scheduledTasks
-        .get(project(sch))
-        .foldLeft((state, List.empty[IO[Unit]])) {
-          case ((state, sideEffectAcc), (_, _, proxies, _)) =>
-            val removed = state.update(TaskFailed(sch))
-            if (config.resubmitFailedTask) {
-              scribe.error(
-                cause,
-                "TaskExecutionFailed+Resubmit",
-                sch,
-                scribe.data(
-                  "explain",
-                  "configuration tasks.resubmitFailedTask=false can prevent this"
-                ),
-                scribe.data("queue-size", state.queuedTasks.keys.size)
-              )
+      val proxies = state.proxiesOf(sch)
+      val known = state.scheduledTasks.contains(project(sch)) ||
+        state.queuedTasks.contains(project(sch))
+      val (updated, sideEffects) =
+        if (!known) (state, List.empty[IO[Unit]])
+        else {
+          val removed = state.update(TaskFailed(sch))
+          if (config.resubmitFailedTask) {
+            scribe.error(
+              cause,
+              "TaskExecutionFailed+Resubmit",
+              sch,
+              scribe.data(
+                "explain",
+                "configuration tasks.resubmitFailedTask=false can prevent this"
+              ),
+              scribe.data("queue-size", state.queuedTasks.keys.size)
+            )
 
-              (
-                removed.update(Enqueued(sch, proxies)),
-                sideEffectAcc :+ metrics.onEnqueued(sch.description)
+            (
+              removed.update(Enqueued(sch, proxies)),
+              List(metrics.onEnqueued(sch.description))
+            )
+          } else {
+            val stored = proxies.foldLeft(removed) { case (acc, pr) =>
+              acc.update(
+                ResultStoredForProxy(pr.address, ProxyResultFailure(cause))
               )
-            } else {
-              val stored = proxies.foldLeft(removed) { case (acc, pr) =>
-                acc.update(
-                  ResultStoredForProxy(pr.address, ProxyResultFailure(cause))
-                )
-              }
-              scribe.error(
-                cause,
-                "TaskExecutionFailed",
-                sch,
-                scribe.data(
-                  "explain",
-                  "configuration tasks.resubmitFailedTask=true can resubmit automatically"
-                )
-              )
-              (stored, sideEffectAcc)
             }
+            scribe.error(
+              cause,
+              "TaskExecutionFailed",
+              sch,
+              scribe.data(
+                "explain",
+                "configuration tasks.resubmitFailedTask=true can resubmit automatically"
+              )
+            )
+            (stored, List.empty[IO[Unit]])
+          }
         }
       updated -> (recordMetric *> IO.parSequenceN(1)(sideEffects).void)
     }

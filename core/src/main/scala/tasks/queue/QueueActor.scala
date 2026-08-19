@@ -106,6 +106,9 @@ private[tasks] final class QueueActorBehavior(
     case Message(MessageData.InitFailed(n), _, _) =>
       impl.initFailed(n)
 
+    case Message(MessageData.LauncherStopped(launcher), _, _) =>
+      impl.handleLauncherStopped(launcher)
+
     case Message(
           MessageData.AskForWork(availableResource, launcher, node),
           from,

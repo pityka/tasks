@@ -157,9 +157,28 @@ private[tasks] object Launcher {
           scribe.debug(s"Canceled fibers ", address)
         )
 
+      val reportStopped =
+        queue.launcherStopped(address).attempt.flatMap {
+          case Left(e) =>
+            IO(
+              scribe.error(
+                e,
+                "Failed to report the stopped launcher to the queue. It will be removed by the failure detector instead.",
+                address
+              )
+            )
+          case Right(_) =>
+            IO(
+              scribe.debug(
+                s"Reported this launcher as stopped to the queue.",
+                address
+              )
+            )
+        }
+
       Resource
         .make(streamFiber)(fiber =>
-          releaseIO *> fiber.cancel *> IO(
+          releaseIO *> reportStopped *> fiber.cancel *> IO(
             scribe.debug(s"Streams of actor canceled.", address)
           )
         )
