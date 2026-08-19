@@ -69,7 +69,8 @@ case class TaskSystemComponents private[tasks] (
     private[tasks] val priority: Priority,
     private[tasks] val labels: Labels,
     private[tasks] val lineage: TaskLineage,
-    private[tasks] val messenger: Messenger
+    private[tasks] val messenger: Messenger,
+    private[tasks] val sessionId: String
 ) {
 
   def withChildPrefix(name: String) =
@@ -126,6 +127,11 @@ object TaskSystemComponents {
               .getHostName
 
           val rootHistory = NoHistory
+
+          val sessionId = hostConfig match {
+            case t: RemotingHostConfiguration => t.bindPrefix
+            case _                            => tasks.util.SessionId.random
+          }
 
           val s3Client = s3ClientResource.map { s3Client =>
             if (config.storageURI.getScheme == "s3" || config.s3RemoteEnabled) {
@@ -741,6 +747,7 @@ object TaskSystemComponents {
             historyContext = rootHistory,
             priority = Priority(0),
             labels = Labels.empty,
+            sessionId = sessionId,
             lineage = TaskLineage.root,
             messenger = messenger
           )
@@ -759,11 +766,14 @@ object TaskSystemComponents {
           def makeLauncherName() =
             Resource.pure[IO, LauncherName](
               LauncherName(
-                hostConfig match {
-                  case t: RemotingHostConfiguration =>
-                    s"Launcher-${t.myAddressExternal.getOrElse(t.myAddressBind).toString}"
-                  case _ => s"Launcher"
-                }
+                tasks.util.SessionId.tag(
+                  sessionId,
+                  hostConfig match {
+                    case t: RemotingHostConfiguration =>
+                      s"Launcher-${t.myAddressExternal.getOrElse(t.myAddressBind).toString}"
+                    case _ => s"Launcher"
+                  }
+                )
               )
             )
 

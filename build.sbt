@@ -327,7 +327,8 @@ lazy val root = (project in file("."))
     s3,
     kubernetes,
     kubernetesTest,
-    example
+    example,
+    dynamodb
   )
 
 lazy val testables = (project in file("testables"))

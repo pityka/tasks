@@ -65,10 +65,14 @@ private[tasks] class ProxyTask[Input, Output](
     lineage: TaskLineage,
     noCache: Boolean,
     messenger: Messenger,
+    sessionId: String,
     config: tasks.util.config.TasksConfig
 ) extends tasks.util.Actor.ActorBehavior[Proxy](messenger) {
   val address: Address = Address(
-    s"ProxyTask-$taskId-${input.hashCode()}-${scala.util.Random.alphanumeric.take(22).mkString}"
+    tasks.util.SessionId.tag(
+      sessionId,
+      s"ProxyTask-$taskId-${input.hashCode()}-${scala.util.Random.alphanumeric.take(22).mkString}"
+    )
   ).withAddress(messenger.listeningAddress)
   def derive(): Proxy = Proxy(address)
 

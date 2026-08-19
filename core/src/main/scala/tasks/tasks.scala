@@ -165,6 +165,7 @@ final class TaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
         lineage = components.lineage,
         noCache = noCache,
         messenger = components.messenger,
+        sessionId = components.sessionId,
         config = components.tasksConfig
       )
       val r = tasks.util.Actor
@@ -234,6 +235,7 @@ final class ParentTaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
         lineage = components.lineage,
         noCache = noCache,
         messenger = components.messenger,
+        sessionId = components.sessionId,
         config = components.tasksConfig
       )
       val r = tasks.util.Actor

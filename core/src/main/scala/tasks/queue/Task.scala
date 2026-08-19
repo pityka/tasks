@@ -342,7 +342,8 @@ private[tasks] class Task(
           priority = priority,
           labels = labels,
           lineage = lineage,
-          messenger = messenger
+          messenger = messenger,
+          sessionId = launcherActor.sessionId
         ),
         launcher = launcherActor,
         taskActor = this,

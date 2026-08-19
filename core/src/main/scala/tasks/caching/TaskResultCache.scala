@@ -166,7 +166,7 @@ private[tasks] class TaskResultCache(
     cacheMap
       .set(sch, result)(prefix)
       .void
-      .handleError { case e =>
+      .handleErrorWith { case e =>
         IO {
           scribe.error(
             e,

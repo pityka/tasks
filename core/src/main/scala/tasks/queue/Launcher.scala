@@ -220,6 +220,9 @@ private[tasks] object Launcher {
       shutdownInitiated: Ref[IO, Boolean]
   ) { handle =>
 
+    val sessionId: String =
+      tasks.util.SessionId.of(address.name).getOrElse(address.name)
+
     def askForWork(
         ref: Ref[IO, State],
         messenger: Messenger,

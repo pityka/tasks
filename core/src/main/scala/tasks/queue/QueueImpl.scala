@@ -63,6 +63,7 @@ object QueueImpl {
   case class TaskFailed(sch: ScheduleTask) extends Event
   case class TaskLauncherStoppedFor(sch: ScheduleTask) extends Event
   case class LauncherCrashed(crashedLauncher: LauncherName) extends Event
+  case class SessionProxiesDropped(session: String) extends Event
   case class CacheHit(sch: ScheduleTask, result: UntypedResult) extends Event
   case class NodeEvent(ev: NodeRegistryState.Event) extends Event
   case class RendezvousJoined(
@@ -184,6 +185,22 @@ object QueueImpl {
           copy(
             knownLaunchers = knownLaunchers - launcher,
             counters = counters - launcher
+          )
+
+        case SessionProxiesDropped(session) =>
+          def alive(proxy: Proxy) =
+            !tasks.util.SessionId.belongsTo(proxy.address.value, session)
+          copy(
+            queuedTasks = queuedTasks.map { case (key, (sch, proxies)) =>
+              (key, (sch, proxies.filter(alive)))
+            },
+            scheduledTasks = scheduledTasks.map {
+              case (key, (launcher, allocated, proxies, sch)) =>
+                (key, (launcher, allocated, proxies.filter(alive), sch))
+            },
+            completedResults = completedResults.filterNot { case (address, _) =>
+              tasks.util.SessionId.belongsTo(address.value, session)
+            }
           )
         case CacheHit(sch, _) =>
           copy(scheduledTasks = scheduledTasks - project(sch))
@@ -899,11 +916,11 @@ private[tasks] class QueueImpl(
       }
 
     val node = state.knownLaunchers.get(launcher).flatten
+    val session = tasks.util.SessionId.of(launcher.name)
     val updated2 = {
       val st1 = updated.update(LauncherCrashed(launcher))
-      node.fold(st1)(n =>
-        st1.update(NodeEvent(NodeRegistryState.NodeIsDown(n)))
-      )
+      val st2 = session.fold(st1)(s => st1.update(SessionProxiesDropped(s)))
+      node.fold(st2)(n => st2.update(NodeEvent(NodeRegistryState.NodeIsDown(n))))
     }
 
     val shutdown = node
@@ -931,6 +948,8 @@ private[tasks] class QueueImpl(
               .toMap
               .toString,
             "had-node" -> node.isDefined,
+            "session" -> session.getOrElse("none"),
+            "dropped-completed-results" -> (updated.completedResults.size - updated2.completedResults.size),
             "queued-tasks-after" -> updated2.queuedTasks.size,
             "scheduled-tasks-after" -> updated2.scheduledTasks.size,
             "running-nodes-after" -> updated2.nodes.running.size,
