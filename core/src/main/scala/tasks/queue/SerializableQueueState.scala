@@ -31,7 +31,8 @@ private[tasks] case class SerializableQueueState(
     counters: List[(LauncherName, Long)],
     nodes: NodeRegistryState.State,
     rendezvous: List[(RendezvousGroupId, QueueImpl.RendezvousGroup)] = Nil,
-    completedResults: List[(Address, QueueImpl.ProxyResult)] = Nil
+    completedResults: List[(Address, QueueImpl.ProxyResult)] = Nil,
+    mainProcesses: List[String] = Nil
 ) {
   def toState = QueueImpl.State(
     queuedTasks = queuedTasks.toMap,
@@ -40,7 +41,8 @@ private[tasks] case class SerializableQueueState(
     counters = counters.toMap,
     nodes = nodes,
     rendezvous = rendezvous.toMap,
-    completedResults = completedResults.toMap
+    completedResults = completedResults.toMap,
+    mainProcesses = mainProcesses.toSet
   )
 }
 
@@ -52,7 +54,8 @@ private[tasks] object SerializableQueueState {
     counters = state.counters.toList,
     nodes = state.nodes,
     rendezvous = state.rendezvous.toList,
-    completedResults = state.completedResults.toList
+    completedResults = state.completedResults.toList,
+    mainProcesses = state.mainProcesses.toList.sorted
   )
 
   import com.github.plokhotnyuk.jsoniter_scala.core._

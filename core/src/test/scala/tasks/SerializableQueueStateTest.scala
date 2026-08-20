@@ -87,7 +87,8 @@ class SerializableQueueStateTest extends FunSuite with Matchers {
           readers = Set(0)
         )
     ),
-    completedResults = Map.empty
+    completedResults = Map.empty,
+    mainProcesses = Set.empty
   )
 
   test("a populated queue state survives an encode/decode round trip") {

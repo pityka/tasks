@@ -41,7 +41,8 @@ class QueueImplAskForWorkTestSuite extends FunSuite with Matchers {
           convertRunningToPending = None,
           unmanagedResource = ResourceAvailable.empty,
           meterProvider =
-            org.typelevel.otel4s.metrics.MeterProvider.noop[cats.effect.IO]
+            org.typelevel.otel4s.metrics.MeterProvider.noop[cats.effect.IO],
+          mainProcessSession = None
         )
       }
       .use { q =>

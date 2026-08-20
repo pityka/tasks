@@ -163,7 +163,8 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
         deadProxy.address -> result,
         liveProxy.address -> result,
         untaggedProxy.address -> result
-      )
+      ),
+      mainProcesses = Set.empty
     )
 
     val after = state.update(QueueImpl.SessionProxiesDropped(deadSession))
@@ -200,7 +201,8 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
       counters = Map(launcher -> 1L),
       nodes = NodeRegistryState.State.empty,
       rendezvous = Map.empty,
-      completedResults = Map(liveProxy.address -> result)
+      completedResults = Map(liveProxy.address -> result),
+      mainProcesses = Set.empty
     )
 
     def afterStop(reason: QueueImpl.LauncherStopReason) =
@@ -217,7 +219,8 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
               convertRunningToPending = None,
               unmanagedResource = ResourceAvailable.empty,
               meterProvider =
-                org.typelevel.otel4s.metrics.MeterProvider.noop[IO]
+                org.typelevel.otel4s.metrics.MeterProvider.noop[IO],
+              mainProcessSession = None
             )
           }
           .use(_.handleLauncherStopped(launcher, reason)) *> stateRef.get
@@ -281,7 +284,8 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
               convertRunningToPending = None,
               unmanagedResource = ResourceAvailable.empty,
               meterProvider =
-                org.typelevel.otel4s.metrics.MeterProvider.noop[IO]
+                org.typelevel.otel4s.metrics.MeterProvider.noop[IO],
+              mainProcessSession = None
             )
           }
           .use { q =>
@@ -321,7 +325,8 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
       counters = Map.empty,
       nodes = NodeRegistryState.State.empty,
       rendezvous = Map.empty,
-      completedResults = Map(liveProxy.address -> result)
+      completedResults = Map(liveProxy.address -> result),
+      mainProcesses = Set.empty
     )
 
     state.update(QueueImpl.SessionProxiesDropped(deadSession)) shouldBe state

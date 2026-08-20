@@ -64,6 +64,8 @@ object QueueImpl {
   case class TaskLauncherStoppedFor(sch: ScheduleTask) extends Event
   case class LauncherCrashed(crashedLauncher: LauncherName) extends Event
   case class SessionProxiesDropped(session: String) extends Event
+  case class MainProcessJoined(session: String) extends Event
+  case class MainProcessLeft(session: String) extends Event
 
   sealed trait LauncherStopReason {
     def proxiesCanNoLongerPoll: Boolean
@@ -126,7 +128,8 @@ object QueueImpl {
       counters: Map[LauncherName, Long],
       nodes: NodeRegistryState.State,
       rendezvous: Map[RendezvousGroupId, RendezvousGroup] = Map.empty,
-      completedResults: Map[Address, ProxyResult]
+      completedResults: Map[Address, ProxyResult],
+      mainProcesses: Set[String]
   ) {
 
     def update(e: Event): State = {
@@ -236,6 +239,12 @@ object QueueImpl {
         case ResultDeliveredToProxy(proxy) =>
           copy(completedResults = completedResults - proxy)
 
+        case MainProcessJoined(session) =>
+          copy(mainProcesses = mainProcesses + session)
+
+        case MainProcessLeft(session) =>
+          copy(mainProcesses = mainProcesses - session)
+
       }
     }
 
@@ -268,13 +277,14 @@ object QueueImpl {
   object State {
     def empty =
       State(
-        Map(),
-        Map(),
-        Map(),
-        Map(),
-        NodeRegistryState.State.empty,
-        Map(),
-        Map()
+        queuedTasks = Map(),
+        scheduledTasks = Map(),
+        knownLaunchers = Map(),
+        counters = Map(),
+        nodes = NodeRegistryState.State.empty,
+        rendezvous = Map(),
+        completedResults = Map(),
+        mainProcesses = Set()
       )
 
   }
@@ -289,6 +299,7 @@ object QueueImpl {
       convertRunningToPending: Option[tasks.elastic.ConvertRunningToPending],
       unmanagedResource: tasks.shared.ResourceAvailable,
       meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO],
+      mainProcessSession: Option[String],
       onFatalError: IO[Unit] = IO.unit
   )(implicit config: TasksConfig): Resource[IO, QueueImpl] = {
     QueueMetrics.make(meterProvider, transaction.get).flatMap { metrics =>
@@ -307,9 +318,10 @@ object QueueImpl {
               unmanagedResource = unmanagedResource,
               metrics = metrics,
               handleQueueStatMutex = handleQueueStatMutex,
+              mainProcessSession = mainProcessSession,
               onFatalError = onFatalError
             )
-            q.startCounterLoops.map(_ => q)
+            q.joinAsMainProcess *> q.startCounterLoops.map(_ => q)
           }
         )
       )(_.release)
@@ -325,6 +337,7 @@ object QueueImpl {
       convertRunningToPending: Option[tasks.elastic.ConvertRunningToPending],
       unmanagedResource: tasks.shared.ResourceAvailable,
       meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO],
+      mainProcessSession: Option[String],
       onFatalError: IO[Unit] = IO.unit
   )(implicit
       config: TasksConfig
@@ -347,9 +360,10 @@ object QueueImpl {
                   unmanagedResource = unmanagedResource,
                   metrics = metrics,
                   handleQueueStatMutex = handleQueueStatMutex,
+                  mainProcessSession = mainProcessSession,
                   onFatalError = onFatalError
                 )
-                q.startCounterLoops.map(_ => q)
+                q.joinAsMainProcess *> q.startCounterLoops.map(_ => q)
               }
             )
           )(_.release)
@@ -369,6 +383,7 @@ private[tasks] class QueueImpl(
     unmanagedResource: tasks.shared.ResourceAvailable,
     metrics: QueueMetrics,
     handleQueueStatMutex: Mutex[IO],
+    mainProcessSession: Option[String],
     onFatalError: IO[Unit] = IO.unit
 )(implicit config: TasksConfig) {
   import QueueImpl._
@@ -434,6 +449,65 @@ private[tasks] class QueueImpl(
     loop.start.flatMap { fiber => fiberList.update(list => fiber :: list) }
   }
 
+  private[tasks] def joinAsMainProcess: IO[Unit] = mainProcessSession match {
+    case None => IO.unit
+    case Some(session) =>
+      ref.flatModify { state =>
+        val joined = state.update(MainProcessJoined(session))
+        joined -> IO(
+          scribe.info(
+            "MainProcessJoined",
+            scribe.data(
+              Map(
+                "session" -> session,
+                "main-processes" -> joined.mainProcesses.toList.sorted.toString
+              )
+            )
+          )
+        )
+      }
+  }
+
+  private def leaveAsMainProcess: IO[Unit] = mainProcessSession match {
+    case None => IO.unit
+    case Some(session) =>
+      ref.flatModify { state =>
+        val left = state.update(MainProcessLeft(session))
+        if (
+          left.mainProcesses.isEmpty && config.clearQueueStateWhenLastMainProcessExits
+        )
+          State.empty -> IO(
+            scribe.info(
+              "QueueStateCleared",
+              scribe.data(
+                Map(
+                  "session" -> session,
+                  "explain" -> "This was the last main process using this queue state, so it was emptied. The next run starts from a clean slate.",
+                  "discarded-queued-tasks" -> left.queuedTasks.size,
+                  "discarded-scheduled-tasks" -> left.scheduledTasks.size,
+                  "discarded-known-launchers" -> left.knownLaunchers.size,
+                  "discarded-completed-results" -> left.completedResults.size,
+                  "discarded-cumulative-requested" -> left.nodes.cumulativeRequested
+                )
+              )
+            )
+          )
+        else
+          left -> IO(
+            scribe.info(
+              "MainProcessLeft",
+              scribe.data(
+                Map(
+                  "session" -> session,
+                  "explain" -> "Other main processes are still using this queue state, so it was left intact.",
+                  "main-processes" -> left.mainProcesses.toList.sorted.toString
+                )
+              )
+            )
+          )
+      }
+  }
+
   def release = {
     val stopFibers = fiberList.get.flatMap { fibers =>
       IO(
@@ -465,7 +539,7 @@ private[tasks] class QueueImpl(
         }
     }
 
-    IO.both(stopFibers, stopNodes).void
+    IO.both(stopFibers, stopNodes).void *> leaveAsMainProcess
   }
 
   private def handleCacheAnwser(

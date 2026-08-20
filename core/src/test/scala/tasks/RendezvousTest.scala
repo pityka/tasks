@@ -127,6 +127,7 @@ class RendezvousInvariantSuite extends FunSuite with Matchers {
               unmanagedResource = ResourceAvailable.empty,
               meterProvider =
                 org.typelevel.otel4s.metrics.MeterProvider.noop[IO],
+              mainProcessSession = None,
               onFatalError = fatalRef.update(_ + 1)
             )
         }

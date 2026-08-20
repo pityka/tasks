@@ -135,7 +135,8 @@ class LauncherStoppedOnShutdownTestSuite extends FunSuite with Matchers {
       counters = Map.empty,
       nodes = NodeRegistryState.State.empty,
       rendezvous = Map.empty,
-      completedResults = Map.empty
+      completedResults = Map.empty,
+      mainProcesses = Set.empty
     )
 
   test(
@@ -193,7 +194,8 @@ class LauncherStoppedOnShutdownTestSuite extends FunSuite with Matchers {
       counters = Map.empty,
       nodes = NodeRegistryState.State.empty,
       rendezvous = Map.empty,
-      completedResults = Map.empty
+      completedResults = Map.empty,
+      mainProcesses = Set.empty
     )
     scheduled.proxiesOf(sch) shouldBe List(p)
 

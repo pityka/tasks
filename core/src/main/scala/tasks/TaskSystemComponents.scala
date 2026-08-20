@@ -436,7 +436,9 @@ object TaskSystemComponents {
                     convertRunningToPending,
                     unmanagedResource,
                     meterProvider,
-                    onFatalError
+                    mainProcessSession =
+                      if (hostConfig.isApp) Some(sessionId) else None,
+                    onFatalError = onFatalError
                   )(config)
                   .map { queueImpl =>
                     (new QueueFromQueueImpl(
@@ -459,7 +461,9 @@ object TaskSystemComponents {
                     convertRunningToPending,
                     unmanagedResource,
                     meterProvider,
-                    onFatalError
+                    mainProcessSession =
+                      if (hostConfig.isApp) Some(sessionId) else None,
+                    onFatalError = onFatalError
                   )(config)
                   .flatMap { impl =>
                     QueueActor

@@ -53,6 +53,7 @@ object ExternalQueueCompletionOfPreviousTaskTest extends TestHelpers {
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
       tasks.elastic.maxNodes = 0
+      tasks.clearQueueStateWhenLastMainProcessExits = false
       
       """
     )
@@ -65,6 +66,7 @@ object ExternalQueueCompletionOfPreviousTaskTest extends TestHelpers {
       tasks.addShutdownHook = false
       tasks.failuredetector.acceptable-heartbeat-pause = 10 s
       tasks.elastic.maxNodes = 0
+      tasks.clearQueueStateWhenLastMainProcessExits = false
       
       """
     )

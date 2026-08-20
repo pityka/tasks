@@ -159,6 +159,9 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   def resubmitFailedTask = raw.getBoolean("tasks.resubmitFailedTask")
 
+  def clearQueueStateWhenLastMainProcessExits =
+    raw.getBoolean("tasks.clearQueueStateWhenLastMainProcessExits")
+
   def verifySharedFileInCache = raw.getBoolean("tasks.verifySharedFileInCache")
 
   val disableRemoting = raw.getBoolean("tasks.disableRemoting")
