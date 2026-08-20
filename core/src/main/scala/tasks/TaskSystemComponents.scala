@@ -149,7 +149,13 @@ object TaskSystemComponents {
 
           val streamHelper = httpClient.flatMap { http =>
             s3Client.map { s3 =>
-              new StreamHelper(s3Client = s3, httpClient = http, s3DownloadPartSizeMB = config.s3DownloadPartSizeMB, s3DownloadParallelism = config.s3DownloadParallelism, s3MultipartThreshold = config.s3MultipartThreshold)
+              new StreamHelper(
+                s3Client = s3,
+                httpClient = http,
+                s3DownloadPartSizeMB = config.s3DownloadPartSizeMB,
+                s3DownloadParallelism = config.s3DownloadParallelism,
+                s3MultipartThreshold = config.s3MultipartThreshold
+              )
             }
           }
 
@@ -558,7 +564,9 @@ object TaskSystemComponents {
                   elastic.CodeAddress(
                     SimpleSocketAddress(
                       packageServerHostname(t),
-                      packageServerPort(t)
+                      server
+                        .map(_.addressIp4s.port.value)
+                        .getOrElse(packageServerPort(t))
                     ),
                     config.codeVersion
                   )
@@ -586,17 +594,40 @@ object TaskSystemComponents {
                     val actorsystem = 1 // shade implicit conversion
                     val _ = actorsystem // suppress unused warning
                     import com.comcast.ip4s._
+                    import cats.syntax.applicativeError._
 
-                    val server = EmberServerBuilder
-                      .default[IO]
-                      .withHost(ipv4"0.0.0.0")
-                      .withPort(
-                        com.comcast.ip4s.Port.fromInt(packageServerPort(t)).get
-                      )
-                      .withHttpApp(service.route.orNotFound)
-                      .build
+                    val server: Resource[IO, Server] = {
+                      val preferredPort = packageServerPort(t)
 
-                    // scribe.info(s"Started package server on $server")
+                      def bindOn(port: Port): Resource[IO, Server] =
+                        EmberServerBuilder
+                          .default[IO]
+                          .withHost(ipv4"0.0.0.0")
+                          .withPort(port)
+                          .withHttpApp(service.route.orNotFound)
+                          .build
+
+                      val onArbitraryPort: Throwable => Resource[IO, Server] =
+                        e =>
+                          Resource
+                            .eval(IO {
+                              scribe.warn(
+                                s"Package server could not bind to the preferred port $preferredPort. Falling back to an arbitrary port. Workers are told where to download the package from, so this only breaks if the network policy of the deployment restricts which ports are reachable.",
+                                e
+                              )
+                            })
+                            .flatMap(_ => bindOn(port"0"))
+
+                      bindOn(Port.fromInt(preferredPort).get)
+                        .handleErrorWith(onArbitraryPort)
+                        .evalTap(server =>
+                          IO {
+                            scribe.info(
+                              s"Started package server on ${server.baseUri}"
+                            )
+                          }
+                        )
+                    }
 
                     (server.map(Some(_)): Resource[IO, Option[Server]])
                   case Failure(e) =>
@@ -643,7 +674,9 @@ object TaskSystemComponents {
                       val baseUrl = org.http4s.Uri
                         .fromString(addr)
                         .toOption
-                        .map(u => u.copy(path = org.http4s.Uri.Path.Root).renderString)
+                        .map(u =>
+                          u.copy(path = org.http4s.Uri.Path.Root).renderString
+                        )
                         .getOrElse(addr)
                       Option(file.getParentFile).foreach(_.mkdirs())
                       val tmp = new java.io.File(
