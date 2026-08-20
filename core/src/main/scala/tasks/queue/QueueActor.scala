@@ -107,7 +107,10 @@ private[tasks] final class QueueActorBehavior(
       impl.initFailed(n)
 
     case Message(MessageData.LauncherStopped(launcher), _, _) =>
-      impl.handleLauncherStopped(launcher)
+      impl.handleLauncherStopped(
+        launcher,
+        QueueImpl.LauncherStopReason.SelfReportedByRemoteProcess
+      )
 
     case Message(
           MessageData.AskForWork(availableResource, launcher, node),

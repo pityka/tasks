@@ -64,6 +64,25 @@ object QueueImpl {
   case class TaskLauncherStoppedFor(sch: ScheduleTask) extends Event
   case class LauncherCrashed(crashedLauncher: LauncherName) extends Event
   case class SessionProxiesDropped(session: String) extends Event
+
+  sealed trait LauncherStopReason {
+    def proxiesCanNoLongerPoll: Boolean
+    def shouldRequestReplacementNodes: Boolean
+  }
+  object LauncherStopReason {
+    case object SelfReportedByThisProcess extends LauncherStopReason {
+      def proxiesCanNoLongerPoll = true
+      def shouldRequestReplacementNodes = false
+    }
+    case object SelfReportedByRemoteProcess extends LauncherStopReason {
+      def proxiesCanNoLongerPoll = true
+      def shouldRequestReplacementNodes = true
+    }
+    case object TimedOutByFailureDetector extends LauncherStopReason {
+      def proxiesCanNoLongerPoll = false
+      def shouldRequestReplacementNodes = true
+    }
+  }
   case class CacheHit(sch: ScheduleTask, result: UntypedResult) extends Event
   case class NodeEvent(ev: NodeRegistryState.Event) extends Event
   case class RendezvousJoined(
@@ -393,7 +412,10 @@ private[tasks] class QueueImpl(
           ) *>
             HeartBeatIO.Counter.sideEffectWhenTimeout(
               query = ref.get.map(_.counters.get(launcher).getOrElse(0L)),
-              sideEffect = handleLauncherStopped(launcher)
+              sideEffect = handleLauncherStopped(
+                launcher,
+                LauncherStopReason.TimedOutByFailureDetector
+              )
             )
         })
       }
@@ -916,12 +938,8 @@ private[tasks] class QueueImpl(
     }
 
   private[tasks] def handleLauncherStopped(
-      launcher: LauncherName
-  ): IO[Unit] = handleLauncherStopped(launcher, true)
-
-  private[tasks] def handleLauncherStopped(
       launcher: LauncherName,
-      requestReplacementNodes: Boolean
+      reason: LauncherStopReason
   ): IO[Unit] = ref.flatModify { state =>
     import tasks.util.eq._
     val msgs =
@@ -942,7 +960,10 @@ private[tasks] class QueueImpl(
     val session = tasks.util.SessionId.of(launcher.name)
     val updated2 = {
       val st1 = updated.update(LauncherCrashed(launcher))
-      val st2 = session.fold(st1)(s => st1.update(SessionProxiesDropped(s)))
+      val st2 =
+        if (reason.proxiesCanNoLongerPoll)
+          session.fold(st1)(s => st1.update(SessionProxiesDropped(s)))
+        else st1
       node.fold(st2)(n => st2.update(NodeEvent(NodeRegistryState.NodeIsDown(n))))
     }
 
@@ -983,7 +1004,8 @@ private[tasks] class QueueImpl(
       )
     )
     (updated2 -> (logIO *> recordMetrics *> shutdown))
-  } *> (if (requestReplacementNodes) handleQueueStatIO else IO.unit)
+  } *> (if (reason.shouldRequestReplacementNodes) handleQueueStatIO
+        else IO.unit)
 
   def askForWork(
       launcher: LauncherName,

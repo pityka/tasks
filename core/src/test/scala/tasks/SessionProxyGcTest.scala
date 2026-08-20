@@ -72,6 +72,9 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
     .withHandler(minimumLevel = Some(scribe.Level.Warn))
     .replace()
 
+  implicit val tasksConfig: tasks.util.config.TasksConfig =
+    tasks.util.config.parse(() => ConfigFactory.load())
+
   private val deadSession = "deadSession000000"
   private val liveSession = "liveSession111111"
 
@@ -180,6 +183,130 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
 
     after.queuedTasks.keySet shouldBe state.queuedTasks.keySet
     after.scheduledTasks.keySet shouldBe state.scheduledTasks.keySet
+  }
+
+  test(
+    "a launcher timed out by the failure detector keeps the proxies of its session"
+  ) {
+    val liveProxy = proxyOf(liveSession, "live")
+    val queued = scheduleTask("queued", "queued-hash", liveProxy)
+    val launcher = LauncherName(SessionId.tag(liveSession, "Launcher-1"))
+
+    val state = QueueImpl.State(
+      queuedTasks =
+        Map(QueueImpl.project(queued) -> ((queued, List(liveProxy)))),
+      scheduledTasks = Map.empty,
+      knownLaunchers = Map(launcher -> None),
+      counters = Map(launcher -> 1L),
+      nodes = NodeRegistryState.State.empty,
+      rendezvous = Map.empty,
+      completedResults = Map(liveProxy.address -> result)
+    )
+
+    def afterStop(reason: QueueImpl.LauncherStopReason) =
+      Ref.of[IO, QueueImpl.State](state).flatMap { stateRef =>
+        tasks.util.LocalMessenger.make
+          .flatMap { messenger =>
+            QueueImpl.fromTransaction(
+              transaction = tasks.util.Transaction.fromRef(stateRef),
+              cache = null,
+              messenger = messenger,
+              shutdownNode = None,
+              decideNewNode = None,
+              createNode = None,
+              convertRunningToPending = None,
+              unmanagedResource = ResourceAvailable.empty,
+              meterProvider =
+                org.typelevel.otel4s.metrics.MeterProvider.noop[IO]
+            )
+          }
+          .use(_.handleLauncherStopped(launcher, reason)) *> stateRef.get
+      }
+
+    val (timedOut, selfReported) = (for {
+      a <- afterStop(QueueImpl.LauncherStopReason.TimedOutByFailureDetector)
+      b <- afterStop(QueueImpl.LauncherStopReason.SelfReportedByThisProcess)
+    } yield (a, b)).unsafeRunSync()
+
+    timedOut.queuedTasks(QueueImpl.project(queued))._2 shouldBe List(liveProxy)
+    timedOut.completedResults.keySet shouldBe Set(liveProxy.address)
+    timedOut.knownLaunchers shouldBe empty
+
+    selfReported.queuedTasks(QueueImpl.project(queued))._2 shouldBe empty
+    selfReported.completedResults shouldBe empty
+  }
+
+  test(
+    "a task completing after a spurious reap still delivers its result to the waiting proxy"
+  ) {
+    val liveProxy = proxyOf(liveSession, "live")
+    val launcher = LauncherName(SessionId.tag(liveSession, "Launcher-1"))
+    val sch = scheduleTask("reaped", "reaped-hash", liveProxy)
+      .copy(tryCache = false)
+
+    val offered = VersionedResourceAvailable(
+      CodeVersion("v1"),
+      ResourceAvailable(
+        cpu = 4,
+        memory = 1000,
+        scratch = 0,
+        gpu = Nil,
+        image = None
+      )
+    )
+
+    val completed = UntypedResultWithMetadata(
+      UntypedResult(Set.empty, Base64Data("cmVzdWx0"), None),
+      ResultMetadata(
+        dependencies = Nil,
+        started = java.time.Instant.now,
+        ended = java.time.Instant.now,
+        logs = Nil,
+        lineage = TaskLineage(Nil)
+      ),
+      noCache = true
+    )
+
+    val program = Ref.of[IO, QueueImpl.State](QueueImpl.State.empty).flatMap {
+      stateRef =>
+        tasks.util.LocalMessenger.make
+          .flatMap { messenger =>
+            QueueImpl.fromTransaction(
+              transaction = tasks.util.Transaction.fromRef(stateRef),
+              cache = null,
+              messenger = messenger,
+              shutdownNode = None,
+              decideNewNode = None,
+              createNode = None,
+              convertRunningToPending = None,
+              unmanagedResource = ResourceAvailable.empty,
+              meterProvider =
+                org.typelevel.otel4s.metrics.MeterProvider.noop[IO]
+            )
+          }
+          .use { q =>
+            for {
+              _ <- q.scheduleTask(sch)
+              dispatched <- q.askForWork(launcher, offered, None)
+              _ <- q.handleLauncherStopped(
+                launcher,
+                QueueImpl.LauncherStopReason.TimedOutByFailureDetector
+              )
+              _ <- q.taskSuccess(
+                sch,
+                completed,
+                ElapsedTimeNanoSeconds(1L),
+                ResourceAllocated(1, 500, 0, Nil, None)
+              )
+              polled <- q.pollResult(liveProxy.address)
+            } yield (dispatched, polled)
+          }
+    }
+
+    val (dispatched, polled) = program.unsafeRunSync()
+
+    dispatched shouldBe Right(MessageData.Schedule(sch))
+    polled shouldBe defined
   }
 
   test("dropping a session that owns nothing leaves the state unchanged") {

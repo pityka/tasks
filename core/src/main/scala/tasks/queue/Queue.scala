@@ -88,7 +88,10 @@ private[tasks] final class QueueFromQueueImpl(
     queueImpl.initFailed(nodeName)
 
   def launcherStopped(launcher: LauncherName): IO[Unit] =
-    queueImpl.handleLauncherStopped(launcher, false)
+    queueImpl.handleLauncherStopped(
+      launcher,
+      QueueImpl.LauncherStopReason.SelfReportedByThisProcess
+    )
 
   def knownLaunchers = queueImpl.knownLaunchers.map(_.keySet)
 
