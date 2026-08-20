@@ -22,7 +22,8 @@ import tasks.util.message._
 
 object LauncherStoppedOnShutdownTest extends TestHelpers {
 
-  val testTask = Task[Input, Int]("launcherStoppedOnShutdown", 1) { _ => _ =>
+  val testTask = tasks.Task[Input, Int]("launcherStoppedOnShutdown", 1) {
+    _ => _ =>
     IO(1)
   }
 

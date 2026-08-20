@@ -15,7 +15,7 @@ import tasks.queue._
 
 object MainProcessLatchTest extends TestHelpers {
 
-  val testTask = Task[Input, Int]("mainProcessLatch", 1) { in => _ =>
+  val testTask = tasks.Task[Input, Int]("mainProcessLatch", 1) { in => _ =>
     IO(in.i)
   }
 

@@ -24,7 +24,7 @@ object SessionProxyGcTest extends TestHelpers {
   val taskStarted = Deferred[IO, Unit].unsafeRunSync()
   val releaseTask = Deferred[IO, Unit].unsafeRunSync()
 
-  val blockingTask = Task[Input, Int]("sessionProxyGc", 1) { _ => _ =>
+  val blockingTask = tasks.Task[Input, Int]("sessionProxyGc", 1) { _ => _ =>
     taskStarted.complete(()) *> releaseTask.get.map(_ => 1)
   }
 
