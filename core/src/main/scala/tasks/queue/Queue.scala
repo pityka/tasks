@@ -277,13 +277,14 @@ private[tasks] class QueueWithActor(
     def step: IO[Option[List[String]]] = tasks.util.Ask
       .ask(
         target = queueActor.address0,
-        data =
-          MessageData.RendezvousStep(groupId, rank, worldSize, payload),
+        data = MessageData.RendezvousStep(groupId, rank, worldSize, payload),
         timeout = config.askForWorkTimeout,
         messenger = messenger
       )
       .flatMap {
-        case Right(Some(Message(MessageData.RendezvousStepResponse(o), _, _))) =>
+        case Right(
+              Some(Message(MessageData.RendezvousStepResponse(o), _, _))
+            ) =>
           IO.pure(o)
         case Right(
               Some(Message(MessageData.RendezvousStepFailed(reason), _, _))

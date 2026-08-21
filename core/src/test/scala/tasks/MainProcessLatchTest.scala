@@ -100,9 +100,7 @@ class MainProcessLatchTestSuite extends FunSuite with Matchers {
       queueStateRef =>
         for {
           _ <- queueStateRef.update(state =>
-            state.copy(nodes =
-              state.nodes.copy(cumulativeRequested = 102)
-            )
+            state.copy(nodes = state.nodes.copy(cumulativeRequested = 102))
           )
           whileRunning <- mainProcess(queueStateRef).use { implicit ts =>
             testTask(Input(1))(tasks.ResourceRequest(1, 500)) *>

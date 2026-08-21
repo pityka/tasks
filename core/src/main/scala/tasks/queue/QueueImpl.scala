@@ -138,7 +138,10 @@ object QueueImpl {
           copy(nodes = nodes.update(ev))
         case RendezvousJoined(groupId, rank, worldSize, payload) =>
           val group = rendezvous
-            .getOrElse(groupId, RendezvousGroup(worldSize, Map.empty, Set.empty))
+            .getOrElse(
+              groupId,
+              RendezvousGroup(worldSize, Map.empty, Set.empty)
+            )
           copy(rendezvous =
             rendezvous.updated(
               groupId,
@@ -563,15 +566,16 @@ private[tasks] class QueueImpl(
           scribe.data("explain", "replying with result found in cache")
         )
         ref.flatModify { state =>
-          val stored = allProxies.foldLeft(state.update(CacheHit(sch, result))) {
-            case (acc, p) =>
-              acc.update(
-                ResultStoredForProxy(
-                  p.address,
-                  ProxyResultSuccess(result, retrievedFromCache = true)
+          val stored =
+            allProxies.foldLeft(state.update(CacheHit(sch, result))) {
+              case (acc, p) =>
+                acc.update(
+                  ResultStoredForProxy(
+                    p.address,
+                    ProxyResultSuccess(result, retrievedFromCache = true)
+                  )
                 )
-              )
-          }
+            }
           stored -> metrics.onCacheHit(sch.description)
 
         }
@@ -601,14 +605,12 @@ private[tasks] class QueueImpl(
     cacheIO *> handleQueueStatIO
   }
 
-  
   private def warnIfResourceRequestDiverges(
       sch: ScheduleTask,
       stateBeforeEnqueue: State
   ): IO[Unit] =
     stateBeforeEnqueue.queuedTasks.get(project(sch)) match {
-      case Some((alreadyQueued, _))
-          if alreadyQueued.resource != sch.resource =>
+      case Some((alreadyQueued, _)) if alreadyQueued.resource != sch.resource =>
         IO(
           scribe.warn(
             "ResourceRequestDiverges",
@@ -742,7 +744,8 @@ private[tasks] class QueueImpl(
           fatal(
             s"worldSize mismatch on group ${groupId.value}: existing=${existing.worldSize} new=$worldSize"
           )
-        case Some(existing) if existing.joiners.get(rank).exists(_ != payload) =>
+        case Some(existing)
+            if existing.joiners.get(rank).exists(_ != payload) =>
           fatal(s"duplicate rank $rank in group ${groupId.value}")
         case Some(existing) if existing.joiners.contains(rank) =>
           readyOrNot(state)
@@ -827,11 +830,9 @@ private[tasks] class QueueImpl(
           val rawNeededNodes: Map[ResourceRequest, Int] =
             if (plannedSpawns.nonEmpty) plannedSpawns
             else if (queueStat.queued.nonEmpty && noWorkerKnown)
-              queueStat.queued.headOption
-                .map { case (_, versioned) =>
-                  versioned.cpuMemoryRequest -> 1
-                }
-                .toMap
+              queueStat.queued.headOption.map { case (_, versioned) =>
+                versioned.cpuMemoryRequest -> 1
+              }.toMap
             else plannedSpawns
 
           def committedResourceFor(req: ResourceRequest): ResourceAvailable =
@@ -1067,7 +1068,9 @@ private[tasks] class QueueImpl(
         if (reason.proxiesCanNoLongerPoll)
           session.fold(st1)(s => st1.update(SessionProxiesDropped(s)))
         else st1
-      node.fold(st2)(n => st2.update(NodeEvent(NodeRegistryState.NodeIsDown(n))))
+      node.fold(st2)(n =>
+        st2.update(NodeEvent(NodeRegistryState.NodeIsDown(n)))
+      )
     }
 
     val shutdown = node

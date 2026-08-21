@@ -1,7 +1,11 @@
 package tasks.fileservice
 
 import java.io.File
-import java.nio.file.{AtomicMoveNotSupportedException, Files, StandardCopyOption}
+import java.nio.file.{
+  AtomicMoveNotSupportedException,
+  Files,
+  StandardCopyOption
+}
 
 import cats.effect.IO
 import cats.effect.kernel.Resource
@@ -23,8 +27,9 @@ private[tasks] object LocalFileCache {
   }
 
   private def sanitize(s: String): String =
-    s.map(c => if (c.isLetterOrDigit || c == '.' || c == '-' || c == '_') c else '_')
-      .take(80)
+    s.map(c =>
+      if (c.isLetterOrDigit || c == '.' || c == '-' || c == '_') c else '_'
+    ).take(80)
 
   private def digestHex(s: String): String =
     java.security.MessageDigest
@@ -44,19 +49,29 @@ private[tasks] object LocalFileCache {
       .map(_ == expectedHash)
       .handleError(_ => false)
 
-  private def isValid(file: File, sf: SharedFile, config: TasksConfig): IO[Boolean] =
+  private def isValid(
+      file: File,
+      sf: SharedFile,
+      config: TasksConfig
+  ): IO[Boolean] =
     IO(file.isFile && file.length == sf.byteSize).flatMap {
       case false => IO.pure(false)
       case true =>
-        if (sf.hash == -1 || config.skipContentHashVerificationAfterCache) IO.pure(true)
+        if (sf.hash == -1 || config.skipContentHashVerificationAfterCache)
+          IO.pure(true)
         else contentHashMatches(file, sf.hash)
     }
 
   private def persistInto(source: File, target: File): IO[File] = IO {
     val parent = target.getParentFile
     if (parent != null) Files.createDirectories(parent.toPath)
-    val staging = new File(parent, target.getName + ".part-" + java.util.UUID.randomUUID())
-    Files.copy(source.toPath, staging.toPath, StandardCopyOption.REPLACE_EXISTING)
+    val staging =
+      new File(parent, target.getName + ".part-" + java.util.UUID.randomUUID())
+    Files.copy(
+      source.toPath,
+      staging.toPath,
+      StandardCopyOption.REPLACE_EXISTING
+    )
     try
       Files.move(
         staging.toPath,
@@ -66,12 +81,20 @@ private[tasks] object LocalFileCache {
       )
     catch {
       case _: AtomicMoveNotSupportedException =>
-        Files.move(staging.toPath, target.toPath, StandardCopyOption.REPLACE_EXISTING)
+        Files.move(
+          staging.toPath,
+          target.toPath,
+          StandardCopyOption.REPLACE_EXISTING
+        )
     }
     target
   }
 
-  def wrap(sf: SharedFile, keepLocalCache: Boolean, download: Resource[IO, File])(implicit
+  def wrap(
+      sf: SharedFile,
+      keepLocalCache: Boolean,
+      download: Resource[IO, File]
+  )(implicit
       config: TasksConfig
   ): Resource[IO, File] =
     if (!keepLocalCache) download
