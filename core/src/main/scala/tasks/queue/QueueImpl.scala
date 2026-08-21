@@ -550,6 +550,10 @@ private[tasks] class QueueImpl(
     val sch = a.sch
     val num = CorrelationId.make
     scribe.debug(s"Cache answered.", sch, num, a.sender.address)
+    val enqueueIO = ref.flatModify { state =>
+      state.update(Enqueued(sch, allProxies)) ->
+        warnIfResourceRequestDiverges(sch, state)
+    } *> metrics.onEnqueued(sch.description)
     val cacheIO = message match {
       case Right(Some(result)) => {
         scribe.debug(
@@ -579,8 +583,7 @@ private[tasks] class QueueImpl(
           num,
           scribe.data("explain", "Task is not found in cache. Enqueue.")
         )
-        ref.update(_.update(Enqueued(sch, allProxies))) *> metrics
-          .onEnqueued(sch.description)
+        enqueueIO
       }
       case Left(msg) => {
         scribe.debug(
@@ -591,8 +594,7 @@ private[tasks] class QueueImpl(
           scribe.data("message", msg)
         )
 
-        ref.update(_.update(Enqueued(sch, allProxies))) *> metrics
-          .onEnqueued(sch.description)
+        enqueueIO
       }
 
     }
@@ -600,6 +602,30 @@ private[tasks] class QueueImpl(
   }
 
   
+  private def warnIfResourceRequestDiverges(
+      sch: ScheduleTask,
+      stateBeforeEnqueue: State
+  ): IO[Unit] =
+    stateBeforeEnqueue.queuedTasks.get(project(sch)) match {
+      case Some((alreadyQueued, _))
+          if alreadyQueued.resource != sch.resource =>
+        IO(
+          scribe.warn(
+            "ResourceRequestDiverges",
+            sch.description,
+            scribe.data(
+              Map(
+                "kept-resource-request" -> sch.resource.toString,
+                "discarded-resource-request" -> alreadyQueued.resource.toString,
+                "explain" ->
+                  ("The same task was submitted again with a different resource request. Task identity is the task id and the hash of its input, so the resource request is not part of it and the newest submission replaces the stored one. Every proxy waiting on this task now depends on the kept request, including submitters which asked for something smaller. If no node can satisfy the kept request the task never gets scheduled and all of them wait forever. Put whatever varies the resource request into the task input if the variants are meant to be different tasks.")
+              )
+            )
+          )
+        )
+      case _ => IO.unit
+    }
+
   private def enqueueOrCacheHit(
       sch: ScheduleTask,
       proxies: List[Proxy],
@@ -624,7 +650,9 @@ private[tasks] class QueueImpl(
       )
       (
         state.update(Enqueued(sch, proxies)),
-        metrics.onEnqueued(sch.description)
+        warnIfResourceRequestDiverges(sch, state) *> metrics.onEnqueued(
+          sch.description
+        )
       )
     }
   }
@@ -635,9 +663,10 @@ private[tasks] class QueueImpl(
       val proxy = Proxy(sch.proxy)
 
       if (state.queuedButSentByADifferentProxy(sch, proxy)) {
-        state.update(Enqueued(sch, List(proxy))) -> metrics.onEnqueued(
-          sch.description
-        )
+        state.update(Enqueued(sch, List(proxy))) ->
+          (warnIfResourceRequestDiverges(sch, state) *> metrics.onEnqueued(
+            sch.description
+          ))
       } else if (state.scheduledButSentByADifferentProxy(sch, proxy)) {
         scribe.debug(
           s"MultipleProxies",
