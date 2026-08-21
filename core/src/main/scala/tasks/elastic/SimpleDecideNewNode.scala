@@ -40,9 +40,13 @@ private[tasks] class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
       registeredNodes: Seq[ResourceAvailable],
       pendingNodes: Seq[ResourceAvailable]
   ): Map[ResourceRequest, Int] = {
-    val resourceRequests: List[ResourceRequest] = q.queued.map(_._2).collect {
-      case VersionedResourceRequest(v, request) if v === codeVersion => request
-    }
+    val resourceRequests: List[ResourceRequest] = q.queued
+      .map(_._2)
+      .collect {
+        case VersionedResourceRequest(v, request) if v === codeVersion =>
+          request
+      }
+      .sortBy(r => (-r.gpu, -r.cpu._1, -r.memory, -r.scratch))
     val resourcesUsedByRunningJobs: List[ResourceAllocated] =
       q.running.map(_._2).collect {
         case VersionedResourceAllocated(v, allocated) if v === codeVersion =>
@@ -74,15 +78,18 @@ private[tasks] class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
       resourceRequests.foldLeft(
         (availableResourcesMinusRunningJobs, List[ResourceRequest]())
       ) { case ((available, allocated), request) =>
-        val (prefix, suffix) =
-          available.span(x => !x.canFulfillRequest(request))
-        val chosen = suffix.headOption
-        chosen.foreach(x => assert(x.canFulfillRequest(request)))
+        val smallestFitting = available.zipWithIndex
+          .filter { case (node, _) => node.canFulfillRequest(request) }
+          .minByOption { case (node, _) =>
+            (node.numGpu, node.cpu, node.memory, node.scratch)
+          }
 
-        val transformed = chosen.map(_.substract(request))
-        if (chosen.isDefined)
-          (prefix ::: (transformed.get :: suffix.tail)) -> (request :: allocated)
-        else (available, allocated)
+        smallestFitting match {
+          case None => (available, allocated)
+          case Some((node, index)) =>
+            available.updated(index, node.substract(request)) ->
+              (request :: allocated)
+        }
       }
 
     val nonAllocatedResources: Map[ResourceRequest, Int] = {
