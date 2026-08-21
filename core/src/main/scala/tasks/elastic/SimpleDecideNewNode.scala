@@ -37,7 +37,7 @@ private[tasks] class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
 
   def needNewNode(
       q: QueueStat,
-      registeredNodes: Seq[ResourceAvailable],
+      freeOnRegisteredNodes: Seq[ResourceAvailable],
       pendingNodes: Seq[ResourceAvailable]
   ): Map[ResourceRequest, Int] = {
     val resourceRequests: List[ResourceRequest] = q.queued
@@ -47,36 +47,12 @@ private[tasks] class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
           request
       }
       .sortBy(r => (-r.gpu, -r.cpu._1, -r.memory, -r.scratch))
-    val resourcesUsedByRunningJobs: List[ResourceAllocated] =
-      q.running.map(_._2).collect {
-        case VersionedResourceAllocated(v, allocated) if v === codeVersion =>
-          allocated
-      }
-
     val availableResources: List[ResourceAvailable] =
-      (registeredNodes ++ pendingNodes).toList
+      (freeOnRegisteredNodes ++ pendingNodes).toList
 
-    val availableResourcesMinusRunningJobs =
-      (resourcesUsedByRunningJobs).foldLeft(availableResources) {
-        case (available, runningJob) =>
-          val (prefix, suffix) =
-            available.span(x => !x.canFulfillRequest(runningJob))
-          val chosen = suffix.headOption
-          chosen.foreach(x => assert(x.canFulfillRequest(runningJob)))
-
-          val transformed = chosen.map(_.substract(runningJob))
-          if (transformed.isDefined)
-            (prefix ::: (transformed.get :: suffix.tail))
-          else {
-            // scribe.debug(
-            //   "More resources running than available??"
-            // )
-            available
-          }
-      }
     val (_, allocatedRequests) =
       resourceRequests.foldLeft(
-        (availableResourcesMinusRunningJobs, List[ResourceRequest]())
+        (availableResources, List[ResourceRequest]())
       ) { case ((available, allocated), request) =>
         val smallestFitting = available.zipWithIndex
           .filter { case (node, _) => node.canFulfillRequest(request) }

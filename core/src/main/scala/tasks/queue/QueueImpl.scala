@@ -132,6 +132,30 @@ object QueueImpl {
       mainProcesses: Set[String]
   ) {
 
+    def freeCapacityOfRunningNodes: List[ResourceAvailable] = {
+      val nodeOfLauncher: Map[LauncherName, RunningJobId] =
+        knownLaunchers.collect { case (launcher, Some(node)) =>
+          launcher -> node.name
+        }
+      val allocationsByNode: Map[RunningJobId, List[ResourceAllocated]] =
+        scheduledTasks.values.toList
+          .flatMap { case (launcher, allocated, _, _) =>
+            nodeOfLauncher
+              .get(launcher)
+              .map(_ -> allocated.cpuMemoryAllocated)
+          }
+          .groupBy(_._1)
+          .map { case (runningJobId, pairs) =>
+            runningJobId -> pairs.map(_._2)
+          }
+
+      nodes.running.toList.map { case (runningJobId, total) =>
+        allocationsByNode
+          .getOrElse(runningJobId, Nil)
+          .foldLeft(total)((free, allocated) => free.substract(allocated))
+      }
+    }
+
     def update(e: Event): State = {
       e match {
         case NodeEvent(ev) =>
@@ -816,7 +840,7 @@ private[tasks] class QueueImpl(
         try {
           val plannedSpawns = decideNewNode.needNewNode(
             queueStat,
-            state.nodes.running.toSeq.map(_._2) ++ Seq(unmanagedResource),
+            state.freeCapacityOfRunningNodes ++ Seq(unmanagedResource),
             state.nodes.pending.toSeq.map(_._2)
           )
           val noWorkerKnown =

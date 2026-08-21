@@ -34,7 +34,7 @@ class ScaleOutHeadOfLineTest extends FunSuite with Matchers {
         },
         running = Nil
       ),
-      registeredNodes = registeredNodes,
+      freeOnRegisteredNodes = registeredNodes,
       pendingNodes = pendingNodes
     )
 

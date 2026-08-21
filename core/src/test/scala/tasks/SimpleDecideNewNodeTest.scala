@@ -29,7 +29,13 @@ class SimpleDecideNewNodeTestSuite extends FunSuite with Matchers {
 
     // One registered node with 4 CPUs and 2000 MB — enough to handle the queued task
     val registeredNodes = Seq(
-      ResourceAvailable(cpu = 4, memory = 2000, scratch = 1000, gpu = Nil, image = None)
+      ResourceAvailable(
+        cpu = 4,
+        memory = 2000,
+        scratch = 1000,
+        gpu = Nil,
+        image = None
+      )
     )
 
     val result = decider.needNewNode(queueStat, registeredNodes, Seq.empty)
@@ -50,7 +56,13 @@ class SimpleDecideNewNodeTestSuite extends FunSuite with Matchers {
 
     // One registered node with only 2 CPUs — not enough
     val registeredNodes = Seq(
-      ResourceAvailable(cpu = 2, memory = 1000, scratch = 1000, gpu = Nil, image = None)
+      ResourceAvailable(
+        cpu = 2,
+        memory = 1000,
+        scratch = 1000,
+        gpu = Nil,
+        image = None
+      )
     )
 
     val result = decider.needNewNode(queueStat, registeredNodes, Seq.empty)
@@ -60,51 +72,55 @@ class SimpleDecideNewNodeTestSuite extends FunSuite with Matchers {
   }
 
   test(
-    "should not request new nodes when running jobs consume available resources but remaining can still handle queued tasks"
+    "should not request new nodes when the capacity still free on a node can handle queued tasks"
   ) {
     val queuedRequest = ResourceRequest((1, 1), 500, 0, 0, None)
-    val runningAllocation =
-      ResourceAllocated(cpu = 2, memory = 1000, scratch = 0, gpu = Nil, image = None)
     val queueStat = QueueStat(
       queued = List(
         ("task1", VersionedResourceRequest(cv, queuedRequest))
       ),
-      running = List(
-        ("task0", VersionedResourceAllocated(cv, runningAllocation))
+      running = Nil
+    )
+
+    val freeOnRegisteredNodes = Seq(
+      ResourceAvailable(
+        cpu = 2,
+        memory = 1000,
+        scratch = 1000,
+        gpu = Nil,
+        image = None
       )
     )
 
-    // Node has 4 CPUs total, running job uses 2 CPUs, so 2 CPUs remain — enough for the queued 1-CPU task
-    val registeredNodes = Seq(
-      ResourceAvailable(cpu = 4, memory = 2000, scratch = 1000, gpu = Nil, image = None)
-    )
-
-    val result = decider.needNewNode(queueStat, registeredNodes, Seq.empty)
+    val result =
+      decider.needNewNode(queueStat, freeOnRegisteredNodes, Seq.empty)
 
     result shouldBe empty
   }
 
   test(
-    "should request new node when running jobs exhaust available resources"
+    "should request new node when the registered nodes have no capacity left"
   ) {
     val queuedRequest = ResourceRequest((2, 2), 1000, 0, 0, None)
-    val runningAllocation =
-      ResourceAllocated(cpu = 4, memory = 2000, scratch = 0, gpu = Nil, image = None)
     val queueStat = QueueStat(
       queued = List(
         ("task1", VersionedResourceRequest(cv, queuedRequest))
       ),
-      running = List(
-        ("task0", VersionedResourceAllocated(cv, runningAllocation))
+      running = Nil
+    )
+
+    val freeOnRegisteredNodes = Seq(
+      ResourceAvailable(
+        cpu = 0,
+        memory = 0,
+        scratch = 1000,
+        gpu = Nil,
+        image = None
       )
     )
 
-    // Node has 4 CPUs, running job uses all 4 — no capacity left
-    val registeredNodes = Seq(
-      ResourceAvailable(cpu = 4, memory = 2000, scratch = 1000, gpu = Nil, image = None)
-    )
-
-    val result = decider.needNewNode(queueStat, registeredNodes, Seq.empty)
+    val result =
+      decider.needNewNode(queueStat, freeOnRegisteredNodes, Seq.empty)
 
     result should not be empty
   }

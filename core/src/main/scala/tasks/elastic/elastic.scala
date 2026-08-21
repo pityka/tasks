@@ -91,7 +91,7 @@ trait CreateNodeFactory {
 private[tasks] trait DecideNewNode {
   def needNewNode(
       q: QueueStat,
-      registeredNodes: Seq[ResourceAvailable],
+      freeOnRegisteredNodes: Seq[ResourceAvailable],
       pendingNodes: Seq[ResourceAvailable]
   ): Map[ResourceRequest, Int]
 }
