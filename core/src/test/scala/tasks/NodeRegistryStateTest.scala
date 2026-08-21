@@ -105,16 +105,18 @@ class NodeRegistryStateTest extends AnyFunSuite with Matchers {
       )
       committedResource = shapeA
       recordFailure = ref.update(_.update(NodeRequestFailed(committedResource)))
-      hangingRequest = IO.uncancelable { poll =>
-        poll(IO.never[Either[String, (PendingJobId, ResourceAvailable)]])
-          .flatMap {
-            case Left(_)  => recordFailure
-            case Right(_) => IO.unit
-          }
-      }.guaranteeCase {
-        case cats.effect.Outcome.Canceled() => recordFailure
-        case _                              => IO.unit
-      }
+      hangingRequest = IO
+        .uncancelable { poll =>
+          poll(IO.never[Either[String, (PendingJobId, ResourceAvailable)]])
+            .flatMap {
+              case Left(_)  => recordFailure
+              case Right(_) => IO.unit
+            }
+        }
+        .guaranteeCase {
+          case cats.effect.Outcome.Canceled() => recordFailure
+          case _                              => IO.unit
+        }
       fiber <- hangingRequest.start
       _ <- IO.sleep(50.millis)
       _ <- fiber.cancel

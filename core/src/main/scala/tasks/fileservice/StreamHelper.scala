@@ -213,7 +213,13 @@ private[tasks] class StreamHelper(
 
     fs2.Stream.force(length.map { length =>
       if (length > s3MultipartThreshold)
-        s3Client.get.readFileMultipart(bucket = bucket, key = key, partSize = s3DownloadPartSizeMB, multiPartConcurrency = s3DownloadParallelism, fromOffset = fromOffset)
+        s3Client.get.readFileMultipart(
+          bucket = bucket,
+          key = key,
+          partSize = s3DownloadPartSizeMB,
+          multiPartConcurrency = s3DownloadParallelism,
+          fromOffset = fromOffset
+        )
       else s3Client.get.readFile(bucket, key, fromOffset = fromOffset)
     })
   }

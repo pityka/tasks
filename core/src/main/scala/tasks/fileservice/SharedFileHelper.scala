@@ -99,7 +99,8 @@ private[tasks] object SharedFileHelper {
       config: TasksConfig
   ): Resource[IO, File] = getPathToFileNonCachedFile(sf, keepLocalCache = false)
 
-  def getPathToFileNonCachedFile(sf: SharedFile, keepLocalCache: Boolean)(implicit
+  def getPathToFileNonCachedFile(sf: SharedFile, keepLocalCache: Boolean)(
+      implicit
       service: FileServiceComponent,
       config: TasksConfig
   ): Resource[IO, File] = {

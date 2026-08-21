@@ -88,9 +88,11 @@ tasks.fileservice.storageURI=${tmp.getAbsolutePath}
         }
       )
 
-    val (as, bs) = (call("grp-b", "alpha"), call("grp-c", "beta")).parMapN {
-      case (a, b) => (a, b)
-    }.unsafeRunSync()
+    val (as, bs) = (call("grp-b", "alpha"), call("grp-c", "beta"))
+      .parMapN { case (a, b) =>
+        (a, b)
+      }
+      .unsafeRunSync()
 
     as.foreach { r =>
       r.peers shouldBe (0 until worldSize).toList.map(i => s"alpha-$i:1000")
@@ -150,13 +152,17 @@ class RendezvousInvariantSuite extends FunSuite with Matchers {
 
     fatalCount shouldBe 1
     secondErr.isLeft shouldBe true
-    secondErr.left.map(_.getMessage) shouldBe Left("duplicate rank 0 in group dup")
+    secondErr.left.map(_.getMessage) shouldBe Left(
+      "duplicate rank 0 in group dup"
+    )
   }
 
   test("worldSize mismatch fails fast") {
     val (result, fatalCount) = withQueue { (q, _) =>
       for {
-        firstFiber <- q.rendezvous(RendezvousGroupId("mismatch"), 0, 2, "a").start
+        firstFiber <- q
+          .rendezvous(RendezvousGroupId("mismatch"), 0, 2, "a")
+          .start
         _ <- IO.sleep(scala.concurrent.duration.DurationInt(100).millis)
         second <- q.rendezvous(RendezvousGroupId("mismatch"), 1, 3, "b").attempt
         _ <- firstFiber.cancel
@@ -172,7 +178,8 @@ class RendezvousInvariantSuite extends FunSuite with Matchers {
 
   test("rank out of range fails fast") {
     val (result, fatalCount) = withQueue { (q, _) =>
-      q.rendezvous(RendezvousGroupId("oor"), rank = 5, worldSize = 2, "a").attempt
+      q.rendezvous(RendezvousGroupId("oor"), rank = 5, worldSize = 2, "a")
+        .attempt
     }
     fatalCount shouldBe 1
     result.isLeft shouldBe true

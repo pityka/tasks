@@ -23,7 +23,9 @@ class LocalMessengerTestSuite extends FunSuite with Matchers {
           result <- messenger.subscribe(address).attempt
         } yield {
           result.isLeft shouldBe true
-          result.swap.getOrElse(fail()).getMessage should include("already subscribed")
+          result.swap.getOrElse(fail()).getMessage should include(
+            "already subscribed"
+          )
         }
       }
       .unsafeRunSync()
