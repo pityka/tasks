@@ -20,6 +20,16 @@ ThisBuild / credentials ++= {
   )
 }.toSeq
 
+ThisBuild / credentials ++= {
+  for {
+    token <- sys.env.get("GITLAB_DEPLOY_TOKEN")
+  } yield Credentials(
+    "GitLab Packages Registry",
+    "gitlab.com",
+    "Deploy-Token",
+    token)
+}.toSeq
+
 ThisBuild / versionScheme := Some("early-semver")
 
 ThisBuild / versionPolicyIntention := Compatibility.None
