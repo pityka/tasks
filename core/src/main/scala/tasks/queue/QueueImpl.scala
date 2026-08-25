@@ -1162,27 +1162,15 @@ private[tasks] class QueueImpl(
           .flatMap(_.lineage.lineage.iterator)
           .toSet
 
-      var maxPrio = Int.MinValue
-      var maxDepth = Int.MinValue
-      var selected = Option.empty[ScheduleTask]
-      state.queuedTasks.valuesIterator
-        .foreach { case (sch, _) =>
+      val eligible = state.queuedTasks.valuesIterator
+        .map(_._1)
+        .filter { sch =>
           val invId =
             TaskInvocationId(sch.description.taskId, sch.description)
           val hasPendingDescendant =
             invocationIdsAppearingInLineage.contains(invId)
           val ret = availableResource.canFulfillRequest(sch.resource)
-          if (ret && !hasPendingDescendant) {
-            val prio = sch.priority.s
-            val depth = sch.lineage.lineage.length
-            val better =
-              prio > maxPrio || (prio == maxPrio && depth > maxDepth)
-            if (better) {
-              maxPrio = prio
-              maxDepth = depth
-              selected = Some(sch)
-            }
-          } else if (!ret) {
+          if (!ret) {
             scribe.debug(
               s"CantFulfillRequest",
               num,
@@ -1194,7 +1182,21 @@ private[tasks] class QueueImpl(
               )
             )
           }
+          ret && !hasPendingDescendant
         }
+        .toList
+
+      val selected = eligible.maxByOption { sch =>
+        val request = sch.resource.cpuMemoryRequest
+        (
+          sch.priority.s,
+          request.gpu,
+          request.cpu._1,
+          request.memory,
+          request.scratch,
+          sch.lineage.lineage.length
+        )
+      }
 
       // Register the launcher / mark the node up on FIRST contact, regardless of
       // whether there is work to hand it. Doing this inside the `Some(sch)`
