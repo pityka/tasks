@@ -157,16 +157,38 @@ private[tasks] class ProxyTask[Input, Output](
   override def schedulers(
       stopQueue: Actor.StopQueue
   ): Option[IO[fs2.Stream[IO, Unit]]] = Some(IO {
-    val submit = (fs2.Stream.unit ++ fs2.Stream.never[IO]).evalMap(_ =>
-      startTask(cache = true)
-    )
+
+    def submitUntilAccepted: IO[Unit] =
+      startTask(cache = true).handleErrorWith { e =>
+        IO(
+          scribe.warn(
+            e,
+            "Failed to submit this task to the queue. Retrying, the caller stays blocked until it succeeds.",
+            address
+          )
+        ) *> IO.sleep(config.askInterval) *> submitUntilAccepted
+      }
+
+    val submit = fs2.Stream.eval(submitUntilAccepted) ++ fs2.Stream.never[IO]
+
     val poll = fs2.Stream
       .fixedDelay[IO](config.askInterval)
       .evalMap(_ =>
-        queue.pollResult(address).flatMap {
-          case None         => IO.unit
-          case Some(result) => handleResult(result, stopQueue)
-        }
+        queue
+          .pollResult(address)
+          .flatMap {
+            case None         => IO.unit
+            case Some(result) => handleResult(result, stopQueue)
+          }
+          .handleErrorWith { e =>
+            IO(
+              scribe.warn(
+                e,
+                "Failed to poll the queue for the result of this task. Retrying on the next poll.",
+                address
+              )
+            )
+          }
       )
     submit.merge(poll)
   })
