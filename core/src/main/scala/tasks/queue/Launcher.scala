@@ -140,6 +140,17 @@ private[tasks] object Launcher {
 
       val streamFiber =
         stream
+          .handleErrorWith { e =>
+            fs2.Stream.eval(
+              IO(
+                scribe.error(
+                  e,
+                  "Launcher stream failed. It is not restarted, so this launcher stops asking for work and stops incrementing its liveness counter.",
+                  address
+                )
+              )
+            )
+          }
           .onFinalize(IO(scribe.debug(s"Stream terminated", address)))
           .compile
           .drain

@@ -72,6 +72,17 @@ private[tasks] object Actor {
         IO.both(messageStream, schedulerStream).flatMap { case (a, b) =>
           (a.mergeHaltBoth(b))
             .mergeHaltBoth(stopStream)
+            .handleErrorWith { e =>
+              fs2.Stream.eval(
+                IO(
+                  scribe.error(
+                    e,
+                    "Actor stream failed. It is not restarted, so this actor stops processing messages and running its schedulers.",
+                    address
+                  )
+                )
+              )
+            }
             .onFinalize(IO(scribe.debug(s"Stream terminated", address)))
             .compile
             .drain
