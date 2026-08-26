@@ -435,41 +435,46 @@ private[tasks] class QueueImpl(
   def knownLaunchers = ref.get.map(_.knownLaunchers)
 
   private def startCounterLoops = {
-    def loop: IO[Unit] = ref.get
+    def round: IO[Unit] = ref.get
       .map(_.knownLaunchers.keySet.toList)
-      .flatMap { launcher =>
-        IO.parSequenceN(1)(launcher.map { launcher =>
-          IO(
-            scribe.debug(
-              s"Query counter",
-              launcher,
-              scribe.data(
-                "explain",
-                "if the request times out then we assume the launcher is stopped"
-              )
-            )
-          ) *>
-            HeartBeatIO.Counter.sideEffectWhenTimeout(
-              query = ref.get.map(_.counters.get(launcher).getOrElse(0L)),
-              sideEffect = handleLauncherStopped(
+      .flatMap { launchers =>
+        if (launchers.isEmpty)
+          IO.sleep(config.launcherActorHeartBeatInterval)
+        else
+          IO.parSequenceN(1)(launchers.map { launcher =>
+            IO(
+              scribe.debug(
+                s"Query counter",
                 launcher,
-                LauncherStopReason.TimedOutByFailureDetector
+                scribe.data(
+                  "explain",
+                  "if the request times out then we assume the launcher is stopped"
+                )
               )
-            )
-        })
+            ) *>
+              HeartBeatIO.Counter.sideEffectWhenTimeout(
+                query = ref.get.map(_.counters.get(launcher).getOrElse(0L)),
+                sideEffect = handleLauncherStopped(
+                  launcher,
+                  LauncherStopReason.TimedOutByFailureDetector
+                )
+              )
+          }).void
       }
-      .map(_ => ())
-      .attempt
-      .map {
+
+    def loop: IO[Unit] = round.attempt
+      .flatMap {
         case Left(e) =>
-          scribe.error(
-            "Error reading counters and/or handling stopped launchers",
-            e
-          )
-          ()
-        case _ => ()
+          IO(
+            scribe.error(
+              "Error reading counters and/or handling stopped launchers",
+              e
+            )
+          ) *> IO.sleep(config.launcherActorHeartBeatInterval)
+        case Right(_) => IO.unit
       }
       .flatMap(_ => loop)
+
     loop.start.flatMap { fiber => fiberList.update(list => fiber :: list) }
   }
 
