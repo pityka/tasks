@@ -14,7 +14,9 @@ final case class EcsConfig(
     startedBy: String,
     stopReason: String,
     extraEnvironment: Map[String, String],
-    tags: Map[String, String]
+    tags: Map[String, String],
+    advertiseInstanceAttributes: Boolean,
+    advertisedBuiltInAttributes: Set[String]
 ) {
 
   require(
@@ -75,6 +77,12 @@ final case class EcsConfig(
   def withTags(entries: (String, String)*): EcsConfig =
     copy(tags = tags ++ entries)
 
+  def withoutInstanceAttributeAdvertisement: EcsConfig =
+    copy(advertiseInstanceAttributes = false)
+
+  def withAdvertisedBuiltInAttributes(names: String*): EcsConfig =
+    copy(advertisedBuiltInAttributes = advertisedBuiltInAttributes ++ names)
+
   def ownsNodeId(nodeId: String): Boolean = {
     val clusterName = cluster.split('/').last
     nodeId.split('/').toList.lift(1).contains(clusterName)
@@ -99,7 +107,8 @@ final case class EcsConfig(
       s"cluster=$cluster, " +
       s"capacityProviders=[${capacityProviders.mkString(",")}], " +
       s"taskDefinition=$taskDefinition, container=$containerName, " +
-      s"imagesMapped=${taskDefinitionsByImage.size})"
+      s"imagesMapped=${taskDefinitionsByImage.size}, " +
+      s"advertiseInstanceAttributes=$advertiseInstanceAttributes)"
 }
 
 object EcsConfig {
@@ -137,7 +146,9 @@ object EcsConfig {
       startedBy = "tasks-elastic",
       stopReason = "Shut down by tasks framework",
       extraEnvironment = Map.empty,
-      tags = Map.empty
+      tags = Map.empty,
+      advertiseInstanceAttributes = true,
+      advertisedBuiltInAttributes = Set.empty
     )
 
   def resolveRegion(configured: Option[String]): String =

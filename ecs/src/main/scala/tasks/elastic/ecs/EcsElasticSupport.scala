@@ -376,9 +376,9 @@ private[ecs] object EcsTaskMetadata {
 
 object EcsGetNodeName extends GetNodeName {
 
-  private val ecsMetadataUriVariable = "ECS_CONTAINER_METADATA_URI_V4"
+  private[ecs] val ecsMetadataUriVariable = "ECS_CONTAINER_METADATA_URI_V4"
 
-  private def fetchTaskArn(metadataUri: String): IO[String] =
+  private[ecs] def fetchTaskArn(metadataUri: String): IO[String] =
     IO.interruptible {
       val client = java.net.http.HttpClient.newHttpClient()
       val request = java.net.http.HttpRequest
@@ -422,7 +422,22 @@ object EcsGetNodeName extends GetNodeName {
   }
 }
 
+final class EcsHostConfiguration(
+    tasksConfig: TasksConfig,
+    advertisedLabels: Set[String]
+) extends DefaultHostConfigurationFromConfig()(tasksConfig) {
+  override lazy val labels: Set[String] =
+    tasksConfig.hostLabels ++ advertisedLabels
+}
+
 object EcsElasticSupport {
+
+  private final case class Clients(
+      region: String,
+      ecs: EcsClient,
+      autoscaling: AutoScalingClient,
+      ec2: Ec2Client
+  )
 
   def apply(
       ecsConfig: EcsConfig
@@ -432,16 +447,25 @@ object EcsElasticSupport {
         instanceTypeCache <- Ref.of[IO, Map[String, InstanceTypeCapacity]](
           Map.empty
         )
-        support <- IO {
+        clients <- IO {
           val region = EcsConfig.resolveRegion(ecsConfig.region)
-          val client = EcsClient.builder.region(Region.of(region)).build
-          val autoscaling =
-            AutoScalingClient.builder.region(Region.of(region)).build
-          val ec2 = Ec2Client.builder.region(Region.of(region)).build
+          Clients(
+            region = region,
+            ecs = EcsClient.builder.region(Region.of(region)).build,
+            autoscaling =
+              AutoScalingClient.builder.region(Region.of(region)).build,
+            ec2 = Ec2Client.builder.region(Region.of(region)).build
+          )
+        }
+        advertisedLabels <-
+          if (ecsConfig.advertiseInstanceAttributes)
+            EcsInstanceLabels.discover(clients.ecs, ecsConfig)
+          else IO.pure(Set.empty[String])
+        support <- IO {
           val ops = EcsOperations.fromClient(
-            client,
-            autoscaling,
-            ec2,
+            clients.ecs,
+            clients.autoscaling,
+            clients.ec2,
             instanceTypeCache,
             ecsConfig
           )
@@ -451,12 +475,12 @@ object EcsElasticSupport {
 
           new ElasticSupport(
             hostConfig = Some((tasksConfig: TasksConfig) =>
-              new DefaultHostConfigurationFromConfig()(tasksConfig)
+              new EcsHostConfiguration(tasksConfig, advertisedLabels)
             ),
             shutdownFromNodeRegistry = shutdown,
             shutdownFromWorker = shutdown,
             createNodeFactory =
-              new EcsCreateNodeFactory(ops, ecsConfig, region),
+              new EcsCreateNodeFactory(ops, ecsConfig, clients.region),
             getNodeName = EcsGetNodeName,
             needsPackageServer = false
           )
