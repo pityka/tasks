@@ -23,7 +23,9 @@ import org.typelevel.otel4s.metrics.{
   BucketBoundaries,
   Counter,
   Histogram,
-  MeterProvider
+  Meter,
+  MeterProvider,
+  ObservableMeasurement
 }
 import tasks.util.config.TasksConfig
 
@@ -177,11 +179,11 @@ private[tasks] object QueueMetrics {
   def pairCap(maxSeries: Int): Int =
     math.max(1, (maxSeries - fixedSeries) / seriesPerTaskPair - 1)
 
-  /** Bound on distinct node labels admitted into label-keyed gauges. Carved
-    * out of the same `tasks.otel.maxSeries` budget; novel labels beyond this
-    * cap fold into the [[otherSentinel]] series. ~2% of total series at
-    * default config (5000 → 100), which is plenty for realistic label
-    * schemes (cloud region, queue name, instance class, …).
+  /** Bound on distinct node labels admitted into label-keyed gauges. Carved out
+    * of the same `tasks.otel.maxSeries` budget; novel labels beyond this cap
+    * fold into the [[otherSentinel]] series. ~2% of total series at default
+    * config (5000 → 100), which is plenty for realistic label schemes (cloud
+    * region, queue name, instance class, …).
     */
   def labelCap(maxSeries: Int): Int = math.max(1, maxSeries / 50)
 
@@ -190,6 +192,30 @@ private[tasks] object QueueMetrics {
 
   val queueWaitTimeBuckets: BucketBoundaries =
     BucketBoundaries(0.1, 1.0, 10.0, 60.0, 600.0)
+
+  private final case class Binding(
+      observable: ObservableMeasurement[IO, Long],
+      record: QueueImpl.State => IO[Unit]
+  )
+
+  private def sequenceRecords[A](
+      values: Vector[A]
+  )(f: A => IO[Unit]): IO[Unit] =
+    values.foldLeft(IO.unit)((acc, a) => acc *> f(a))
+
+  private def scalarGauge(
+      meter: Meter[IO],
+      name: String,
+      description: String,
+      unit: Option[String],
+      select: QueueImpl.State => Long
+  ): Resource[IO, Binding] = {
+    val base = meter.observableGauge[Long](name).withDescription(description)
+    val withUnit = unit.fold(base)(u => base.withUnit(u))
+    Resource
+      .eval(withUnit.createObserver)
+      .map(obs => Binding(obs, st => obs.record(select(st))))
+  }
 
   def make(
       meterProvider: MeterProvider[IO],
@@ -259,121 +285,146 @@ private[tasks] object QueueMetrics {
         labelOverflowWarned = labelOverflowWarnedRef
       )
 
-      _ <- meter
-        .observableGauge[Long]("tasks.queued.count")
-        .withDescription("Tasks currently queued, by task name and version.")
-        .createWithCallback { obs =>
-          stateSnapshot.flatMap { st =>
-            val byTask = st.queuedTasks.valuesIterator
-              .map { case (sch, _) => sch.description.taskId }
-              .toVector
-              .groupBy(identity)
-              .view
-              .mapValues(_.size.toLong)
-              .toVector
-            byTask.foldLeft(IO.unit) { case (acc, (taskId, count)) =>
-              acc *> qm
-                .attrsFor(taskId)
-                .flatMap(attrs => obs.record(count, attrs))
+      queuedCount <- Resource
+        .eval(
+          meter
+            .observableGauge[Long]("tasks.queued.count")
+            .withDescription(
+              "Tasks currently queued, by task name and version."
+            )
+            .createObserver
+        )
+        .map { obs =>
+          Binding(
+            obs,
+            st => {
+              val byTask = st.queuedTasks.valuesIterator
+                .map { case (sch, _) => sch.description.taskId }
+                .toVector
+                .groupBy(identity)
+                .view
+                .mapValues(_.size.toLong)
+                .toVector
+              sequenceRecords(byTask) { case (taskId, count) =>
+                qm.attrsFor(taskId).flatMap(attrs => obs.record(count, attrs))
+              }
             }
-          }
-        }
-
-      _ <- meter
-        .observableGauge[Long]("tasks.running.count")
-        .withDescription("Tasks currently executing, by task name and version.")
-        .createWithCallback { obs =>
-          stateSnapshot.flatMap { st =>
-            val byTask = st.scheduledTasks.valuesIterator
-              .map { case (_, _, _, sch) => sch.description.taskId }
-              .toVector
-              .groupBy(identity)
-              .view
-              .mapValues(_.size.toLong)
-              .toVector
-            byTask.foldLeft(IO.unit) { case (acc, (taskId, count)) =>
-              acc *> qm
-                .attrsFor(taskId)
-                .flatMap(attrs => obs.record(count, attrs))
-            }
-          }
-        }
-
-      _ <- meter
-        .observableGauge[Long]("tasks.resources.allocated.cpu")
-        .withDescription("Total CPU currently allocated to scheduled tasks.")
-        .createWithCallback { obs =>
-          stateSnapshot.flatMap { st =>
-            val total =
-              st.scheduledTasks.valuesIterator.map { case (_, alloc, _, _) =>
-                alloc.cpuMemoryAllocated.cpu.toLong
-              }.sum
-            obs.record(total)
-          }
-        }
-
-      _ <- meter
-        .observableGauge[Long]("tasks.resources.allocated.memory")
-        .withDescription(
-          "Total memory (MB) currently allocated to scheduled tasks."
-        )
-        .withUnit("MB")
-        .createWithCallback { obs =>
-          stateSnapshot.flatMap { st =>
-            val total =
-              st.scheduledTasks.valuesIterator.map { case (_, alloc, _, _) =>
-                alloc.cpuMemoryAllocated.memory.toLong
-              }.sum
-            obs.record(total)
-          }
-        }
-
-      _ <- meter
-        .observableGauge[Long]("tasks.nodes.running.count")
-        .withDescription("Worker nodes currently running.")
-        .createWithCallback { obs =>
-          stateSnapshot.flatMap(st => obs.record(st.nodes.running.size.toLong))
-        }
-
-      _ <- meter
-        .observableGauge[Long]("tasks.nodes.pending.count")
-        .withDescription(
-          "Worker nodes that have been allocated by the scheduler " +
-            "but are not yet up."
-        )
-        .createWithCallback { obs =>
-          stateSnapshot.flatMap(st => obs.record(st.nodes.pending.size.toLong))
-        }
-
-      _ <- meter
-        .observableGauge[Long]("tasks.nodes.inflight.count")
-        .withDescription(
-          "Node requests that have been pre-committed but not yet " +
-            "resolved (still mid-spawn)."
-        )
-        .createWithCallback { obs =>
-          stateSnapshot.flatMap(st =>
-            obs.record(st.nodes.inFlightRequests.size.toLong)
           )
         }
 
-      _ <- meter
-        .observableCounter[Long]("tasks.nodes.cumulative_requested")
-        .withDescription(
-          "Total node requests issued across the lifetime of this " +
-            "task system (monotonic; counts failures too, gates " +
-            "maxNodesCumulative)."
+      runningCount <- Resource
+        .eval(
+          meter
+            .observableGauge[Long]("tasks.running.count")
+            .withDescription(
+              "Tasks currently executing, by task name and version."
+            )
+            .createObserver
         )
-        .createWithCallback { obs =>
-          stateSnapshot.flatMap(st =>
-            obs.record(st.nodes.cumulativeRequested.toLong)
+        .map { obs =>
+          Binding(
+            obs,
+            st => {
+              val byTask = st.scheduledTasks.valuesIterator
+                .map { case (_, _, _, sch) => sch.description.taskId }
+                .toVector
+                .groupBy(identity)
+                .view
+                .mapValues(_.size.toLong)
+                .toVector
+              sequenceRecords(byTask) { case (taskId, count) =>
+                qm.attrsFor(taskId).flatMap(attrs => obs.record(count, attrs))
+              }
+            }
           )
         }
 
-      _ <- registerNodeRegistryGauges(meter, stateSnapshot)
-      _ <- registerLauncherAvailableGauges(meter, stateSnapshot)
-      _ <- registerQueuedResourceGauges(meter, stateSnapshot, qm)
-      _ <- registerLabelGauges(meter, stateSnapshot, qm)
+      allocatedCpu <- scalarGauge(
+        meter,
+        "tasks.resources.allocated.cpu",
+        "Total CPU currently allocated to scheduled tasks.",
+        None,
+        st =>
+          st.scheduledTasks.valuesIterator.map { case (_, alloc, _, _) =>
+            alloc.cpuMemoryAllocated.cpu.toLong
+          }.sum
+      )
+
+      allocatedMemory <- scalarGauge(
+        meter,
+        "tasks.resources.allocated.memory",
+        "Total memory (MB) currently allocated to scheduled tasks.",
+        Some("MB"),
+        st =>
+          st.scheduledTasks.valuesIterator.map { case (_, alloc, _, _) =>
+            alloc.cpuMemoryAllocated.memory.toLong
+          }.sum
+      )
+
+      nodesRunning <- scalarGauge(
+        meter,
+        "tasks.nodes.running.count",
+        "Worker nodes currently running.",
+        None,
+        _.nodes.running.size.toLong
+      )
+
+      nodesPending <- scalarGauge(
+        meter,
+        "tasks.nodes.pending.count",
+        "Worker nodes that have been allocated by the scheduler " +
+          "but are not yet up.",
+        None,
+        _.nodes.pending.size.toLong
+      )
+
+      nodesInflight <- scalarGauge(
+        meter,
+        "tasks.nodes.inflight.count",
+        "Node requests that have been pre-committed but not yet " +
+          "resolved (still mid-spawn).",
+        None,
+        _.nodes.inFlightRequests.size.toLong
+      )
+
+      cumulativeRequested <- Resource
+        .eval(
+          meter
+            .observableCounter[Long]("tasks.nodes.cumulative_requested")
+            .withDescription(
+              "Total node requests issued across the lifetime of this " +
+                "task system (monotonic; counts failures too, gates " +
+                "maxNodesCumulative)."
+            )
+            .createObserver
+        )
+        .map(obs =>
+          Binding(obs, st => obs.record(st.nodes.cumulativeRequested.toLong))
+        )
+
+      nodeRegistry <- nodeRegistryGauges(meter)
+      launcherAvailable <- launcherAvailableGauges(meter)
+      queuedResources <- queuedResourceGauges(meter, qm)
+      labels <- labelGauges(meter, qm)
+
+      bindings = List(
+        queuedCount,
+        runningCount,
+        allocatedCpu,
+        allocatedMemory,
+        nodesRunning,
+        nodesPending,
+        nodesInflight,
+        cumulativeRequested
+      ) ::: nodeRegistry ::: launcherAvailable ::: queuedResources ::: labels
+
+      _ <- meter.batchCallback(
+        stateSnapshot.flatMap(st =>
+          sequenceRecords(bindings.toVector)(_.record(st))
+        ),
+        bindings.head.observable,
+        bindings.tail.map(_.observable): _*
+      )
     } yield qm
   }
 
@@ -382,8 +433,8 @@ private[tasks] object QueueMetrics {
     * `tasks.queued.affinity_label` gauge.
     *
     * For `And` and `Or` this returns the union of the children's positive
-    * labels: a task with `Or(Has(a), Has(b))` contributes a unit count to
-    * BOTH a and b, since the task can be satisfied by either. This is the
+    * labels: a task with `Or(Has(a), Has(b))` contributes a unit count to BOTH
+    * a and b, since the task can be satisfied by either. This is the
     * over-counting compromise needed to keep the gauge label-keyed without
     * fanning out to power-sets.
     */
@@ -399,11 +450,10 @@ private[tasks] object QueueMetrics {
       xs.iterator.flatMap(positiveSelectorLabels).toSet
   }
 
-  private def registerLabelGauges(
-      meter: org.typelevel.otel4s.metrics.Meter[IO],
-      stateSnapshot: IO[QueueImpl.State],
+  private def labelGauges(
+      meter: Meter[IO],
       qm: QueueMetrics
-  ): Resource[IO, Unit] = {
+  ): Resource[IO, List[Binding]] = {
 
     def countByLabel(
         labelSources: QueueImpl.State => Iterator[Set[String]]
@@ -420,51 +470,56 @@ private[tasks] object QueueMetrics {
         name: String,
         description: String,
         select: QueueImpl.State => Map[String, Long]
-    ): Resource[IO, Unit] =
-      meter
-        .observableGauge[Long](name)
-        .withDescription(description)
-        .createWithCallback { obs =>
-          stateSnapshot.flatMap { st =>
-            val counts = select(st)
-            // Resolve admittance first (some labels may fold into _other),
-            // then SUM counts per resolved attribute set so a gauge point
-            // labelled _other reflects the aggregate of all overflowed
-            // labels rather than the last one recorded (OTel gauges are
-            // last-wins per attribute set).
-            counts.toVector
-              .foldLeft(IO.pure(Map.empty[Attributes, Long])) {
-                case (accIO, (label, count)) =>
-                  accIO.flatMap { acc =>
-                    qm.labelAttrsFor(label).map { attrs =>
-                      acc.updated(attrs, acc.getOrElse(attrs, 0L) + count)
+    ): Resource[IO, Binding] =
+      Resource
+        .eval(
+          meter
+            .observableGauge[Long](name)
+            .withDescription(description)
+            .createObserver
+        )
+        .map { obs =>
+          Binding(
+            obs,
+            st => {
+              val counts = select(st)
+              // Resolve admittance first (some labels may fold into _other),
+              // then SUM counts per resolved attribute set so a gauge point
+              // labelled _other reflects the aggregate of all overflowed
+              // labels rather than the last one recorded (OTel gauges are
+              // last-wins per attribute set).
+              counts.toVector
+                .foldLeft(IO.pure(Map.empty[Attributes, Long])) {
+                  case (accIO, (label, count)) =>
+                    accIO.flatMap { acc =>
+                      qm.labelAttrsFor(label).map { attrs =>
+                        acc.updated(attrs, acc.getOrElse(attrs, 0L) + count)
+                      }
                     }
-                  }
-              }
-              .flatMap { byAttrs =>
-                byAttrs.toVector.foldLeft(IO.unit) {
-                  case (acc, (attrs, count)) =>
-                    acc *> obs.record(count, attrs)
                 }
-              }
-          }
+                .flatMap { byAttrs =>
+                  sequenceRecords(byAttrs.toVector) { case (attrs, count) =>
+                    obs.record(count, attrs)
+                  }
+                }
+            }
+          )
         }
-        .map(_ => ())
 
     for {
-      _ <- labelGauge(
+      nodesRunningByLabel <- labelGauge(
         "tasks.nodes.running.by_label",
         "Worker nodes currently running, broken down by every label they advertise. " +
           "A node with N labels contributes one point per label.",
         countByLabel(_.nodes.running.valuesIterator.map(_.labels))
       )
-      _ <- labelGauge(
+      nodesPendingByLabel <- labelGauge(
         "tasks.nodes.pending.by_label",
         "Worker nodes allocated but not yet up, broken down by every label they " +
           "advertise. A node with N labels contributes one point per label.",
         countByLabel(_.nodes.pending.valuesIterator.map(_.labels))
       )
-      _ <- labelGauge(
+      queuedByAffinityLabel <- labelGauge(
         "tasks.queued.affinity_label",
         "Queued tasks whose ResourceRequest.nodeSelector references the given label " +
           "via a Has(...) clause. A task whose selector mentions K positive labels " +
@@ -477,21 +532,23 @@ private[tasks] object QueueMetrics {
         }
       )
 
-      _ <- meter
-        .observableGauge[Long]("tasks.queued.with_selector.count")
-        .withDescription(
-          "Queued tasks whose ResourceRequest.nodeSelector is set (any " +
-            "affinity or avoidance constraint)."
-        )
-        .createWithCallback { obs =>
-          stateSnapshot.flatMap { st =>
-            val n = st.queuedTasks.valuesIterator.count { case (sch, _) =>
-              sch.resource.cpuMemoryRequest.nodeSelector.isDefined
-            }
-            obs.record(n.toLong)
-          }
-        }
-    } yield ()
+      queuedWithSelector <- scalarGauge(
+        meter,
+        "tasks.queued.with_selector.count",
+        "Queued tasks whose ResourceRequest.nodeSelector is set (any " +
+          "affinity or avoidance constraint).",
+        None,
+        st =>
+          st.queuedTasks.valuesIterator.count { case (sch, _) =>
+            sch.resource.cpuMemoryRequest.nodeSelector.isDefined
+          }.toLong
+      )
+    } yield List(
+      nodesRunningByLabel,
+      nodesPendingByLabel,
+      queuedByAffinityLabel,
+      queuedWithSelector
+    )
   }
 
   private def sumResources(
@@ -510,26 +567,16 @@ private[tasks] object QueueMetrics {
     (cpu, memory, scratch, gpu)
   }
 
-  private def registerNodeRegistryGauges(
-      meter: org.typelevel.otel4s.metrics.Meter[IO],
-      stateSnapshot: IO[QueueImpl.State]
-  ): Resource[IO, Unit] = {
+  private def nodeRegistryGauges(
+      meter: Meter[IO]
+  ): Resource[IO, List[Binding]] = {
     def gauge(
         name: String,
         description: String,
         unit: Option[String],
         select: QueueImpl.State => Long
-    ): Resource[IO, Unit] = {
-      val base = meter
-        .observableGauge[Long](name)
-        .withDescription(description)
-      val withUnit = unit.fold(base)(u => base.withUnit(u))
-      withUnit
-        .createWithCallback(obs =>
-          stateSnapshot.flatMap(st => obs.record(select(st)))
-        )
-        .map(_ => ())
-    }
+    ): Resource[IO, Binding] =
+      scalarGauge(meter, name, description, unit, select)
 
     def fromRunning(st: QueueImpl.State) = sumResources(st.nodes.running.values)
     def fromPending(st: QueueImpl.State) = sumResources(st.nodes.pending.values)
@@ -537,87 +584,99 @@ private[tasks] object QueueMetrics {
       sumResources(st.nodes.inFlightRequests)
 
     for {
-      _ <- gauge(
+      runningCpu <- gauge(
         "tasks.nodes.running.cpu",
         "Total CPU provisioned across running worker nodes.",
         None,
         fromRunning(_)._1
       )
-      _ <- gauge(
+      runningMemory <- gauge(
         "tasks.nodes.running.memory",
         "Total memory (MB) provisioned across running worker nodes.",
         Some("MB"),
         fromRunning(_)._2
       )
-      _ <- gauge(
+      runningScratch <- gauge(
         "tasks.nodes.running.scratch",
         "Total scratch space provisioned across running worker nodes.",
         None,
         fromRunning(_)._3
       )
-      _ <- gauge(
+      runningGpu <- gauge(
         "tasks.nodes.running.gpu",
         "Total GPU count provisioned across running worker nodes.",
         None,
         fromRunning(_)._4
       )
 
-      _ <- gauge(
+      pendingCpu <- gauge(
         "tasks.nodes.pending.cpu",
         "Total CPU on worker nodes allocated but not yet up.",
         None,
         fromPending(_)._1
       )
-      _ <- gauge(
+      pendingMemory <- gauge(
         "tasks.nodes.pending.memory",
         "Total memory (MB) on worker nodes allocated but not yet up.",
         Some("MB"),
         fromPending(_)._2
       )
-      _ <- gauge(
+      pendingScratch <- gauge(
         "tasks.nodes.pending.scratch",
         "Total scratch on worker nodes allocated but not yet up.",
         None,
         fromPending(_)._3
       )
-      _ <- gauge(
+      pendingGpu <- gauge(
         "tasks.nodes.pending.gpu",
         "Total GPU count on worker nodes allocated but not yet up.",
         None,
         fromPending(_)._4
       )
 
-      _ <- gauge(
+      inflightCpu <- gauge(
         "tasks.nodes.inflight.cpu",
         "Total CPU pre-committed for node requests still mid-spawn.",
         None,
         fromInflight(_)._1
       )
-      _ <- gauge(
+      inflightMemory <- gauge(
         "tasks.nodes.inflight.memory",
         "Total memory (MB) pre-committed for node requests still mid-spawn.",
         Some("MB"),
         fromInflight(_)._2
       )
-      _ <- gauge(
+      inflightScratch <- gauge(
         "tasks.nodes.inflight.scratch",
         "Total scratch pre-committed for node requests still mid-spawn.",
         None,
         fromInflight(_)._3
       )
-      _ <- gauge(
+      inflightGpu <- gauge(
         "tasks.nodes.inflight.gpu",
         "Total GPU count pre-committed for node requests still mid-spawn.",
         None,
         fromInflight(_)._4
       )
-    } yield ()
+    } yield List(
+      runningCpu,
+      runningMemory,
+      runningScratch,
+      runningGpu,
+      pendingCpu,
+      pendingMemory,
+      pendingScratch,
+      pendingGpu,
+      inflightCpu,
+      inflightMemory,
+      inflightScratch,
+      inflightGpu
+    )
   }
 
-  private def registerLauncherAvailableGauges(
-      meter: org.typelevel.otel4s.metrics.Meter[IO],
-      stateSnapshot: IO[QueueImpl.State]
-  ): Resource[IO, Unit] = {
+  private def launcherAvailableGauges(
+      meter: Meter[IO]
+  ): Resource[IO, List[Binding]] = {
     def allocatedSums(st: QueueImpl.State): (Long, Long, Long, Long) = {
       var cpu = 0L
       var memory = 0L
@@ -644,51 +703,41 @@ private[tasks] object QueueMetrics {
         description: String,
         unit: Option[String],
         select: QueueImpl.State => Long
-    ): Resource[IO, Unit] = {
-      val base = meter
-        .observableGauge[Long](name)
-        .withDescription(description)
-      val withUnit = unit.fold(base)(u => base.withUnit(u))
-      withUnit
-        .createWithCallback(obs =>
-          stateSnapshot.flatMap(st => obs.record(select(st)))
-        )
-        .map(_ => ())
-    }
+    ): Resource[IO, Binding] =
+      scalarGauge(meter, name, description, unit, select)
 
     for {
-      _ <- gauge(
+      availableCpu <- gauge(
         "tasks.launchers.available.cpu",
         "CPU currently free across launchers (running node total minus allocated).",
         None,
         availableFor(_)._1
       )
-      _ <- gauge(
+      availableMemory <- gauge(
         "tasks.launchers.available.memory",
         "Memory (MB) currently free across launchers (running node total minus allocated).",
         Some("MB"),
         availableFor(_)._2
       )
-      _ <- gauge(
+      availableScratch <- gauge(
         "tasks.launchers.available.scratch",
         "Scratch currently free across launchers (running node total minus allocated).",
         None,
         availableFor(_)._3
       )
-      _ <- gauge(
+      availableGpu <- gauge(
         "tasks.launchers.available.gpu",
         "GPU count currently free across launchers (running node total minus allocated).",
         None,
         availableFor(_)._4
       )
-    } yield ()
+    } yield List(availableCpu, availableMemory, availableScratch, availableGpu)
   }
 
-  private def registerQueuedResourceGauges(
-      meter: org.typelevel.otel4s.metrics.Meter[IO],
-      stateSnapshot: IO[QueueImpl.State],
+  private def queuedResourceGauges(
+      meter: Meter[IO],
       qm: QueueMetrics
-  ): Resource[IO, Unit] = {
+  ): Resource[IO, List[Binding]] = {
 
     def byTaskQueuedSums(
         st: QueueImpl.State
@@ -713,50 +762,51 @@ private[tasks] object QueueMetrics {
         description: String,
         unit: Option[String],
         select: ((Long, Long, Long, Long)) => Long
-    ): Resource[IO, Unit] = {
+    ): Resource[IO, Binding] = {
       val base = meter
         .observableGauge[Long](name)
         .withDescription(description)
       val withUnit = unit.fold(base)(u => base.withUnit(u))
-      withUnit
-        .createWithCallback { obs =>
-          stateSnapshot.flatMap { st =>
-            val sums = byTaskQueuedSums(st)
-            sums.toVector.foldLeft(IO.unit) { case (acc, (taskId, tuple)) =>
-              acc *> qm
-                .attrsFor(taskId)
-                .flatMap(attrs => obs.record(select(tuple), attrs))
-            }
-          }
+      Resource
+        .eval(withUnit.createObserver)
+        .map { obs =>
+          Binding(
+            obs,
+            st =>
+              sequenceRecords(byTaskQueuedSums(st).toVector) {
+                case (taskId, tuple) =>
+                  qm.attrsFor(taskId)
+                    .flatMap(attrs => obs.record(select(tuple), attrs))
+              }
+          )
         }
-        .map(_ => ())
     }
 
     for {
-      _ <- gauge(
+      queuedCpu <- gauge(
         "tasks.queued.cpu",
         "Total max-CPU requested across currently queued tasks, by task name and version.",
         None,
         _._1
       )
-      _ <- gauge(
+      queuedMemory <- gauge(
         "tasks.queued.memory",
         "Total memory (MB) requested across currently queued tasks, by task name and version.",
         Some("MB"),
         _._2
       )
-      _ <- gauge(
+      queuedScratch <- gauge(
         "tasks.queued.scratch",
         "Total scratch requested across currently queued tasks, by task name and version.",
         None,
         _._3
       )
-      _ <- gauge(
+      queuedGpu <- gauge(
         "tasks.queued.gpu",
         "Total GPU count requested across currently queued tasks, by task name and version.",
         None,
         _._4
       )
-    } yield ()
+    } yield List(queuedCpu, queuedMemory, queuedScratch, queuedGpu)
   }
 }
