@@ -101,7 +101,8 @@ private[tasks] object Launcher {
         Launcher.State(
           maxResources = slots,
           availableResources = slots,
-          lastTaskFinished = System.nanoTime
+          lastTaskFinished = System.nanoTime,
+          pendingReports = Nil
         )
       )
 
@@ -123,7 +124,11 @@ private[tasks] object Launcher {
       val askForWorkScheduler =
         fs2.Stream
           .fixedRate[IO](refreshInterval)
-          .evalMap(_ => derive(ref).askForWork(ref, messenger, address, queue))
+          .evalMap { _ =>
+            val handle = derive(ref)
+            handle.drainPendingReports *> handle
+              .askForWork(ref, messenger, address, queue)
+          }
 
       val incrementStream =
         fs2.Stream
@@ -215,6 +220,14 @@ private[tasks] object Launcher {
     }
   }
 
+  case class PendingReport(
+      scheduleTask: MessageData.ScheduleTask,
+      result: UntypedResultWithMetadata,
+      elapsedTime: ElapsedTimeNanoSeconds,
+      resourceAllocated: ResourceAllocated
+  )
+
+
   /** Per-launcher mutable state.
     *
     * @param lastTaskFinished
@@ -243,7 +256,8 @@ private[tasks] object Launcher {
             Long,
             Deferred[IO, FiberIO[Unit]]
         )
-      ] = Nil
+      ] = Nil,
+      pendingReports: List[PendingReport]
   ) {
 
     def isIdle = runningTasks.isEmpty
@@ -460,6 +474,34 @@ private[tasks] object Launcher {
       }
     }
 
+    private def reportOrPark(report: Launcher.PendingReport): IO[Unit] =
+      queue
+        .taskSuccess(
+          report.scheduleTask,
+          report.result,
+          report.elapsedTime,
+          report.resourceAllocated
+        )
+        .handleErrorWith { e =>
+          IO(
+            scribe.warn(
+              e,
+              "Failed to report this completed task to the queue. The result is parked on this launcher and reported again on each ask for work. The allocated resources are already released. If this launcher dies before it succeeds then the queue reenqueues the task.",
+              report.scheduleTask,
+              address
+            )
+          ) *> ref.update { state =>
+            state.copy(pendingReports = state.pendingReports :+ report)
+          }
+        }
+
+    private[tasks] def drainPendingReports: IO[Unit] =
+      ref
+        .modify(state =>
+          (state.copy(pendingReports = Nil), state.pendingReports)
+        )
+        .flatMap(reports => IO.parSequenceN(1)(reports.map(reportOrPark)).void)
+
     private[tasks] def internalMessageFromTask(
         task: Task,
         result: UntypedResultWithMetadata
@@ -503,6 +545,13 @@ private[tasks] object Launcher {
           val elapsedTime =
             ElapsedTimeNanoSeconds(System.nanoTime - elem._4)
 
+          val report = Launcher.PendingReport(
+            scheduleTask,
+            receivedResult,
+            elapsedTime,
+            resourceAllocated.cpuMemoryAllocated
+          )
+
           val sideEffect = if (!receivedResult.noCache) {
 
             cache
@@ -520,22 +569,12 @@ private[tasks] object Launcher {
                     scribe.error(e, s"Failed to save", scheduleTask, address)
                   )
                 case Right(_) =>
-                  queue.taskSuccess(
-                    scheduleTask,
-                    receivedResult,
-                    elapsedTime,
-                    resourceAllocated.cpuMemoryAllocated
-                  )
+                  reportOrPark(report)
 
               }
 
           } else {
-            queue.taskSuccess(
-              scheduleTask,
-              receivedResult,
-              elapsedTime,
-              resourceAllocated.cpuMemoryAllocated
-            )
+            reportOrPark(report)
 
           }
 
