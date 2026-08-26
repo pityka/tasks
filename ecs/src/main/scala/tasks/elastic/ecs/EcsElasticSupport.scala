@@ -102,13 +102,19 @@ class EcsCreateNode(
       config: TasksConfig
   ): IO[Either[String, (PendingJobId, ResourceAvailable)]] =
     ecsConfig.resolveTaskDefinition(requestSize.image) match {
-      case Left(error)           => IO.pure(Left(error))
-      case Right(taskDefinition) => place(requestSize, taskDefinition)
+      case Left(error) => IO.pure(Left(error))
+      case Right(taskDefinition) =>
+        EcsAttributes.placementExpression(requestSize.nodeSelector) match {
+          case Left(error) => IO.pure(Left(error))
+          case Right(placementExpression) =>
+            place(requestSize, taskDefinition, placementExpression)
+        }
     }
 
   private def place(
       requestSize: ResourceRequest,
-      taskDefinition: String
+      taskDefinition: String,
+      placementExpression: Option[String]
   )(implicit
       config: TasksConfig
   ): IO[Either[String, (PendingJobId, ResourceAvailable)]] = {
@@ -144,7 +150,8 @@ class EcsCreateNode(
       cpuUnits = EcsOperations.vcpuToCpuUnits(resources.cpu),
       memoryMib = resources.memory,
       gpus = resources.gpu.size,
-      environment = environment
+      environment = environment,
+      placementExpression = placementExpression
     )
 
     screen(
@@ -271,7 +278,8 @@ class EcsCreateNode(
                   s"ECS placement via $target failed (${failures.map(_.render).mkString("; ")}); trying ${rest.mkString(", ")}"
                 )
               ) *> attempt(spec, rest, resources)
-            case Left(failures) => classify(target, failures, resources)
+            case Left(failures) =>
+              classify(target, failures, resources, spec.placementExpression)
           }
           .handleErrorWith { e =>
             val msg =
@@ -286,7 +294,8 @@ class EcsCreateNode(
   private def classify(
       target: PlacementTarget,
       failures: List[TaskPlacementFailure],
-      requested: ResourceAvailable
+      requested: ResourceAvailable,
+      placementExpression: Option[String]
   ): IO[Either[String, (PendingJobId, ResourceAvailable)]] = {
     val rendered =
       if (failures.isEmpty) "RunTask returned neither a task nor a failure"
@@ -298,6 +307,9 @@ class EcsCreateNode(
 
     val capacityShortage =
       failures.nonEmpty && failures.forall(_.isCapacityShortage)
+
+    val attributeMismatch =
+      failures.nonEmpty && failures.forall(_.isAttributeMismatch)
 
     val logged =
       if (capacityShortage)
@@ -314,7 +326,18 @@ class EcsCreateNode(
               )
             )
           )
-      else IO(scribe.error(base)).as(base)
+      else if (attributeMismatch) {
+        val explained =
+          s"$base. No ACTIVE container instance satisfies the placement " +
+            s"constraint ${placementExpression.getOrElse("<none>")} derived " +
+            "from the node selector of this request. A placement constraint " +
+            "filters the instances which are already registered, it does not " +
+            "make the auto scaling group launch a matching one, so retrying " +
+            "this request cannot help. Set the attribute on the container " +
+            "instances (ECS_INSTANCE_ATTRIBUTES in /etc/ecs/ecs.config, or " +
+            "the PutAttributes API), or drop the node selector."
+        IO(scribe.error(explained)).as(explained)
+      } else IO(scribe.error(base)).as(base)
 
     logged.map(msg => Left(msg))
   }

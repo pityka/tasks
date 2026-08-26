@@ -31,6 +31,8 @@ final case class TaskPlacementFailure(reason: String, detail: Option[String]) {
 
   def isCapacityShortage: Boolean =
     reason.startsWith("RESOURCE:") || reason == "AGENT"
+
+  def isAttributeMismatch: Boolean = reason == "ATTRIBUTE"
 }
 
 final case class WorkerTaskSpec(
@@ -40,7 +42,8 @@ final case class WorkerTaskSpec(
     cpuUnits: Int,
     memoryMib: Int,
     gpus: Int,
-    environment: Map[String, String]
+    environment: Map[String, String],
+    placementExpression: Option[String]
 )
 
 trait EcsOperations {
@@ -72,6 +75,20 @@ object EcsOperations {
   def vcpuToCpuUnits(vcpu: Int): Int = vcpu * CpuUnitsPerVcpu
 
   def cpuUnitsToVcpu(units: Int): Int = units / CpuUnitsPerVcpu
+
+  private[ecs] def constraintExpression(
+      target: PlacementTarget,
+      placementExpression: Option[String]
+  ): Option[String] =
+    target match {
+      case PlacementTarget.External =>
+        Some(
+          placementExpression.fold(externalInstanceFilter)(selector =>
+            s"$externalInstanceFilter and ($selector)"
+          )
+        )
+      case PlacementTarget.CapacityProvider(_) => placementExpression
+    }
 
   def fromClient(
       ecs: EcsClient,
@@ -172,25 +189,32 @@ object EcsOperations {
           TaskOverride.builder.containerOverrides(containerOverride).build
         )
 
+      def memberOf(expression: String) =
+        PlacementConstraint.builder
+          .`type`(PlacementConstraintType.MEMBER_OF)
+          .expression(expression)
+          .build
+
+      val constraint =
+        EcsOperations.constraintExpression(target, spec.placementExpression)
+
       // External (ECS Anywhere / on-prem) instances aren't members of any
       // capacity provider, so they're reachable only via launchType=EXTERNAL
       // + a placement constraint -- capacityProviderStrategy is the other,
       // mutually exclusive mechanism, used for the elastic pool.
-      val requestBuilder = target match {
+      val onTarget = target match {
         case PlacementTarget.External =>
-          requestBuilderBase
-            .launchType(LaunchType.EXTERNAL)
-            .placementConstraints(
-              PlacementConstraint.builder
-                .`type`(PlacementConstraintType.MEMBER_OF)
-                .expression(EcsOperations.externalInstanceFilter)
-                .build
-            )
+          requestBuilderBase.launchType(LaunchType.EXTERNAL)
         case PlacementTarget.CapacityProvider(capacityProvider) =>
           requestBuilderBase.capacityProviderStrategy(
             strategy(capacityProvider).asJava
           )
       }
+
+      val requestBuilder =
+        constraint.fold(onTarget)(expression =>
+          onTarget.placementConstraints(memberOf(expression))
+        )
 
       val request =
         if (sdkTags.isEmpty) requestBuilder.build
@@ -200,7 +224,8 @@ object EcsOperations {
         scribe.info(
           s"ecs.runTask(cluster=$cluster, target=$target, " +
             s"taskDefinition=${spec.taskDefinition}, cpuUnits=${spec.cpuUnits}, " +
-            s"memoryMiB=${spec.memoryMib}, gpus=${spec.gpus})"
+            s"memoryMiB=${spec.memoryMib}, gpus=${spec.gpus}, " +
+            s"constraint=${spec.placementExpression.getOrElse("none")})"
         )
       ) *>
         IO.interruptible(ecs.runTask(request)).map { response =>
