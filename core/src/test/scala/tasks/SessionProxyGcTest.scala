@@ -270,8 +270,8 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
       noCache = true
     )
 
-    val program = Ref.of[IO, QueueImpl.State](QueueImpl.State.empty).flatMap {
-      stateRef =>
+    val program =
+      Ref.of[IO, QueueImpl.State](QueueImpl.State.empty).flatMap { stateRef =>
         tasks.util.LocalMessenger.make
           .flatMap { messenger =>
             QueueImpl.fromTransaction(
@@ -305,7 +305,7 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
               polled <- q.pollResult(liveProxy.address)
             } yield (dispatched, polled)
           }
-    }
+      }
 
     val (dispatched, polled) = program.unsafeRunSync()
 
@@ -350,7 +350,9 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
 
     val proxies = state.scheduledTasks.values.flatMap(_._3).toList
     proxies should not be empty
-    proxies.map(p => SessionId.of(p.address.value)).toSet shouldBe launcherSessions
+    proxies
+      .map(p => SessionId.of(p.address.value))
+      .toSet shouldBe launcherSessions
   }
 
 }

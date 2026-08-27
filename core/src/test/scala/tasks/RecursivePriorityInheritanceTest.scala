@@ -39,7 +39,9 @@ object RecursivePriorityInheritanceTest extends TestHelpers {
     withTaskSystem(testConfig2) { implicit ts =>
       chainTask(Input(depth)).map { _ =>
         import scala.jdk.CollectionConverters._
-        recordedPriorities.asScala.toMap.map { case (k, v) => (k.toInt, v.toInt) }
+        recordedPriorities.asScala.toMap.map { case (k, v) =>
+          (k.toInt, v.toInt)
+        }
       }
     }
   }

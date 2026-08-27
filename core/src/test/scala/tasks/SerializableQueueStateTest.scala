@@ -12,7 +12,13 @@ import tasks.util.message._
 class SerializableQueueStateTest extends FunSuite with Matchers {
 
   private val resource =
-    ResourceAvailable(cpu = 2, memory = 500, scratch = 10, gpu = List(0), image = Some("img"))
+    ResourceAvailable(
+      cpu = 2,
+      memory = 500,
+      scratch = 10,
+      gpu = List(0),
+      image = Some("img")
+    )
 
   private val launcher = LauncherName("launcher-1")
 
@@ -108,7 +114,9 @@ class SerializableQueueStateTest extends FunSuite with Matchers {
     decodedProxies.map(_.listeningUri) shouldBe List(
       Some("http://worker:1234/prefix")
     )
-    decoded.queuedTasks.values.map(_._1.proxy.listeningUri).toList shouldBe List(
+    decoded.queuedTasks.values
+      .map(_._1.proxy.listeningUri)
+      .toList shouldBe List(
       Some("http://worker:1234/prefix")
     )
   }

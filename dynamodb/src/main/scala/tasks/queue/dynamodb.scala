@@ -143,8 +143,8 @@ object DynamoDb {
     private def writeIfUnchanged(
         state: State,
         expectedVersion: Long
-    ): IO[Boolean] = IO(compress(SerializableQueueState.encode(state))).flatMap {
-      payload =>
+    ): IO[Boolean] =
+      IO(compress(SerializableQueueState.encode(state))).flatMap { payload =>
         if (payload.length > stateSizeLimitBytes)
           IO.raiseError(
             new RuntimeException(
@@ -185,10 +185,12 @@ object DynamoDb {
             .recover { case _: ConditionalCheckFailedException => false }
             .adaptError { case e: ResourceNotFoundException => missingTable(e) }
         }
-    }
+      }
 
     private def backoff(attempt: Int): IO[Unit] =
-      IO.sleep(retryBaseDelay * math.pow(2d, math.min(attempt, 5).toDouble).toLong)
+      IO.sleep(
+        retryBaseDelay * math.pow(2d, math.min(attempt, 5).toDouble).toLong
+      )
 
     override def flatModify[B](update: State => (State, IO[B])): IO[B] = {
       def loop(attempt: Int): IO[IO[B]] =

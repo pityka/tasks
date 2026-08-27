@@ -340,7 +340,7 @@ class BatchCreateNode(
       config: TasksConfig
   ): IO[Either[String, (PendingJobId, ResourceAvailable)]] =
     batchConfig.resolveJobDefinition(requestSize.image) match {
-      case Left(err) => IO.pure(Left(err))
+      case Left(err)            => IO.pure(Left(err))
       case Right(jobDefinition) => submitJob(requestSize, jobDefinition)
     }
 
@@ -358,8 +358,9 @@ class BatchCreateNode(
       )
       selectJobQueue(preliminaryResources)
         .flatMap { targetQueueInfo =>
-          adaptMinimumsToQueue(targetQueueInfo.name).map { case (minCpu, minMem) =>
-            (targetQueueInfo, selectResources(requestSize, minCpu, minMem))
+          adaptMinimumsToQueue(targetQueueInfo.name).map {
+            case (minCpu, minMem) =>
+              (targetQueueInfo, selectResources(requestSize, minCpu, minMem))
           }
         }
         .flatMap { case (targetQueueInfo, selectedResources) =>
@@ -480,18 +481,20 @@ class BatchCreateNode(
     if (onDemandCandidates.isEmpty) IO.pure(false)
     else {
       val aggregateMaxVcpus = onDemandCandidates.map(_.maxVcpus.toLong).sum
-      sumOnDemandJobVcpus(onDemandCandidates.map(_.name)).map { inUseVcpus =>
-        scribe.info(
-          s"on-demand aggregate cap=$aggregateMaxVcpus inUseVcpus=$inUseVcpus ask=${request.cpu} queues=[${onDemandCandidates.map(_.name).mkString(",")}]"
-        )
-        inUseVcpus.toLong + request.cpu.toLong <= aggregateMaxVcpus
-      }.handleErrorWith { e =>
-        IO(
-          scribe.warn(
-            s"Failed to compute on-demand headroom, defaulting to on-demand: ${e.getMessage}"
+      sumOnDemandJobVcpus(onDemandCandidates.map(_.name))
+        .map { inUseVcpus =>
+          scribe.info(
+            s"on-demand aggregate cap=$aggregateMaxVcpus inUseVcpus=$inUseVcpus ask=${request.cpu} queues=[${onDemandCandidates.map(_.name).mkString(",")}]"
           )
-        ).as(true)
-      }
+          inUseVcpus.toLong + request.cpu.toLong <= aggregateMaxVcpus
+        }
+        .handleErrorWith { e =>
+          IO(
+            scribe.warn(
+              s"Failed to compute on-demand headroom, defaulting to on-demand: ${e.getMessage}"
+            )
+          ).as(true)
+        }
     }
 
   private def selectJobQueue(
@@ -578,22 +581,25 @@ class BatchCreateNode(
     if (jobIds.isEmpty) IO.pure(Nil)
     else
       IO.interruptible {
-        jobIds.grouped(100).flatMap { batchIds =>
-          val resp = batch.describeJobs(
-            DescribeJobsRequest.builder.jobs(batchIds.asJava).build
-          )
-          resp.jobs.asScala.toList.map { j =>
-            val vcpus = Option(j.container)
-              .flatMap(c => Option(c.resourceRequirements))
-              .map(_.asScala.toList)
-              .getOrElse(Nil)
-              .find(_.`type` == ResourceType.VCPU)
-              .flatMap(r => Option(r.value))
-              .map(_.toInt)
-              .getOrElse(0)
-            JobDetail(j.jobId, j.status, vcpus)
+        jobIds
+          .grouped(100)
+          .flatMap { batchIds =>
+            val resp = batch.describeJobs(
+              DescribeJobsRequest.builder.jobs(batchIds.asJava).build
+            )
+            resp.jobs.asScala.toList.map { j =>
+              val vcpus = Option(j.container)
+                .flatMap(c => Option(c.resourceRequirements))
+                .map(_.asScala.toList)
+                .getOrElse(Nil)
+                .find(_.`type` == ResourceType.VCPU)
+                .flatMap(r => Option(r.value))
+                .map(_.toInt)
+                .getOrElse(0)
+              JobDetail(j.jobId, j.status, vcpus)
+            }
           }
-        }.toList
+          .toList
       }
 
   private val maxReconcileAttempts: Int = 5
@@ -715,7 +721,9 @@ object BatchElasticSupport {
       for {
         requestMutex <- Mutex[IO]
         recentOnDemandSubmissions <- Ref.of[IO, List[(Instant, String)]](Nil)
-        instanceTypeCache <- Ref.of[IO, Map[String, InstanceCapacity]](Map.empty)
+        instanceTypeCache <- Ref.of[IO, Map[String, InstanceCapacity]](
+          Map.empty
+        )
         support <- IO {
           val batch =
             batchConfig.region.fold(BatchClient.create)(region =>
