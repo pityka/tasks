@@ -27,7 +27,8 @@ ThisBuild / credentials ++= {
     "GitLab Packages Registry",
     "gitlab.com",
     "Deploy-Token",
-    token)
+    token
+  )
 }.toSeq
 
 ThisBuild / versionScheme := Some("early-semver")
@@ -109,7 +110,10 @@ lazy val commonSettings = Seq(
   ThisBuild / parallelExecution := false,
   cancelable in Global := true,
   scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
-  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings")),  
+  scalacOptions in (
+    Compile,
+    console
+  ) ~= (_ filterNot (_ == "-Xfatal-warnings")),
   Compile / doc / sources := Seq.empty
 )
 
