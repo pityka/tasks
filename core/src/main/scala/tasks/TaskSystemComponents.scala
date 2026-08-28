@@ -849,6 +849,69 @@ object TaskSystemComponents {
 
           }
 
+          def otherMainProcessesIn(state: QueueImpl.State) =
+            (state.mainProcesses - sessionId).toList.sorted
+
+          def warnIfQueueStateIsOccupied(state: QueueImpl.State): IO[Unit] = {
+            val otherMainProcesses = otherMainProcessesIn(state)
+            val launchers = state.knownLaunchers.keySet.toList
+            val launcherSessions = launchers
+              .flatMap(launcher => tasks.util.SessionId.of(launcher.name))
+              .distinct
+              .sorted
+            if (otherMainProcesses.isEmpty && launchers.isEmpty) IO.unit
+            else
+              IO(
+                scribe.warn(
+                  "MainProcessJoinedOccupiedQueueState",
+                  scribe.data(
+                    Map(
+                      "session" -> sessionId,
+                      "other-main-processes" -> otherMainProcesses.toString,
+                      "known-launchers" -> launchers.size,
+                      "known-launcher-sessions" -> launcherSessions.toString,
+                      "explain" -> "This process joined an external queue state which already has other main processes or launchers registered in it. If no other run is live then these are leftovers of a crashed run: this run picks up their queued tasks, stale launchers are dropped only once the failure detector times them out, and a leftover main process keeps the state from being cleared when this one exits. Set tasks.clearQueueStateWhenMainProcessJoins to start from a clean slate instead."
+                    )
+                  )
+                )
+              )
+          }
+
+          def warnIfQueueStateWasCleared(state: QueueImpl.State): IO[Unit] =
+            if (state == QueueImpl.State.empty) IO.unit
+            else {
+              val otherMains = otherMainProcessesIn(state)
+              val nodes = state.nodes
+              IO(
+                scribe.warn(
+                  "QueueStateClearedOnJoin",
+                  scribe.data(
+                    Map(
+                      "session" -> sessionId,
+                      "discarded-main-processes" -> otherMains.toString,
+                      "discarded-known-launchers" -> state.knownLaunchers.size,
+                      "discarded-queued-tasks" -> state.queuedTasks.size,
+                      "discarded-scheduled-tasks" -> state.scheduledTasks.size,
+                      "discarded-completed-results" -> state.completedResults.size,
+                      "discarded-running-nodes" -> nodes.running.size,
+                      "discarded-pending-nodes" -> nodes.pending.size,
+                      "discarded-cumulative-requested" -> nodes.cumulativeRequested,
+                      "explain" -> "tasks.clearQueueStateWhenMainProcessJoins is set, so this process emptied the external queue state it joined and starts from a clean slate. Everything a previous run left behind is gone, and so is everything a concurrently running app process put there. Launchers which are still alive register themselves again when they next ask for work, but nodes are only forgotten here, not shut down."
+                    )
+                  )
+                )
+              )
+            }
+
+          def clearOrWarnAboutExternalQueueState(
+              transaction: Transaction[QueueImpl.State]
+          ): IO[Unit] =
+            if (config.clearQueueStateWhenMainProcessJoins)
+              transaction.flatModify(state =>
+                QueueImpl.State.empty -> warnIfQueueStateWasCleared(state)
+              )
+            else transaction.get.flatMap(warnIfQueueStateIsOccupied)
+
           for {
             _ <- Resource.make(
               IO(scribe.debug("Start allocation of TaskSystem"))
@@ -882,6 +945,11 @@ object TaskSystemComponents {
                 shutdownInitiated.get.map(initiated => !initiated)
               else IO.pure(false)
             externalQueueState <- externalQueueState
+            _ <- Resource.eval(externalQueueState match {
+              case Some(transaction) if hostConfig.isApp =>
+                clearOrWarnAboutExternalQueueState(transaction)
+              case _ => IO.unit
+            })
             messenger <-
               if (externalQueueState.isDefined)
                 Resource

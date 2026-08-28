@@ -162,6 +162,9 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   def clearQueueStateWhenLastMainProcessExits =
     raw.getBoolean("tasks.clearQueueStateWhenLastMainProcessExits")
 
+  def clearQueueStateWhenMainProcessJoins =
+    raw.getBoolean("tasks.clearQueueStateWhenMainProcessJoins")
+
   def verifySharedFileInCache = raw.getBoolean("tasks.verifySharedFileInCache")
 
   val disableRemoting = raw.getBoolean("tasks.disableRemoting")
