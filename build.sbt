@@ -27,7 +27,8 @@ ThisBuild / credentials ++= {
     "GitLab Packages Registry",
     "gitlab.com",
     "Deploy-Token",
-    token)
+    token
+  )
 }.toSeq
 
 ThisBuild / versionScheme := Some("early-semver")
@@ -109,7 +110,10 @@ lazy val commonSettings = Seq(
   ThisBuild / parallelExecution := false,
   cancelable in Global := true,
   scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
-  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings")),  
+  scalacOptions in (
+    Compile,
+    console
+  ) ~= (_ filterNot (_ == "-Xfatal-warnings")),
   Compile / doc / sources := Seq.empty
 )
 
@@ -174,7 +178,7 @@ lazy val core = project
       "com.outr" %% "scribe" % scribeVersion,
       "com.outr" %% "scribe-slf4j" % scribeVersion,
       "org.typelevel" %% "otel4s-core" % otel4sCoreVersion,
-      "org.typelevel" %% "otel4s-sdk-metrics-testkit" % "0.19.0" % "test",
+      "org.typelevel" %% "otel4s-sdk-metrics-testkit" % "0.19.2" % "test",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test"
     ) ++ (CrossVersion
