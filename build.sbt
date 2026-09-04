@@ -27,7 +27,8 @@ ThisBuild / credentials ++= {
     "GitLab Packages Registry",
     "gitlab.com",
     "Deploy-Token",
-    token)
+    token
+  )
 }.toSeq
 
 ThisBuild / versionScheme := Some("early-semver")
@@ -56,8 +57,8 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.18",
-  crossScalaVersions := Seq("2.13.18", "3.6.4"),
+  scalaVersion := "3.9.0",
+  crossScalaVersions := Seq("3.9.0", "3.6.4"),
   parallelExecution in Test := false,
   scalacOptions ++= (CrossVersion.partialVersion(scalaVersion.value) match {
     case Some((2, 13)) =>
@@ -109,7 +110,10 @@ lazy val commonSettings = Seq(
   ThisBuild / parallelExecution := false,
   cancelable in Global := true,
   scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
-  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings")),  
+  scalacOptions in (
+    Compile,
+    console
+  ) ~= (_ filterNot (_ == "-Xfatal-warnings")),
   Compile / doc / sources := Seq.empty
 )
 
