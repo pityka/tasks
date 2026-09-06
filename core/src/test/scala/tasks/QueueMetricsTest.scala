@@ -299,7 +299,7 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
       ),
       scheduledTasks = Map(
         QueueImpl.ScheduleTaskEqualityProjection(schA.description) ->
-          ((launcher, allocated, Nil, schA))
+          QueueImpl.ScheduledTask.dispatchedOnce(schA, launcher, allocated, Nil)
       ),
       knownLaunchers = Map.empty,
       counters = Map.empty,

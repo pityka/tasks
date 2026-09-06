@@ -141,6 +141,7 @@ private[tasks] final class QueueActorBehavior(
     case Message(
           MessageData.TaskDone(
             sch,
+            launcher,
             resultWithMetadata,
             elapsedTime,
             resourceAllocated
@@ -150,13 +151,18 @@ private[tasks] final class QueueActorBehavior(
         ) =>
       impl.taskSuccess(
         sch,
+        launcher,
         resultWithMetadata,
         elapsedTime,
         resourceAllocated
       )
 
-    case Message(MessageData.TaskFailedMessageToQueue(sch, cause), _, _) =>
-      impl.taskFailed(sch, cause)
+    case Message(
+          MessageData.TaskFailedMessageToQueue(sch, launcher, cause),
+          _,
+          _
+        ) =>
+      impl.taskFailed(sch, launcher, cause)
 
     case Message(MessageData.PollProxyResult(proxy), from, _) =>
       impl.pollResult(proxy).flatMap { result =>

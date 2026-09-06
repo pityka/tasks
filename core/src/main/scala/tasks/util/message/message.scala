@@ -135,6 +135,7 @@ private[tasks] object MessageData {
   ) extends MessageData
   case class TaskDone(
       sch: ScheduleTask,
+      launcher: LauncherName,
       result: UntypedResultWithMetadata,
       elapsedTime: ElapsedTimeNanoSeconds,
       resourceAllocated: ResourceAllocated
@@ -185,6 +186,7 @@ private[tasks] object MessageData {
   case class LauncherStopped(launcher: LauncherName) extends MessageData
   case class TaskFailedMessageToQueue(
       sch: ScheduleTask,
+      launcher: LauncherName,
       cause: Throwable
   ) extends MessageData
   case class Schedule(sch: ScheduleTask) extends MessageData

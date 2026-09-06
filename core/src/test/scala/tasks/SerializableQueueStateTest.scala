@@ -59,16 +59,27 @@ class SerializableQueueStateTest extends FunSuite with Matchers {
       QueueImpl.project(queued) -> ((queued, List(Proxy(proxyAddress))))
     ),
     scheduledTasks = Map(
-      QueueImpl.project(scheduled) -> (
-        (
-          launcher,
-          VersionedResourceAllocated(
-            CodeVersion("code-version-1"),
-            ResourceAllocated(1, 500, 10, List(0), Some("img"))
+      QueueImpl.project(scheduled) -> QueueImpl.ScheduledTask(
+        sch = scheduled,
+        dispatches = List(
+          QueueImpl.Dispatch(
+            launcher,
+            VersionedResourceAllocated(
+              CodeVersion("code-version-1"),
+              ResourceAllocated(1, 500, 10, List(0), Some("img"))
+            )
           ),
-          List(Proxy(proxyAddress)),
-          scheduled
-        )
+          QueueImpl.Dispatch(
+            LauncherName("launcher-2"),
+            VersionedResourceAllocated(
+              CodeVersion("code-version-1"),
+              ResourceAllocated(1, 500, 10, List(0), Some("img"))
+            )
+          )
+        ),
+        proxies = List(Proxy(proxyAddress)),
+        placementValue = Some("eu-west-1a"),
+        resultDelivered = false
       )
     ),
     knownLaunchers = Map(launcher -> Some(node)),

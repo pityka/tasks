@@ -55,22 +55,20 @@ class RunningJobAttributionTest extends FunSuite with Matchers {
       memory: Int
   ) = {
     val sch = scheduleTask(hash)
-    QueueImpl.project(sch) -> (
-      (
-        onLauncher,
-        VersionedResourceAllocated(
-          cv,
-          ResourceAllocated(
-            cpu = cpu,
-            memory = memory,
-            scratch = 0,
-            gpu = Nil,
-            image = None
-          )
-        ),
-        List.empty[Proxy],
-        sch
-      )
+    QueueImpl.project(sch) -> QueueImpl.ScheduledTask.dispatchedOnce(
+      sch,
+      onLauncher,
+      VersionedResourceAllocated(
+        cv,
+        ResourceAllocated(
+          cpu = cpu,
+          memory = memory,
+          scratch = 0,
+          gpu = Nil,
+          image = None
+        )
+      ),
+      List.empty[Proxy]
     )
   }
 

@@ -478,6 +478,7 @@ private[tasks] object Launcher {
       queue
         .taskSuccess(
           report.scheduleTask,
+          address,
           report.result,
           report.elapsedTime,
           report.resourceAllocated
@@ -625,7 +626,7 @@ private[tasks] object Launcher {
             availableResources = state.availableResources.addBack(elem._3),
             lastTaskFinished = System.nanoTime
           )
-          val sideEffect = queue.taskFailed(sch, cause)
+          val sideEffect = queue.taskFailed(sch, address, cause)
 
           (st2, sideEffect)
       }

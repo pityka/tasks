@@ -143,16 +143,14 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
         )
       ),
       scheduledTasks = Map(
-        QueueImpl.project(scheduled) -> (
-          (
-            LauncherName(SessionId.tag(liveSession, "Launcher-1")),
-            VersionedResourceAllocated(
-              CodeVersion("v1"),
-              ResourceAllocated(1, 500, 0, Nil, None)
-            ),
-            List(deadProxy, liveProxy),
-            scheduled
-          )
+        QueueImpl.project(scheduled) -> QueueImpl.ScheduledTask.dispatchedOnce(
+          scheduled,
+          LauncherName(SessionId.tag(liveSession, "Launcher-1")),
+          VersionedResourceAllocated(
+            CodeVersion("v1"),
+            ResourceAllocated(1, 500, 0, Nil, None)
+          ),
+          List(deadProxy, liveProxy)
         )
       ),
       knownLaunchers = Map.empty,
@@ -175,7 +173,7 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
 
     after
       .scheduledTasks(QueueImpl.project(scheduled))
-      ._3 shouldBe List(liveProxy)
+      .proxies shouldBe List(liveProxy)
 
     after.completedResults.keySet shouldBe Set(
       liveProxy.address,
@@ -298,6 +296,7 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
               )
               _ <- q.taskSuccess(
                 sch,
+                launcher,
                 completed,
                 ElapsedTimeNanoSeconds(1L),
                 ResourceAllocated(1, 500, 0, Nil, None)
@@ -348,7 +347,7 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
     launcherSessions.size shouldBe 1
     launcherSessions.head shouldBe defined
 
-    val proxies = state.scheduledTasks.values.flatMap(_._3).toList
+    val proxies = state.scheduledTasks.values.flatMap(_.proxies).toList
     proxies should not be empty
     proxies.map(p => SessionId.of(p.address.value)).toSet shouldBe launcherSessions
   }

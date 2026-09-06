@@ -9,6 +9,7 @@ import tasks.util.message.Message
 import tasks.util.message.MessageData
 import tasks.util.message.Address
 import tasks.shared.ElapsedTimeNanoSeconds
+import tasks.shared.Label
 import tasks.shared.ResourceAllocated
 import tasks.shared.ResourceAvailable
 import tasks.shared.ResourceRequest
@@ -52,16 +53,25 @@ object QueueImpl {
   case class TaskScheduled(
       sch: ScheduleTask,
       launcher: LauncherName,
-      allocated: VersionedResourceAllocated
+      allocated: VersionedResourceAllocated,
+      placementValue: Option[String]
   ) extends Event
   case class TaskDone(
       sch: ScheduleTask,
+      launcher: LauncherName,
       result: UntypedResultWithMetadata,
       elapsedTime: ElapsedTimeNanoSeconds,
       resourceAllocated: ResourceAllocated
   ) extends Event
-  case class TaskFailed(sch: ScheduleTask) extends Event
-  case class TaskLauncherStoppedFor(sch: ScheduleTask) extends Event
+  case class TaskFailed(
+      sch: ScheduleTask,
+      launcher: LauncherName,
+      completesCaller: Boolean
+  ) extends Event
+  case class TaskLauncherStoppedFor(
+      sch: ScheduleTask,
+      launcher: LauncherName
+  ) extends Event
   case class LauncherCrashed(crashedLauncher: LauncherName) extends Event
   case class SessionProxiesDropped(session: String) extends Event
   case class MainProcessJoined(session: String) extends Event
@@ -115,15 +125,63 @@ object QueueImpl {
   def project(sch: ScheduleTask) =
     ScheduleTaskEqualityProjection(sch.description)
 
+  case class Dispatch(
+      launcher: LauncherName,
+      allocated: VersionedResourceAllocated
+  )
+
+  case class ScheduledTask(
+      sch: ScheduleTask,
+      dispatches: List[Dispatch],
+      proxies: List[Proxy],
+      placementValue: Option[String],
+      resultDelivered: Boolean
+  ) {
+
+    def copies: Int = dispatches.size
+
+    def roomForAnotherCopy: Boolean =
+      !resultDelivered && copies < sch.resource.cpuMemoryRequest.maximumCopies
+
+    def admitsPlacement(offered: Option[String]): Boolean =
+      sch.resource.cpuMemoryRequest.placementAttribute match {
+        case None => true
+        case Some(_) =>
+          offered.isDefined && placementValue.forall(offered.contains)
+      }
+
+    def dispatchedTo(launcher: LauncherName): Boolean =
+      dispatches.exists(_.launcher === launcher)
+
+    def withoutOneCopyOn(launcher: LauncherName): ScheduledTask = {
+      val index = dispatches.indexWhere(_.launcher === launcher)
+      if (index < 0) this
+      else copy(dispatches = dispatches.patch(index, Nil, 1))
+    }
+  }
+
+  object ScheduledTask {
+    def dispatchedOnce(
+        sch: ScheduleTask,
+        launcher: LauncherName,
+        allocated: VersionedResourceAllocated,
+        proxies: List[Proxy]
+    ): ScheduledTask =
+      ScheduledTask(
+        sch = sch,
+        dispatches = List(Dispatch(launcher, allocated)),
+        proxies = proxies,
+        placementValue = None,
+        resultDelivered = false
+      )
+  }
+
   case class State(
       queuedTasks: Map[
         ScheduleTaskEqualityProjection,
         (ScheduleTask, List[Proxy])
       ],
-      scheduledTasks: Map[
-        ScheduleTaskEqualityProjection,
-        (LauncherName, VersionedResourceAllocated, List[Proxy], ScheduleTask)
-      ],
+      scheduledTasks: Map[ScheduleTaskEqualityProjection, ScheduledTask],
       knownLaunchers: Map[LauncherName, Option[Node]],
       counters: Map[LauncherName, Long],
       nodes: NodeRegistryState.State,
@@ -139,10 +197,11 @@ object QueueImpl {
         }
       val allocationsByNode: Map[RunningJobId, List[ResourceAllocated]] =
         scheduledTasks.values.toList
-          .flatMap { case (launcher, allocated, _, _) =>
+          .flatMap(_.dispatches)
+          .flatMap { dispatch =>
             nodeOfLauncher
-              .get(launcher)
-              .map(_ -> allocated.cpuMemoryAllocated)
+              .get(dispatch.launcher)
+              .map(_ -> dispatch.allocated.cpuMemoryAllocated)
           }
           .groupBy(_._1)
           .map { case (runningJobId, pairs) =>
@@ -156,13 +215,32 @@ object QueueImpl {
       }
     }
 
+    private def releaseCopy(
+        sch: ScheduleTask,
+        launcher: LauncherName,
+        delivered: Boolean
+    ): Map[ScheduleTaskEqualityProjection, ScheduledTask] =
+      scheduledTasks.get(project(sch)) match {
+        case None => scheduledTasks
+        case Some(scheduled) =>
+          val remaining = scheduled
+            .withoutOneCopyOn(launcher)
+            .copy(resultDelivered = scheduled.resultDelivered || delivered)
+          if (remaining.dispatches.isEmpty)
+            scheduledTasks - project(sch)
+          else scheduledTasks.updated(project(sch), remaining)
+      }
+
     def update(e: Event): State = {
       e match {
         case NodeEvent(ev) =>
           copy(nodes = nodes.update(ev))
         case RendezvousJoined(groupId, rank, worldSize, payload) =>
           val group = rendezvous
-            .getOrElse(groupId, RendezvousGroup(worldSize, Map.empty, Set.empty))
+            .getOrElse(
+              groupId,
+              RendezvousGroup(worldSize, Map.empty, Set.empty)
+            )
           copy(rendezvous =
             rendezvous.updated(
               groupId,
@@ -203,36 +281,65 @@ object QueueImpl {
           } else update(ProxyAddedToScheduledMessage(sch, proxies))
 
         case ProxyAddedToScheduledMessage(sch, newProxies) =>
-          val (launcher, allocation, proxies, _) = scheduledTasks(project(sch))
+          val scheduled = scheduledTasks(project(sch))
           copy(
             scheduledTasks = scheduledTasks
               .updated(
                 project(sch),
-                (launcher, allocation, (newProxies ::: proxies).distinct, sch)
+                scheduled.copy(
+                  sch = sch,
+                  proxies = (newProxies ::: scheduled.proxies).distinct
+                )
               )
           )
         case LauncherJoined(launcher, node) =>
           copy(knownLaunchers = knownLaunchers + (launcher -> node))
-        case TaskScheduled(sch, launcher, allocated) =>
-          val (_, proxies) = queuedTasks(project(sch))
-          copy(
-            queuedTasks = queuedTasks - project(sch),
-            scheduledTasks = scheduledTasks
-              .updated(project(sch), (launcher, allocated, proxies, sch))
-          )
+        case TaskScheduled(sch, launcher, allocated, placementValue) =>
+          val dispatch = Dispatch(launcher, allocated)
+          scheduledTasks.get(project(sch)) match {
+            case Some(scheduled) =>
+              copy(
+                queuedTasks = queuedTasks - project(sch),
+                scheduledTasks = scheduledTasks.updated(
+                  project(sch),
+                  scheduled.copy(
+                    dispatches = dispatch :: scheduled.dispatches,
+                    placementValue =
+                      scheduled.placementValue.orElse(placementValue)
+                  )
+                )
+              )
+            case None =>
+              val (_, proxies) = queuedTasks(project(sch))
+              copy(
+                queuedTasks = queuedTasks - project(sch),
+                scheduledTasks = scheduledTasks.updated(
+                  project(sch),
+                  ScheduledTask(
+                    sch = sch,
+                    dispatches = List(dispatch),
+                    proxies = proxies,
+                    placementValue = placementValue,
+                    resultDelivered = false
+                  )
+                )
+              )
+          }
 
-        case TaskDone(sch, _, _, _) =>
+        case TaskDone(sch, launcher, _, _, _) =>
           copy(
-            scheduledTasks = scheduledTasks - project(sch),
+            scheduledTasks = releaseCopy(sch, launcher, delivered = true),
             queuedTasks = queuedTasks - project(sch)
           )
-        case TaskFailed(sch) =>
+        case TaskFailed(sch, launcher, completesCaller) =>
           copy(
-            scheduledTasks = scheduledTasks - project(sch),
-            queuedTasks = queuedTasks - project(sch)
+            scheduledTasks =
+              releaseCopy(sch, launcher, delivered = completesCaller),
+            queuedTasks =
+              if (completesCaller) queuedTasks - project(sch) else queuedTasks
           )
-        case TaskLauncherStoppedFor(sch) =>
-          copy(scheduledTasks = scheduledTasks - project(sch))
+        case TaskLauncherStoppedFor(sch, launcher) =>
+          copy(scheduledTasks = releaseCopy(sch, launcher, delivered = false))
         case LauncherCrashed(launcher) =>
           copy(
             knownLaunchers = knownLaunchers - launcher,
@@ -246,9 +353,8 @@ object QueueImpl {
             queuedTasks = queuedTasks.map { case (key, (sch, proxies)) =>
               (key, (sch, proxies.filter(alive)))
             },
-            scheduledTasks = scheduledTasks.map {
-              case (key, (launcher, allocated, proxies, sch)) =>
-                (key, (launcher, allocated, proxies.filter(alive), sch))
+            scheduledTasks = scheduledTasks.map { case (key, scheduled) =>
+              (key, scheduled.copy(proxies = scheduled.proxies.filter(alive)))
             },
             completedResults = completedResults.filterNot { case (address, _) =>
               tasks.util.SessionId.belongsTo(address.value, session)
@@ -276,7 +382,7 @@ object QueueImpl {
       val scheduled = scheduledTasks
         .get(project(sch))
         .toList
-        .flatMap { case (_, _, proxies, _) => proxies }
+        .flatMap(_.proxies)
       val queued = queuedTasks
         .get(project(sch))
         .toList
@@ -291,10 +397,22 @@ object QueueImpl {
     def scheduledButSentByADifferentProxy(sch: ScheduleTask, proxy: Proxy) =
       scheduledTasks
         .get(project(sch))
-        .map { case (_, _, proxies, _) =>
-          !proxies.isEmpty && !proxies.contains(proxy)
-        }
+        .map(scheduled =>
+          !scheduled.proxies.isEmpty && !scheduled.proxies.contains(proxy)
+        )
         .getOrElse(false)
+
+    def underReplicated: List[ScheduledTask] =
+      scheduledTasks.valuesIterator.filter(_.roomForAnotherCopy).toList
+
+    def outstandingDispatches: List[ScheduleTask] =
+      queuedTasks.valuesIterator.flatMap { case (sch, _) =>
+        List.fill(sch.resource.cpuMemoryRequest.maximumCopies)(sch)
+      }.toList ::: underReplicated.flatMap(scheduled =>
+        List.fill(
+          scheduled.sch.resource.cpuMemoryRequest.maximumCopies - scheduled.copies
+        )(scheduled.sch)
+      )
 
   }
 
@@ -592,15 +710,16 @@ private[tasks] class QueueImpl(
           scribe.data("explain", "replying with result found in cache")
         )
         ref.flatModify { state =>
-          val stored = allProxies.foldLeft(state.update(CacheHit(sch, result))) {
-            case (acc, p) =>
-              acc.update(
-                ResultStoredForProxy(
-                  p.address,
-                  ProxyResultSuccess(result, retrievedFromCache = true)
+          val stored =
+            allProxies.foldLeft(state.update(CacheHit(sch, result))) {
+              case (acc, p) =>
+                acc.update(
+                  ResultStoredForProxy(
+                    p.address,
+                    ProxyResultSuccess(result, retrievedFromCache = true)
+                  )
                 )
-              )
-          }
+            }
           stored -> metrics.onCacheHit(sch.description)
 
         }
@@ -630,14 +749,12 @@ private[tasks] class QueueImpl(
     cacheIO *> handleQueueStatIO
   }
 
-  
   private def warnIfResourceRequestDiverges(
       sch: ScheduleTask,
       stateBeforeEnqueue: State
   ): IO[Unit] =
     stateBeforeEnqueue.queuedTasks.get(project(sch)) match {
-      case Some((alreadyQueued, _))
-          if alreadyQueued.resource != sch.resource =>
+      case Some((alreadyQueued, _)) if alreadyQueued.resource != sch.resource =>
         IO(
           scribe.warn(
             "ResourceRequestDiverges",
@@ -771,7 +888,8 @@ private[tasks] class QueueImpl(
           fatal(
             s"worldSize mismatch on group ${groupId.value}: existing=${existing.worldSize} new=$worldSize"
           )
-        case Some(existing) if existing.joiners.get(rank).exists(_ != payload) =>
+        case Some(existing)
+            if existing.joiners.get(rank).exists(_ != payload) =>
           fatal(s"duplicate rank $rank in group ${groupId.value}")
         case Some(existing) if existing.joiners.contains(rank) =>
           readyOrNot(state)
@@ -819,12 +937,14 @@ private[tasks] class QueueImpl(
   ) =
     ref.flatModify { state =>
       val queueStat = tasks.util.message.QueueStat(
-        state.queuedTasks.toList.map { case (_, (sch, _)) =>
+        state.outstandingDispatches.map(sch =>
           (sch.description.taskId.toString, sch.resource)
-        }.toList,
-        state.scheduledTasks.toSeq
-          .map(x => x._1.description.taskId.toString -> x._2._2)
-          .toList
+        ),
+        state.scheduledTasks.toSeq.flatMap { case (key, scheduled) =>
+          scheduled.dispatches.map(dispatch =>
+            key.description.taskId.toString -> dispatch.allocated
+          )
+        }.toList
       )
       val logIO = if (config.logQueueStatus) {
         IO {
@@ -856,11 +976,9 @@ private[tasks] class QueueImpl(
           val rawNeededNodes: Map[ResourceRequest, Int] =
             if (plannedSpawns.nonEmpty) plannedSpawns
             else if (queueStat.queued.nonEmpty && noWorkerKnown)
-              queueStat.queued.headOption
-                .map { case (_, versioned) =>
-                  versioned.cpuMemoryRequest -> 1
-                }
-                .toMap
+              queueStat.queued.headOption.map { case (_, versioned) =>
+                versioned.cpuMemoryRequest -> 1
+              }.toMap
             else plannedSpawns
 
           def committedResourceFor(req: ResourceRequest): ResourceAvailable =
@@ -1075,17 +1193,23 @@ private[tasks] class QueueImpl(
   ): IO[Unit] = ref.flatModify { state =>
     import tasks.util.eq._
     val msgs =
-      state.scheduledTasks.toSeq.filter(_._2._1 === launcher).map(_._1)
+      state.scheduledTasks.toSeq.filter(_._2.dispatchedTo(launcher)).map(_._1)
     val (updated, reEnqueued) =
       msgs.foldLeft((state, List.empty[ScheduleTask])) {
         case ((state, acc), schProjection) =>
-          val (_, _, proxies, sch) = state.scheduledTasks(schProjection)
-          (
-            state
-              .update(TaskLauncherStoppedFor(sch))
-              .update(Enqueued(sch, proxies)),
-            sch :: acc
+          val scheduled = state.scheduledTasks(schProjection)
+          val released = state.update(
+            TaskLauncherStoppedFor(scheduled.sch, launcher)
           )
+          val lastCopyIsGone =
+            !released.scheduledTasks.contains(schProjection) &&
+              !scheduled.resultDelivered
+          if (lastCopyIsGone)
+            (
+              released.update(Enqueued(scheduled.sch, scheduled.proxies)),
+              scheduled.sch :: acc
+            )
+          else (released, acc)
       }
 
     val node = state.knownLaunchers.get(launcher).flatten
@@ -1096,7 +1220,9 @@ private[tasks] class QueueImpl(
         if (reason.proxiesCanNoLongerPoll)
           session.fold(st1)(s => st1.update(SessionProxiesDropped(s)))
         else st1
-      node.fold(st2)(n => st2.update(NodeEvent(NodeRegistryState.NodeIsDown(n))))
+      node.fold(st2)(n =>
+        st2.update(NodeEvent(NodeRegistryState.NodeIsDown(n)))
+      )
     }
 
     val shutdown = node
@@ -1163,33 +1289,50 @@ private[tasks] class QueueImpl(
 
       val invocationIdsAppearingInLineage: Set[TaskInvocationId] =
         (state.queuedTasks.valuesIterator.map(_._1) ++
-          state.scheduledTasks.valuesIterator.map(_._4))
+          state.scheduledTasks.valuesIterator.map(_.sch))
           .flatMap(_.lineage.lineage.iterator)
           .toSet
 
-      val eligible = state.queuedTasks.valuesIterator
-        .map(_._1)
-        .filter { sch =>
-          val invId =
-            TaskInvocationId(sch.description.taskId, sch.description)
-          val hasPendingDescendant =
-            invocationIdsAppearingInLineage.contains(invId)
-          val ret = availableResource.canFulfillRequest(sch.resource)
-          if (!ret) {
-            scribe.debug(
-              s"CantFulfillRequest",
-              num,
-              sch,
-              availableResource,
-              scribe.data(
-                "explain",
-                "No available resources for this task"
-              )
-            )
-          }
-          ret && !hasPendingDescendant
+      val offeredLabels = availableResource.cpuMemoryAvailable.labels
+
+      def placementValueFor(sch: ScheduleTask): Option[String] =
+        sch.resource.cpuMemoryRequest.placementAttribute
+          .flatMap(Label.valueOf(offeredLabels, _))
+
+      def admitsPlacement(sch: ScheduleTask): Boolean =
+        state.scheduledTasks.get(project(sch)) match {
+          case Some(scheduled) =>
+            scheduled.admitsPlacement(placementValueFor(sch))
+          case None =>
+            sch.resource.cpuMemoryRequest.placementAttribute.isEmpty ||
+            placementValueFor(sch).isDefined
         }
-        .toList
+
+      def fits(sch: ScheduleTask): Boolean = {
+        val invId = TaskInvocationId(sch.description.taskId, sch.description)
+        val hasPendingDescendant =
+          invocationIdsAppearingInLineage.contains(invId)
+        val ret = availableResource.canFulfillRequest(sch.resource)
+        if (!ret) {
+          scribe.debug(
+            s"CantFulfillRequest",
+            num,
+            sch,
+            availableResource,
+            scribe.data(
+              "explain",
+              "No available resources for this task"
+            )
+          )
+        }
+        ret && !hasPendingDescendant && admitsPlacement(sch)
+      }
+
+      val anotherCopy = state.underReplicated.map(_.sch)
+
+      val eligible =
+        (state.queuedTasks.valuesIterator.map(_._1).toList ::: anotherCopy)
+          .filter(fits)
 
       val selected = eligible.maxByOption { sch =>
         val request = sch.resource.cpuMemoryRequest
@@ -1247,7 +1390,9 @@ private[tasks] class QueueImpl(
           )
 
           val newState = stateWithJoin
-            .update(TaskScheduled(sch, launcher, allocated))
+            .update(
+              TaskScheduled(sch, launcher, allocated, placementValueFor(sch))
+            )
 
           val io =
             metrics.onTaskScheduled(sch.description) *> joinIO *> IO.pure(
@@ -1265,6 +1410,7 @@ private[tasks] class QueueImpl(
 
   def taskSuccess(
       sch: ScheduleTask,
+      launcher: LauncherName,
       resultWithMetadata: UntypedResultWithMetadata,
       elapsedTime: ElapsedTimeNanoSeconds,
       resourceAllocated: ResourceAllocated
@@ -1272,40 +1418,70 @@ private[tasks] class QueueImpl(
     val taskSuccessIO = ref.flatModify { state =>
       scribe.debug(s"TaskDone", sch, resultWithMetadata)
       val recordMetric = metrics.onTaskDone(sch.description, elapsedTime.s)
-      if (state.queuedTasks.contains(project(sch))) {
-        scribe.warn(
-          s"CompletedWhileQueued",
+      val alreadyDelivered =
+        state.scheduledTasks.get(project(sch)).exists(_.resultDelivered)
+
+      if (alreadyDelivered) {
+        scribe.info(
+          "LateCopyDiscarded",
+          sch,
+          launcher,
           scribe.data(
             "explain",
-            "This completed task was back in the queue, most likely because its launcher was reported stopped while the task was finishing. The result is delivered to the waiting proxies and the queued entry is dropped, so the task is not executed a second time."
-          ),
-          state.queuedTasks(project(sch))._1,
-          scribe.data(
-            Map(
-              "proxies" -> state.queuedTasks(project(sch))._2.map(_.address)
-            )
+            "Another copy of this task already reported its outcome to the caller, so this one is discarded. The caller is completed by whichever copy exits first."
           )
         )
-      }
-      val proxies = state.proxiesOf(sch)
-
-      val done = state.update(
-        TaskDone(sch, resultWithMetadata, elapsedTime, resourceAllocated)
-      )
-
-      val stored = proxies.foldLeft(done) { case (acc, pr) =>
-        acc.update(
-          ResultStoredForProxy(
-            pr.address,
-            ProxyResultSuccess(
-              resultWithMetadata.untypedResult,
-              retrievedFromCache = false
+        state.update(
+          TaskDone(
+            sch,
+            launcher,
+            resultWithMetadata,
+            elapsedTime,
+            resourceAllocated
+          )
+        ) -> recordMetric
+      } else {
+        if (state.queuedTasks.contains(project(sch))) {
+          scribe.warn(
+            s"CompletedWhileQueued",
+            scribe.data(
+              "explain",
+              "This completed task was back in the queue, most likely because its launcher was reported stopped while the task was finishing. The result is delivered to the waiting proxies and the queued entry is dropped, so the task is not executed a second time."
+            ),
+            state.queuedTasks(project(sch))._1,
+            scribe.data(
+              Map(
+                "proxies" -> state.queuedTasks(project(sch))._2.map(_.address)
+              )
             )
           )
-        )
-      }
+        }
+        val proxies = state.proxiesOf(sch)
 
-      stored -> recordMetric
+        val done = state.update(
+          TaskDone(
+            sch,
+            launcher,
+            resultWithMetadata,
+            elapsedTime,
+            resourceAllocated
+          )
+        )
+
+        val stored = proxies.foldLeft(done) { case (acc, pr) =>
+          acc.update(
+            ResultStoredForProxy(
+              pr.address,
+              ProxyResultSuccess(
+                resultWithMetadata.untypedResult,
+                retrievedFromCache = false
+              )
+            )
+          )
+        }
+
+        stored -> recordMetric
+      }
     }
     taskSuccessIO *> handleQueueStatIO
   }
@@ -1323,16 +1499,60 @@ private[tasks] class QueueImpl(
       }
     }
 
-  def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit] = {
+  def taskFailed(
+      sch: ScheduleTask,
+      launcher: LauncherName,
+      cause: Throwable
+  ): IO[Unit] = {
     val taskFailedIO = ref.flatModify { state =>
       val recordMetric = metrics.onTaskFailed(sch.description)
       val proxies = state.proxiesOf(sch)
+      val alreadyDelivered =
+        state.scheduledTasks.get(project(sch)).exists(_.resultDelivered)
       val known = state.scheduledTasks.contains(project(sch)) ||
         state.queuedTasks.contains(project(sch))
       val (updated, sideEffects) =
-        if (!known) (state, List.empty[IO[Unit]])
-        else {
-          val removed = state.update(TaskFailed(sch))
+        if (alreadyDelivered) {
+          scribe.info(
+            "LateCopyDiscarded",
+            sch,
+            launcher,
+            scribe.data(
+              "explain",
+              "Another copy of this task already reported its outcome to the caller, so this failure is discarded. The caller is completed by whichever copy exits first."
+            )
+          )
+          (
+            state.update(TaskFailed(sch, launcher, completesCaller = false)),
+            List.empty[IO[Unit]]
+          )
+        } else if (!known) (state, List.empty[IO[Unit]])
+        else if (state.scheduledTasks.get(project(sch)).exists(_.copies > 1)) {
+          scribe.info(
+            "CopyFailedWhileSiblingsRun",
+            sch,
+            launcher,
+            scribe.data(
+              Map(
+                "running-copies-after" -> (state.scheduledTasks
+                  .get(project(sch))
+                  .fold(0)(_.copies) - 1),
+                "explain" -> "A copy of this replicated task failed while other copies are still running. Its slot is freed but the caller is not completed, because a sibling may still succeed. The caller sees a failure only from the last copy to fail."
+              )
+            )
+          )
+          (
+            state.update(TaskFailed(sch, launcher, completesCaller = false)),
+            List.empty[IO[Unit]]
+          )
+        } else {
+          val removed = state.update(
+            TaskFailed(
+              sch,
+              launcher,
+              completesCaller = !config.resubmitFailedTask
+            )
+          )
           if (config.resubmitFailedTask) {
             scribe.error(
               cause,

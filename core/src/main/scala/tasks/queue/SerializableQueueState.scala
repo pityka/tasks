@@ -17,15 +17,7 @@ private[tasks] case class SerializableQueueState(
       (ScheduleTaskEqualityProjection, (ScheduleTask, List[Proxy]))
     ],
     scheduledTasks: List[
-      (
-          ScheduleTaskEqualityProjection,
-          (
-              LauncherName,
-              VersionedResourceAllocated,
-              List[Proxy],
-              ScheduleTask
-          )
-      )
+      (ScheduleTaskEqualityProjection, QueueImpl.ScheduledTask)
     ],
     knownLaunchers: List[(LauncherName, Option[Node])],
     counters: List[(LauncherName, Long)],

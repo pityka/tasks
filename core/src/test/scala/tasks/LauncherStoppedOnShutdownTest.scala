@@ -152,6 +152,7 @@ class LauncherStoppedOnShutdownTestSuite extends FunSuite with Matchers {
     val after = state.update(
       QueueImpl.TaskDone(
         sch,
+        LauncherName("l"),
         UntypedResultWithMetadata(untypedResult, null, false),
         ElapsedTimeNanoSeconds(1L),
         ResourceAllocated(1, 500, 0, Nil, None)
@@ -167,7 +168,11 @@ class LauncherStoppedOnShutdownTestSuite extends FunSuite with Matchers {
     val sch = scheduleTask("racedfail", "racedfail-hash", p)
     val state = stateWithQueued(sch, List(p))
 
-    state.update(QueueImpl.TaskFailed(sch)).queuedTasks shouldBe empty
+    state
+      .update(
+        QueueImpl.TaskFailed(sch, LauncherName("l"), completesCaller = true)
+      )
+      .queuedTasks shouldBe empty
   }
 
   test("proxiesOf finds the waiting proxies in whichever map holds the task") {
@@ -179,16 +184,14 @@ class LauncherStoppedOnShutdownTestSuite extends FunSuite with Matchers {
     val scheduled = QueueImpl.State(
       queuedTasks = Map.empty,
       scheduledTasks = Map(
-        QueueImpl.project(sch) -> (
-          (
-            LauncherName("l"),
-            VersionedResourceAllocated(
-              CodeVersion("v1"),
-              ResourceAllocated(1, 500, 0, Nil, None)
-            ),
-            List(p),
-            sch
-          )
+        QueueImpl.project(sch) -> QueueImpl.ScheduledTask.dispatchedOnce(
+          sch,
+          LauncherName("l"),
+          VersionedResourceAllocated(
+            CodeVersion("v1"),
+            ResourceAllocated(1, 500, 0, Nil, None)
+          ),
+          List(p)
         )
       ),
       knownLaunchers = Map.empty,

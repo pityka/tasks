@@ -62,9 +62,14 @@ private[tasks] trait Queue {
     Either[Throwable, Either[NothingForSchedule.type, MessageData.Schedule]]
   ]
 
-  def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit]
+  def taskFailed(
+      sch: ScheduleTask,
+      launcher: LauncherName,
+      cause: Throwable
+  ): IO[Unit]
   def taskSuccess(
       scheduleTask: ScheduleTask,
+      launcher: LauncherName,
       receivedResult: UntypedResultWithMetadata,
       elapsedTime: ElapsedTimeNanoSeconds,
       resourceAllocated: ResourceAllocated
@@ -124,15 +129,20 @@ private[tasks] final class QueueFromQueueImpl(
   def pollResult(proxy: Address): IO[Option[QueueImpl.ProxyResult]] =
     queueImpl.pollResult(proxy)
 
-  def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit] =
-    queueImpl.taskFailed(sch, cause)
+  def taskFailed(
+      sch: ScheduleTask,
+      launcher: LauncherName,
+      cause: Throwable
+  ): IO[Unit] = queueImpl.taskFailed(sch, launcher, cause)
   def taskSuccess(
       scheduleTask: ScheduleTask,
+      launcher: LauncherName,
       receivedResult: UntypedResultWithMetadata,
       elapsedTime: ElapsedTimeNanoSeconds,
       resourceAllocated: ResourceAllocated
   ): IO[Unit] = queueImpl.taskSuccess(
     scheduleTask,
+    launcher,
     receivedResult,
     elapsedTime,
     resourceAllocated
@@ -218,17 +228,22 @@ private[tasks] class QueueWithActor(
       }
 
   }
-  def taskFailed(sch: ScheduleTask, cause: Throwable): IO[Unit] =
+  def taskFailed(
+      sch: ScheduleTask,
+      launcher: LauncherName,
+      cause: Throwable
+  ): IO[Unit] =
     messenger
       .submit(
         Message(
           from = Address.unknown,
           to = queueActor.address0,
-          data = MessageData.TaskFailedMessageToQueue(sch, cause)
+          data = MessageData.TaskFailedMessageToQueue(sch, launcher, cause)
         )
       )
   def taskSuccess(
       scheduleTask: ScheduleTask,
+      launcher: LauncherName,
       receivedResult: UntypedResultWithMetadata,
       elapsedTime: ElapsedTimeNanoSeconds,
       resourceAllocated: ResourceAllocated
@@ -240,6 +255,7 @@ private[tasks] class QueueWithActor(
           to = queueActor.address0,
           data = MessageData.TaskDone(
             scheduleTask,
+            launcher,
             receivedResult,
             elapsedTime,
             resourceAllocated

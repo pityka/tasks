@@ -326,9 +326,13 @@ private[tasks] object QueueMetrics {
             obs,
             st => {
               val byTask = st.scheduledTasks.valuesIterator
-                .map { case (_, _, _, sch) => sch.description.taskId }
+                .flatMap(scheduled =>
+                  List.fill(scheduled.copies)(
+                    scheduled.sch.description.taskId
+                  )
+                )
                 .toVector
-                .groupBy(identity)
+                .groupBy(taskId => taskId)
                 .view
                 .mapValues(_.size.toLong)
                 .toVector
@@ -345,9 +349,10 @@ private[tasks] object QueueMetrics {
         "Total CPU currently allocated to scheduled tasks.",
         None,
         st =>
-          st.scheduledTasks.valuesIterator.map { case (_, alloc, _, _) =>
-            alloc.cpuMemoryAllocated.cpu.toLong
-          }.sum
+          st.scheduledTasks.valuesIterator
+            .flatMap(_.dispatches)
+            .map(_.allocated.cpuMemoryAllocated.cpu.toLong)
+            .sum
       )
 
       allocatedMemory <- scalarGauge(
@@ -356,9 +361,10 @@ private[tasks] object QueueMetrics {
         "Total memory (MB) currently allocated to scheduled tasks.",
         Some("MB"),
         st =>
-          st.scheduledTasks.valuesIterator.map { case (_, alloc, _, _) =>
-            alloc.cpuMemoryAllocated.memory.toLong
-          }.sum
+          st.scheduledTasks.valuesIterator
+            .flatMap(_.dispatches)
+            .map(_.allocated.cpuMemoryAllocated.memory.toLong)
+            .sum
       )
 
       nodesRunning <- scalarGauge(
@@ -682,12 +688,13 @@ private[tasks] object QueueMetrics {
       var memory = 0L
       var scratch = 0L
       var gpu = 0L
-      st.scheduledTasks.valuesIterator.foreach { case (_, alloc, _, _) =>
-        val a = alloc.cpuMemoryAllocated
-        cpu += a.cpu.toLong
-        memory += a.memory.toLong
-        scratch += a.scratch.toLong
-        gpu += a.gpu.size.toLong
+      st.scheduledTasks.valuesIterator.flatMap(_.dispatches).foreach {
+        dispatch =>
+          val a = dispatch.allocated.cpuMemoryAllocated
+          cpu += a.cpu.toLong
+          memory += a.memory.toLong
+          scratch += a.scratch.toLong
+          gpu += a.gpu.size.toLong
       }
       (cpu, memory, scratch, gpu)
     }

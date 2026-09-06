@@ -67,14 +67,74 @@ object NodeSelector {
     JsonCodecMaker.make(CodecMakerConfig.withAllowRecursiveTypes(true))
 }
 
+/** Reads the `name:value` labels advertised by a worker
+  * ([[ResourceAvailable.labels]]). Only the first colon separates the name from
+  * the value, so `build:2026:08` names `build` with value `2026:08`. A label
+  * without a colon is a bare presence attribute and has no value.
+  */
+object Label {
+
+  private val separator = ':'
+
+  def name(label: String): String =
+    label.indexOf(separator.toInt) match {
+      case -1    => label
+      case index => label.take(index)
+    }
+
+  def value(label: String): Option[String] =
+    label.indexOf(separator.toInt) match {
+      case -1    => None
+      case index => Some(label.drop(index + 1))
+    }
+
+  def valueOf(labels: Set[String], attribute: String): Option[String] = {
+    val values = labels.iterator
+      .filter(label => name(label) == attribute)
+      .flatMap(value)
+      .toSet
+    if (values.size == 1) Some(values.head) else None
+  }
+}
+
+/** Asks for the same task to run on up to `maximum` workers at once.
+  *
+  * `maximum` is a ceiling, not a target: a copy starts as soon as a worker has
+  * room for it, and fewer than `maximum` may ever run. The caller receives the
+  * outcome of whichever copy finishes first, successfully or not.
+  *
+  * When `placementAttribute` is set, the first copy pins the value it finds
+  * under that attribute name and every later copy has to land on a worker
+  * advertising the same value. Workers that do not advertise the attribute at
+  * all are never offered the task.
+  */
+case class Replication(maximum: Int, placementAttribute: Option[String]) {
+  require(maximum >= 1, s"maximum must be positive, got $maximum")
+}
+
+object Replication {
+  def apply(maximum: Int): Replication = Replication(maximum, None)
+
+  def apply(maximum: Int, placementAttribute: String): Replication =
+    Replication(maximum, Some(placementAttribute))
+
+  implicit val codec: JsonValueCodec[Replication] = JsonCodecMaker.make
+}
+
 case class ResourceRequest(
     cpu: (Int, Int),
     memory: Int,
     scratch: Int,
     gpu: Int,
     image: Option[String],
-    nodeSelector: Option[NodeSelector]
-)
+    nodeSelector: Option[NodeSelector],
+    replication: Option[Replication]
+) {
+  def maximumCopies: Int = replication.fold(1)(_.maximum)
+
+  def placementAttribute: Option[String] =
+    replication.flatMap(_.placementAttribute)
+}
 
 object ResourceRequest {
 
@@ -89,12 +149,15 @@ object ResourceRequest {
           "none"
         ),
         "resource-request-node-selector" -> rm.nodeSelector
-          .fold("any")(_.toString)
+          .fold("any")(_.toString),
+        "resource-request-replication" -> rm.replication.fold("none")(r =>
+          s"max=${r.maximum}${r.placementAttribute.fold("")(a => s"@$a")}"
+        )
       )
     )
 
   def apply(cpu: Int, memory: Int, scratch: Int, gpu: Int): ResourceRequest =
-    ResourceRequest((cpu, cpu), memory, scratch, gpu, None, None)
+    ResourceRequest((cpu, cpu), memory, scratch, gpu, None, None, None)
 
   def apply(
       cpu: (Int, Int),
@@ -103,7 +166,17 @@ object ResourceRequest {
       gpu: Int,
       image: Option[String]
   ): ResourceRequest =
-    ResourceRequest(cpu, memory, scratch, gpu, image, None)
+    ResourceRequest(cpu, memory, scratch, gpu, image, None, None)
+
+  def apply(
+      cpu: (Int, Int),
+      memory: Int,
+      scratch: Int,
+      gpu: Int,
+      image: Option[String],
+      nodeSelector: Option[NodeSelector]
+  ): ResourceRequest =
+    ResourceRequest(cpu, memory, scratch, gpu, image, nodeSelector, None)
 
   implicit val codec: JsonValueCodec[ResourceRequest] =
     JsonCodecMaker.make(CodecMakerConfig.withAllowRecursiveTypes(true))
