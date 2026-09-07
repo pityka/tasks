@@ -135,7 +135,6 @@ class LauncherStoppedOnShutdownTestSuite extends FunSuite with Matchers {
       knownLaunchers = Map.empty,
       counters = Map.empty,
       nodes = NodeRegistryState.State.empty,
-      rendezvous = Map.empty,
       completedResults = Map.empty,
       mainProcesses = Set.empty
     )
@@ -197,7 +196,6 @@ class LauncherStoppedOnShutdownTestSuite extends FunSuite with Matchers {
       knownLaunchers = Map.empty,
       counters = Map.empty,
       nodes = NodeRegistryState.State.empty,
-      rendezvous = Map.empty,
       completedResults = Map.empty,
       mainProcesses = Set.empty
     )

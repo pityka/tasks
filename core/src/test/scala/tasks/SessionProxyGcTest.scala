@@ -156,7 +156,6 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
       knownLaunchers = Map.empty,
       counters = Map.empty,
       nodes = NodeRegistryState.State.empty,
-      rendezvous = Map.empty,
       completedResults = Map(
         deadProxy.address -> result,
         liveProxy.address -> result,
@@ -198,7 +197,6 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
       knownLaunchers = Map(launcher -> None),
       counters = Map(launcher -> 1L),
       nodes = NodeRegistryState.State.empty,
-      rendezvous = Map.empty,
       completedResults = Map(liveProxy.address -> result),
       mainProcesses = Set.empty
     )
@@ -323,7 +321,6 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
       knownLaunchers = Map.empty,
       counters = Map.empty,
       nodes = NodeRegistryState.State.empty,
-      rendezvous = Map.empty,
       completedResults = Map(liveProxy.address -> result),
       mainProcesses = Set.empty
     )

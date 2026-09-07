@@ -134,9 +134,6 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   val askInterval: FD = raw.getDuration("tasks.askInterval")
 
-  val rendezvousPollInterval: FD =
-    raw.getDuration("tasks.rendezvousPollInterval")
-
   val askForWorkTimeout: FD =
     raw.getDuration("tasks.queue.askForWorkTimeout")
 

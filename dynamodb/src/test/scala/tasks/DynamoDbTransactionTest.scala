@@ -237,10 +237,7 @@ class DynamoDbTransactionTest extends FunSuite with Matchers {
           tx.flatModify { state =>
             (
               state.update(
-                QueueImpl.RendezvousJoined(
-                  tasks.util.message.RendezvousGroupId("group"),
-                  0,
-                  1,
+                QueueImpl.MainProcessJoined(
                   java.util.Base64.getEncoder.encodeToString(incompressible)
                 )
               ),

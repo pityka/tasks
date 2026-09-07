@@ -100,7 +100,6 @@ class RunningJobAttributionTest extends FunSuite with Matchers {
           RunningJobId("node-b") -> nodeB.size
         )
       ),
-      rendezvous = Map.empty,
       completedResults = Map.empty,
       mainProcesses = Set.empty
     )

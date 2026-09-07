@@ -5,7 +5,6 @@ import tasks.util.message.MessageData.ScheduleTask
 import tasks.util.message.Address
 import tasks.util.message.LauncherName
 import tasks.wire._
-import tasks.util.message.RendezvousGroupId
 import tasks.util.message.Node
 import tasks.shared.VersionedResourceAllocated
 import tasks.shared.PendingJobId
@@ -22,7 +21,6 @@ private[tasks] case class SerializableQueueState(
     knownLaunchers: List[(LauncherName, Option[Node])],
     counters: List[(LauncherName, Long)],
     nodes: NodeRegistryState.State,
-    rendezvous: List[(RendezvousGroupId, QueueImpl.RendezvousGroup)] = Nil,
     completedResults: List[(Address, QueueImpl.ProxyResult)] = Nil,
     mainProcesses: List[String] = Nil
 ) {
@@ -32,7 +30,6 @@ private[tasks] case class SerializableQueueState(
     knownLaunchers = knownLaunchers.toMap,
     counters = counters.toMap,
     nodes = nodes,
-    rendezvous = rendezvous.toMap,
     completedResults = completedResults.toMap,
     mainProcesses = mainProcesses.toSet
   )
@@ -45,7 +42,6 @@ private[tasks] object SerializableQueueState {
     knownLaunchers = state.knownLaunchers.toList,
     counters = state.counters.toList,
     nodes = state.nodes,
-    rendezvous = state.rendezvous.toList,
     completedResults = state.completedResults.toList,
     mainProcesses = state.mainProcesses.toList.sorted
   )

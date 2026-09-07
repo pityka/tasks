@@ -75,13 +75,6 @@ private[tasks] trait Queue {
       resourceAllocated: ResourceAllocated
   ): IO[Unit]
 
-  def rendezvous(
-      groupId: RendezvousGroupId,
-      rank: Int,
-      worldSize: Int,
-      payload: String
-  ): IO[List[String]]
-
   def pollResult(proxy: Address): IO[Option[QueueImpl.ProxyResult]]
 }
 
@@ -99,14 +92,6 @@ private[tasks] final class QueueFromQueueImpl(
     )
 
   def knownLaunchers = queueImpl.knownLaunchers.map(_.keySet)
-
-  def rendezvous(
-      groupId: RendezvousGroupId,
-      rank: Int,
-      worldSize: Int,
-      payload: String
-  ): IO[List[String]] =
-    queueImpl.rendezvous(groupId, rank, worldSize, payload)
 
   def increment(launcher: LauncherName): IO[Unit] =
     queueImpl.increment(launcher).attempt.map {
@@ -283,42 +268,4 @@ private[tasks] class QueueWithActor(
         case Right(None) => IO.pure(None)
         case Left(e)     => IO.raiseError(e)
       }
-
-  def rendezvous(
-      groupId: RendezvousGroupId,
-      rank: Int,
-      worldSize: Int,
-      payload: String
-  ): IO[List[String]] = {
-    def step: IO[Option[List[String]]] = tasks.util.Ask
-      .ask(
-        target = queueActor.address0,
-        data =
-          MessageData.RendezvousStep(groupId, rank, worldSize, payload),
-        timeout = config.askForWorkTimeout,
-        messenger = messenger
-      )
-      .flatMap {
-        case Right(Some(Message(MessageData.RendezvousStepResponse(o), _, _))) =>
-          IO.pure(o)
-        case Right(
-              Some(Message(MessageData.RendezvousStepFailed(reason), _, _))
-            ) =>
-          IO.raiseError(new RuntimeException(reason))
-        case Right(Some(Message(other, _, _))) =>
-          IO.raiseError(
-            new RuntimeException(s"Unexpected rendezvous reply: $other")
-          )
-        case Right(None) =>
-          IO.raiseError(
-            new RuntimeException("Queue closed the rendezvous stream")
-          )
-        case Left(e) => IO.raiseError(e)
-      }
-    def loop: IO[List[String]] = step.flatMap {
-      case Some(peers) => IO.pure(peers)
-      case None        => IO.sleep(config.rendezvousPollInterval) *> loop
-    }
-    loop
-  }
 }

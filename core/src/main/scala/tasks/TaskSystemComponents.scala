@@ -422,9 +422,6 @@ object TaskSystemComponents {
               meterProvider: org.typelevel.otel4s.metrics.MeterProvider[IO]
           ): Resource[IO, Queue] = {
 
-            val onFatalError: IO[Unit] =
-              exitCode.complete(ExitCode.Error).void
-
             val io: IO[Resource[IO, Queue]] = IO {
               if (externalQueueState.isDefined) {
                 scribe.info(
@@ -443,8 +440,7 @@ object TaskSystemComponents {
                     unmanagedResource,
                     meterProvider,
                     mainProcessSession =
-                      if (hostConfig.isApp) Some(sessionId) else None,
-                    onFatalError = onFatalError
+                      if (hostConfig.isApp) Some(sessionId) else None
                   )(config)
                   .map { queueImpl =>
                     (new QueueFromQueueImpl(
@@ -468,8 +464,7 @@ object TaskSystemComponents {
                     unmanagedResource,
                     meterProvider,
                     mainProcessSession =
-                      if (hostConfig.isApp) Some(sessionId) else None,
-                    onFatalError = onFatalError
+                      if (hostConfig.isApp) Some(sessionId) else None
                   )(config)
                   .flatMap { impl =>
                     QueueActor
