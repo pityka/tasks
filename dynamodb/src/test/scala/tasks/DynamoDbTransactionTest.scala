@@ -16,15 +16,18 @@ import scala.jdk.CollectionConverters._
 import software.amazon.awssdk.core.SdkBytes
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue
-import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException
+import software.amazon.awssdk.services.dynamodb.model.CancellationReason
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse
-import software.amazon.awssdk.services.dynamodb.model.PutItemRequest
-import software.amazon.awssdk.services.dynamodb.model.PutItemResponse
+import software.amazon.awssdk.services.dynamodb.model.TransactWriteItem
+import software.amazon.awssdk.services.dynamodb.model.TransactWriteItemsRequest
+import software.amazon.awssdk.services.dynamodb.model.TransactWriteItemsResponse
+import software.amazon.awssdk.services.dynamodb.model.TransactionCanceledException
 
 import tasks.queue.DynamoDb
 import tasks.queue.QueueImpl
 import tasks.queue.SerializableQueueState
+import tasks.util.message.Address
 import tasks.util.message.LauncherName
 
 class DynamoDbTransactionTest extends FunSuite with Matchers {
@@ -33,12 +36,16 @@ class DynamoDbTransactionTest extends FunSuite with Matchers {
   private val stateKey = "tasks-queue-state"
   private val partitionKey = "id"
 
+  private type Store = Map[String, Map[String, AttributeValue]]
+
   private class FakeDynamoDb(
-      val stored: AtomicReference[Option[(Long, Array[Byte])]],
-      val beforePut: AtomicReference[() => Unit] = new AtomicReference(() => ())
+      val store: AtomicReference[Store],
+      val beforeTransact: AtomicReference[() => Unit] = new AtomicReference(
+        () => ()
+      )
   ) extends DynamoDbAsyncClient {
 
-    val putCount = new AtomicInteger(0)
+    val transactCount = new AtomicInteger(0)
 
     def serviceName(): String = "dynamodb"
 
@@ -47,79 +54,138 @@ class DynamoDbTransactionTest extends FunSuite with Matchers {
     override def getItem(
         request: GetItemRequest
     ): CompletableFuture[GetItemResponse] = CompletableFuture.completedFuture {
-      request.key.asScala(partitionKey).s shouldBe stateKey
-      stored.get match {
-        case None => GetItemResponse.builder().build()
-        case Some((version, payload)) =>
-          GetItemResponse
-            .builder()
-            .item(
-              Map(
-                partitionKey -> AttributeValue.fromS(stateKey),
-                DynamoDb.versionAttribute -> AttributeValue
-                  .fromN(version.toString),
-                DynamoDb.stateAttribute -> AttributeValue.fromB(
-                  SdkBytes.fromByteArray(payload)
-                )
-              ).asJava
-            )
-            .build()
+      val id = request.key.asScala(partitionKey).s
+      store.get.get(id) match {
+        case None       => GetItemResponse.builder().build()
+        case Some(item) => GetItemResponse.builder().item(item.asJava).build()
       }
     }
 
-    override def putItem(
-        request: PutItemRequest
-    ): CompletableFuture[PutItemResponse] = {
-      beforePut.get.apply()
-      putCount.incrementAndGet()
-      val expected =
-        request.expressionAttributeValues.asScala(":expected").n.toLong
-      val currentVersion = stored.get.map(_._1).getOrElse(0L)
-      if (expected != currentVersion)
-        CompletableFuture.failedFuture(
-          ConditionalCheckFailedException.builder().build()
-        )
-      else {
-        val item = request.item.asScala
-        stored.set(
-          Some(
-            (
-              item(DynamoDb.versionAttribute).n.toLong,
-              item(DynamoDb.stateAttribute).b.asByteArray()
-            )
+    override def transactWriteItems(
+        request: TransactWriteItemsRequest
+    ): CompletableFuture[TransactWriteItemsResponse] = {
+      beforeTransact.get.apply()
+      transactCount.incrementAndGet()
+      synchronized {
+        val current = store.get
+        val actions = request.transactItems.asScala.toList
+
+        def conditionPasses(action: TransactWriteItem): Boolean = {
+          val put = action.put
+          if (put == null) true
+          else if (put.conditionExpression == null) true
+          else {
+            val id = put.item.asScala(partitionKey).s
+            val versionAttr = put.expressionAttributeNames.asScala("#version")
+            val expected =
+              put.expressionAttributeValues.asScala(":expected").n.toLong
+            current.get(id) match {
+              case None => true
+              case Some(item) =>
+                item.get(versionAttr).map(_.n.toLong).contains(expected)
+            }
+          }
+        }
+
+        val outcomes = actions.map(conditionPasses)
+        if (outcomes.forall(identity)) {
+          val updated = actions.foldLeft(current) { (acc, action) =>
+            val put = action.put
+            acc.updated(put.item.asScala(partitionKey).s, put.item.asScala.toMap)
+          }
+          store.set(updated)
+          CompletableFuture.completedFuture(
+            TransactWriteItemsResponse.builder().build()
           )
-        )
-        CompletableFuture.completedFuture(PutItemResponse.builder().build())
+        } else {
+          val reasons = outcomes.map { passed =>
+            CancellationReason
+              .builder()
+              .code(if (passed) "None" else "ConditionalCheckFailed")
+              .build()
+          }
+          CompletableFuture.failedFuture(
+            TransactionCanceledException
+              .builder()
+              .cancellationReasons(reasons.asJava)
+              .build()
+          )
+        }
       }
     }
   }
 
-  private def transactionFor(client: DynamoDbAsyncClient) =
+  private def transactionFor(client: DynamoDbAsyncClient, shardCount: Int) =
     DynamoDb.makeTransaction(
       client = client,
       table = table,
       stateKey = stateKey,
       partitionKeyAttribute = partitionKey,
-      retryBaseDelay = 1.millisecond
+      retryBaseDelay = 1.millisecond,
+      shardCount = shardCount
     )
+
+  private def storeOf(client: FakeDynamoDb): Store = client.store.get
+
+  private def shardId(shard: Int): String = stateKey + "#" + shard.toString
 
   private def storedState(
-      client: FakeDynamoDb
-  ): QueueImpl.State =
-    SerializableQueueState.decode(
-      DynamoDb.decompress(client.stored.get.get._2)
+      client: FakeDynamoDb,
+      shardCount: Int
+  ): QueueImpl.State = {
+    val store = storeOf(client)
+    store.get(stateKey) match {
+      case Some(sentinel) if sentinel.contains(DynamoDb.stateAttribute) =>
+        SerializableQueueState.decode(
+          DynamoDb.decompress(sentinel(DynamoDb.stateAttribute).b.asByteArray())
+        )
+      case _ =>
+        val shards = (0 until shardCount).toVector.map { shard =>
+          store
+            .get(shardId(shard))
+            .flatMap(_.get(DynamoDb.stateAttribute))
+            .map(av =>
+              DynamoDb.decodeShard(DynamoDb.decompress(av.b.asByteArray()))
+            )
+            .getOrElse(DynamoDb.emptyShard)
+        }
+        DynamoDb.mergeShards(shards)
+    }
+  }
+
+  private def injectCommit(
+      client: FakeDynamoDb,
+      state: QueueImpl.State,
+      version: Long,
+      shardCount: Int
+  ): Unit = {
+    val shards = DynamoDb.projectShards(state, shardCount)
+    val sentinel = stateKey -> Map(
+      partitionKey -> AttributeValue.fromS(stateKey),
+      DynamoDb.versionAttribute -> AttributeValue.fromN(version.toString),
+      DynamoDb.shardCountAttribute -> AttributeValue.fromN(shardCount.toString)
     )
+    val shardItems = shards.zipWithIndex.map { case (shard, index) =>
+      shardId(index) -> Map(
+        partitionKey -> AttributeValue.fromS(shardId(index)),
+        DynamoDb.stateAttribute -> AttributeValue.fromB(
+          SdkBytes.fromByteArray(DynamoDb.compress(DynamoDb.encodeShard(shard)))
+        )
+      )
+    }.toMap
+    client.store.set(client.store.get ++ shardItems + sentinel)
+  }
 
   test("an absent item reads as the empty state") {
-    val client = new FakeDynamoDb(new AtomicReference(None))
-    val result = transactionFor(client).use(_.get).unsafeRunSync()
+    val client = new FakeDynamoDb(new AtomicReference[Store](Map.empty))
+    val result = transactionFor(client, 4).use(_.get).unsafeRunSync()
     result shouldBe QueueImpl.State.empty
   }
 
   test("flatModify commits the new state and bumps the version from zero") {
-    val client = new FakeDynamoDb(new AtomicReference(None))
+    val client = new FakeDynamoDb(new AtomicReference[Store](Map.empty))
 
-    val result = transactionFor(client)
+    val result = transactionFor(client, 4)
       .use(tx =>
         tx.flatModify(state =>
           (
@@ -133,18 +199,18 @@ class DynamoDbTransactionTest extends FunSuite with Matchers {
       .unsafeRunSync()
 
     result shouldBe 7
-    client.stored.get.get._1 shouldBe 1L
-    storedState(client).knownLaunchers.keySet shouldBe Set(
+    storeOf(client)(stateKey)(DynamoDb.versionAttribute).n.toLong shouldBe 1L
+    storedState(client, 4).knownLaunchers.keySet shouldBe Set(
       LauncherName("launcher-1")
     )
   }
 
-  test("the side effect runs only after the conditional write commits") {
-    val client = new FakeDynamoDb(new AtomicReference(None))
+  test("the side effect runs only after the transactional write commits") {
+    val client = new FakeDynamoDb(new AtomicReference[Store](Map.empty))
     val sideEffectRan = new AtomicInteger(0)
-    val putsAtSideEffect = new AtomicInteger(-1)
+    val transactsAtSideEffect = new AtomicInteger(-1)
 
-    transactionFor(client)
+    transactionFor(client, 4)
       .use(tx =>
         tx.flatModify(state =>
           (
@@ -152,7 +218,7 @@ class DynamoDbTransactionTest extends FunSuite with Matchers {
               QueueImpl.LauncherJoined(LauncherName("launcher-1"), None)
             ),
             IO {
-              putsAtSideEffect.set(client.putCount.get)
+              transactsAtSideEffect.set(client.transactCount.get)
               sideEffectRan.incrementAndGet()
             }
           )
@@ -161,14 +227,14 @@ class DynamoDbTransactionTest extends FunSuite with Matchers {
       .unsafeRunSync()
 
     sideEffectRan.get shouldBe 1
-    putsAtSideEffect.get shouldBe 1
+    transactsAtSideEffect.get shouldBe 1
   }
 
   test("an update that leaves the state unchanged does not write") {
-    val client = new FakeDynamoDb(new AtomicReference(None))
+    val client = new FakeDynamoDb(new AtomicReference[Store](Map.empty))
     val sideEffectRan = new AtomicInteger(0)
 
-    val result = transactionFor(client)
+    val result = transactionFor(client, 4)
       .use(tx =>
         tx.flatModify(state =>
           (
@@ -184,26 +250,27 @@ class DynamoDbTransactionTest extends FunSuite with Matchers {
 
     result shouldBe 3
     sideEffectRan.get shouldBe 1
-    client.putCount.get shouldBe 0
-    client.stored.get shouldBe None
+    client.transactCount.get shouldBe 0
+    storeOf(client) shouldBe empty
   }
 
   test("a competing commit forces a retry and the update is reapplied") {
-    val client = new FakeDynamoDb(new AtomicReference(None))
+    val client = new FakeDynamoDb(new AtomicReference[Store](Map.empty))
     val updateInvocations = new AtomicInteger(0)
 
-    client.beforePut.set { () =>
-      if (updateInvocations.get == 1) {
-        val competing = SerializableQueueState.encode(
+    client.beforeTransact.set { () =>
+      if (updateInvocations.get == 1)
+        injectCommit(
+          client,
           QueueImpl.State.empty.update(
             QueueImpl.LauncherJoined(LauncherName("competitor"), None)
-          )
+          ),
+          1L,
+          4
         )
-        client.stored.set(Some((1L, DynamoDb.compress(competing))))
-      }
     }
 
-    transactionFor(client)
+    transactionFor(client, 4)
       .use(tx =>
         tx.flatModify { state =>
           updateInvocations.incrementAndGet()
@@ -218,21 +285,60 @@ class DynamoDbTransactionTest extends FunSuite with Matchers {
       .unsafeRunSync()
 
     updateInvocations.get shouldBe 2
-    client.stored.get.get._1 shouldBe 2L
-    storedState(client).knownLaunchers.keySet shouldBe Set(
+    storeOf(client)(stateKey)(DynamoDb.versionAttribute).n.toLong shouldBe 2L
+    storedState(client, 4).knownLaunchers.keySet shouldBe Set(
       LauncherName("competitor"),
       LauncherName("mine")
     )
   }
 
-  test("a state larger than the item size limit fails with a legible error") {
-    val client = new FakeDynamoDb(new AtomicReference(None))
+  test("a state that overflows a single item is spread across shards") {
+    val shardCount = 8
+    val client = new FakeDynamoDb(new AtomicReference[Store](Map.empty))
+    val random = new scala.util.Random(1)
+    val entries = (0 until 64).toList.map { k =>
+      val bytes = new Array[Byte](16 * 1024)
+      random.nextBytes(bytes)
+      QueueImpl.ResultStoredForProxy(
+        Address(s"proxy-$k"),
+        QueueImpl.ProxyResultFailure(
+          new RuntimeException(java.util.Base64.getEncoder.encodeToString(bytes))
+        )
+      )
+    }
+
+    transactionFor(client, shardCount)
+      .use(tx =>
+        tx.flatModify(state =>
+          (entries.foldLeft(state)((s, e) => s.update(e)), IO.unit)
+        )
+      )
+      .unsafeRunSync()
+
+    val store = storeOf(client)
+    val shardPayloadBytes = (0 until shardCount).flatMap { shard =>
+      store
+        .get(shardId(shard))
+        .flatMap(_.get(DynamoDb.stateAttribute))
+        .map(_.b.asByteArray().length)
+    }
+
+    shardPayloadBytes.count(_ > 0) should be > 1
+    shardPayloadBytes.sum should be > DynamoDb.itemSizeLimitBytes
+    shardPayloadBytes.foreach(_ should be <= DynamoDb.stateSizeLimitBytes)
+
+    val reread = transactionFor(client, shardCount).use(_.get).unsafeRunSync()
+    reread.completedResults.keySet shouldBe entries.map(_.proxy).toSet
+  }
+
+  test("a shard larger than the item size limit fails with a legible error") {
+    val client = new FakeDynamoDb(new AtomicReference[Store](Map.empty))
     val random = new scala.util.Random(42)
-    val incompressible = new Array[Byte](DynamoDb.itemSizeLimitBytes)
+    val incompressible = new Array[Byte](2 * DynamoDb.itemSizeLimitBytes)
     random.nextBytes(incompressible)
 
     val error = intercept[RuntimeException] {
-      transactionFor(client)
+      transactionFor(client, 4)
         .use(tx =>
           tx.flatModify { state =>
             (
@@ -250,7 +356,74 @@ class DynamoDbTransactionTest extends FunSuite with Matchers {
 
     error.getMessage should include("does not fit in a DynamoDB item")
     error.getMessage should include(DynamoDb.itemSizeLimitBytes.toString)
-    client.stored.get shouldBe None
+    storeOf(client) shouldBe empty
+  }
+
+  test("the configured shard count must match what the table already stores") {
+    val client = new FakeDynamoDb(new AtomicReference[Store](Map.empty))
+
+    transactionFor(client, 4)
+      .use(tx =>
+        tx.flatModify(state =>
+          (
+            state.update(
+              QueueImpl.LauncherJoined(LauncherName("launcher-1"), None)
+            ),
+            IO.unit
+          )
+        )
+      )
+      .unsafeRunSync()
+
+    val error = intercept[RuntimeException] {
+      transactionFor(client, 8).use(_.get).unsafeRunSync()
+    }
+    error.getMessage should include("shard")
+  }
+
+  test("a legacy single-item state is read and migrated to shards") {
+    val client = new FakeDynamoDb(new AtomicReference[Store](Map.empty))
+    val legacy = QueueImpl.State.empty.update(
+      QueueImpl.LauncherJoined(LauncherName("legacy-launcher"), None)
+    )
+    client.store.set(
+      Map(
+        stateKey -> Map(
+          partitionKey -> AttributeValue.fromS(stateKey),
+          DynamoDb.versionAttribute -> AttributeValue.fromN("5"),
+          DynamoDb.stateAttribute -> AttributeValue.fromB(
+            SdkBytes.fromByteArray(
+              DynamoDb.compress(SerializableQueueState.encode(legacy))
+            )
+          )
+        )
+      )
+    )
+
+    val readBack = transactionFor(client, 4).use(_.get).unsafeRunSync()
+    readBack.knownLaunchers.keySet shouldBe Set(LauncherName("legacy-launcher"))
+
+    transactionFor(client, 4)
+      .use(tx =>
+        tx.flatModify(state =>
+          (
+            state.update(
+              QueueImpl.LauncherJoined(LauncherName("new-launcher"), None)
+            ),
+            IO.unit
+          )
+        )
+      )
+      .unsafeRunSync()
+
+    val sentinel = storeOf(client)(stateKey)
+    sentinel(DynamoDb.versionAttribute).n.toLong shouldBe 6L
+    sentinel.contains(DynamoDb.stateAttribute) shouldBe false
+    sentinel(DynamoDb.shardCountAttribute).n.toInt shouldBe 4
+    storedState(client, 4).knownLaunchers.keySet shouldBe Set(
+      LauncherName("legacy-launcher"),
+      LauncherName("new-launcher")
+    )
   }
 
   test("compress and decompress round trip an encoded state") {

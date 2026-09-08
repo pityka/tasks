@@ -250,6 +250,8 @@ lazy val dynamodb = project
     name := "tasks-dynamodb",
     libraryDependencies ++= Seq(
       "software.amazon.awssdk" % "dynamodb" % "2.23.13", // scala-steward:off
+      "software.amazon.awssdk" % "sso" % "2.23.13" % "test", // scala-steward:off
+      "software.amazon.awssdk" % "ssooidc" % "2.23.13" % "test", // scala-steward:off
       "org.scalatest" %% "scalatest" % "3.2.19" % "test"
     )
   )
