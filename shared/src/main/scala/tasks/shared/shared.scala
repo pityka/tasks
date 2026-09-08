@@ -99,14 +99,7 @@ object Label {
 
 /** Asks for the same task to run on up to `maximum` workers at once.
   *
-  * `maximum` is a ceiling, not a target: a copy starts as soon as a worker has
-  * room for it, and fewer than `maximum` may ever run. The caller receives the
-  * outcome of whichever copy finishes first, successfully or not.
-  *
-  * When `placementAttribute` is set, the first copy pins the value it finds
-  * under that attribute name and every later copy has to land on a worker
-  * advertising the same value. Workers that do not advertise the attribute at
-  * all are never offered the task.
+  * The caller receives the first success or the last failure.
   */
 case class Replication(maximum: Int, placementAttribute: Option[String]) {
   require(maximum >= 1, s"maximum must be positive, got $maximum")
@@ -133,7 +126,7 @@ case class ResourceRequest(
   def maximumCopies: Int = replication.fold(1)(_.maximum)
 
   def placementAttribute: Option[String] =
-    replication.flatMap(_.placementAttribute)
+    replication.filter(_.maximum > 1).flatMap(_.placementAttribute)
 }
 
 object ResourceRequest {

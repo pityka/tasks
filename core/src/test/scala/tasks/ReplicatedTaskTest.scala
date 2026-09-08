@@ -120,6 +120,19 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
     taken shouldBe ((true, false))
   }
 
+  test("a replication maximum of one still hands the task out once") {
+    val sch = task(Some(Replication(1)))
+
+    val taken = withQueue(sch) { q =>
+      for {
+        a <- q.askForWork(LauncherName("w1"), worker(4), None)
+        b <- q.askForWork(LauncherName("w2"), worker(4), None)
+      } yield (took(a), took(b))
+    }
+
+    taken shouldBe ((true, false))
+  }
+
   test("one worker with room may run several copies of the same task") {
     val sch = task(Some(Replication(3)))
 
@@ -211,6 +224,14 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
     withQueue(sch) { q =>
       q.askForWork(LauncherName("w1"), worker(4), None).map(took)
     } shouldBe false
+  }
+
+  test("a single copy is offered to a worker without the attribute") {
+    val sch = task(Some(Replication(1, zone)))
+
+    withQueue(sch) { q =>
+      q.askForWork(LauncherName("w1"), worker(4), None).map(took)
+    } shouldBe true
   }
 
   test("the pinned attribute is released once every copy is gone") {
