@@ -225,6 +225,9 @@ lazy val s3 = project
     name := "tasks-s3",
     libraryDependencies ++= Seq(
       "software.amazon.awssdk" % "s3" % "2.23.13", // scala-steward:off
+      "software.amazon.awssdk" % "sso" % "2.23.13" % "test", // scala-steward:off
+      "software.amazon.awssdk" % "ssooidc" % "2.23.13" % "test", // scala-steward:off
+      "org.typelevel" %% "cats-effect-testkit" % "3.6.3" % "test",
       "org.scalatest" %% "scalatest" % "3.2.19" % "test"
     )
   )

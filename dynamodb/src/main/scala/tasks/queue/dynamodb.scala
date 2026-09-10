@@ -213,6 +213,72 @@ object DynamoDb {
       a.nodes == b.nodes &&
       a.mainProcesses.toSet == b.mainProcesses.toSet
 
+  private def describeShardEntries(
+      shard: SerializableQueueState
+  ): List[(String, Int)] = {
+    def sizeOf(single: SerializableQueueState): Int =
+      compress(encodeShard(single)).length
+    shard.queuedTasks.map { entry =>
+      val description = entry._1.description
+      (
+        s"queued task ${description.taskId.id}.${description.taskId.version} (dataHash=${description.dataHash})",
+        sizeOf(emptyShard.copy(queuedTasks = List(entry)))
+      )
+    } ++ shard.scheduledTasks.map { entry =>
+      val description = entry._1.description
+      (
+        s"scheduled task ${description.taskId.id}.${description.taskId.version} (dataHash=${description.dataHash})",
+        sizeOf(emptyShard.copy(scheduledTasks = List(entry)))
+      )
+    } ++ shard.completedResults.map { entry =>
+      (
+        s"completed result for proxy ${entry._1.value}",
+        sizeOf(emptyShard.copy(completedResults = List(entry)))
+      )
+    } ++ shard.knownLaunchers.map { entry =>
+      (
+        s"launcher ${entry._1.name}",
+        sizeOf(emptyShard.copy(knownLaunchers = List(entry)))
+      )
+    } ++ shard.mainProcesses.map { session =>
+      (
+        s"main process session $session",
+        sizeOf(emptyShard.copy(mainProcesses = List(session)))
+      )
+    }
+  }
+
+  private def shardContentSummary(shard: SerializableQueueState): String =
+    s"queued=${shard.queuedTasks.size} scheduled=${shard.scheduledTasks.size} " +
+      s"completedResults=${shard.completedResults.size} knownLaunchers=${shard.knownLaunchers.size} " +
+      s"counters=${shard.counters.size} mainProcesses=${shard.mainProcesses.size}"
+
+  private def oversizedShardMessage(
+      shardIndex: Int,
+      shard: SerializableQueueState,
+      compressedLength: Int,
+      effectiveShards: Int
+  ): String = {
+    val entries = describeShardEntries(shard)
+    val largest = if (entries.isEmpty) None else Some(entries.maxBy(_._2))
+    val advice = largest match {
+      case Some((description, size)) if size > stateSizeLimitBytes =>
+        s"Its largest single entry, $description, is ~$size compressed bytes on its own, over the per-item limit. " +
+          "A single entry cannot be split across shards: move its payload out of the task input or result " +
+          "(pass large data as a SharedFile reference), or use a queue state backend without a per-item size limit."
+      case Some((description, size)) =>
+        s"Its largest single entry, $description, is ~$size compressed bytes; no single entry is over the limit, so the " +
+          s"shard overflows because its entries sum past it. Increasing the shard count (currently $effectiveShards) " +
+          "would spread them across more items."
+      case None =>
+        s"Increase the shard count (currently $effectiveShards) so the state spreads across more items, or use a " +
+          "queue state backend without a per-item size limit."
+    }
+    s"Queue state shard $shardIndex does not fit in a DynamoDB item: $compressedLength compressed bytes exceeds the " +
+      s"usable per-item limit of $stateSizeLimitBytes (DynamoDB caps an item at $itemSizeLimitBytes). " +
+      s"Shard holds: ${shardContentSummary(shard)}. $advice"
+  }
+
   private case class Sentinel(
       version: Long,
       shardCount: Option[Int],
@@ -434,14 +500,15 @@ object DynamoDb {
               payload.length.toLong
             }.sum
             oversizedShard match {
-              case Some((shard, payload)) =>
+              case Some((shardIndex, payload)) =>
                 IO.raiseError(
                   new RuntimeException(
-                    s"Queue state shard $shard does not fit in a DynamoDB item: ${payload.length} " +
-                      s"compressed bytes exceeds the usable per-item limit of $stateSizeLimitBytes " +
-                      s"(DynamoDB caps an item at $itemSizeLimitBytes). Increase the shard count " +
-                      s"(currently $effectiveShards) so the state spreads across more items, or use a " +
-                      "queue state backend without a per-item size limit."
+                    oversizedShardMessage(
+                      shardIndex,
+                      projected(shardIndex),
+                      payload.length,
+                      effectiveShards
+                    )
                   )
                 )
               case None if changedBytes > transactionSizeLimitBytes =>
