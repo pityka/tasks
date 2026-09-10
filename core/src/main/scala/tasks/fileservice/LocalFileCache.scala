@@ -45,14 +45,14 @@ private[tasks] object LocalFileCache {
       .handleError(_ => false)
 
   private def isValid(file: File, sf: SharedFile, config: TasksConfig): IO[Boolean] =
-    IO(file.isFile && file.length == sf.byteSize).flatMap {
+    IO.blocking(file.isFile && file.length == sf.byteSize).flatMap {
       case false => IO.pure(false)
       case true =>
         if (sf.hash == -1 || config.skipContentHashVerificationAfterCache) IO.pure(true)
         else contentHashMatches(file, sf.hash)
     }
 
-  private def persistInto(source: File, target: File): IO[File] = IO {
+  private def persistInto(source: File, target: File): IO[File] = IO.blocking {
     val parent = target.getParentFile
     if (parent != null) Files.createDirectories(parent.toPath)
     val staging = new File(parent, target.getName + ".part-" + java.util.UUID.randomUUID())

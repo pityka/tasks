@@ -94,12 +94,12 @@ private[tasks] class FolderFileStorage(val basePath: File)(implicit
 
       {
         val file = assemblePath(mp)
-        val sizeOnDiskNow = IO(file.length)
+        val sizeOnDiskNow = IO.interruptible(file.length)
         val hash = FolderFileStorage.getContentHashOfFile(
           file,
           config.skipContentHashCreationUponImport
         )
-        val canRead = IO(file.canRead)
+        val canRead = IO.interruptible(file.canRead)
 
         val sizeMatch = sizeOnDiskNow.map(_ === expectedSize)
         val contentMatch = hash.map(_ === expectedHash)
@@ -117,16 +117,19 @@ private[tasks] class FolderFileStorage(val basePath: File)(implicit
 
           }
         }
-        canDelete.map { canDelete =>
+        canDelete.flatMap { canDelete =>
           if (canDelete) {
-            val deleted = file.delete
-            scribe.warn(s"File deleted $file $mp : $deleted")
-            deleted
+            IO.interruptible(file.delete).map { deleted =>
+              scribe.warn(s"File deleted $file $mp : $deleted")
+              deleted
+            }
           } else {
-            scribe.warn(
-              s"Not deleting file because its size or hash is different than expectation. $file $mp $sizeMatch $contentMatch"
-            )
-            false
+            IO {
+              scribe.warn(
+                s"Not deleting file because its size or hash is different than expectation. $file $mp $sizeMatch $contentMatch"
+              )
+              false
+            }
           }
         }
       }
@@ -207,13 +210,14 @@ private[tasks] class FolderFileStorage(val basePath: File)(implicit
         IO.pure(None)
       } else {
         if (retrieveSizeAndHash) {
-          val size = f.length
-          val hash = FolderFileStorage.getContentHashOfFile(
-            f,
-            config.skipContentHashCreationUponImport
-          )
-          hash.map { hash =>
-            Some(SharedFileHelper.create(size, hash, path))
+          IO.interruptible(f.length).flatMap { size =>
+            val hash = FolderFileStorage.getContentHashOfFile(
+              f,
+              config.skipContentHashCreationUponImport
+            )
+            hash.map { hash =>
+              Some(SharedFileHelper.create(size, hash, path))
+            }
           }
         } else
           IO.pure(Some(SharedFileHelper.create(size = -1L, hash = 0, path)))
@@ -401,7 +405,7 @@ private[tasks] class FolderFileStorage(val basePath: File)(implicit
                   if (contentEquals)
                     IO.pure((size, hash, managed))
                   else
-                    IO {
+                    IO.blocking {
                       scribe.info(
                         s"Equality check failed for a file at the same path. Importing file. $file to $finalFile"
                       )
