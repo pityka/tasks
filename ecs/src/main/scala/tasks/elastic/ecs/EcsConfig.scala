@@ -3,6 +3,13 @@ package tasks.elastic.ecs
 import software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain
 import tasks.shared.ResourceRequest
 
+sealed trait EcsPlacementConstraint
+
+object EcsPlacementConstraint {
+  case object DistinctInstance extends EcsPlacementConstraint
+  final case class MemberOf(expression: String) extends EcsPlacementConstraint
+}
+
 final case class EcsConfig(
     region: Option[String],
     cluster: String,
@@ -10,6 +17,7 @@ final case class EcsConfig(
     containerName: String,
     taskDefinition: String,
     taskDefinitionSelector: ResourceRequest => Option[String],
+    placementConstraints: List[EcsPlacementConstraint],
     minimumCpu: Int,
     minimumMemory: Int,
     startedBy: String,
@@ -66,6 +74,11 @@ final case class EcsConfig(
       select: ResourceRequest => Option[String]
   ): EcsConfig =
     copy(taskDefinitionSelector = select)
+
+  def withPlacementConstraints(
+      constraints: EcsPlacementConstraint*
+  ): EcsConfig =
+    copy(placementConstraints = placementConstraints ++ constraints)
 
   def withMinimumResources(cpu: Int, memoryMib: Int): EcsConfig =
     copy(minimumCpu = cpu, minimumMemory = memoryMib)
@@ -144,6 +157,7 @@ object EcsConfig {
       containerName = containerName,
       taskDefinition = taskDefinition,
       taskDefinitionSelector = _ => None,
+      placementConstraints = Nil,
       minimumCpu = 1,
       minimumMemory = 512,
       startedBy = "tasks-elastic",

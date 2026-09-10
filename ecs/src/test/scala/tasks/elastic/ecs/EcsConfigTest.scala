@@ -4,6 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 import tasks.shared.ResourceRequest
 import tasks.shared.NodeSelector
+import software.amazon.awssdk.services.ecs.model.PlacementConstraintType
 
 class EcsConfigTest extends AnyFunSuite with Matchers {
 
@@ -126,6 +127,30 @@ class EcsConfigTest extends AnyFunSuite with Matchers {
       )
     ) shouldBe Right("fpga-td")
     c.resolveTaskDefinition(ResourceRequest(1, 128, 0, 0)) shouldBe Right("default-td")
+  }
+
+  test("withPlacementConstraints accumulates and converts to SDK constraints") {
+    val c = minimal.withPlacementConstraints(
+      EcsPlacementConstraint.DistinctInstance,
+      EcsPlacementConstraint.MemberOf(
+        "attribute:ecs.instance-type == c5.large"
+      )
+    )
+
+    c.placementConstraints shouldBe List(
+      EcsPlacementConstraint.DistinctInstance,
+      EcsPlacementConstraint.MemberOf("attribute:ecs.instance-type == c5.large")
+    )
+
+    val sdk = c.placementConstraints.map(EcsOperations.toSdkPlacementConstraint)
+    sdk.head.`type` shouldBe PlacementConstraintType.DISTINCT_INSTANCE
+    sdk.head.expression shouldBe null
+    sdk(1).`type` shouldBe PlacementConstraintType.MEMBER_OF
+    sdk(1).expression shouldBe "attribute:ecs.instance-type == c5.large"
+  }
+
+  test("placement constraints default to empty") {
+    minimal.placementConstraints shouldBe empty
   }
 
   test("a task arn of the configured cluster is owned") {

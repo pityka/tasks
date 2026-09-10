@@ -90,6 +90,21 @@ object EcsOperations {
       case PlacementTarget.CapacityProvider(_) => placementExpression
     }
 
+  private[ecs] def toSdkPlacementConstraint(
+      constraint: EcsPlacementConstraint
+  ): PlacementConstraint =
+    constraint match {
+      case EcsPlacementConstraint.DistinctInstance =>
+        PlacementConstraint.builder
+          .`type`(PlacementConstraintType.DISTINCT_INSTANCE)
+          .build
+      case EcsPlacementConstraint.MemberOf(expression) =>
+        PlacementConstraint.builder
+          .`type`(PlacementConstraintType.MEMBER_OF)
+          .expression(expression)
+          .build
+    }
+
   def fromClient(
       ecs: EcsClient,
       autoscaling: AutoScalingClient,
@@ -211,10 +226,14 @@ object EcsOperations {
           )
       }
 
+      val allConstraints =
+        ecsConfig.placementConstraints.map(
+          EcsOperations.toSdkPlacementConstraint
+        ) ::: constraint.map(memberOf).toList
+
       val requestBuilder =
-        constraint.fold(onTarget)(expression =>
-          onTarget.placementConstraints(memberOf(expression))
-        )
+        if (allConstraints.isEmpty) onTarget
+        else onTarget.placementConstraints(allConstraints.asJava)
 
       val request =
         if (sdkTags.isEmpty) requestBuilder.build
@@ -225,7 +244,8 @@ object EcsOperations {
           s"ecs.runTask(cluster=$cluster, target=$target, " +
             s"taskDefinition=${spec.taskDefinition}, cpuUnits=${spec.cpuUnits}, " +
             s"memoryMiB=${spec.memoryMib}, gpus=${spec.gpus}, " +
-            s"constraint=${spec.placementExpression.getOrElse("none")})"
+            s"constraint=${spec.placementExpression.getOrElse("none")}, " +
+            s"configConstraints=${ecsConfig.placementConstraints.size})"
         )
       ) *>
         IO.interruptible(ecs.runTask(request)).map { response =>
