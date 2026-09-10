@@ -89,7 +89,7 @@ class EcsConfigTest extends AnyFunSuite with Matchers {
 
   test("resolveTaskDefinition falls back to the default when the selector abstains") {
     minimal.resolveTaskDefinition(ResourceRequest(1, 128, 0, 0)) shouldBe
-      "default-td"
+      Right("default-td")
   }
 
   test("a selector may key the task definition on the image") {
@@ -102,11 +102,11 @@ class EcsConfigTest extends AnyFunSuite with Matchers {
     )
     c.resolveTaskDefinition(
       ResourceRequest((1, 1), 128, 0, 0, Some("my-image:v1"))
-    ) shouldBe "my-td-v1"
+    ) shouldBe Right("my-td-v1")
     c.resolveTaskDefinition(
       ResourceRequest((1, 1), 128, 0, 0, Some("my-image:v2"))
-    ) shouldBe "my-td-v2"
-    c.resolveTaskDefinition(ResourceRequest(1, 128, 0, 0)) shouldBe "default-td"
+    ) shouldBe Right("my-td-v2")
+    c.resolveTaskDefinition(ResourceRequest(1, 128, 0, 0)) shouldBe Right("default-td")
   }
 
   test("a selector may key the task definition on the node selector, not the image") {
@@ -124,8 +124,8 @@ class EcsConfigTest extends AnyFunSuite with Matchers {
         None,
         Some(NodeSelector.Has("device.fpga"))
       )
-    ) shouldBe "fpga-td"
-    c.resolveTaskDefinition(ResourceRequest(1, 128, 0, 0)) shouldBe "default-td"
+    ) shouldBe Right("fpga-td")
+    c.resolveTaskDefinition(ResourceRequest(1, 128, 0, 0)) shouldBe Right("default-td")
   }
 
   test("a task arn of the configured cluster is owned") {

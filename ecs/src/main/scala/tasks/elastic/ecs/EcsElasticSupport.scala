@@ -104,11 +104,15 @@ class EcsCreateNode(
     EcsAttributes.placementExpression(requestSize.nodeSelector) match {
       case Left(error) => IO.pure(Left(error))
       case Right(placementExpression) =>
-        place(
-          requestSize,
-          ecsConfig.resolveTaskDefinition(requestSize),
-          placementExpression
-        )
+        ecsConfig.resolveTaskDefinition(requestSize) match {
+          case Left(error) => IO.pure(Left(error))
+          case Right(taskDefinition) =>
+            place(
+              requestSize,
+              taskDefinition,
+              placementExpression
+            )
+        }
     }
 
   private def place(

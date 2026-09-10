@@ -91,8 +91,20 @@ final case class EcsConfig(
     nodeId.split('/').toList.lift(1).contains(clusterName)
   }
 
-  def resolveTaskDefinition(request: ResourceRequest): String =
-    taskDefinitionSelector(request).getOrElse(taskDefinition)
+  def resolveTaskDefinition(request: ResourceRequest): Either[String, String] =
+    taskDefinitionSelector(request) match {
+      case Some(selected) => Right(selected)
+      case None =>
+        request.image match {
+          case Some(image) =>
+            Left(
+              s"No ECS task definition is mapped to the requested image '$image'. " +
+                "Map it with EcsConfig.withTaskDefinitionSelector, or submit the " +
+                s"task without an image to use the default task definition '$taskDefinition'."
+            )
+          case None => Right(taskDefinition)
+        }
+    }
 
   override def toString: String =
     s"EcsConfig(region=${region.getOrElse("<default-chain>")}, " +
