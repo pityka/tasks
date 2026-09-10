@@ -101,14 +101,14 @@ class EcsCreateNode(
   )(implicit
       config: TasksConfig
   ): IO[Either[String, (PendingJobId, ResourceAvailable)]] =
-    ecsConfig.resolveTaskDefinition(requestSize.image) match {
+    EcsAttributes.placementExpression(requestSize.nodeSelector) match {
       case Left(error) => IO.pure(Left(error))
-      case Right(taskDefinition) =>
-        EcsAttributes.placementExpression(requestSize.nodeSelector) match {
-          case Left(error) => IO.pure(Left(error))
-          case Right(placementExpression) =>
-            place(requestSize, taskDefinition, placementExpression)
-        }
+      case Right(placementExpression) =>
+        place(
+          requestSize,
+          ecsConfig.resolveTaskDefinition(requestSize),
+          placementExpression
+        )
     }
 
   private def place(

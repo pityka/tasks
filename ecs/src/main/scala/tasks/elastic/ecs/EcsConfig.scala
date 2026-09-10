@@ -1,6 +1,7 @@
 package tasks.elastic.ecs
 
 import software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain
+import tasks.shared.ResourceRequest
 
 final case class EcsConfig(
     region: Option[String],
@@ -8,7 +9,7 @@ final case class EcsConfig(
     capacityProviders: List[String],
     containerName: String,
     taskDefinition: String,
-    taskDefinitionsByImage: Map[String, String],
+    taskDefinitionSelector: ResourceRequest => Option[String],
     minimumCpu: Int,
     minimumMemory: Int,
     startedBy: String,
@@ -61,8 +62,10 @@ final case class EcsConfig(
   def withCapacityProviders(entries: String*): EcsConfig =
     copy(capacityProviders = capacityProviders ++ entries)
 
-  def withTaskDefinitionForImage(image: String, value: String): EcsConfig =
-    copy(taskDefinitionsByImage = taskDefinitionsByImage + (image -> value))
+  def withTaskDefinitionSelector(
+      select: ResourceRequest => Option[String]
+  ): EcsConfig =
+    copy(taskDefinitionSelector = select)
 
   def withMinimumResources(cpu: Int, memoryMib: Int): EcsConfig =
     copy(minimumCpu = cpu, minimumMemory = memoryMib)
@@ -88,26 +91,14 @@ final case class EcsConfig(
     nodeId.split('/').toList.lift(1).contains(clusterName)
   }
 
-  def resolveTaskDefinition(image: Option[String]): Either[String, String] =
-    image match {
-      case None => Right(taskDefinition)
-      case Some(img) =>
-        taskDefinitionsByImage
-          .get(img)
-          .toRight(
-            s"No ECS task definition configured for image '$img'. " +
-              "Register one with EcsConfig.withTaskDefinitionForImage. " +
-              "ECS takes the image from the task definition, so it cannot be " +
-              "overridden at RunTask time."
-          )
-    }
+  def resolveTaskDefinition(request: ResourceRequest): String =
+    taskDefinitionSelector(request).getOrElse(taskDefinition)
 
   override def toString: String =
     s"EcsConfig(region=${region.getOrElse("<default-chain>")}, " +
       s"cluster=$cluster, " +
       s"capacityProviders=[${capacityProviders.mkString(",")}], " +
       s"taskDefinition=$taskDefinition, container=$containerName, " +
-      s"imagesMapped=${taskDefinitionsByImage.size}, " +
       s"advertiseInstanceAttributes=$advertiseInstanceAttributes)"
 }
 
@@ -140,7 +131,7 @@ object EcsConfig {
       capacityProviders = capacityProviders,
       containerName = containerName,
       taskDefinition = taskDefinition,
-      taskDefinitionsByImage = Map.empty,
+      taskDefinitionSelector = _ => None,
       minimumCpu = 1,
       minimumMemory = 512,
       startedBy = "tasks-elastic",

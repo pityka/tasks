@@ -3,6 +3,7 @@ package tasks.elastic.ecs
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 import tasks.shared.ResourceRequest
+import tasks.shared.NodeSelector
 
 class EcsConfigTest extends AnyFunSuite with Matchers {
 
@@ -24,7 +25,7 @@ class EcsConfigTest extends AnyFunSuite with Matchers {
     minimal.minimumCpu shouldBe 1
     minimal.minimumMemory shouldBe 512
     minimal.startedBy shouldBe "tasks-elastic"
-    minimal.taskDefinitionsByImage shouldBe empty
+    minimal.taskDefinitionSelector(ResourceRequest(1, 128, 0, 0)) shouldBe None
     minimal.extraEnvironment shouldBe empty
     minimal.tags shouldBe empty
   }
@@ -86,30 +87,45 @@ class EcsConfigTest extends AnyFunSuite with Matchers {
     )
   }
 
-  test("resolveTaskDefinition(None) returns the default taskDefinition") {
-    minimal.resolveTaskDefinition(None) shouldBe Right("default-td")
+  test("resolveTaskDefinition falls back to the default when the selector abstains") {
+    minimal.resolveTaskDefinition(ResourceRequest(1, 128, 0, 0)) shouldBe
+      "default-td"
   }
 
-  test("resolveTaskDefinition(Some(x)) returns the mapped task definition") {
-    val c = minimal
-      .withTaskDefinitionForImage("my-image:v1", "my-td-v1")
-      .withTaskDefinitionForImage("my-image:v2", "my-td-v2")
-    c.resolveTaskDefinition(Some("my-image:v1")) shouldBe Right("my-td-v1")
-    c.resolveTaskDefinition(Some("my-image:v2")) shouldBe Right("my-td-v2")
-    c.resolveTaskDefinition(None) shouldBe Right("default-td")
+  test("a selector may key the task definition on the image") {
+    val c = minimal.withTaskDefinitionSelector(req =>
+      req.image match {
+        case Some("my-image:v1") => Some("my-td-v1")
+        case Some("my-image:v2") => Some("my-td-v2")
+        case _                   => None
+      }
+    )
+    c.resolveTaskDefinition(
+      ResourceRequest((1, 1), 128, 0, 0, Some("my-image:v1"))
+    ) shouldBe "my-td-v1"
+    c.resolveTaskDefinition(
+      ResourceRequest((1, 1), 128, 0, 0, Some("my-image:v2"))
+    ) shouldBe "my-td-v2"
+    c.resolveTaskDefinition(ResourceRequest(1, 128, 0, 0)) shouldBe "default-td"
   }
 
-  test("resolveTaskDefinition(Some(x)) fails fast when image is not mapped") {
-    val c = minimal.withTaskDefinitionForImage("my-image:v1", "my-td-v1")
-    val result = c.resolveTaskDefinition(Some("unknown:tag"))
-    result.isLeft shouldBe true
-    val err = result.left.getOrElse(fail("expected Left"))
-    err should include("unknown:tag")
-    err should include("withTaskDefinitionForImage")
-  }
-
-  test("resolveTaskDefinition(Some(x)) fails when no image is mapped") {
-    minimal.resolveTaskDefinition(Some("my-image:v1")).isLeft shouldBe true
+  test("a selector may key the task definition on the node selector, not the image") {
+    val c = minimal.withTaskDefinitionSelector { req =>
+      if (req.nodeSelector.contains(NodeSelector.Has("device.fpga")))
+        Some("fpga-td")
+      else None
+    }
+    c.resolveTaskDefinition(
+      ResourceRequest(
+        (1, 1),
+        128,
+        0,
+        0,
+        None,
+        Some(NodeSelector.Has("device.fpga"))
+      )
+    ) shouldBe "fpga-td"
+    c.resolveTaskDefinition(ResourceRequest(1, 128, 0, 0)) shouldBe "default-td"
   }
 
   test("a task arn of the configured cluster is owned") {

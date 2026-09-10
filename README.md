@@ -134,7 +134,11 @@ withTaskSystem(
   elasticSupport = EcsElasticSupport(
     EcsConfig("my-cluster", "my-capacity-provider", "worker", "my-task-definition")
       .withRegion("us-east-1")
-      .withTaskDefinitionForImage("my-image:v1", "my-task-definition-v1")
+      .withTaskDefinitionSelector { request =>
+        if (request.nodeSelector.contains(tasks.shared.NodeSelector.Has("device.fpga")))
+          Some("my-fpga-task-definition")
+        else None
+      }
   ).map(Some(_))
 )(system => ???)
 ```
