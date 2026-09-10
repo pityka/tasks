@@ -172,7 +172,7 @@ private[tasks] class ProxyTask[Input, Output](
     val submit = fs2.Stream.eval(submitUntilAccepted) ++ fs2.Stream.never[IO]
 
     val poll = fs2.Stream
-      .fixedDelay[IO](config.askInterval)
+      .fixedDelay[IO](config.resultPollInterval)
       .evalMap(_ =>
         queue
           .pollResult(address)

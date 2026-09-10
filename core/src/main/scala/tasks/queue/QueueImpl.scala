@@ -1375,16 +1375,23 @@ private[tasks] class QueueImpl(
   }
 
   def pollResult(proxy: Address): IO[Option[ProxyResult]] =
-    ref.flatModify { state =>
-      state.completedResults.get(proxy) match {
-        case None => state -> IO.pure(Option.empty[ProxyResult])
-        case Some(result) =>
-          scribe.debug(
-            s"ResultPolled",
-            scribe.data("proxy", proxy.toString)
-          )
-          state.update(ResultDeliveredToProxy(proxy)) -> IO.pure(Some(result))
-      }
+    ref.get.flatMap { current =>
+      if (!current.completedResults.contains(proxy))
+        IO.pure(Option.empty[ProxyResult])
+      else
+        ref.flatModify { state =>
+          state.completedResults.get(proxy) match {
+            case None => state -> IO.pure(Option.empty[ProxyResult])
+            case Some(result) =>
+              scribe.debug(
+                s"ResultPolled",
+                scribe.data("proxy", proxy.toString)
+              )
+              state.update(ResultDeliveredToProxy(proxy)) -> IO.pure(
+                Some(result)
+              )
+          }
+        }
     }
 
   def taskFailed(
