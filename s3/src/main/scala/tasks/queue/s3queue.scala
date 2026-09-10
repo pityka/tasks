@@ -264,7 +264,7 @@ object S3QueueState {
   private case class ReadLoaded(state: State, etag: String) extends ReadResult
   private case object ReadAbsent extends ReadResult
 
-  private case class Cached(
+  private[tasks] case class Cached(
       state: State,
       etag: Option[String],
       confirmedAtNanos: Long
