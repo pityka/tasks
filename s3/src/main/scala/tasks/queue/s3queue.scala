@@ -3,6 +3,7 @@ package tasks.queue
 import cats.effect.IO
 import cats.effect.kernel.Ref
 import cats.effect.kernel.Resource
+import cats.effect.std.Mutex
 
 import scala.concurrent.duration._
 
@@ -20,18 +21,41 @@ import tasks.queue.QueueImpl.State
 
 object S3QueueState {
 
-
   val DefaultRetryBaseDelay = 20.milliseconds
 
   val preconditionFailedStatusCode = 412
 
   val conflictingOperationStatusCode = 409
 
-  val DefaultMaxRequestsPerSecond = 100
+  val notModifiedStatusCode = 304
 
-  val DefaultMaxBurst = 200
+  val DefaultMaxReadRequestsPerSecond = 300
+
+  val DefaultMaxReadBurst = 400
+
+  val DefaultMaxWriteRequestsPerSecond = 100
+
+  val DefaultMaxWriteBurst = 200
+
+  val DefaultReadCacheTtl = 1.second
 
   val backpressureWarnInterval = 10.seconds
+
+  case class RateLimits(
+      maxReadRequestsPerSecond: Int,
+      maxReadBurst: Int,
+      maxWriteRequestsPerSecond: Int,
+      maxWriteBurst: Int
+  )
+
+  object RateLimits {
+    val default: RateLimits = RateLimits(
+      maxReadRequestsPerSecond = DefaultMaxReadRequestsPerSecond,
+      maxReadBurst = DefaultMaxReadBurst,
+      maxWriteRequestsPerSecond = DefaultMaxWriteRequestsPerSecond,
+      maxWriteBurst = DefaultMaxWriteBurst
+    )
+  }
 
   def clientResource(
       regionProfileName: Option[String]
@@ -57,8 +81,7 @@ object S3QueueState {
       regionProfileName = regionProfileName,
       key = key,
       retryBaseDelay = retryBaseDelay,
-      maxRequestsPerSecond = DefaultMaxRequestsPerSecond,
-      maxBurst = DefaultMaxBurst
+      rateLimits = RateLimits.default
     )
 
   def makeTransaction(
@@ -66,8 +89,7 @@ object S3QueueState {
       regionProfileName: Option[String],
       key: String,
       retryBaseDelay: FiniteDuration,
-      maxRequestsPerSecond: Int,
-      maxBurst: Int
+      rateLimits: RateLimits
   ): Resource[IO, tasks.util.Transaction[State]] =
     clientResource(regionProfileName).flatMap(client =>
       makeTransaction(
@@ -75,8 +97,7 @@ object S3QueueState {
         bucket = bucket,
         key = key,
         retryBaseDelay = retryBaseDelay,
-        maxRequestsPerSecond = maxRequestsPerSecond,
-        maxBurst = maxBurst
+        rateLimits = rateLimits
       )
     )
 
@@ -91,8 +112,7 @@ object S3QueueState {
       bucket = bucket,
       key = key,
       retryBaseDelay = retryBaseDelay,
-      maxRequestsPerSecond = DefaultMaxRequestsPerSecond,
-      maxBurst = DefaultMaxBurst
+      rateLimits = RateLimits.default
     )
 
   def makeTransaction(
@@ -100,17 +120,33 @@ object S3QueueState {
       bucket: String,
       key: String,
       retryBaseDelay: FiniteDuration,
-      maxRequestsPerSecond: Int,
-      maxBurst: Int
+      rateLimits: RateLimits
   ): Resource[IO, tasks.util.Transaction[State]] =
-    rateLimiter(maxRequestsPerSecond, maxBurst).map(limiter =>
-      new S3Transaction(
-        client = client,
-        bucket = bucket,
-        key = key,
-        retryBaseDelay = retryBaseDelay,
-        limiter = limiter
+    for {
+      readLimiter <- rateLimiter(
+        "read",
+        rateLimits.maxReadRequestsPerSecond,
+        rateLimits.maxReadBurst
       )
+      writeLimiter <- rateLimiter(
+        "write",
+        rateLimits.maxWriteRequestsPerSecond,
+        rateLimits.maxWriteBurst
+      )
+      cached <- Resource.eval(Ref.of[IO, Option[Cached]](None))
+      writeMutex <- Resource.eval(Mutex[IO])
+      readMutex <- Resource.eval(Mutex[IO])
+    } yield new S3Transaction(
+      client = client,
+      bucket = bucket,
+      key = key,
+      retryBaseDelay = retryBaseDelay,
+      readLimiter = readLimiter,
+      writeLimiter = writeLimiter,
+      cached = cached,
+      writeMutex = writeMutex,
+      readMutex = readMutex,
+      readCacheTtl = DefaultReadCacheTtl
     )
 
   private[tasks] def compress(bytes: Array[Byte]): Array[Byte] = {
@@ -130,6 +166,7 @@ object S3QueueState {
   }
 
   private[tasks] def rateLimiter(
+      label: String,
       maxRequestsPerSecond: Int,
       maxBurst: Int
   ): Resource[IO, RateLimiter] =
@@ -147,6 +184,7 @@ object S3QueueState {
           now.toNanos - backpressureWarnInterval.toNanos
         )
       } yield new RateLimiter(
+        label = label,
         state = state,
         refillIntervalNanos =
           math.max(1L, 1000000000L / maxRequestsPerSecond.toLong),
@@ -158,6 +196,7 @@ object S3QueueState {
     )
 
   private[tasks] class RateLimiter(
+      label: String,
       state: Ref[IO, (Long, Long)],
       refillIntervalNanos: Long,
       capacity: Long,
@@ -205,9 +244,10 @@ object S3QueueState {
             IO.whenA(due)(
               IO(
                 scribe.warn(
-                  "S3 queue-state backend is rate-limited: requests are waiting for the token bucket to refill. This caps S3 request cost; raise maxRequestsPerSecond if this is expected load.",
+                  s"S3 queue-state backend $label requests are rate-limited: waiting for the token bucket to refill. This caps S3 request cost; raise the corresponding limit if this is expected load.",
                   scribe.data(
                     Map(
+                      "limiter" -> label,
                       "max-requests-per-second" -> maxRequestsPerSecond,
                       "max-burst" -> maxBurst
                     )
@@ -219,22 +259,35 @@ object S3QueueState {
       }
   }
 
+  private sealed trait ReadResult
+  private case object ReadNotModified extends ReadResult
+  private case class ReadLoaded(state: State, etag: String) extends ReadResult
+  private case object ReadAbsent extends ReadResult
+
+  private case class Cached(
+      state: State,
+      etag: Option[String],
+      confirmedAtNanos: Long
+  )
+
   private[tasks] class S3Transaction(
       client: S3AsyncClient,
       bucket: String,
       key: String,
       retryBaseDelay: FiniteDuration,
-      limiter: RateLimiter
+      readLimiter: RateLimiter,
+      writeLimiter: RateLimiter,
+      cached: Ref[IO, Option[Cached]],
+      writeMutex: Mutex[IO],
+      readMutex: Mutex[IO],
+      readCacheTtl: FiniteDuration
   ) extends tasks.util.Transaction[State] {
 
-    private def readVersionedState: IO[(State, Option[String])] = {
-      val request = GetObjectRequest
-        .builder()
-        .bucket(bucket)
-        .key(key)
-        .build()
-
-      limiter(
+    private def conditionalGet(ifNoneMatch: Option[String]): IO[ReadResult] = {
+      val base = GetObjectRequest.builder().bucket(bucket).key(key)
+      val request =
+        ifNoneMatch.fold(base)(etag => base.ifNoneMatch(etag)).build()
+      readLimiter(
         IO.fromCompletableFuture(
           IO(
             client.getObject(
@@ -244,18 +297,59 @@ object S3QueueState {
           )
         )
       ).map { response =>
-        val state =
-          SerializableQueueState.decode(decompress(response.asByteArray()))
-        (state, Option(response.response().eTag()))
-      }.recover { case _: NoSuchKeyException =>
-        (State.empty, None)
+        (ReadLoaded(
+          SerializableQueueState.decode(decompress(response.asByteArray())),
+          response.response().eTag()
+        ): ReadResult)
+      }.recover {
+        case _: NoSuchKeyException => ReadAbsent
+        case e: S3Exception if e.statusCode() == notModifiedStatusCode =>
+          ReadNotModified
       }
     }
 
-    private def writeIfUnchanged(
+    private def forceRead: IO[(State, Option[String])] =
+      cached.get.flatMap { current =>
+        conditionalGet(current.flatMap(_.etag)).flatMap { result =>
+          IO.monotonic.flatMap { now =>
+            val (state, etag) = result match {
+              case ReadNotModified =>
+                (
+                  current.map(_.state).getOrElse(State.empty),
+                  current.flatMap(_.etag)
+                )
+              case ReadLoaded(s, e) => (s, Some(e))
+              case ReadAbsent       => (State.empty, None)
+            }
+            cached.set(Some(Cached(state, etag, now.toNanos))).as((state, etag))
+          }
+        }
+      }
+
+    private def readLatest: IO[(State, Option[String])] =
+      IO.monotonic.flatMap { now =>
+        cached.get.flatMap {
+          case Some(c)
+              if now.toNanos - c.confirmedAtNanos <= readCacheTtl.toNanos =>
+            IO.pure((c.state, c.etag))
+          case _ =>
+            readMutex.lock.surround {
+              IO.monotonic.flatMap { now2 =>
+                cached.get.flatMap {
+                  case Some(c)
+                      if now2.toNanos - c.confirmedAtNanos <= readCacheTtl.toNanos =>
+                    IO.pure((c.state, c.etag))
+                  case _ => forceRead
+                }
+              }
+            }
+        }
+      }
+
+    private def putIfMatch(
         state: State,
         expectedETag: Option[String]
-    ): IO[Boolean] =
+    ): IO[Option[String]] =
       IO(compress(SerializableQueueState.encode(state))).flatMap { payload =>
         val condition = expectedETag match {
           case Some(etag) => AwsRequestOverrideConfiguration
@@ -274,16 +368,16 @@ object S3QueueState {
           .overrideConfiguration(condition)
           .build()
 
-        limiter(
+        writeLimiter(
           IO.fromCompletableFuture(
             IO(client.putObject(request, AsyncRequestBody.fromBytes(payload)))
           )
-        ).as(true)
+        ).map(response => Option(response.eTag()))
           .recover {
             case e: S3Exception
                 if e.statusCode() == preconditionFailedStatusCode ||
                   e.statusCode() == conflictingOperationStatusCode =>
-              false
+              None
           }
       }
 
@@ -292,9 +386,48 @@ object S3QueueState {
         retryBaseDelay * math.pow(2d, math.min(attempt, 5).toDouble).toLong
       )
 
+    override def get: IO[State] = readLatest.map(_._1)
+
     override def flatModify[B](update: State => (State, IO[B])): IO[B] = {
-      def loop(attempt: Int): IO[IO[B]] =
-        readVersionedState.flatMap { case (state, etag) =>
+      def commit(
+          attempt: Int,
+          reusable: Option[(Option[String], State, IO[B])]
+      ): IO[IO[B]] =
+        cached.get.flatMap { current =>
+          val currentState = current.map(_.state).getOrElse(State.empty)
+          val currentETag = current.flatMap(_.etag)
+          val (base, updated, sideEffect) = reusable match {
+            case Some((readETag, computed, effect)) if readETag == currentETag =>
+              (currentState, computed, effect)
+            case _ =>
+              val (recomputed, effect) = update(currentState)
+              (currentState, recomputed, effect)
+          }
+          if (updated == base) IO.pure(sideEffect)
+          else
+            putIfMatch(updated, currentETag).flatMap {
+              case Some(newETag) =>
+                IO.monotonic
+                  .flatMap(now =>
+                    cached.set(Some(Cached(updated, Some(newETag), now.toNanos)))
+                  )
+                  .as(sideEffect)
+              case None =>
+                IO {
+                  val message =
+                    "Conditional write of the queue state failed because another process committed first. Try again."
+                  val data = scribe.data(Map("attempt" -> attempt))
+                  if (attempt > 10) scribe.warn(message, data)
+                  else scribe.debug(message, data)
+                } *> forceRead *> backoff(attempt) *> commit(
+                  attempt + 1,
+                  None
+                )
+            }
+        }
+
+      def start: IO[IO[B]] =
+        readLatest.flatMap { case (state, readETag) =>
           val (updated, sideEffect) = update(state)
           if (updated == state)
             IO(
@@ -303,24 +436,13 @@ object S3QueueState {
               )
             ).as(sideEffect)
           else
-            writeIfUnchanged(updated, etag).flatMap { committed =>
-              if (committed) IO.pure(sideEffect)
-              else
-                IO(
-                  scribe.debug(
-                    "Conditional write of the queue state failed because another process committed first. Try again.",
-                    scribe.data(Map("attempt" -> attempt))
-                  )
-                ) *> backoff(attempt) *> loop(attempt + 1)
-            }
+            writeMutex.lock.surround(
+              commit(0, Some((readETag, updated, sideEffect)))
+            )
         }
 
-      IO.uncancelable { poll =>
-        poll(loop(0)).flatten
-      }
+      IO.uncancelable(poll => poll(start).flatten)
     }
-
-    override def get: IO[State] = readVersionedState.map(_._1)
 
   }
 

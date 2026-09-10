@@ -18,7 +18,7 @@ class S3RateLimiterTest extends FunSuite with Matchers {
 
   test("the token bucket admits a burst then throttles to the refill rate") {
     val program =
-      S3QueueState.rateLimiter(maxRequestsPerSecond = 10, maxBurst = 3).use {
+      S3QueueState.rateLimiter("read", maxRequestsPerSecond =10, maxBurst = 3).use {
         limiter =>
           for {
             start <- IO.monotonic
@@ -40,7 +40,7 @@ class S3RateLimiterTest extends FunSuite with Matchers {
 
   test("the bucket does not accumulate tokens beyond the burst while idle") {
     val program =
-      S3QueueState.rateLimiter(maxRequestsPerSecond = 10, maxBurst = 2).use {
+      S3QueueState.rateLimiter("read", maxRequestsPerSecond =10, maxBurst = 2).use {
         limiter =>
           for {
             _ <- IO.sleep(950.milliseconds)
@@ -64,7 +64,7 @@ class S3RateLimiterTest extends FunSuite with Matchers {
 
     try {
       val program =
-        S3QueueState.rateLimiter(maxRequestsPerSecond = 10, maxBurst = 1).use {
+        S3QueueState.rateLimiter("read", maxRequestsPerSecond =10, maxBurst = 1).use {
           limiter =>
             limiter(IO.unit) *> limiter(IO.unit) *> limiter(IO.unit)
         }
@@ -81,7 +81,7 @@ class S3RateLimiterTest extends FunSuite with Matchers {
     intercept[IllegalArgumentException] {
       TestControl
         .executeEmbed(
-          S3QueueState.rateLimiter(maxRequestsPerSecond = 0, maxBurst = 1).use_
+          S3QueueState.rateLimiter("read", maxRequestsPerSecond =0, maxBurst = 1).use_
         )
         .unsafeRunSync()
     }
