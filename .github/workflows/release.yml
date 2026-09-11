@@ -86,7 +86,8 @@ jobs:
       - uses: sbt/setup-sbt@v1
       - name: Publish to GitLab Packages
         run: |
-          sbt 'set ThisBuild / publishTo := Some("gitlab" at "https://gitlab.com/api/v4/projects/85707877/packages/maven")' \
+          sbt 'set ThisBuild / publishTo := Some("gitlab" at "https://gitlab.com/api/v4/projects/86342759/packages/maven")' \
               versionCheck +publish
         env:
           GITLAB_DEPLOY_TOKEN: ${{ secrets.GITLAB_DEPLOY_TOKEN }}
+          GITLAB_DEPLOY_TOKEN_USER: ${{ secrets.GITLAB_DEPLOY_TOKEN_USER }}

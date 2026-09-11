@@ -23,10 +23,11 @@ ThisBuild / credentials ++= {
 ThisBuild / credentials ++= {
   for {
     token <- sys.env.get("GITLAB_DEPLOY_TOKEN")
+    user <- sys.env.get("GITLAB_DEPLOY_TOKEN_USER")
   } yield Credentials(
     "GitLab Packages Registry",
     "gitlab.com",
-    "Deploy-Token",
+    user,
     token)
 }.toSeq
 
