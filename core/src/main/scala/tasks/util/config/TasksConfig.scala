@@ -189,6 +189,9 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   val nodeName = raw.getString("tasks.elastic.nodename")
 
+  def zeroCPULauncherOnApp =
+    raw.getBoolean("tasks.elastic.zeroCPULauncherOnApp")
+
   def idleNodeTimeout: FD = raw.getDuration("tasks.elastic.idleNodeTimeout")
 
   def cacheTimeout: FD = raw.getDuration("tasks.cache.timeout")

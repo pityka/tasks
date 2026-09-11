@@ -740,7 +740,7 @@ object TaskSystemComponents {
                   VersionedResourceAvailable(
                     config.codeVersion,
                     ResourceAvailable(
-                      cpu = hostConfig.availableCPU,
+                      cpu = if (hostConfig.isApp && config.zeroCPULauncherOnApp) 0 else hostConfig.availableCPU,
                       memory = hostConfig.availableMemory,
                       scratch = hostConfig.availableScratch,
                       gpu = hostConfig.availableGPU,
