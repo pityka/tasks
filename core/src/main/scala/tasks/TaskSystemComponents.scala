@@ -99,7 +99,8 @@ object TaskSystemComponents {
       meterProviderResource: Resource[
         IO,
         org.typelevel.otel4s.metrics.MeterProvider[IO]
-      ]
+      ],
+      mainProcessResource: Resource[IO, Unit]
   ): Resource[IO, (TaskSystemComponents, HostConfiguration)] =
     hostConfig.flatMap { hostConfig =>
       elasticSupport.attempt
@@ -908,6 +909,9 @@ object TaskSystemComponents {
             else transaction.get.flatMap(warnIfQueueStateIsOccupied)
 
           for {
+            _ <-
+              if (hostConfig.isApp || hostConfig.isQueue) mainProcessResource
+              else Resource.unit[IO]
             _ <- Resource.make(
               IO(scribe.debug("Start allocation of TaskSystem"))
             )(_ => IO(scribe.debug("Finished deallocation of TaskSystem")))

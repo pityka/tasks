@@ -57,6 +57,8 @@ There are two constructor methods which can provide an instance of this type:
 - `tasks.withTaskSystem[T](use: TaskSystemComponents => IO[T])` takes a lambda which uses the task system.
    The `use` lambda is executed only if the process has the application role. For a pure worker process the `use` lambda is not invoked, but the returned IO fiber-blocks and executes tasks in the background. It returns the result type of the lambda in a `Right` if it running the application. If it is running a worker process without the application then it returns an ExitCode in a `Left`.
 
+Both constructors accept a `mainProcessResource: Resource[IO, Unit]` which is allocated only on App or Queue roles. It is acquired first and released last.
+
 ### Configuration
 Configuration may be passed to both constructors (see signatures). 
 For the list of configuration values see the reference.conf in the source tree.
