@@ -9,27 +9,81 @@ import tasks.util.message.QueueStat
 
 class ImageResourceMatchTest extends FunSuite with Matchers {
 
-  test("canFulfillRequest(ResourceAllocated) allows any node when allocated image is None") {
-    val node = ResourceAvailable(cpu = 4, memory = 2000, scratch = 1000, gpu = Nil, image = Some("A"))
-    val allocated = ResourceAllocated(cpu = 2, memory = 1000, scratch = 0, gpu = Nil, image = None)
+  test(
+    "canFulfillRequest(ResourceAllocated) allows any node when allocated image is None"
+  ) {
+    val node = ResourceAvailable(
+      cpu = 4,
+      memory = 2000,
+      scratch = 1000,
+      gpu = Nil,
+      image = Some("A")
+    )
+    val allocated = ResourceAllocated(
+      cpu = 2,
+      memory = 1000,
+      scratch = 0,
+      gpu = Nil,
+      image = None
+    )
     node.canFulfillRequest(allocated) shouldBe true
   }
 
   test("canFulfillRequest(ResourceAllocated) matches when images agree") {
-    val node = ResourceAvailable(cpu = 4, memory = 2000, scratch = 1000, gpu = Nil, image = Some("A"))
-    val allocated = ResourceAllocated(cpu = 2, memory = 1000, scratch = 0, gpu = Nil, image = Some("A"))
+    val node = ResourceAvailable(
+      cpu = 4,
+      memory = 2000,
+      scratch = 1000,
+      gpu = Nil,
+      image = Some("A")
+    )
+    val allocated = ResourceAllocated(
+      cpu = 2,
+      memory = 1000,
+      scratch = 0,
+      gpu = Nil,
+      image = Some("A")
+    )
     node.canFulfillRequest(allocated) shouldBe true
   }
 
-  test("canFulfillRequest(ResourceAllocated) rejects when allocated demands an image the node lacks") {
-    val node = ResourceAvailable(cpu = 4, memory = 2000, scratch = 1000, gpu = Nil, image = Some("A"))
-    val allocated = ResourceAllocated(cpu = 2, memory = 1000, scratch = 0, gpu = Nil, image = Some("B"))
+  test(
+    "canFulfillRequest(ResourceAllocated) rejects when allocated demands an image the node lacks"
+  ) {
+    val node = ResourceAvailable(
+      cpu = 4,
+      memory = 2000,
+      scratch = 1000,
+      gpu = Nil,
+      image = Some("A")
+    )
+    val allocated = ResourceAllocated(
+      cpu = 2,
+      memory = 1000,
+      scratch = 0,
+      gpu = Nil,
+      image = Some("B")
+    )
     node.canFulfillRequest(allocated) shouldBe false
   }
 
-  test("canFulfillRequest(ResourceAllocated) rejects when allocated demands an image and the node has none") {
-    val node = ResourceAvailable(cpu = 4, memory = 2000, scratch = 1000, gpu = Nil, image = None)
-    val allocated = ResourceAllocated(cpu = 2, memory = 1000, scratch = 0, gpu = Nil, image = Some("A"))
+  test(
+    "canFulfillRequest(ResourceAllocated) rejects when allocated demands an image and the node has none"
+  ) {
+    val node = ResourceAvailable(
+      cpu = 4,
+      memory = 2000,
+      scratch = 1000,
+      gpu = Nil,
+      image = None
+    )
+    val allocated = ResourceAllocated(
+      cpu = 2,
+      memory = 1000,
+      scratch = 0,
+      gpu = Nil,
+      image = Some("A")
+    )
     node.canFulfillRequest(allocated) shouldBe false
   }
 
@@ -49,19 +103,38 @@ class ImageResourceMatchTest extends FunSuite with Matchers {
     val queuedRequest =
       ResourceRequest((2, 2), 1000, 0, 0, image = Some("B"))
     val runningAllocation =
-      ResourceAllocated(cpu = 2, memory = 1000, scratch = 0, gpu = Nil, image = Some("A"))
+      ResourceAllocated(
+        cpu = 2,
+        memory = 1000,
+        scratch = 0,
+        gpu = Nil,
+        image = Some("A")
+      )
 
     val queueStat = QueueStat(
       queued = List(("task-b", VersionedResourceRequest(cv, queuedRequest))),
-      running = List(("task-a", VersionedResourceAllocated(cv, runningAllocation)))
+      running =
+        List(("task-a", VersionedResourceAllocated(cv, runningAllocation)))
     )
 
     // Node A is fully consumed by the running job. Node B is idle but has the
     // wrong image for a request without an image constraint; here the queued
     // request explicitly wants image=B so it must schedule on node B.
     val registeredNodes = Seq(
-      ResourceAvailable(cpu = 2, memory = 1000, scratch = 1000, gpu = Nil, image = Some("A")),
-      ResourceAvailable(cpu = 2, memory = 1000, scratch = 1000, gpu = Nil, image = Some("B"))
+      ResourceAvailable(
+        cpu = 2,
+        memory = 1000,
+        scratch = 1000,
+        gpu = Nil,
+        image = Some("A")
+      ),
+      ResourceAvailable(
+        cpu = 2,
+        memory = 1000,
+        scratch = 1000,
+        gpu = Nil,
+        image = Some("B")
+      )
     )
 
     val result = decider.needNewNode(queueStat, registeredNodes, Seq.empty)

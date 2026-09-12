@@ -24,7 +24,10 @@
 
 package tasks
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString}
+import com.github.plokhotnyuk.jsoniter_scala.core.{
+  readFromString,
+  writeToString
+}
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 import tasks.shared._
@@ -126,7 +129,8 @@ class NodeSelectorTest extends FunSuite with Matchers {
   }
 
   test("on-disk compat: old JSON without nodeSelector field decodes to None") {
-    val oldJson = """{"cpu":[2,2],"memory":100,"scratch":0,"gpu":0,"image":null}"""
+    val oldJson =
+      """{"cpu":[2,2],"memory":100,"scratch":0,"gpu":0,"image":null}"""
     val req = readFromString[ResourceRequest](oldJson)
     req.nodeSelector shouldBe None
     req.cpu shouldBe ((2, 2))
@@ -143,7 +147,11 @@ class NodeSelectorTest extends FunSuite with Matchers {
 
   test("NodeSelector codec roundtrips for composite expressions") {
     val sel: NodeSelector = And(
-      List(Has("region:us-east"), Or(List(Has("zone:a"), Has("zone:b"))), Not(Has("spot")))
+      List(
+        Has("region:us-east"),
+        Or(List(Has("zone:a"), Has("zone:b"))),
+        Not(Has("spot"))
+      )
     )
     val json = writeToString(sel)
     val back = readFromString[NodeSelector](json)

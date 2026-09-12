@@ -81,7 +81,9 @@ class WorkerHealthTest extends AnyFunSuite with Matchers {
     status shouldBe Status.ServiceUnavailable
   }
 
-  test("GET /health reflects the predicate on every request (flips on shutdown)") {
+  test(
+    "GET /health reflects the predicate on every request (flips on shutdown)"
+  ) {
     val port = freePort()
     val program: Resource[IO, (Client[IO], Ref[IO, Boolean])] = for {
       healthRef <- Resource.eval(Ref.of[IO, Boolean](true))

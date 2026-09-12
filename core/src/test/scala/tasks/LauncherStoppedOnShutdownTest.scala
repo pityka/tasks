@@ -24,7 +24,7 @@ object LauncherStoppedOnShutdownTest extends TestHelpers {
 
   val testTask = tasks.Task[Input, Int]("launcherStoppedOnShutdown", 1) {
     _ => _ =>
-    IO(1)
+      IO(1)
   }
 
   val heartbeat = "tasks.failuredetector.heartbeat-interval = 120 s"

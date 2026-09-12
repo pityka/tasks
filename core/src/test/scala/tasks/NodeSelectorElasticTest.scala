@@ -53,11 +53,11 @@ object NodeSelectorElasticTest extends TestHelpers {
     * nothing.
     */
   def labelsFromSelector(sel: NodeSelector): Set[String] = sel match {
-    case NodeSelector.Always      => Set.empty
-    case NodeSelector.Has(label)  => Set(label)
-    case NodeSelector.Not(_)      => Set.empty
-    case NodeSelector.And(xs)     => xs.iterator.flatMap(labelsFromSelector).toSet
-    case NodeSelector.Or(xs)      => xs.iterator.flatMap(labelsFromSelector).toSet
+    case NodeSelector.Always     => Set.empty
+    case NodeSelector.Has(label) => Set(label)
+    case NodeSelector.Not(_)     => Set.empty
+    case NodeSelector.And(xs) => xs.iterator.flatMap(labelsFromSelector).toSet
+    case NodeSelector.Or(xs)  => xs.iterator.flatMap(labelsFromSelector).toSet
   }
 
   def labelsForRequest(req: tasks.shared.ResourceRequest): Set[String] =

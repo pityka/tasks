@@ -36,7 +36,9 @@ import tasks.util.message.{Address, Message, MessageData}
 
 class RemoteMessengerEntityCodecTest extends AnyFunSuite with Matchers {
 
-  test("decode a Message whose JSON body exceeds the default jsoniter maxCharBufSize") {
+  test(
+    "decode a Message whose JSON body exceeds the default jsoniter maxCharBufSize"
+  ) {
     // jsoniter's default maxCharBufSize is 128 KiB. We embed a single string
     // field >> that limit to ensure the decoder is exercised at the boundary
     // that caused the production HTTP 400 ("too long string exceeded
