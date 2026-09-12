@@ -247,20 +247,6 @@ lazy val postgres = project
   )
   .dependsOn(core)
 
-lazy val dynamodb = project
-  .in(file("dynamodb"))
-  .settings(commonSettings: _*)
-  .settings(
-    name := "tasks-dynamodb",
-    libraryDependencies ++= Seq(
-      "software.amazon.awssdk" % "dynamodb" % "2.23.13", // scala-steward:off
-      "software.amazon.awssdk" % "sso" % "2.23.13" % "test", // scala-steward:off
-      "software.amazon.awssdk" % "ssooidc" % "2.23.13" % "test", // scala-steward:off
-      "org.scalatest" %% "scalatest" % "3.2.19" % "test"
-    )
-  )
-  .dependsOn(core)
-
 lazy val kubernetes = project
   .in(file("kubernetes"))
   .settings(commonSettings: _*)
@@ -344,7 +330,6 @@ lazy val root = (project in file("."))
     kubernetes,
     kubernetesTest,
     example,
-    dynamodb
   )
 
 lazy val testables = (project in file("testables"))
@@ -360,7 +345,6 @@ lazy val testables = (project in file("testables"))
     circe,
     sharedJVM,
     s3,
-    dynamodb,
     batch,
     ecs
   )
