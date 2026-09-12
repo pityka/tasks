@@ -517,7 +517,7 @@ object TaskSystemComponents {
                       shutdownSelf.map(_.shutdownRunningNode(exitCode, n))
                     )
                     .getOrElse(IO.unit) *> IO.raiseError(
-                    new RuntimeException("Remote queue failed", e)
+                    new RuntimeException("Self shutdown failed", e)
                   )
               }
 
