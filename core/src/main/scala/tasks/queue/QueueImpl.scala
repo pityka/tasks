@@ -527,25 +527,27 @@ private[tasks] class QueueImpl(
         if (launchers.isEmpty)
           IO.sleep(config.launcherActorHeartBeatInterval)
         else
-          IO.parSequenceN(1)(launchers.map { launcher =>
-            IO(
-              scribe.debug(
-                s"Query counter",
-                launcher,
-                scribe.data(
-                  "explain",
-                  "if the request times out then we assume the launcher is stopped"
-                )
-              )
-            ) *>
-              HeartBeatIO.Counter.sideEffectWhenTimeout(
-                query = ref.get.map(_.counters.get(launcher).getOrElse(0L)),
-                sideEffect = handleLauncherStopped(
+          IO.parSequenceN(1)(
+            launchers.map { launcher =>
+              IO(
+                scribe.debug(
+                  s"Query counter",
                   launcher,
-                  LauncherStopReason.TimedOutByFailureDetector
+                  scribe.data(
+                    "explain",
+                    "if the request times out then we assume the launcher is stopped"
+                  )
                 )
-              )
-          }).void
+              ) *>
+                HeartBeatIO.Counter.sideEffectWhenTimeout(
+                  query = ref.get.map(_.counters.get(launcher).getOrElse(0L)),
+                  sideEffect = handleLauncherStopped(
+                    launcher,
+                    LauncherStopReason.TimedOutByFailureDetector
+                  )
+                )
+            }
+          ).void
       }
 
     def loop: IO[Unit] = round.attempt
@@ -1382,36 +1384,38 @@ private[tasks] class QueueImpl(
   }
 
   def pollResult(proxy: Address): IO[Option[ProxyResult]] =
-    localResults.modify { current =>
-      current.get(proxy) match {
-        case Some(result) => (current - proxy, Some(result))
-        case None         => (current, None)
-      }
-    }.flatMap {
-      case delivered @ Some(_) =>
-        IO(
-          scribe.debug(s"ResultPolled", scribe.data("proxy", proxy.toString))
-        ).as(delivered)
-      case None =>
-        ref.get.flatMap { current =>
-          if (!current.completedResults.contains(proxy))
-            IO.pure(Option.empty[ProxyResult])
-          else
-            ref.flatModify { state =>
-              state.completedResults.get(proxy) match {
-                case None => state -> IO.pure(Option.empty[ProxyResult])
-                case Some(result) =>
-                  scribe.debug(
-                    s"ResultPolled",
-                    scribe.data("proxy", proxy.toString)
-                  )
-                  state.update(ResultDeliveredToProxy(proxy)) -> IO.pure(
-                    Some(result)
-                  )
-              }
-            }
+    localResults
+      .modify { current =>
+        current.get(proxy) match {
+          case Some(result) => (current - proxy, Some(result))
+          case None         => (current, None)
         }
-    }
+      }
+      .flatMap {
+        case delivered @ Some(_) =>
+          IO(
+            scribe.debug(s"ResultPolled", scribe.data("proxy", proxy.toString))
+          ).as(delivered)
+        case None =>
+          ref.get.flatMap { current =>
+            if (!current.completedResults.contains(proxy))
+              IO.pure(Option.empty[ProxyResult])
+            else
+              ref.flatModify { state =>
+                state.completedResults.get(proxy) match {
+                  case None => state -> IO.pure(Option.empty[ProxyResult])
+                  case Some(result) =>
+                    scribe.debug(
+                      s"ResultPolled",
+                      scribe.data("proxy", proxy.toString)
+                    )
+                    state.update(ResultDeliveredToProxy(proxy)) -> IO.pure(
+                      Some(result)
+                    )
+                }
+              }
+          }
+      }
 
   def taskFailed(
       sch: ScheduleTask,

@@ -49,7 +49,9 @@ class BatchJobDefinitionResolutionTest extends AnyFunSuite with Matchers {
     err should include("withJobDefinitionForImage")
   }
 
-  test("resolveJobDefinition(None) still returns default even when map is set") {
+  test(
+    "resolveJobDefinition(None) still returns default even when map is set"
+  ) {
     minimal
       .withJobDefinitionForImage("my-image:v1", "my-jd-v1")
       .resolveJobDefinition(None) shouldBe Right("default-jd")

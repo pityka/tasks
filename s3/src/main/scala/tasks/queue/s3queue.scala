@@ -210,26 +210,24 @@ object S3QueueState {
     private def acquire: IO[Unit] =
       IO.monotonic.flatMap { nowDuration =>
         val now = nowDuration.toNanos
-        state
-          .modify { case (tokens, last) =>
-            val elapsed = now - last
-            val added = if (elapsed <= 0L) 0L else elapsed / refillIntervalNanos
-            val tentative = tokens + added
-            val (refilled, refilledLast) =
-              if (tentative >= capacity) (capacity, now)
-              else (tentative, last + added * refillIntervalNanos)
-            if (refilled >= 1L)
-              ((refilled - 1L, refilledLast), IO.unit)
-            else {
-              val waitNanos =
-                math.max(1L, refillIntervalNanos - (now - refilledLast))
-              (
-                (refilled, refilledLast),
-                warnIfDue *> IO.sleep(waitNanos.nanos) *> acquire
-              )
-            }
+        state.modify { case (tokens, last) =>
+          val elapsed = now - last
+          val added = if (elapsed <= 0L) 0L else elapsed / refillIntervalNanos
+          val tentative = tokens + added
+          val (refilled, refilledLast) =
+            if (tentative >= capacity) (capacity, now)
+            else (tentative, last + added * refillIntervalNanos)
+          if (refilled >= 1L)
+            ((refilled - 1L, refilledLast), IO.unit)
+          else {
+            val waitNanos =
+              math.max(1L, refillIntervalNanos - (now - refilledLast))
+            (
+              (refilled, refilledLast),
+              warnIfDue *> IO.sleep(waitNanos.nanos) *> acquire
+            )
           }
-          .flatten
+        }.flatten
       }
 
     private def warnIfDue: IO[Unit] =
@@ -352,11 +350,13 @@ object S3QueueState {
     ): IO[Option[String]] =
       IO(compress(SerializableQueueState.encode(state))).flatMap { payload =>
         val condition = expectedETag match {
-          case Some(etag) => AwsRequestOverrideConfiguration
+          case Some(etag) =>
+            AwsRequestOverrideConfiguration
               .builder()
               .putHeader("If-Match", etag)
               .build()
-          case None => AwsRequestOverrideConfiguration
+          case None =>
+            AwsRequestOverrideConfiguration
               .builder()
               .putHeader("If-None-Match", "*")
               .build()
@@ -397,7 +397,8 @@ object S3QueueState {
           val currentState = current.map(_.state).getOrElse(State.empty)
           val currentETag = current.flatMap(_.etag)
           val (base, updated, sideEffect) = reusable match {
-            case Some((readETag, computed, effect)) if readETag == currentETag =>
+            case Some((readETag, computed, effect))
+                if readETag == currentETag =>
               (currentState, computed, effect)
             case _ =>
               val (recomputed, effect) = update(currentState)
@@ -409,7 +410,8 @@ object S3QueueState {
               case Some(newETag) =>
                 IO.monotonic
                   .flatMap(now =>
-                    cached.set(Some(Cached(updated, Some(newETag), now.toNanos)))
+                    cached
+                      .set(Some(Cached(updated, Some(newETag), now.toNanos)))
                   )
                   .as(sideEffect)
               case None =>

@@ -28,9 +28,12 @@ private[tasks] class LocalMessenger(
           case None =>
             (map.updated(address.withoutUri, ch), IO.unit)
           case Some(_) =>
-            (map, IO.raiseError[Unit](
-              new RuntimeException(s"Address $address already subscribed")
-            ))
+            (
+              map,
+              IO.raiseError[Unit](
+                new RuntimeException(s"Address $address already subscribed")
+              )
+            )
         }
       }.flatten
     } yield ch.stream
