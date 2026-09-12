@@ -11,7 +11,7 @@ package object jsonitersupport {
     new Serializer[A] {
       override def hash(a: A): IO[String] = {
         fs2.io
-          .readOutputStream[IO](16384)(os => IO(writeToStream(a, os)))
+          .readOutputStream[IO](16384)(os => IO.blocking(writeToStream(a, os)))
           .through(
             fs2.hashing.Hashing[IO].hash(fs2.hashing.HashAlgorithm.SHA256)
           )
