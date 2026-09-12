@@ -734,20 +734,24 @@ object TaskSystemComponents {
             // elastic as before.
             if (hostConfig.isWorker) {
               val refreshInterval = config.askInterval
-              Launcher
+              val zeroCPULauncherOnApp =
+                hostConfig.isApp && config.zeroCPULauncherOnApp
+              val available = ResourceAvailable(
+                cpu = hostConfig.availableCPU,
+                memory = hostConfig.availableMemory,
+                scratch = hostConfig.availableScratch,
+                gpu = hostConfig.availableGPU,
+                image = hostConfig.image,
+                labels = hostConfig.labels
+              )
+              val launcher = Launcher
                 .makeHandle(
                   queue,
                   nodeLocalCache,
                   VersionedResourceAvailable(
                     config.codeVersion,
-                    ResourceAvailable(
-                      cpu = if (hostConfig.isApp && config.zeroCPULauncherOnApp) 0 else hostConfig.availableCPU,
-                      memory = hostConfig.availableMemory,
-                      scratch = hostConfig.availableScratch,
-                      gpu = hostConfig.availableGPU,
-                      image = hostConfig.image,
-                      labels = hostConfig.labels
-                    )
+                    if (zeroCPULauncherOnApp) available.copy(cpu = 0)
+                    else available
                   ),
                   refreshInterval = refreshInterval,
                   remoteStorage = fs.remote,
@@ -761,6 +765,16 @@ object TaskSystemComponents {
                   shutdownInitiated = shutdownInitiated
                 )(config)
                 .map(Some(_))
+
+              if (zeroCPULauncherOnApp)
+                Resource
+                  .eval(IO {
+                    scribe.info(
+                      "tasks.elastic.zeroCPULauncherOnApp=true"
+                    )
+                  })
+                  .flatMap(_ => launcher)
+              else launcher
 
             } else Resource.pure[IO, Option[LauncherHandle]](None)
 
