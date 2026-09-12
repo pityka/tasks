@@ -24,11 +24,7 @@ ThisBuild / credentials ++= {
   for {
     token <- sys.env.get("GITLAB_DEPLOY_TOKEN")
     user <- sys.env.get("GITLAB_DEPLOY_TOKEN_USER")
-  } yield Credentials(
-    "GitLab Packages Registry",
-    "gitlab.com",
-    user,
-    token)
+  } yield Credentials("GitLab Packages Registry", "gitlab.com", user, token)
 }.toSeq
 
 ThisBuild / versionScheme := Some("early-semver")
@@ -58,7 +54,7 @@ inThisBuild(
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.13.18",
-  crossScalaVersions := Seq("2.13.18", "3.6.4"),
+  crossScalaVersions := Seq("2.13.18", "3.9.0"),
   parallelExecution in Test := false,
   scalacOptions ++= (CrossVersion.partialVersion(scalaVersion.value) match {
     case Some((2, 13)) =>
@@ -110,7 +106,10 @@ lazy val commonSettings = Seq(
   ThisBuild / parallelExecution := false,
   cancelable in Global := true,
   scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
-  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings")),  
+  scalacOptions in (
+    Compile,
+    console
+  ) ~= (_ filterNot (_ == "-Xfatal-warnings")),
   Compile / doc / sources := Seq.empty
 )
 
@@ -329,7 +328,7 @@ lazy val root = (project in file("."))
     s3,
     kubernetes,
     kubernetesTest,
-    example,
+    example
   )
 
 lazy val testables = (project in file("testables"))
