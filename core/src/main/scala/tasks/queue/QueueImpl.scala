@@ -409,21 +409,26 @@ object QueueImpl {
       Resource.make(
         Mutex[IO].flatMap(handleQueueStatMutex =>
           Ref.of[IO, List[FiberIO[Unit]]](Nil).flatMap { ref =>
-            val q = new QueueImpl(
-              ref = transaction,
-              fiberList = ref,
-              cache = cache,
-              messenger = messenger,
-              shutdownNode = shutdownNode,
-              decideNewNode = decideNewNode,
-              createNode = createNode,
-              convertRunningToPending = convertRunningToPending,
-              unmanagedResource = unmanagedResource,
-              metrics = metrics,
-              handleQueueStatMutex = handleQueueStatMutex,
-              mainProcessSession = mainProcessSession
-            )
-            q.joinAsMainProcess *> q.startCounterLoops.map(_ => q)
+            Ref
+              .of[IO, Map[Address, QueueImpl.ProxyResult]](Map.empty)
+              .flatMap { localResults =>
+                val q = new QueueImpl(
+                  ref = transaction,
+                  fiberList = ref,
+                  localResults = localResults,
+                  cache = cache,
+                  messenger = messenger,
+                  shutdownNode = shutdownNode,
+                  decideNewNode = decideNewNode,
+                  createNode = createNode,
+                  convertRunningToPending = convertRunningToPending,
+                  unmanagedResource = unmanagedResource,
+                  metrics = metrics,
+                  handleQueueStatMutex = handleQueueStatMutex,
+                  mainProcessSession = mainProcessSession
+                )
+                q.joinAsMainProcess *> q.startCounterLoops.map(_ => q)
+              }
           }
         )
       )(_.release)
@@ -449,21 +454,26 @@ object QueueImpl {
           Resource.make(
             Mutex[IO].flatMap(handleQueueStatMutex =>
               Ref.of[IO, List[FiberIO[Unit]]](Nil).flatMap { ref2 =>
-                val q = new QueueImpl(
-                  ref = Transaction.fromRef(stateRef),
-                  fiberList = ref2,
-                  cache = cache,
-                  messenger = messenger,
-                  shutdownNode = shutdownNode,
-                  decideNewNode = decideNewNode,
-                  createNode = createNode,
-                  convertRunningToPending = convertRunningToPending,
-                  unmanagedResource = unmanagedResource,
-                  metrics = metrics,
-                  handleQueueStatMutex = handleQueueStatMutex,
-                  mainProcessSession = mainProcessSession
-                )
-                q.joinAsMainProcess *> q.startCounterLoops.map(_ => q)
+                Ref
+                  .of[IO, Map[Address, QueueImpl.ProxyResult]](Map.empty)
+                  .flatMap { localResults =>
+                    val q = new QueueImpl(
+                      ref = Transaction.fromRef(stateRef),
+                      fiberList = ref2,
+                      localResults = localResults,
+                      cache = cache,
+                      messenger = messenger,
+                      shutdownNode = shutdownNode,
+                      decideNewNode = decideNewNode,
+                      createNode = createNode,
+                      convertRunningToPending = convertRunningToPending,
+                      unmanagedResource = unmanagedResource,
+                      metrics = metrics,
+                      handleQueueStatMutex = handleQueueStatMutex,
+                      mainProcessSession = mainProcessSession
+                    )
+                    q.joinAsMainProcess *> q.startCounterLoops.map(_ => q)
+                  }
               }
             )
           )(_.release)
@@ -474,6 +484,7 @@ object QueueImpl {
 private[tasks] class QueueImpl(
     ref: Transaction[QueueImpl.State],
     fiberList: Ref[IO, List[FiberIO[Unit]]],
+    localResults: Ref[IO, Map[Address, QueueImpl.ProxyResult]],
     cache: TaskResultCache,
     messenger: Messenger,
     shutdownNode: Option[tasks.elastic.ShutdownNode],
@@ -667,19 +678,15 @@ private[tasks] class QueueImpl(
           scribe.data("explain", "replying with result found in cache")
         )
         ref.flatModify { state =>
-          val stored =
-            allProxies.foldLeft(state.update(CacheHit(sch, result))) {
-              case (acc, p) =>
-                acc.update(
-                  ResultStoredForProxy(
-                    p.address,
-                    ProxyResultSuccess(result, retrievedFromCache = true)
-                  )
-                )
-            }
-          stored -> metrics.onCacheHit(sch.description)
-
-        }
+          state.update(CacheHit(sch, result)) -> IO.unit
+        } *> localResults.update { current =>
+          allProxies.foldLeft(current) { case (acc, p) =>
+            acc.updated(
+              p.address,
+              ProxyResultSuccess(result, retrievedFromCache = true)
+            )
+          }
+        } *> metrics.onCacheHit(sch.description)
       }
       case Right(None) => {
         scribe.debug(
@@ -1375,22 +1382,34 @@ private[tasks] class QueueImpl(
   }
 
   def pollResult(proxy: Address): IO[Option[ProxyResult]] =
-    ref.get.flatMap { current =>
-      if (!current.completedResults.contains(proxy))
-        IO.pure(Option.empty[ProxyResult])
-      else
-        ref.flatModify { state =>
-          state.completedResults.get(proxy) match {
-            case None => state -> IO.pure(Option.empty[ProxyResult])
-            case Some(result) =>
-              scribe.debug(
-                s"ResultPolled",
-                scribe.data("proxy", proxy.toString)
-              )
-              state.update(ResultDeliveredToProxy(proxy)) -> IO.pure(
-                Some(result)
-              )
-          }
+    localResults.modify { current =>
+      current.get(proxy) match {
+        case Some(result) => (current - proxy, Some(result))
+        case None         => (current, None)
+      }
+    }.flatMap {
+      case delivered @ Some(_) =>
+        IO(
+          scribe.debug(s"ResultPolled", scribe.data("proxy", proxy.toString))
+        ).as(delivered)
+      case None =>
+        ref.get.flatMap { current =>
+          if (!current.completedResults.contains(proxy))
+            IO.pure(Option.empty[ProxyResult])
+          else
+            ref.flatModify { state =>
+              state.completedResults.get(proxy) match {
+                case None => state -> IO.pure(Option.empty[ProxyResult])
+                case Some(result) =>
+                  scribe.debug(
+                    s"ResultPolled",
+                    scribe.data("proxy", proxy.toString)
+                  )
+                  state.update(ResultDeliveredToProxy(proxy)) -> IO.pure(
+                    Some(result)
+                  )
+              }
+            }
         }
     }
 
