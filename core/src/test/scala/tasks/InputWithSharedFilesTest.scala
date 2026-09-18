@@ -30,7 +30,6 @@ import cats.effect.unsafe.implicits.global
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import tasks.fileservice.allowUnscopedSharedFiles.allow
 import cats.effect.IO
 
 import com.github.plokhotnyuk.jsoniter_scala.macros._
@@ -43,7 +42,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
   val task1 = Task[Input, SharedFile]("sharedfileinput1", 1) {
     _ => implicit computationEnvironment =>
       sideEffect += "execution of task 1"
-      SharedFile(
+      SharedFile.scoped(
         fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))),
         "f1"
       )
@@ -53,7 +52,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
     _ => implicit computationEnvironment =>
       sideEffect += "execution of task 2"
       for {
-        sf2 <- SharedFile(
+        sf2 <- SharedFile.scoped(
           fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))),
           "f2"
         )
@@ -78,7 +77,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
     implicit computationEnvironment =>
       sideEffect += "execution of task 3"
       for {
-        sf3 <- SharedFile(
+        sf3 <- SharedFile.scoped(
           fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))),
           "f3"
         )
@@ -90,7 +89,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
     _ => implicit computationEnvironment =>
       sideEffect += "execution of task 4"
       for {
-        sf4 <- SharedFile(
+        sf4 <- SharedFile.scoped(
           fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))),
           "f4"
         )
@@ -106,7 +105,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
 
         sideEffect += "execution of task 5"
 
-        SharedFile(
+        SharedFile.scoped(
           fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))),
           "f2"
         )
@@ -125,7 +124,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
     _ => implicit computationEnvironment =>
       sideEffect += "execution of task 6"
 
-      SharedFile(
+      SharedFile.scoped(
         fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))),
         "mutable"
       )
@@ -172,10 +171,10 @@ class InputWithSharedFilesTestSuite extends FunSuite with Matchers {
     ) shouldBe 2
     InputWithSharedFilesTest.sideEffect.count(
       _ == "execution of task 2"
-    ) shouldBe 1
+    ) shouldBe 2
     InputWithSharedFilesTest.sideEffect.count(
       _ == "execution of task 5"
-    ) shouldBe 0
+    ) shouldBe 1
     InputWithSharedFilesTest.sideEffect.count(
       _ == "execution of task 6"
     ) shouldBe 1

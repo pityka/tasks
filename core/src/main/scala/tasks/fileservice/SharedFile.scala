@@ -122,50 +122,17 @@ object SharedFile {
   def apply(uri: Uri)(implicit tsc: TaskSystemComponents): IO[SharedFile] =
     SharedFileHelper.create(RemoteFilePath(uri), tsc.fs.remote)
 
-  def apply(file: File, name: String)(implicit
-      notInTask: NotInTaskScope,
-      tsc: TaskSystemComponents
-  ): IO[SharedFile] = {
-    val _ = notInTask
-    apply(file, name, false)
-  }
-
-  def apply(file: File, name: String, deleteFile: Boolean)(implicit
-      notInTask: NotInTaskScope,
-      tsc: TaskSystemComponents
-  ): IO[SharedFile] = {
-    val _ = notInTask
-    SharedFileHelper.createFromFile(file, name, deleteFile)
-  }
-
-  def apply(source: Stream[IO, Byte], name: String)(implicit
-      notInTask: NotInTaskScope,
-      tsc: TaskSystemComponents
-  ): IO[SharedFile] = {
-    val _ = notInTask
-    SharedFileHelper.createFromStream(source, name)
-  }
-
-  def apply(bytes: Array[Byte], name: String)(implicit
-      notInTask: NotInTaskScope,
-      tsc: TaskSystemComponents
-  ): IO[SharedFile] = {
-    val _ = notInTask
-    this.apply(fs2.Stream.chunk(fs2.Chunk.array(bytes)), name)
-  }
-
-  def sink(name: String)(implicit
-      notInTask: NotInTaskScope,
-      tsc: TaskSystemComponents
-  ): Pipe[IO, Byte, SharedFile] = {
-    val _ = notInTask
-    SharedFileHelper.sink(name)
-  }
-
   def fromFolder(parallelism: Int)(
       callback: File => List[File]
-  )(implicit tsc: TaskSystemComponents): IO[Seq[SharedFile]] =
-    SharedFileHelper.createFromFolder(parallelism)(callback)
+  )(implicit ce: ComputationEnvironment): IO[Seq[SharedFile]] = {
+    val tsc = ce.toTaskSystemComponents
+    SharedFileHelper.createFromFolder(parallelism)(callback)(
+      tsc.filePrefix,
+      tsc.fs,
+      tsc.tasksConfig,
+      tsc.historyContext
+    )
+  }
 
   def getByName(
       name: String

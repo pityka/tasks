@@ -174,9 +174,9 @@ Rules to follow when assembling one:
 
 ## File abstraction
 Opaque binary blobs of data (files) in the input and output types are managed by the `tasks.SharedFile` type.
-The library provides serializes, constructors (from local file, byte stream and external url) and access methods (into local file, byte stream, byte array, string) for this type. 
+The library provides serializes, constructors (from data inside a task, or a link to an external url) and access methods (into local file, byte stream, byte array, string) for this type. 
 
-The application must ensure that the name of SharedFile instances are unique. 
+SharedFile instances created from data can only be created inside a task body (the `scoped` constructors, which scope the name by the task's input); outside a task, link an existing resource with `SharedFile(uri)`. 
 
 ```scala
   val task2 = Task[SharedFile, SharedFile]("task-with-file", 1) {
@@ -184,16 +184,16 @@ The application must ensure that the name of SharedFile instances are unique.
       // access methods:
       inputFile.stream // fs2 byte stream
       inputFile.file // local temp file in Resource
-      input.utf8 // contents in String
-      input.bytes // contents in ByteVector
+      inputFile.utf8 // contents in String
+      inputFile.bytes // contents in ByteVector
 
-      // consructors:
-      // constructors must provide name and data
-      // SharedFile.apply overloads from fs2 stream, local file, byte array
-      // SharedFile.sink fs2 Sink
+      // constructors (inside a task):
+      // SharedFile.scoped overloads from fs2 stream, local file, byte array
+      // SharedFile.scopedSink fs2 Sink
+      // outside a task: SharedFile(uri) links an existing resource
 
       for {        
-        sf2 <- SharedFile(
+        sf2 <- SharedFile.scoped(
           fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))),
           "filename"
         )        

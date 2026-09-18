@@ -30,20 +30,24 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import tasks.util.TempFile
-import tasks.fileservice.allowUnscopedSharedFiles.allow
+import tasks.jsonitersupport._
 
 object DeleteSharedFileTest extends TestHelpers {
 
-  def run = {
-
-    withTaskSystem(testConfig) { implicit ts =>
+  val makeFile = Task[Input, SharedFile]("deletesharedfile", 1) {
+    _ => implicit computationEnvironment =>
       val file = TempFile.createTempFile("")
       val os = new java.io.FileOutputStream(file)
       os.write(Array[Byte](51, 52, 53))
       os.close
+      SharedFile.scoped(file, "boo", deleteFile = true)
+  }
 
+  def run = {
+
+    withTaskSystem(testConfig) { implicit ts =>
       val future = for {
-        sf <- SharedFile(file, "boo", deleteFile = true)
+        sf <- makeFile(Input(1))(ResourceRequest(1, 500))
         local <- sf.file.allocated
           .map(_._1)
         _ <- sf.delete

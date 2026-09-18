@@ -30,7 +30,6 @@ import cats.effect.unsafe.implicits.global
 import org.scalatest.matchers.should.Matchers
 import java.io.File
 import tasks.jsonitersupport._
-import tasks.fileservice.allowUnscopedSharedFiles.allow
 
 object FolderFileStorageTest extends TestHelpers with Matchers {
 
@@ -38,7 +37,7 @@ object FolderFileStorageTest extends TestHelpers with Matchers {
     _ => implicit computationEnvironment =>
       for {
 
-        sf <- SharedFile(
+        sf <- SharedFile.scoped(
           fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))),
           "f1"
         )
@@ -46,7 +45,7 @@ object FolderFileStorageTest extends TestHelpers with Matchers {
         sf2 <- {
           val newPath = new File(local.getParentFile.getParentFile, "uncle")
           writeBinaryToFile(newPath, "boo".getBytes)
-          SharedFile(newPath, "something")
+          SharedFile.scoped(newPath, "something")
 
         }
         local2 <- sf2.file.allocated.map(_._1)

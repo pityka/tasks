@@ -29,7 +29,6 @@ import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
 import tasks.jsonitersupport._
-import tasks.fileservice.allowUnscopedSharedFiles.allow
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 
@@ -89,24 +88,24 @@ object ResultWithSharedFilesTest extends TestHelpers {
       sideEffect += "execution of task"
       val source = fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8")))
       val fs = List(
-        SharedFile(source, "f1"),
-        SharedFile(source, "f2"),
-        SharedFile(source, "f3"),
-        SharedFile(source, "f4"),
-        SharedFile(source, "f5"),
-        SharedFile(source, "f6"),
-        SharedFile(source, "f7"),
-        SharedFile(source, "f8"),
-        SharedFile(source, "f9"),
-        SharedFile(source, "f10"),
-        SharedFile(source, "f11"),
-        SharedFile(source, "f12"),
-        SharedFile(source, "f13"),
-        SharedFile(source, "f14"),
-        SharedFile(source, "f15"),
-        SharedFile(source, "f16"),
-        SharedFile(source, "f17"),
-        SharedFile(source, "f18")
+        SharedFile.scoped(source, "f1"),
+        SharedFile.scoped(source, "f2"),
+        SharedFile.scoped(source, "f3"),
+        SharedFile.scoped(source, "f4"),
+        SharedFile.scoped(source, "f5"),
+        SharedFile.scoped(source, "f6"),
+        SharedFile.scoped(source, "f7"),
+        SharedFile.scoped(source, "f8"),
+        SharedFile.scoped(source, "f9"),
+        SharedFile.scoped(source, "f10"),
+        SharedFile.scoped(source, "f11"),
+        SharedFile.scoped(source, "f12"),
+        SharedFile.scoped(source, "f13"),
+        SharedFile.scoped(source, "f14"),
+        SharedFile.scoped(source, "f15"),
+        SharedFile.scoped(source, "f16"),
+        SharedFile.scoped(source, "f17"),
+        SharedFile.scoped(source, "f18")
       )
 
       for {
