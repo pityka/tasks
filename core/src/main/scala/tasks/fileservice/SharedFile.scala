@@ -110,7 +110,7 @@ case class SharedFile(
     SharedFileHelper.delete(this)
 
   def utf8(implicit tsc: TaskSystemComponents): IO[String] =
-    stream(0L).through(fs2.text.utf8.decode).compile.last.map(_.getOrElse(""))
+    stream(0L).through(fs2.text.utf8.decode).compile.string
   def bytes(implicit tsc: TaskSystemComponents): IO[scodec.bits.ByteVector] =
     stream.compile.to(scodec.bits.ByteVector)
 }
