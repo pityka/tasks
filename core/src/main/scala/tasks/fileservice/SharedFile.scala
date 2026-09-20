@@ -185,6 +185,52 @@ object SharedFile {
     )
   }
 
+  def unscoped(file: File, suffix: String)(implicit
+      ce: ComputationEnvironment
+  ): IO[SharedFile] =
+    unscoped(file, suffix, deleteFile = false)
+
+  def unscoped(file: File, suffix: String, deleteFile: Boolean)(implicit
+      ce: ComputationEnvironment
+  ): IO[SharedFile] = {
+    val tsc = ce.toTaskSystemComponents
+    SharedFileHelper.createFromFile(file, suffix, deleteFile)(
+      tsc.filePrefix,
+      tsc.fs,
+      tsc.tasksConfig,
+      tsc.historyContext
+    )
+  }
+
+  def unscoped(source: Stream[IO, Byte], suffix: String)(implicit
+      ce: ComputationEnvironment
+  ): IO[SharedFile] = {
+    val tsc = ce.toTaskSystemComponents
+    SharedFileHelper.createFromStream(source, suffix)(
+      tsc.filePrefix,
+      tsc.fs,
+      tsc.tasksConfig,
+      tsc.historyContext
+    )
+  }
+
+  def unscoped(bytes: Array[Byte], suffix: String)(implicit
+      ce: ComputationEnvironment
+  ): IO[SharedFile] =
+    unscoped(fs2.Stream.chunk(fs2.Chunk.array(bytes)), suffix)
+
+  def unscopedSink(suffix: String)(implicit
+      ce: ComputationEnvironment
+  ): Pipe[IO, Byte, SharedFile] = {
+    val tsc = ce.toTaskSystemComponents
+    SharedFileHelper.sink(suffix)(
+      tsc.filePrefix,
+      tsc.fs,
+      tsc.tasksConfig,
+      tsc.historyContext
+    )
+  }
+
 }
 
 object FilePath {
