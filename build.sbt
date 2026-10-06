@@ -24,11 +24,7 @@ ThisBuild / credentials ++= {
   for {
     token <- sys.env.get("GITLAB_DEPLOY_TOKEN")
     user <- sys.env.get("GITLAB_DEPLOY_TOKEN_USER")
-  } yield Credentials(
-    "GitLab Packages Registry",
-    "gitlab.com",
-    user,
-    token)
+  } yield Credentials("GitLab Packages Registry", "gitlab.com", user, token)
 }.toSeq
 
 ThisBuild / versionScheme := Some("early-semver")
@@ -110,11 +106,14 @@ lazy val commonSettings = Seq(
   ThisBuild / parallelExecution := false,
   cancelable in Global := true,
   scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
-  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings")),  
+  scalacOptions in (
+    Compile,
+    console
+  ) ~= (_ filterNot (_ == "-Xfatal-warnings")),
   Compile / doc / sources := Seq.empty
 )
 
-lazy val circeVersion = "0.14.9"
+lazy val circeVersion = "0.14.17"
 lazy val jsoniterVersion = "2.34.0"
 
 lazy val otel4sCoreVersion = "1.0.0"
@@ -329,7 +328,7 @@ lazy val root = (project in file("."))
     s3,
     kubernetes,
     kubernetesTest,
-    example,
+    example
   )
 
 lazy val testables = (project in file("testables"))
