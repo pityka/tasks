@@ -76,7 +76,9 @@ class S3QueueStateTest extends FunSuite with Matchers {
       putCount.incrementAndGet()
       val bytes = drain(body)
       val headers = Option(request.overrideConfiguration().orElse(null))
-        .map(_.headers.asScala.map { case (k, v) => (k, v.asScala.toList) }.toMap)
+        .map(
+          _.headers.asScala.map { case (k, v) => (k, v.asScala.toList) }.toMap
+        )
         .getOrElse(Map.empty[String, List[String]])
       val ifMatch = headers.get("If-Match").flatMap(_.headOption)
       val ifNoneMatch = headers.get("If-None-Match").flatMap(_.headOption)
@@ -93,7 +95,9 @@ class S3QueueStateTest extends FunSuite with Matchers {
           S3Exception
             .builder()
             .statusCode(412)
-            .message("At least one of the pre-conditions you specified did not hold")
+            .message(
+              "At least one of the pre-conditions you specified did not hold"
+            )
             .build()
         )
       else {

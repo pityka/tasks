@@ -105,7 +105,8 @@ object JvmElasticSupport {
       val workerLabels = labelsForRequest(requestSize)
       val labelsConfig =
         if (workerLabels.nonEmpty)
-          s"""hosts.labelsAsCommaString = "${workerLabels.toList.sorted.mkString(",")}""""
+          s"""hosts.labelsAsCommaString = "${workerLabels.toList.sorted
+              .mkString(",")}""""
         else ""
 
       val imageConfig = requestSize.image match {

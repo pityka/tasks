@@ -107,8 +107,9 @@ class CacheHitExternalQueueNoWriteTestSuite extends FunSuite with Matchers {
     val program = for {
       populateSetup <- countingTransaction
       (populateTransaction, populateWrites) = populateSetup
-      first <- taskSystem(storage, Some(populateTransaction)).use { implicit ts =>
-        increment(In(1))(ResourceRequest(1, 500))
+      first <- taskSystem(storage, Some(populateTransaction)).use {
+        implicit ts =>
+          increment(In(1))(ResourceRequest(1, 500))
       }
       populateCount <- populateWrites
 
@@ -119,7 +120,9 @@ class CacheHitExternalQueueNoWriteTestSuite extends FunSuite with Matchers {
           (1 to replayCount).toList.foldLeft(IO.pure(List.empty[Out])) {
             (acc, _) =>
               acc.flatMap(soFar =>
-                increment(In(1))(ResourceRequest(1, 500)).map(out => soFar :+ out)
+                increment(In(1))(ResourceRequest(1, 500)).map(out =>
+                  soFar :+ out
+                )
               )
           }
       }
