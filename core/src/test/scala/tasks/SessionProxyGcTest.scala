@@ -133,7 +133,7 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
     val queued = scheduleTask("queued", "queued-hash", liveProxy)
     val scheduled = scheduleTask("scheduled", "scheduled-hash", liveProxy)
 
-    val state = QueueImpl.State(
+    val state = QueueImpl.State.empty.copy(
       queuedTasks = Map(
         QueueImpl.project(queued) -> (
           (
@@ -153,15 +153,11 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
           List(deadProxy, liveProxy)
         )
       ),
-      knownLaunchers = Map.empty,
-      counters = Map.empty,
-      nodes = NodeRegistryState.State.empty,
       completedResults = Map(
         deadProxy.address -> result,
         liveProxy.address -> result,
         untaggedProxy.address -> result
-      ),
-      mainProcesses = Set.empty
+      )
     )
 
     val after = state.update(QueueImpl.SessionProxiesDropped(deadSession))
@@ -190,15 +186,12 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
     val queued = scheduleTask("queued", "queued-hash", liveProxy)
     val launcher = LauncherName(SessionId.tag(liveSession, "Launcher-1"))
 
-    val state = QueueImpl.State(
+    val state = QueueImpl.State.empty.copy(
       queuedTasks =
         Map(QueueImpl.project(queued) -> ((queued, List(liveProxy)))),
-      scheduledTasks = Map.empty,
       knownLaunchers = Map(launcher -> None),
       counters = Map(launcher -> 1L),
-      nodes = NodeRegistryState.State.empty,
-      completedResults = Map(liveProxy.address -> result),
-      mainProcesses = Set.empty
+      completedResults = Map(liveProxy.address -> result)
     )
 
     def afterStop(reason: QueueImpl.LauncherStopReason) =
@@ -314,15 +307,10 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
     val liveProxy = proxyOf(liveSession, "live")
     val queued = scheduleTask("queued", "queued-hash", liveProxy)
 
-    val state = QueueImpl.State(
+    val state = QueueImpl.State.empty.copy(
       queuedTasks =
         Map(QueueImpl.project(queued) -> ((queued, List(liveProxy)))),
-      scheduledTasks = Map.empty,
-      knownLaunchers = Map.empty,
-      counters = Map.empty,
-      nodes = NodeRegistryState.State.empty,
-      completedResults = Map(liveProxy.address -> result),
-      mainProcesses = Set.empty
+      completedResults = Map(liveProxy.address -> result)
     )
 
     state.update(QueueImpl.SessionProxiesDropped(deadSession)) shouldBe state

@@ -123,16 +123,17 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
     reads.get.unsafeRunSync() shouldBe 1
   }
 
-  test("counters increment with paired (task.id, task.version) labels") {
-    val metrics = collect() { qm =>
-      for {
-        _ <- qm.onTaskDone(descA, elapsedNanos = 5_000_000_000L)
-        _ <- qm.onTaskDone(descA, elapsedNanos = 7_000_000_000L)
-        _ <- qm.onTaskFailed(descA)
-        _ <- qm.onCacheHit(descA)
-        _ <- qm.onTaskDone(descB, elapsedNanos = 1_000_000_000L)
-      } yield ()
-    }
+  test(
+    "counters read cumulative completed/failed/cacheHit from shared state"
+  ) {
+    val state = QueueImpl.State.empty.copy(
+      completedCount =
+        Map(TaskId("alignment", 3) -> 2L, TaskId("variant_call", 1) -> 1L),
+      failedCount = Map(TaskId("alignment", 3) -> 1L),
+      cacheHitCount = Map(TaskId("alignment", 3) -> 1L)
+    )
+
+    val metrics = collect(IO.pure(state))(_ => IO.unit)
 
     sumPointsByTask(
       find(metrics, "tasks.completed.count"),
@@ -186,51 +187,58 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
   }
 
   test(
-    "queue.wait_time records elapsed between onEnqueued and onTaskScheduled"
+    "queue.wait_time records the elapsed seconds the caller passes in"
   ) {
     val metrics = collect() { qm =>
-      for {
-        _ <- qm.onEnqueued(descA)
-        _ <- IO.sleep(scala.concurrent.duration.DurationInt(50).millis)
-        _ <- qm.onTaskScheduled(descA)
-      } yield ()
+      qm.onTaskScheduled(descA, waitSeconds = Some(0.05))
     }
 
     find(metrics, "tasks.queue.wait_time").data match {
       case h: MetricPoints.Histogram =>
         val pt = h.points.toVector.head.asInstanceOf[PointData.Histogram]
         pt.stats.map(_.count) shouldBe Some(1L)
-        // ~50ms; permissive on timing (between 0.01s and 1s)
-        pt.stats.map(_.sum).exists(s => s > 0.01 && s < 1.0) shouldBe true
+        pt.stats.map(_.sum).exists(s => s > 0.04 && s < 0.06) shouldBe true
         pt.boundaries.boundaries shouldBe Vector(0.1, 1.0, 10.0, 60.0, 600.0)
       case other => fail(s"expected histogram, got $other")
     }
   }
 
-  test("onTaskScheduled without prior onEnqueued is a no-op") {
-    val metrics = collect() { qm => qm.onTaskScheduled(descA) }
+  test("onTaskScheduled with None does not emit a wait_time point") {
+    val metrics = collect() { qm =>
+      qm.onTaskScheduled(descA, waitSeconds = None)
+    }
     metrics.find(_.name == "tasks.queue.wait_time") shouldBe None
   }
 
-  test("re-enqueue overwrites the wait-time clock") {
-    val metrics = collect() { qm =>
-      for {
-        _ <- qm.onEnqueued(descA) // first enqueue, then immediately re-enqueue
-        _ <- IO.sleep(scala.concurrent.duration.DurationInt(40).millis)
-        _ <- qm.onEnqueued(descA) // clock resets
-        _ <- IO.sleep(scala.concurrent.duration.DurationInt(40).millis)
-        _ <- qm.onTaskScheduled(descA)
-      } yield ()
-    }
+  test(
+    "re-enqueue overwrites the enqueueTimestamp in state"
+  ) {
+    val sch = stubScheduleTask(descA)
+    val afterSecondEnqueue = QueueImpl.State.empty
+      .update(QueueImpl.Enqueued(sch, Nil, enqueueMillis = 1_000L))
+      .update(QueueImpl.Enqueued(sch, Nil, enqueueMillis = 5_000L))
 
-    find(metrics, "tasks.queue.wait_time").data match {
-      case h: MetricPoints.Histogram =>
-        val pt = h.points.toVector.head.asInstanceOf[PointData.Histogram]
-        // Wait recorded from the second enqueue: ~40ms, not ~80ms.
-        // Permissive band: < 100ms (would be ~80ms if clock didn't reset).
-        pt.stats.map(_.sum).exists(_ < 0.1) shouldBe true
-      case other => fail(s"expected histogram, got $other")
-    }
+    afterSecondEnqueue
+      .enqueueTimestamps(QueueImpl.project(sch)) shouldBe 5_000L
+  }
+
+  test(
+    "TaskScheduled clears the enqueueTimestamp so a replicated schedule records no second wait"
+  ) {
+    val sch = stubScheduleTask(descA)
+    val launcher = tasks.util.message.LauncherName("w1")
+    val allocated = tasks.shared.VersionedResourceAllocated(
+      tasks.shared.CodeVersion("v1"),
+      tasks.shared.ResourceAllocated(cpu = 1, memory = 1, scratch = 0, gpu = Nil, image = None)
+    )
+    val afterSchedule = QueueImpl.State.empty
+      .update(QueueImpl.Enqueued(sch, Nil, enqueueMillis = 1_000L))
+      .update(
+        QueueImpl.TaskScheduled(sch, launcher, allocated, placementValue = None)
+      )
+
+    afterSchedule.enqueueTimestamps
+      .contains(QueueImpl.project(sch)) shouldBe false
   }
 
   test("cardinality cap folds overflow pairs to (_other, _other)") {
@@ -245,34 +253,45 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
     val derivedCap = QueueMetrics.pairCap(capOverrideConfig.otelMaxSeries)
     derivedCap shouldBe 1
 
+    val descC = HashedTaskDescription(TaskId("third_task", 1), "h")
+
+    val state = QueueImpl.State.empty.copy(
+      completedCount = Map(
+        descA.taskId -> 1L,
+        descB.taskId -> 1L,
+        descC.taskId -> 1L
+      )
+    )
+
     val metrics = MetricsTestkit
       .inMemory[IO]()
       .use { testkit =>
         QueueMetrics
-          .make(testkit.meterProvider, IO.pure(QueueImpl.State.empty))(
+          .make(testkit.meterProvider, IO.pure(state))(
             capOverrideConfig
           )
-          .use { qm =>
-            // First pair gets admitted, second pair (and third) fold to _other.
-            qm.onTaskDone(descA, elapsedNanos = 1_000_000_000L) *>
-              qm.onTaskDone(descB, elapsedNanos = 1_000_000_000L) *>
-              qm.onTaskDone(
-                HashedTaskDescription(TaskId("third_task", 1), "h"),
-                elapsedNanos = 1_000_000_000L
-              ) *> testkit.collectMetrics
-          }
+          .use { _ => testkit.collectMetrics }
       }
       .unsafeRunSync()
 
     val completed = find(metrics, "tasks.completed.count")
-    // descA admitted: one point with (alignment, 3) value 1
-    sumPointsByTask(completed, "alignment", "3") shouldBe 1L
-    // descB and the third task fold into _other: combined value 2
-    sumPointsByTask(
+
+    // Exactly one of the three task ids is admitted (iteration order of
+    // Map.toVector picks it); the other two fold into the (_other, _other)
+    // overflow bucket. We assert the aggregate is intact rather than guess
+    // which pair won admittance.
+    val admittedTotal =
+      sumPointsByTask(completed, "alignment", "3") +
+        sumPointsByTask(completed, "variant_call", "1") +
+        sumPointsByTask(completed, "third_task", "1")
+    val overflowTotal = sumPointsByTask(
       completed,
       QueueMetrics.otherSentinel,
       QueueMetrics.otherSentinel
-    ) shouldBe 2L
+    )
+
+    admittedTotal shouldBe 1L
+    overflowTotal shouldBe 2L
   }
 
   test("observable gauges read the current state snapshot at collect time") {
@@ -290,7 +309,7 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
         image = None
       )
     )
-    val state = QueueImpl.State(
+    val state = QueueImpl.State.empty.copy(
       queuedTasks = Map(
         QueueImpl.ScheduleTaskEqualityProjection(schA.description) ->
           ((schA, Nil)),
@@ -300,12 +319,7 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
       scheduledTasks = Map(
         QueueImpl.ScheduleTaskEqualityProjection(schA.description) ->
           QueueImpl.ScheduledTask.dispatchedOnce(schA, launcher, allocated, Nil)
-      ),
-      knownLaunchers = Map.empty,
-      counters = Map.empty,
-      nodes = tasks.elastic.NodeRegistryState.State.empty,
-      completedResults = Map.empty,
-      mainProcesses = Set.empty
+      )
     )
 
     val metrics = collect(IO.pure(state))(_ => IO.unit)
@@ -400,15 +414,7 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
     nodeRegistry.inFlightRequests.size shouldBe 2
     nodeRegistry.cumulativeRequested shouldBe 5
 
-    val state = QueueImpl.State(
-      queuedTasks = Map.empty,
-      scheduledTasks = Map.empty,
-      knownLaunchers = Map.empty,
-      counters = Map.empty,
-      nodes = nodeRegistry,
-      completedResults = Map.empty,
-      mainProcesses = Set.empty
-    )
+    val state = QueueImpl.State.empty.copy(nodes = nodeRegistry)
 
     val metrics = collect(IO.pure(state))(_ => IO.unit)
 
@@ -561,15 +567,7 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
         )
       )
 
-    val state = QueueImpl.State(
-      queuedTasks = Map.empty,
-      scheduledTasks = Map.empty,
-      knownLaunchers = Map.empty,
-      counters = Map.empty,
-      nodes = nodeRegistry,
-      completedResults = Map.empty,
-      mainProcesses = Set.empty
-    )
+    val state = QueueImpl.State.empty.copy(nodes = nodeRegistry)
 
     val metrics = collect(IO.pure(state))(_ => IO.unit)
 
@@ -610,7 +608,7 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
         None // no selector — should NOT contribute to affinity_label.
     )
 
-    val state = QueueImpl.State(
+    val state = QueueImpl.State.empty.copy(
       queuedTasks = Map(
         QueueImpl.ScheduleTaskEqualityProjection(schA.description) ->
           ((schA, Nil)),
@@ -618,13 +616,7 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
           ((schB, Nil)),
         QueueImpl.ScheduleTaskEqualityProjection(schC.description) ->
           ((schC, Nil))
-      ),
-      scheduledTasks = Map.empty,
-      knownLaunchers = Map.empty,
-      counters = Map.empty,
-      nodes = tasks.elastic.NodeRegistryState.State.empty,
-      completedResults = Map.empty,
-      mainProcesses = Set.empty
+      )
     )
 
     val metrics = collect(IO.pure(state))(_ => IO.unit)
@@ -690,15 +682,7 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
         )
     }
 
-    val state = QueueImpl.State(
-      queuedTasks = Map.empty,
-      scheduledTasks = Map.empty,
-      knownLaunchers = Map.empty,
-      counters = Map.empty,
-      nodes = registry,
-      completedResults = Map.empty,
-      mainProcesses = Set.empty
-    )
+    val state = QueueImpl.State.empty.copy(nodes = registry)
 
     val metrics = MetricsTestkit
       .inMemory[IO]()
