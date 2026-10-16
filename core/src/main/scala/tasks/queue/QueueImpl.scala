@@ -665,21 +665,42 @@ private[tasks] class QueueImpl(
       case None => IO.unit
       case Some(shutdownNode) =>
         ref.flatModify { st =>
-          val shutdown = IO
-            .parSequenceN(1)(
-              (st.nodes.running.map { case (node, _) =>
-                scribe.info("Shutting down running node ", node)
-                shutdownNode.shutdownRunningNode(node)
-
-              } ++
-                st.nodes.pending.map { case (node, _) =>
-                  scribe.info("Shutting down pending node ", node)
-                  shutdownNode.shutdownPendingNode(node)
-
-                }).toList
+          val otherMainProcesses = mainProcessSession match {
+            case None          => st.mainProcesses
+            case Some(session) => st.mainProcesses - session
+          }
+          if (otherMainProcesses.nonEmpty) {
+            st -> IO(
+              scribe.info(
+                "SkipShutdownRunningNodes",
+                scribe.data(
+                  Map(
+                    "session" -> mainProcessSession.getOrElse[String]("<none>"),
+                    "running-nodes" -> st.nodes.running.size,
+                    "pending-nodes" -> st.nodes.pending.size,
+                    "other-main-processes" -> otherMainProcesses.toList.sorted.toString,
+                    "explain" -> "Other main processes are still using this shared queue state. Leaving the running and pending node entries in place rather than shutting them down. The shared state does not record which main process provisioned a given worker, so shutting any entry here could kill a worker another master is still using. The last main process to exit will shut down whatever remains."
+                  )
+                )
+              )
             )
-            .map((a: List[Unit]) => ())
-          st.update(NodeEvent(NodeRegistryState.AllStop)) -> shutdown
+          } else {
+            val shutdown = IO
+              .parSequenceN(1)(
+                (st.nodes.running.map { case (node, _) =>
+                  scribe.info("Shutting down running node ", node)
+                  shutdownNode.shutdownRunningNode(node)
+
+                } ++
+                  st.nodes.pending.map { case (node, _) =>
+                    scribe.info("Shutting down pending node ", node)
+                    shutdownNode.shutdownPendingNode(node)
+
+                  }).toList
+              )
+              .map((a: List[Unit]) => ())
+            st.update(NodeEvent(NodeRegistryState.AllStop)) -> shutdown
+          }
         }
     }
 
