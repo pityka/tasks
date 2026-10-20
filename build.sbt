@@ -195,9 +195,9 @@ lazy val batch = project
   .settings(
     name := "tasks-batch",
     libraryDependencies ++= Seq(
-      "software.amazon.awssdk" % "batch" % "2.23.13", // scala-steward:off
-      "software.amazon.awssdk" % "cloudwatchlogs" % "2.23.13", // scala-steward:off
-      "software.amazon.awssdk" % "ec2" % "2.23.13", // scala-steward:off
+      "software.amazon.awssdk" % "batch" % "2.28.0", // scala-steward:off
+      "software.amazon.awssdk" % "cloudwatchlogs" % "2.28.0", // scala-steward:off
+      "software.amazon.awssdk" % "ec2" % "2.28.0", // scala-steward:off
       "io.github.pityka" %% "selfpackage-jib" % "2.1.6",
       "org.scalatest" %% "scalatest" % "3.2.19" % "test"
     )
@@ -210,9 +210,9 @@ lazy val ecs = project
   .settings(
     name := "tasks-ecs",
     libraryDependencies ++= Seq(
-      "software.amazon.awssdk" % "ecs" % "2.23.13", // scala-steward:off
-      "software.amazon.awssdk" % "autoscaling" % "2.23.13", // scala-steward:off
-      "software.amazon.awssdk" % "ec2" % "2.23.13", // scala-steward:off
+      "software.amazon.awssdk" % "ecs" % "2.28.0", // scala-steward:off
+      "software.amazon.awssdk" % "autoscaling" % "2.28.0", // scala-steward:off
+      "software.amazon.awssdk" % "ec2" % "2.28.0", // scala-steward:off
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "org.scalatest" %% "scalatest" % "3.2.19" % "test"
     )
@@ -225,9 +225,9 @@ lazy val s3 = project
   .settings(
     name := "tasks-s3",
     libraryDependencies ++= Seq(
-      "software.amazon.awssdk" % "s3" % "2.23.13", // scala-steward:off
-      "software.amazon.awssdk" % "sso" % "2.23.13" % "test", // scala-steward:off
-      "software.amazon.awssdk" % "ssooidc" % "2.23.13" % "test", // scala-steward:off
+      "software.amazon.awssdk" % "s3" % "2.28.0", // scala-steward:off
+      "software.amazon.awssdk" % "sso" % "2.28.0" % "test", // scala-steward:off
+      "software.amazon.awssdk" % "ssooidc" % "2.28.0" % "test", // scala-steward:off
       "org.typelevel" %% "cats-effect-testkit" % "3.6.3" % "test",
       "org.scalatest" %% "scalatest" % "3.2.19" % "test"
     )

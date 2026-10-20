@@ -40,8 +40,7 @@ import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider
 import software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain
 import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient
 import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration
-import software.amazon.awssdk.core.retry.RetryMode
-import software.amazon.awssdk.core.retry.RetryPolicy
+import software.amazon.awssdk.retries.DefaultRetryStrategy
 import java.time.Duration
 import scala.concurrent.duration.FiniteDuration
 import S3Client.{S3UploadResponse, ObjectMetaData}
@@ -97,12 +96,15 @@ object S3 {
           .getRegion()
       })
     numRetries.foreach { n =>
-      val retryPolicy = RetryPolicy
-        .builder(RetryMode.STANDARD)
-        .numRetries(n)
+      val retryStrategy = DefaultRetryStrategy
+        .standardStrategyBuilder()
+        .maxAttempts(n + 1)
         .build()
       builder.overrideConfiguration(
-        ClientOverrideConfiguration.builder().retryPolicy(retryPolicy).build()
+        ClientOverrideConfiguration
+          .builder()
+          .retryStrategy(retryStrategy)
+          .build()
       )
     }
     if (
