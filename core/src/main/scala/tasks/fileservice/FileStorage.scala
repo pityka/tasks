@@ -144,6 +144,17 @@ private[tasks] trait ManagedFileStorage {
       retrieveSizeAndHash: Boolean
   ): IO[Option[SharedFile]]
 
+  private[tasks] def buffer(
+      path: ManagedFilePath
+  ): IO[Option[Array[Byte]]] =
+    contains(path, retrieveSizeAndHash = false).flatMap {
+      case None => IO.pure(Option.empty[Array[Byte]])
+      case Some(_) =>
+        stream(path, 0L).compile
+          .foldChunks(fs2.Chunk.empty[Byte])(_ ++ _)
+          .map(c => Some(c.toArray))
+    }
+
   def importFile(
       f: File,
       path: ProposedManagedFilePath,

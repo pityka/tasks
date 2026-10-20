@@ -69,6 +69,11 @@ private[tasks] class S3Storage(
         }
       }
 
+  override def buffer(
+      path: ManagedFilePath
+  ): IO[Option[Array[Byte]]] =
+    s3.buffer(bucketName, assembleName(path))
+
   def contains(path: ManagedFilePath, size: Long, hash: Int): IO[Boolean] =
     s3
       .getObjectMetadata(bucketName, assembleName(path))

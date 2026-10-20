@@ -55,33 +55,28 @@ private[tasks] class SharedFileCache(implicit
     val hash = hashedTaskDescription.hash
     val fileName = "__meta__result__" + hash
     SharedFileHelper
-      .getByName(fileName, retrieveSizeAndHash = false)
+      .buffer(fileName)
       .flatMap {
         case None =>
-          scribe.debug(
-            s"Not found",
-            prefix,
-            hashedTaskDescription,
-            scribe.data("filename", fileName)
-          )
-          IO.pure(None)
-        case Some(sf) =>
-          SharedFileHelper
-            .stream(sf, fromOffset = 0L)
-            .compile
-            .foldChunks(Chunk.empty[Byte])(_ ++ _)
-            .map { byteString =>
-              val t = deserializeResult(byteString.toArray)
-              Some(t)
-            }
-            .handleError { case e =>
-              scribe.error(
-                e,
-                s"Failed to locate cached result file.",
-                scribe.data("filename", fileName)
-              )
-              None
-            }
+          IO {
+            scribe.debug(
+              s"Not found",
+              prefix,
+              hashedTaskDescription,
+              scribe.data("filename", fileName)
+            )
+            Option.empty[UntypedResult]
+          }
+        case Some(bytes) =>
+          IO(Some(deserializeResult(bytes)))
+      }
+      .handleError { case e =>
+        scribe.error(
+          e,
+          s"Failed to locate cached result file.",
+          scribe.data("filename", fileName)
+        )
+        None
       }
 
   }

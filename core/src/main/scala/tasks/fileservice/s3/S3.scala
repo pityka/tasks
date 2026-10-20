@@ -37,6 +37,11 @@ trait S3Client {
       fromOffset: Long = 0L
   ): fs2.Stream[IO, Byte]
 
+  private[tasks] def buffer(
+      bucket: String,
+      key: String
+  ): IO[Option[Array[Byte]]]
+
   def uploadFileMultipart(
       bucket: String,
       key: String,

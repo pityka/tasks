@@ -431,6 +431,21 @@ class S3(
         fs2.Stream.chunk(Chunk(ArraySeq.unsafeWrapArray(r.asByteArray): _*))
       )
 
+  override def buffer(
+      bucket: String,
+      key: String
+  ): IO[Option[Array[Byte]]] =
+    io(
+      s3.getObject(
+        GetObjectRequest.builder().bucket(bucket).key(key).build(),
+        AsyncResponseTransformer.toBytes[GetObjectResponse]
+      )
+    ).map(r => Option(r.asByteArray()))
+      .handleErrorWith(_ match {
+        case _: NoSuchKeyException => IO.pure(Option.empty[Array[Byte]])
+        case e: Throwable          => IO.raiseError(e)
+      })
+
   /** Reads a file in multiple parts of the specified @partSize per request.
     * Suitable for big files.
     *

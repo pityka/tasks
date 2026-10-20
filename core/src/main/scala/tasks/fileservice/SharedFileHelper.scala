@@ -44,6 +44,12 @@ private[tasks] object SharedFileHelper {
   ): IO[Option[SharedFile]] =
     recreateFromManagedPath(prefix.propose(name).toManaged, retrieveSizeAndHash)
 
+  private[tasks] def buffer(name: String)(implicit
+      service: FileServiceComponent,
+      prefix: FileServicePrefix
+  ): IO[Option[Array[Byte]]] =
+    service.storage.buffer(prefix.propose(name).toManaged)
+
   private[tasks] def createForTesting(name: String) =
     new SharedFile(ManagedFilePath(Vector(name)), 0, 0)
   private[tasks] def createForTesting(name: String, size: Long, hash: Int) =
