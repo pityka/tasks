@@ -59,7 +59,15 @@ class StateSizeProbe extends FunSuite {
       val sch = scheduleTask(i, proxy, inputBytes)
       (QueueImpl.project(sch), (sch, List(Proxy(proxy))))
     }
-    QueueImpl.State.empty.copy(queuedTasks = entries.toMap)
+    QueueImpl.State(
+      queuedTasks = entries.toMap,
+      scheduledTasks = Map.empty,
+      knownLaunchers = Map.empty,
+      counters = Map.empty,
+      nodes = NodeRegistryState.State.empty,
+      completedResults = Map.empty,
+      mainProcesses = Set.empty
+    )
   }
 
   private def report(label: String, state: QueueImpl.State): Unit = {

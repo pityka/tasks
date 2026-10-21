@@ -22,11 +22,7 @@ private[tasks] case class SerializableQueueState(
     counters: List[(LauncherName, Long)],
     nodes: NodeRegistryState.State,
     completedResults: List[(Address, QueueImpl.ProxyResult)] = Nil,
-    mainProcesses: List[String] = Nil,
-    enqueueTimestamps: List[(ScheduleTaskEqualityProjection, Long)] = Nil,
-    completedCount: List[(TaskId, Long)] = Nil,
-    failedCount: List[(TaskId, Long)] = Nil,
-    cacheHitCount: List[(TaskId, Long)] = Nil
+    mainProcesses: List[String] = Nil
 ) {
   def toState = QueueImpl.State(
     queuedTasks = queuedTasks.toMap,
@@ -35,11 +31,7 @@ private[tasks] case class SerializableQueueState(
     counters = counters.toMap,
     nodes = nodes,
     completedResults = completedResults.toMap,
-    mainProcesses = mainProcesses.toSet,
-    enqueueTimestamps = enqueueTimestamps.toMap,
-    completedCount = completedCount.toMap,
-    failedCount = failedCount.toMap,
-    cacheHitCount = cacheHitCount.toMap
+    mainProcesses = mainProcesses.toSet
   )
 }
 
@@ -51,11 +43,7 @@ private[tasks] object SerializableQueueState {
     counters = state.counters.toList,
     nodes = state.nodes,
     completedResults = state.completedResults.toList,
-    mainProcesses = state.mainProcesses.toList.sorted,
-    enqueueTimestamps = state.enqueueTimestamps.toList,
-    completedCount = state.completedCount.toList,
-    failedCount = state.failedCount.toList,
-    cacheHitCount = state.cacheHitCount.toList
+    mainProcesses = state.mainProcesses.toList.sorted
   )
 
   import com.github.plokhotnyuk.jsoniter_scala.core._

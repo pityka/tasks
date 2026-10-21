@@ -129,8 +129,14 @@ class LauncherStoppedOnShutdownTestSuite extends FunSuite with Matchers {
     UntypedResult(Set.empty, Base64Data("cmVzdWx0"), None)
 
   private def stateWithQueued(sch: MessageData.ScheduleTask, ps: List[Proxy]) =
-    QueueImpl.State.empty.copy(
-      queuedTasks = Map(QueueImpl.project(sch) -> ((sch, ps)))
+    QueueImpl.State(
+      queuedTasks = Map(QueueImpl.project(sch) -> ((sch, ps))),
+      scheduledTasks = Map.empty,
+      knownLaunchers = Map.empty,
+      counters = Map.empty,
+      nodes = NodeRegistryState.State.empty,
+      completedResults = Map.empty,
+      mainProcesses = Set.empty
     )
 
   test(
@@ -174,7 +180,8 @@ class LauncherStoppedOnShutdownTestSuite extends FunSuite with Matchers {
 
     stateWithQueued(sch, List(p)).proxiesOf(sch) shouldBe List(p)
 
-    val scheduled = QueueImpl.State.empty.copy(
+    val scheduled = QueueImpl.State(
+      queuedTasks = Map.empty,
       scheduledTasks = Map(
         QueueImpl.project(sch) -> QueueImpl.ScheduledTask.dispatchedOnce(
           sch,
@@ -185,7 +192,12 @@ class LauncherStoppedOnShutdownTestSuite extends FunSuite with Matchers {
           ),
           List(p)
         )
-      )
+      ),
+      knownLaunchers = Map.empty,
+      counters = Map.empty,
+      nodes = NodeRegistryState.State.empty,
+      completedResults = Map.empty,
+      mainProcesses = Set.empty
     )
     scheduled.proxiesOf(sch) shouldBe List(p)
 

@@ -484,7 +484,8 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
     )
     val sch = task(Some(Replication(2)), cpu = 3)
 
-    val state = QueueImpl.State.empty.copy(
+    val state = QueueImpl.State(
+      queuedTasks = Map.empty,
       scheduledTasks = Map(
         QueueImpl.project(sch) -> QueueImpl.ScheduledTask(
           sch = sch,
@@ -501,6 +502,7 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
         w1 -> Some(Node(RunningJobId("node-1"), total, w1)),
         w2 -> Some(Node(RunningJobId("node-2"), total, w2))
       ),
+      counters = Map.empty,
       nodes = tasks.elastic.NodeRegistryState.State(
         running = Map(
           RunningJobId("node-1") -> total,
@@ -509,7 +511,9 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
         pending = Map.empty,
         cumulativeRequested = 0,
         inFlightRequests = Nil
-      )
+      ),
+      completedResults = Map.empty,
+      mainProcesses = Set.empty
     )
 
     state.freeCapacityOfRunningNodes.map(_.cpu).sorted shouldBe List(5, 5)

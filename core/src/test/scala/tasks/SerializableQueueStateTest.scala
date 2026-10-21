@@ -54,7 +54,7 @@ class SerializableQueueStateTest extends FunSuite with Matchers {
   private val queued = scheduleTask("queued-task", "queued-hash")
   private val scheduled = scheduleTask("scheduled-task", "scheduled-hash")
 
-  private val state = QueueImpl.State.empty.copy(
+  private val state = QueueImpl.State(
     queuedTasks = Map(
       QueueImpl.project(queued) -> ((queued, List(Proxy(proxyAddress))))
     ),
@@ -90,10 +90,8 @@ class SerializableQueueStateTest extends FunSuite with Matchers {
       cumulativeRequested = 5,
       inFlightRequests = List(resource)
     ),
-    enqueueTimestamps = Map(QueueImpl.project(queued) -> 7L),
-    completedCount = Map(TaskId("completed", 1) -> 11L),
-    failedCount = Map(TaskId("flaky", 2) -> 3L),
-    cacheHitCount = Map(TaskId("hit", 1) -> 17L)
+    completedResults = Map.empty,
+    mainProcesses = Set.empty
   )
 
   test("a populated queue state survives an encode/decode round trip") {

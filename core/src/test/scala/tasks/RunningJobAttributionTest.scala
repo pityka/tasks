@@ -82,7 +82,8 @@ class RunningJobAttributionTest extends FunSuite with Matchers {
     val nodeA = node("node-a", launcherA)
     val nodeB = node("node-b", launcherB)
 
-    val state = QueueImpl.State.empty.copy(
+    val state = QueueImpl.State(
+      queuedTasks = Map.empty,
       scheduledTasks = Map(
         scheduled("onA", launcherA, cpu = 2, memory = 1000),
         scheduled("onMaster", masterLauncher, cpu = 3, memory = 1500)
@@ -92,12 +93,15 @@ class RunningJobAttributionTest extends FunSuite with Matchers {
         launcherB -> Some(nodeB),
         masterLauncher -> None
       ),
+      counters = Map.empty,
       nodes = NodeRegistryState.State.empty.copy(
         running = Map(
           RunningJobId("node-a") -> nodeA.size,
           RunningJobId("node-b") -> nodeB.size
         )
-      )
+      ),
+      completedResults = Map.empty,
+      mainProcesses = Set.empty
     )
 
     val free = state.freeCapacityOfRunningNodes.toSet

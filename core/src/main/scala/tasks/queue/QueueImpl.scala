@@ -41,11 +41,7 @@ object QueueImpl {
   )
 
   sealed trait Event
-  case class Enqueued(
-      sch: ScheduleTask,
-      proxies: List[Proxy],
-      enqueueMillis: Long
-  ) extends Event
+  case class Enqueued(sch: ScheduleTask, proxies: List[Proxy]) extends Event
   case class Incremented(launcher: LauncherName) extends Event
   case class ProxyAddedToScheduledMessage(
       sch: ScheduleTask,
@@ -176,11 +172,7 @@ object QueueImpl {
       counters: Map[LauncherName, Long],
       nodes: NodeRegistryState.State,
       completedResults: Map[Address, ProxyResult],
-      mainProcesses: Set[String],
-      enqueueTimestamps: Map[ScheduleTaskEqualityProjection, Long],
-      completedCount: Map[TaskId, Long],
-      failedCount: Map[TaskId, Long],
-      cacheHitCount: Map[TaskId, Long]
+      mainProcesses: Set[String]
   ) {
 
     def freeCapacityOfRunningNodes: List[ResourceAvailable] = {
@@ -233,21 +225,17 @@ object QueueImpl {
             case None        => counters.updated(launcher, 1L)
             case Some(value) => counters.updated(launcher, value + 1)
           })
-        case Enqueued(sch, proxies, enqueueMillis) =>
+        case Enqueued(sch, proxies) =>
           if (!scheduledTasks.contains(project(sch))) {
-            val withTimestamp = copy(
-              enqueueTimestamps =
-                enqueueTimestamps.updated(project(sch), enqueueMillis)
-            )
             queuedTasks.get(project(sch)) match {
               case None =>
-                withTimestamp.copy(
+                copy(
                   queuedTasks =
                     queuedTasks.updated(project(sch), (sch, proxies))
                 )
               case Some((_, existingProxies)) =>
-                withTimestamp.copy(
-                  queuedTasks = queuedTasks.updated(
+                copy(
+                  queuedTasks.updated(
                     project(sch),
                     (sch, (proxies ::: existingProxies).distinct)
                   )
@@ -271,11 +259,9 @@ object QueueImpl {
           copy(knownLaunchers = knownLaunchers + (launcher -> node))
         case TaskScheduled(sch, launcher, allocated, placementValue) =>
           val dispatch = Dispatch(launcher, allocated)
-          val droppedTimestamp =
-            copy(enqueueTimestamps = enqueueTimestamps - project(sch))
           scheduledTasks.get(project(sch)) match {
             case Some(scheduled) =>
-              droppedTimestamp.copy(
+              copy(
                 queuedTasks = queuedTasks - project(sch),
                 scheduledTasks = scheduledTasks.updated(
                   project(sch),
@@ -288,7 +274,7 @@ object QueueImpl {
               )
             case None =>
               val (_, proxies) = queuedTasks(project(sch))
-              droppedTimestamp.copy(
+              copy(
                 queuedTasks = queuedTasks - project(sch),
                 scheduledTasks = scheduledTasks.updated(
                   project(sch),
@@ -304,22 +290,16 @@ object QueueImpl {
           }
 
         case TaskDone(sch, launcher, _, _, _) =>
-          val taskId = sch.description.taskId
           copy(
             scheduledTasks = releaseCopy(sch, launcher, delivered = true),
-            queuedTasks = queuedTasks - project(sch),
-            completedCount =
-              completedCount.updated(taskId, completedCount.getOrElse(taskId, 0L) + 1L)
+            queuedTasks = queuedTasks - project(sch)
           )
         case TaskFailed(sch, launcher, completesCaller) =>
-          val taskId = sch.description.taskId
           copy(
             scheduledTasks =
               releaseCopy(sch, launcher, delivered = completesCaller),
             queuedTasks =
-              if (completesCaller) queuedTasks - project(sch) else queuedTasks,
-            failedCount =
-              failedCount.updated(taskId, failedCount.getOrElse(taskId, 0L) + 1L)
+              if (completesCaller) queuedTasks - project(sch) else queuedTasks
           )
         case TaskLauncherStoppedFor(sch, launcher) =>
           copy(scheduledTasks = releaseCopy(sch, launcher, delivered = false))
@@ -344,12 +324,7 @@ object QueueImpl {
             }
           )
         case CacheHit(sch, _) =>
-          val taskId = sch.description.taskId
-          copy(
-            scheduledTasks = scheduledTasks - project(sch),
-            cacheHitCount =
-              cacheHitCount.updated(taskId, cacheHitCount.getOrElse(taskId, 0L) + 1L)
-          )
+          copy(scheduledTasks = scheduledTasks - project(sch))
 
         case ResultStoredForProxy(proxy, result) =>
           copy(completedResults = completedResults.updated(proxy, result))
@@ -413,11 +388,7 @@ object QueueImpl {
         counters = Map(),
         nodes = NodeRegistryState.State.empty,
         completedResults = Map(),
-        mainProcesses = Set(),
-        enqueueTimestamps = Map(),
-        completedCount = Map(),
-        failedCount = Map(),
-        cacheHitCount = Map()
+        mainProcesses = Set()
       )
 
   }
@@ -748,13 +719,10 @@ private[tasks] class QueueImpl(
     val sch = a.sch
     val num = CorrelationId.make
     scribe.debug(s"Cache answered.", sch, num, a.sender.address)
-    val enqueueIO = IO.realTime.flatMap { nowDuration =>
-      val nowMillis = nowDuration.toMillis
-      ref.flatModify { state =>
-        state.update(Enqueued(sch, allProxies, nowMillis)) ->
-          warnIfResourceRequestDiverges(sch, state)
-      }
-    }
+    val enqueueIO = ref.flatModify { state =>
+      state.update(Enqueued(sch, allProxies)) ->
+        warnIfResourceRequestDiverges(sch, state)
+    } *> metrics.onEnqueued(sch.description)
     val cacheIO = message match {
       case Right(Some(result)) => {
         scribe.debug(
@@ -772,7 +740,7 @@ private[tasks] class QueueImpl(
               ProxyResultSuccess(result, retrievedFromCache = true)
             )
           }
-        }
+        } *> metrics.onCacheHit(sch.description)
       }
       case Right(None) => {
         scribe.debug(
@@ -825,8 +793,7 @@ private[tasks] class QueueImpl(
   private def enqueueOrCacheHit(
       sch: ScheduleTask,
       proxies: List[Proxy],
-      state: State,
-      nowMillis: Long
+      state: State
   ): (State, IO[Unit]) = {
     if (sch.tryCache && proxies.nonEmpty) {
       val sender = proxies.head
@@ -846,36 +813,37 @@ private[tasks] class QueueImpl(
         )
       )
       (
-        state.update(Enqueued(sch, proxies, nowMillis)),
-        warnIfResourceRequestDiverges(sch, state)
+        state.update(Enqueued(sch, proxies)),
+        warnIfResourceRequestDiverges(sch, state) *> metrics.onEnqueued(
+          sch.description
+        )
       )
     }
   }
 
   def scheduleTask(sch: ScheduleTask): IO[Unit] = {
-    val scheduleIO = IO.realTime.flatMap { nowDuration =>
-      val nowMillis = nowDuration.toMillis
-      ref.flatModify { state =>
-        scribe.debug(s"ScheduleTask", sch)
-        val proxy = Proxy(sch.proxy)
+    val scheduleIO = ref.flatModify { state =>
+      scribe.debug(s"ScheduleTask", sch)
+      val proxy = Proxy(sch.proxy)
 
-        if (state.queuedButSentByADifferentProxy(sch, proxy)) {
-          state.update(Enqueued(sch, List(proxy), nowMillis)) ->
-            warnIfResourceRequestDiverges(sch, state)
-        } else if (state.scheduledButSentByADifferentProxy(sch, proxy)) {
-          scribe.debug(
-            s"MultipleProxies",
-            sch,
-            scribe.data(
-              "explain",
-              "Scheduletask received multiple times from different proxies. Not queueing this one, but delivering result if ready. "
-            )
+      if (state.queuedButSentByADifferentProxy(sch, proxy)) {
+        state.update(Enqueued(sch, List(proxy))) ->
+          (warnIfResourceRequestDiverges(sch, state) *> metrics.onEnqueued(
+            sch.description
+          ))
+      } else if (state.scheduledButSentByADifferentProxy(sch, proxy)) {
+        scribe.debug(
+          s"MultipleProxies",
+          sch,
+          scribe.data(
+            "explain",
+            "Scheduletask received multiple times from different proxies. Not queueing this one, but delivering result if ready. "
           )
-          state.update(ProxyAddedToScheduledMessage(sch, List(proxy))) -> IO.unit
+        )
+        state.update(ProxyAddedToScheduledMessage(sch, List(proxy))) -> IO.unit
 
-        } else {
-          enqueueOrCacheHit(sch, List(proxy), state, nowMillis)
-        }
+      } else {
+        enqueueOrCacheHit(sch, List(proxy), state)
       }
     }
     scheduleIO *> handleQueueStatIO
@@ -1160,79 +1128,78 @@ private[tasks] class QueueImpl(
   private[tasks] def handleLauncherStopped(
       launcher: LauncherName,
       reason: LauncherStopReason
-  ): IO[Unit] = IO.realTime.flatMap { nowDuration =>
-    val nowMillis = nowDuration.toMillis
-    ref.flatModify { state =>
-      import tasks.util.eq._
-      val msgs =
-        state.scheduledTasks.toSeq.filter(_._2.dispatchedTo(launcher)).map(_._1)
-      val (updated, reEnqueued) =
-        msgs.foldLeft((state, List.empty[ScheduleTask])) {
-          case ((state, acc), schProjection) =>
-            val scheduled = state.scheduledTasks(schProjection)
-            val released = state.update(
-              TaskLauncherStoppedFor(scheduled.sch, launcher)
+  ): IO[Unit] = ref.flatModify { state =>
+    import tasks.util.eq._
+    val msgs =
+      state.scheduledTasks.toSeq.filter(_._2.dispatchedTo(launcher)).map(_._1)
+    val (updated, reEnqueued) =
+      msgs.foldLeft((state, List.empty[ScheduleTask])) {
+        case ((state, acc), schProjection) =>
+          val scheduled = state.scheduledTasks(schProjection)
+          val released = state.update(
+            TaskLauncherStoppedFor(scheduled.sch, launcher)
+          )
+          val lastCopyIsGone =
+            !released.scheduledTasks.contains(schProjection) &&
+              !scheduled.resultDelivered
+          if (lastCopyIsGone)
+            (
+              released.update(Enqueued(scheduled.sch, scheduled.proxies)),
+              scheduled.sch :: acc
             )
-            val lastCopyIsGone =
-              !released.scheduledTasks.contains(schProjection) &&
-                !scheduled.resultDelivered
-            if (lastCopyIsGone)
-              (
-                released.update(
-                  Enqueued(scheduled.sch, scheduled.proxies, nowMillis)
-                ),
-                scheduled.sch :: acc
-              )
-            else (released, acc)
-        }
-
-      val node = state.knownLaunchers.get(launcher).flatten
-      val session = tasks.util.SessionId.of(launcher.name)
-      val updated2 = {
-        val st1 = updated.update(LauncherCrashed(launcher))
-        val st2 =
-          if (reason.proxiesCanNoLongerPoll)
-            session.fold(st1)(s => st1.update(SessionProxiesDropped(s)))
-          else st1
-        node.fold(st2)(n =>
-          st2.update(NodeEvent(NodeRegistryState.NodeIsDown(n)))
-        )
+          else (released, acc)
       }
 
-      val shutdown = node
-        .flatMap { node =>
-          shutdownNode.map { shutdownNode =>
-            shutdownNode.shutdownRunningNode(node.name)
-          }
+    val node = state.knownLaunchers.get(launcher).flatten
+    val session = tasks.util.SessionId.of(launcher.name)
+    val updated2 = {
+      val st1 = updated.update(LauncherCrashed(launcher))
+      val st2 =
+        if (reason.proxiesCanNoLongerPoll)
+          session.fold(st1)(s => st1.update(SessionProxiesDropped(s)))
+        else st1
+      node.fold(st2)(n =>
+        st2.update(NodeEvent(NodeRegistryState.NodeIsDown(n)))
+      )
+    }
+
+    val shutdown = node
+      .flatMap { node =>
+        shutdownNode.map { shutdownNode =>
+          shutdownNode.shutdownRunningNode(node.name)
         }
-        .getOrElse(IO.unit)
-      val logIO = IO(
-        scribe.info(
-          "LauncherStopped",
-          launcher,
-          scribe.data(
-            Map(
-              "re-enqueued-tasks" -> reEnqueued.size,
-              "re-enqueued-tasks-by-id" -> msgs
-                .groupBy(_.description.taskId)
-                .view
-                .mapValues(_.size)
-                .toMap
-                .toString,
-              "had-node" -> node.isDefined,
-              "session" -> session.getOrElse("none"),
-              "dropped-completed-results" -> (updated.completedResults.size - updated2.completedResults.size),
-              "queued-tasks-after" -> updated2.queuedTasks.size,
-              "scheduled-tasks-after" -> updated2.scheduledTasks.size,
-              "running-nodes-after" -> updated2.nodes.running.size,
-              "pending-nodes" -> updated2.nodes.pending.size,
-              "in-flight-requests" -> updated2.nodes.inFlightRequests.size
-            )
+      }
+      .getOrElse(IO.unit)
+    val recordMetrics =
+      reEnqueued.foldLeft(IO.unit)((acc, sch) =>
+        acc *> metrics.onEnqueued(sch.description)
+      )
+    val logIO = IO(
+      scribe.info(
+        "LauncherStopped",
+        launcher,
+        scribe.data(
+          Map(
+            "re-enqueued-tasks" -> reEnqueued.size,
+            "re-enqueued-tasks-by-id" -> msgs
+              .groupBy(_.description.taskId)
+              .view
+              .mapValues(_.size)
+              .toMap
+              .toString,
+            "had-node" -> node.isDefined,
+            "session" -> session.getOrElse("none"),
+            "dropped-completed-results" -> (updated.completedResults.size - updated2.completedResults.size),
+            "queued-tasks-after" -> updated2.queuedTasks.size,
+            "scheduled-tasks-after" -> updated2.scheduledTasks.size,
+            "running-nodes-after" -> updated2.nodes.running.size,
+            "pending-nodes" -> updated2.nodes.pending.size,
+            "in-flight-requests" -> updated2.nodes.inFlightRequests.size
           )
         )
       )
-      (updated2 -> (logIO *> shutdown))
-    }
+    )
+    (updated2 -> (logIO *> recordMetrics *> shutdown))
   } *> (if (reason.shouldRequestReplacementNodes) handleQueueStatIO
         else IO.unit)
 
@@ -1360,26 +1327,13 @@ private[tasks] class QueueImpl(
             scribe.data("explain", "Scheduling task to launcher.")
           )
 
-          val startMillisOpt = state.enqueueTimestamps.get(project(sch))
-
           val newState = stateWithJoin
             .update(
               TaskScheduled(sch, launcher, allocated, placementValueFor(sch))
             )
 
-          val recordWait = startMillisOpt match {
-            case None => IO.unit
-            case Some(startMillis) =>
-              IO.realTime.flatMap { now =>
-                metrics.onTaskScheduled(
-                  sch.description,
-                  Some((now.toMillis - startMillis) / 1000.0)
-                )
-              }
-          }
-
           val io =
-            recordWait *> joinIO *> IO.pure(
+            metrics.onTaskScheduled(sch.description) *> joinIO *> IO.pure(
               Right(MessageData.Schedule(sch))
             )
 
@@ -1507,92 +1461,90 @@ private[tasks] class QueueImpl(
       launcher: LauncherName,
       cause: Throwable
   ): IO[Unit] = {
-    val taskFailedIO = IO.realTime.flatMap { nowDuration =>
-      val nowMillis = nowDuration.toMillis
-      ref.flatModify { state =>
-        val proxies = state.proxiesOf(sch)
-        val alreadyDelivered =
-          state.scheduledTasks.get(project(sch)).exists(_.resultDelivered)
-        val known = state.scheduledTasks.contains(project(sch)) ||
-          state.queuedTasks.contains(project(sch))
-        val (updated, sideEffects) =
-          if (alreadyDelivered) {
-            scribe.info(
-              "LateCopyDiscarded",
+    val taskFailedIO = ref.flatModify { state =>
+      val recordMetric = metrics.onTaskFailed(sch.description)
+      val proxies = state.proxiesOf(sch)
+      val alreadyDelivered =
+        state.scheduledTasks.get(project(sch)).exists(_.resultDelivered)
+      val known = state.scheduledTasks.contains(project(sch)) ||
+        state.queuedTasks.contains(project(sch))
+      val (updated, sideEffects) =
+        if (alreadyDelivered) {
+          scribe.info(
+            "LateCopyDiscarded",
+            sch,
+            launcher,
+            scribe.data(
+              "explain",
+              "Another copy of this task already reported its outcome to the caller, so this failure is discarded. The caller is completed by whichever copy exits first."
+            )
+          )
+          (
+            state.update(TaskFailed(sch, launcher, completesCaller = false)),
+            List.empty[IO[Unit]]
+          )
+        } else if (!known) (state, List.empty[IO[Unit]])
+        else if (state.scheduledTasks.get(project(sch)).exists(_.copies > 1)) {
+          scribe.info(
+            "CopyFailedWhileSiblingsRun",
+            sch,
+            launcher,
+            scribe.data(
+              Map(
+                "running-copies-after" -> (state.scheduledTasks
+                  .get(project(sch))
+                  .fold(0)(_.copies) - 1),
+                "explain" -> "A copy of this replicated task failed while other copies are still running. Its slot is freed but the caller is not completed, because a sibling may still succeed. The caller sees a failure only from the last copy to fail."
+              )
+            )
+          )
+          (
+            state.update(TaskFailed(sch, launcher, completesCaller = false)),
+            List.empty[IO[Unit]]
+          )
+        } else {
+          val removed = state.update(
+            TaskFailed(
               sch,
               launcher,
+              completesCaller = !config.resubmitFailedTask
+            )
+          )
+          if (config.resubmitFailedTask) {
+            scribe.error(
+              cause,
+              "TaskExecutionFailed+Resubmit",
+              sch,
               scribe.data(
                 "explain",
-                "Another copy of this task already reported its outcome to the caller, so this failure is discarded. The caller is completed by whichever copy exits first."
-              )
+                "configuration tasks.resubmitFailedTask=false can prevent this"
+              ),
+              scribe.data("queue-size", state.queuedTasks.keys.size)
             )
+
             (
-              state.update(TaskFailed(sch, launcher, completesCaller = false)),
-              List.empty[IO[Unit]]
-            )
-          } else if (!known) (state, List.empty[IO[Unit]])
-          else if (state.scheduledTasks.get(project(sch)).exists(_.copies > 1)) {
-            scribe.info(
-              "CopyFailedWhileSiblingsRun",
-              sch,
-              launcher,
-              scribe.data(
-                Map(
-                  "running-copies-after" -> (state.scheduledTasks
-                    .get(project(sch))
-                    .fold(0)(_.copies) - 1),
-                  "explain" -> "A copy of this replicated task failed while other copies are still running. Its slot is freed but the caller is not completed, because a sibling may still succeed. The caller sees a failure only from the last copy to fail."
-                )
-              )
-            )
-            (
-              state.update(TaskFailed(sch, launcher, completesCaller = false)),
-              List.empty[IO[Unit]]
+              removed.update(Enqueued(sch, proxies)),
+              List(metrics.onEnqueued(sch.description))
             )
           } else {
-            val removed = state.update(
-              TaskFailed(
-                sch,
-                launcher,
-                completesCaller = !config.resubmitFailedTask
+            val stored = proxies.foldLeft(removed) { case (acc, pr) =>
+              acc.update(
+                ResultStoredForProxy(pr.address, ProxyResultFailure(cause))
+              )
+            }
+            scribe.error(
+              cause,
+              "TaskExecutionFailed",
+              sch,
+              scribe.data(
+                "explain",
+                "configuration tasks.resubmitFailedTask=true can resubmit automatically"
               )
             )
-            if (config.resubmitFailedTask) {
-              scribe.error(
-                cause,
-                "TaskExecutionFailed+Resubmit",
-                sch,
-                scribe.data(
-                  "explain",
-                  "configuration tasks.resubmitFailedTask=false can prevent this"
-                ),
-                scribe.data("queue-size", state.queuedTasks.keys.size)
-              )
-
-              (
-                removed.update(Enqueued(sch, proxies, nowMillis)),
-                List.empty[IO[Unit]]
-              )
-            } else {
-              val stored = proxies.foldLeft(removed) { case (acc, pr) =>
-                acc.update(
-                  ResultStoredForProxy(pr.address, ProxyResultFailure(cause))
-                )
-              }
-              scribe.error(
-                cause,
-                "TaskExecutionFailed",
-                sch,
-                scribe.data(
-                  "explain",
-                  "configuration tasks.resubmitFailedTask=true can resubmit automatically"
-                )
-              )
-              (stored, List.empty[IO[Unit]])
-            }
+            (stored, List.empty[IO[Unit]])
           }
-        updated -> IO.parSequenceN(1)(sideEffects).void
-      }
+        }
+      updated -> (recordMetric *> IO.parSequenceN(1)(sideEffects).void)
     }
     taskFailedIO *> handleQueueStatIO
   }

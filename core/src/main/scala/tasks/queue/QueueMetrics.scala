@@ -21,6 +21,7 @@ import cats.effect.kernel.{Ref, Resource}
 import org.typelevel.otel4s.{Attribute, Attributes}
 import org.typelevel.otel4s.metrics.{
   BucketBoundaries,
+  Counter,
   Histogram,
   Meter,
   MeterProvider,
@@ -29,10 +30,14 @@ import org.typelevel.otel4s.metrics.{
 import tasks.util.config.TasksConfig
 
 private[tasks] final class QueueMetrics(
+    completedCounter: Counter[IO, Long],
+    failedCounter: Counter[IO, Long],
+    cacheHitCounter: Counter[IO, Long],
     executionDuration: Histogram[IO, Double],
     queueWaitTime: Histogram[IO, Double],
     cap: Int,
     admittedPairs: Ref[IO, Set[(String, Int)]],
+    enqueueTimestamps: Ref[IO, Map[HashedTaskDescription, Long]],
     overflowWarned: Ref[IO, Boolean],
     labelCap: Int,
     admittedLabels: Ref[IO, Set[String]],
@@ -118,26 +123,47 @@ private[tasks] final class QueueMetrics(
       }
   }
 
-
-  def onTaskScheduled(
-      description: HashedTaskDescription,
-      waitSeconds: Option[Double]
-  ): IO[Unit] =
-    waitSeconds match {
-      case None => IO.unit
-      case Some(elapsed) =>
-        attrsFor(description.taskId).flatMap { attrs =>
-          queueWaitTime.record(elapsed, attrs)
-        }
+  // Always (re)sets the enqueue timestamp. Called on both initial enqueue and
+  // re-enqueue after launcher crash or task failure (with resubmitFailedTask).
+  // Resetting on re-enqueue treats the second wait as a separate observation.
+  def onEnqueued(description: HashedTaskDescription): IO[Unit] =
+    enqueueTimestamps.update { ts =>
+      ts.updated(description, System.nanoTime())
     }
+
+  def onTaskScheduled(description: HashedTaskDescription): IO[Unit] =
+    enqueueTimestamps
+      .modify { ts =>
+        ts.get(description) match {
+          case Some(start) => (ts - description, Some(start))
+          case None        => (ts, None)
+        }
+      }
+      .flatMap {
+        case None => IO.unit
+        case Some(startNanos) =>
+          val elapsedSeconds = (System.nanoTime() - startNanos) / 1e9
+          attrsFor(description.taskId).flatMap { attrs =>
+            queueWaitTime.record(elapsedSeconds, attrs)
+          }
+      }
 
   def onTaskDone(
       description: HashedTaskDescription,
       elapsedNanos: Long
   ): IO[Unit] =
     attrsFor(description.taskId).flatMap { attrs =>
-      executionDuration.record(elapsedNanos / 1e9, attrs)
+      completedCounter.inc(attrs) *> executionDuration.record(
+        elapsedNanos / 1e9,
+        attrs
+      )
     }
+
+  def onTaskFailed(description: HashedTaskDescription): IO[Unit] =
+    attrsFor(description.taskId).flatMap(failedCounter.inc(_))
+
+  def onCacheHit(description: HashedTaskDescription): IO[Unit] =
+    attrsFor(description.taskId).flatMap(cacheHitCounter.inc(_))
 }
 
 private[tasks] object QueueMetrics {
@@ -200,6 +226,24 @@ private[tasks] object QueueMetrics {
 
     for {
       meter <- Resource.eval(meterProvider.get("tasks-core"))
+      completed <- Resource.eval(
+        meter
+          .counter[Long]("tasks.completed.count")
+          .withDescription("Cumulative successful task completions.")
+          .create
+      )
+      failed <- Resource.eval(
+        meter
+          .counter[Long]("tasks.failed.count")
+          .withDescription("Cumulative task execution failures.")
+          .create
+      )
+      cacheHit <- Resource.eval(
+        meter
+          .counter[Long]("tasks.cache_hit.count")
+          .withDescription("Cumulative cache hits.")
+          .create
+      )
       execution <- Resource.eval(
         meter
           .histogram[Double]("tasks.execution.duration")
@@ -217,6 +261,9 @@ private[tasks] object QueueMetrics {
           .create
       )
       admittedRef <- Resource.eval(Ref.of[IO, Set[(String, Int)]](Set.empty))
+      enqueueRef <- Resource.eval(
+        Ref.of[IO, Map[HashedTaskDescription, Long]](Map.empty)
+      )
       overflowWarnedRef <- Resource.eval(Ref.of[IO, Boolean](false))
       admittedLabelsRef <- Resource.eval(Ref.of[IO, Set[String]](Set.empty))
       labelOverflowWarnedRef <- Resource.eval(Ref.of[IO, Boolean](false))
@@ -224,72 +271,19 @@ private[tasks] object QueueMetrics {
       // The QueueMetrics instance is needed for attrsFor — declared here so the
       // gauge callbacks can call it and share the same admittance set.
       qm = new QueueMetrics(
+        completedCounter = completed,
+        failedCounter = failed,
+        cacheHitCounter = cacheHit,
         executionDuration = execution,
         queueWaitTime = waitTime,
         cap = cap,
         admittedPairs = admittedRef,
+        enqueueTimestamps = enqueueRef,
         overflowWarned = overflowWarnedRef,
         labelCap = labelsCap,
         admittedLabels = admittedLabelsRef,
         labelOverflowWarned = labelOverflowWarnedRef
       )
-
-      completedCount <- Resource
-        .eval(
-          meter
-            .observableCounter[Long]("tasks.completed.count")
-            .withDescription(
-              "Cumulative successful task completions"
-            )
-            .createObserver
-        )
-        .map { obs =>
-          Binding(
-            obs,
-            st =>
-              sequenceRecords(st.completedCount.toVector) { case (taskId, c) =>
-                qm.attrsFor(taskId).flatMap(attrs => obs.record(c, attrs))
-              }
-          )
-        }
-
-      failedCount <- Resource
-        .eval(
-          meter
-            .observableCounter[Long]("tasks.failed.count")
-            .withDescription(
-              "Cumulative task execution failures."
-            )
-            .createObserver
-        )
-        .map { obs =>
-          Binding(
-            obs,
-            st =>
-              sequenceRecords(st.failedCount.toVector) { case (taskId, c) =>
-                qm.attrsFor(taskId).flatMap(attrs => obs.record(c, attrs))
-              }
-          )
-        }
-
-      cacheHitCount <- Resource
-        .eval(
-          meter
-            .observableCounter[Long]("tasks.cache_hit.count")
-            .withDescription(
-              "Cumulative cache hits."
-            )
-            .createObserver
-        )
-        .map { obs =>
-          Binding(
-            obs,
-            st =>
-              sequenceRecords(st.cacheHitCount.toVector) { case (taskId, c) =>
-                qm.attrsFor(taskId).flatMap(attrs => obs.record(c, attrs))
-              }
-          )
-        }
 
       queuedCount <- Resource
         .eval(
@@ -427,10 +421,7 @@ private[tasks] object QueueMetrics {
         nodesRunning,
         nodesPending,
         nodesInflight,
-        cumulativeRequested,
-        completedCount,
-        failedCount,
-        cacheHitCount
+        cumulativeRequested
       ) ::: nodeRegistry ::: launcherAvailable ::: queuedResources ::: labels
 
       _ <- meter.batchCallback(
