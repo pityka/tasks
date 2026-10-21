@@ -27,6 +27,7 @@ package tasks.fileservice
 import tasks.util.Uri
 import cats.effect.IO
 import org.http4s.client.Client
+import org.http4s.client.middleware.FollowRedirect
 import org.http4s.Request
 import org.http4s.Method
 import org.http4s.headers.ETag
@@ -41,6 +42,9 @@ private[tasks] class StreamHelper(
     s3DownloadParallelism: Int,
     s3MultipartThreshold: Long
 ) {
+
+  private val httpClientFollowRedirects: Option[Client[IO]] =
+    httpClient.map(FollowRedirect(maxRedirects = 10)(_))
 
   def s3Loc(uri: Uri) = {
     val bucket = uri.authority.toString
@@ -62,7 +66,7 @@ private[tasks] class StreamHelper(
 
     def bySingleRequest =
       fs2.Stream.force(
-        httpClient.get
+        httpClientFollowRedirects.get
           .run(Request(method = Method.GET, uri = uri.http4s))
           .allocated
           .map { case (response, release) =>
@@ -72,7 +76,7 @@ private[tasks] class StreamHelper(
 
     def getRangeOnce(range: http4s.headers.Range.SubRange) =
       fs2.Stream.force(
-        httpClient.get
+        httpClientFollowRedirects.get
           .run(
             Request(
               method = Method.GET,
@@ -92,7 +96,7 @@ private[tasks] class StreamHelper(
       )
 
     def serverIndicatesAcceptRanges =
-      httpClient.get
+      httpClientFollowRedirects.get
         .run(Request(method = Method.HEAD, uri = uri.http4s))
         .use { response =>
           val clength = response.contentLength
@@ -108,7 +112,7 @@ private[tasks] class StreamHelper(
       else {
         val max = contentLength - 1
         val min = contentLength - 10
-        httpClient.get
+        httpClientFollowRedirects.get
           .run(
             Request(
               method = Method.GET,
@@ -248,7 +252,7 @@ private[tasks] class StreamHelper(
       "http client is not started (enable in config)"
     )
 
-    httpClient.get.run(Request(uri = uri.http4s, method = Method.HEAD)).use {
+    httpClientFollowRedirects.get.run(Request(uri = uri.http4s, method = Method.HEAD)).use {
       response =>
         val etag = response.headers.get[ETag].map(_.tag.tag)
         val clength = response.contentLength
