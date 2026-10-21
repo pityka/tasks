@@ -527,6 +527,39 @@ private[tasks] class QueueImpl(
 )(implicit config: TasksConfig) {
   import QueueImpl._
 
+  private val lastNodeRequestFailedLogNanos =
+    new java.util.concurrent.atomic.AtomicLong(Long.MinValue)
+  private val suppressedNodeRequestFailedLogs =
+    new java.util.concurrent.atomic.AtomicLong(0L)
+
+  private def logNodeRequestFailedRateLimited(e: String): IO[Unit] =
+    IO.monotonic.flatMap { now =>
+      val nowNanos = now.toNanos
+      val intervalNanos = config.nodeRequestFailedLogInterval.toNanos
+      val last = lastNodeRequestFailedLogNanos.get()
+      if (
+        nowNanos - last >= intervalNanos && lastNodeRequestFailedLogNanos
+          .compareAndSet(last, nowNanos)
+      ) {
+        val suppressed = suppressedNodeRequestFailedLogs.getAndSet(0L)
+        IO(
+          scribe.info(
+            "NodeRequestFailed",
+            scribe.data("info", e),
+            scribe.data("suppressed-since-last", suppressed),
+            scribe.data(
+              "explain",
+              "This is normal if there is no more capacity. " +
+                "Note: failed requests still count against maxNodesCumulative " +
+                "as a defensive measure to bound total attempts."
+            )
+          )
+        )
+      } else {
+        IO(suppressedNodeRequestFailedLogs.incrementAndGet()).void
+      }
+    }
+
   def initFailed(n: RunningJobId): IO[Unit] = {
     val handleFailureIO = createNode match {
       case None => IO.unit
@@ -1036,18 +1069,7 @@ private[tasks] class QueueImpl(
                       createNode.requestOneNewJobFromJobScheduler(request)
                     ).flatMap {
                       case Left(e) =>
-                        IO(
-                          scribe.warn(
-                            "NodeRequestFailed",
-                            scribe.data("info", e),
-                            scribe.data(
-                              "explain",
-                              "This is normal if there is no more capacity. " +
-                                "Note: failed requests still count against maxNodesCumulative " +
-                                "as a defensive measure to bound total attempts."
-                            )
-                          )
-                        ) *> recordFailure
+                        logNodeRequestFailedRateLimited(e) *> recordFailure
                       case Right((jobId, size)) =>
                         ref.flatModify { state =>
                           val updated = state.update(

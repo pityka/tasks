@@ -206,6 +206,9 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   def logQueueStatus = raw.getBoolean("tasks.elastic.logQueueStatus")
 
+  def nodeRequestFailedLogInterval: FD =
+    raw.getDuration("tasks.elastic.nodeRequestFailedLogInterval")
+
   def additionalJavaCommandline =
     raw.getString("tasks.elastic.javaCommandLine")
 
