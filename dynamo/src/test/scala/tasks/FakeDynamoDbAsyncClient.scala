@@ -1,0 +1,253 @@
+package tasks
+
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
+import scala.jdk.CollectionConverters._
+
+import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient
+import software.amazon.awssdk.services.dynamodb.model._
+
+final class FakeDynamoDbAsyncClient(val tableName: String)
+    extends DynamoDbAsyncClient {
+
+  case class ItemKey(pk: String, sk: String)
+
+  private val store: AtomicReference[Map[ItemKey, Map[String, AttributeValue]]] =
+    new AtomicReference(Map.empty)
+
+  val transactWriteCount = new AtomicInteger(0)
+  val putItemCount = new AtomicInteger(0)
+  val getItemCount = new AtomicInteger(0)
+  val queryCount = new AtomicInteger(0)
+
+  val beforeTransactWrite: AtomicReference[() => Unit] =
+    new AtomicReference(() => ())
+
+  def rawStore: Map[ItemKey, Map[String, AttributeValue]] = store.get()
+
+  def currentItem(pk: String, sk: String): Option[Map[String, AttributeValue]] =
+    store.get.get(ItemKey(pk, sk))
+
+  def setItem(pk: String, sk: String, attrs: Map[String, AttributeValue]): Unit =
+    store.updateAndGet { current =>
+      current + (ItemKey(pk, sk) -> attrs)
+    }
+
+  def serviceName(): String = "dynamodb"
+  def close(): Unit = ()
+
+  private def completed[A](value: A): CompletableFuture[A] =
+    CompletableFuture.completedFuture(value)
+
+  private def failed[A](t: Throwable): CompletableFuture[A] = {
+    val cf = new CompletableFuture[A]()
+    cf.completeExceptionally(t)
+    cf
+  }
+
+  private def extractKey(
+      item: Map[String, AttributeValue],
+      key: Map[String, AttributeValue]
+  ): ItemKey = {
+    val pk = (item.get("pk").orElse(key.get("pk"))).map(_.s()).getOrElse("")
+    val sk = (item.get("sk").orElse(key.get("sk"))).map(_.s()).getOrElse("")
+    ItemKey(pk, sk)
+  }
+
+  override def putItem(request: PutItemRequest): CompletableFuture[PutItemResponse] = {
+    putItemCount.incrementAndGet()
+    if (request.tableName() != tableName)
+      return failed(new RuntimeException(s"wrong table: ${request.tableName()}"))
+    val item = request.item().asScala.toMap
+    val key = extractKey(item, Map.empty)
+    val existing = store.get.get(key)
+    val condition = Option(request.conditionExpression())
+    val names = Option(request.expressionAttributeNames())
+      .map(_.asScala.toMap)
+      .getOrElse(Map.empty[String, String])
+    val values = Option(request.expressionAttributeValues())
+      .map(_.asScala.toMap)
+      .getOrElse(Map.empty[String, AttributeValue])
+    val passes = evaluateCondition(condition, names, values, existing)
+    if (!passes)
+      failed(
+        ConditionalCheckFailedException
+          .builder()
+          .message("condition failed")
+          .build()
+      )
+    else {
+      store.updateAndGet(current => current + (key -> item))
+      completed(PutItemResponse.builder().build())
+    }
+  }
+
+  override def getItem(request: GetItemRequest): CompletableFuture[GetItemResponse] = {
+    getItemCount.incrementAndGet()
+    val key = request.key().asScala.toMap
+    val itemKey =
+      ItemKey(key.get("pk").map(_.s()).getOrElse(""), key.get("sk").map(_.s()).getOrElse(""))
+    store.get.get(itemKey) match {
+      case None =>
+        completed(GetItemResponse.builder().build())
+      case Some(attrs) =>
+        completed(GetItemResponse.builder().item(attrs.asJava).build())
+    }
+  }
+
+  override def query(request: QueryRequest): CompletableFuture[QueryResponse] = {
+    queryCount.incrementAndGet()
+    val values = Option(request.expressionAttributeValues())
+      .map(_.asScala.toMap)
+      .getOrElse(Map.empty[String, AttributeValue])
+    val pk = values.get(":pk").map(_.s()).getOrElse("")
+    val items = store.get.collect {
+      case (k, attrs) if k.pk == pk => attrs
+    }.toList
+    val sorted = items.sortBy(_.getOrElse("sk", AttributeValue.builder().s("").build()).s())
+    completed(
+      QueryResponse
+        .builder()
+        .items(sorted.map(_.asJava).asJava)
+        .build()
+    )
+  }
+
+  override def transactWriteItems(
+      request: TransactWriteItemsRequest
+  ): CompletableFuture[TransactWriteItemsResponse] = {
+    beforeTransactWrite.get.apply()
+    transactWriteCount.incrementAndGet()
+    val items = request.transactItems().asScala.toList
+    val snapshot = store.get
+
+    val evaluations: List[Either[CancellationReason, Map[ItemKey, Option[Map[String, AttributeValue]]]]] =
+      items.map { tw =>
+        if (tw.put() != null) {
+          val put = tw.put()
+          val item = put.item().asScala.toMap
+          val key = extractKey(item, Map.empty)
+          val existing = snapshot.get(key)
+          val condition = Option(put.conditionExpression())
+          val names = Option(put.expressionAttributeNames())
+            .map(_.asScala.toMap)
+            .getOrElse(Map.empty[String, String])
+          val values = Option(put.expressionAttributeValues())
+            .map(_.asScala.toMap)
+            .getOrElse(Map.empty[String, AttributeValue])
+          if (evaluateCondition(condition, names, values, existing))
+            Right(Map(key -> Some(item)))
+          else
+            Left(
+              CancellationReason
+                .builder()
+                .code("ConditionalCheckFailed")
+                .message("put condition failed")
+                .build()
+            )
+        } else if (tw.delete() != null) {
+          val del = tw.delete()
+          val key = extractKey(Map.empty, del.key().asScala.toMap)
+          val existing = snapshot.get(key)
+          val condition = Option(del.conditionExpression())
+          val names = Option(del.expressionAttributeNames())
+            .map(_.asScala.toMap)
+            .getOrElse(Map.empty[String, String])
+          val values = Option(del.expressionAttributeValues())
+            .map(_.asScala.toMap)
+            .getOrElse(Map.empty[String, AttributeValue])
+          if (evaluateCondition(condition, names, values, existing))
+            Right(Map(key -> None))
+          else
+            Left(
+              CancellationReason
+                .builder()
+                .code("ConditionalCheckFailed")
+                .message("delete condition failed")
+                .build()
+            )
+        } else if (tw.conditionCheck() != null) {
+          val cc = tw.conditionCheck()
+          val key = extractKey(Map.empty, cc.key().asScala.toMap)
+          val existing = snapshot.get(key)
+          val condition = Option(cc.conditionExpression())
+          val names = Option(cc.expressionAttributeNames())
+            .map(_.asScala.toMap)
+            .getOrElse(Map.empty[String, String])
+          val values = Option(cc.expressionAttributeValues())
+            .map(_.asScala.toMap)
+            .getOrElse(Map.empty[String, AttributeValue])
+          if (evaluateCondition(condition, names, values, existing))
+            Right(Map.empty)
+          else
+            Left(
+              CancellationReason
+                .builder()
+                .code("ConditionalCheckFailed")
+                .message("condition check failed")
+                .build()
+            )
+        } else if (tw.update() != null) {
+          Left(
+            CancellationReason
+              .builder()
+              .code("NotSupported")
+              .message("update not supported in fake")
+              .build()
+          )
+        } else {
+          Left(
+            CancellationReason
+              .builder()
+              .code("None")
+              .message("empty transact write item")
+              .build()
+          )
+        }
+      }
+
+    if (evaluations.exists(_.isLeft)) {
+      val reasons = evaluations.map {
+        case Right(_) =>
+          CancellationReason.builder().code("None").build()
+        case Left(r) => r
+      }
+      failed(
+        TransactionCanceledException
+          .builder()
+          .message("transaction cancelled")
+          .cancellationReasons(reasons.asJava)
+          .build()
+      )
+    } else {
+      val mutations = evaluations.collect { case Right(m) => m }.flatten.toMap
+      store.updateAndGet { current =>
+        mutations.foldLeft(current) {
+          case (acc, (key, Some(attrs))) => acc + (key -> attrs)
+          case (acc, (key, None))        => acc - key
+        }
+      }
+      completed(TransactWriteItemsResponse.builder().build())
+    }
+  }
+
+  private def evaluateCondition(
+      expression: Option[String],
+      names: Map[String, String],
+      values: Map[String, AttributeValue],
+      existing: Option[Map[String, AttributeValue]]
+  ): Boolean = expression match {
+    case None => true
+    case Some(expr) =>
+      val trimmed = expr.trim
+      if (trimmed == "attribute_not_exists(#pk)")
+        existing.isEmpty
+      else if (trimmed == "#ver = :ver") {
+        val expected = values(":ver").n()
+        existing.exists(attrs => attrs.get("ver").exists(_.n() == expected))
+      } else
+        throw new RuntimeException(s"unsupported condition expression: $expr")
+  }
+
+}

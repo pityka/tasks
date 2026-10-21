@@ -247,6 +247,23 @@ lazy val postgres = project
   )
   .dependsOn(core)
 
+lazy val dynamo = project
+  .in(file("dynamo"))
+  .settings(commonSettings: _*)
+  .settings(
+    name := "tasks-dynamo",
+    libraryDependencies ++= Seq(
+      "software.amazon.awssdk" % "dynamodb" % "2.28.0", // scala-steward:off
+      "software.amazon.awssdk" % "sso" % "2.28.0" % "test", // scala-steward:off
+      "software.amazon.awssdk" % "ssooidc" % "2.28.0" % "test", // scala-steward:off
+      "org.typelevel" %% "cats-effect-testkit" % "3.6.3" % "test",
+      "org.scalatest" %% "scalatest" % "3.2.19" % "test",
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test"
+    )
+  )
+  .dependsOn(core)
+
 lazy val kubernetes = project
   .in(file("kubernetes"))
   .settings(commonSettings: _*)
@@ -327,6 +344,7 @@ lazy val root = (project in file("."))
     batch,
     ecs,
     s3,
+    dynamo,
     kubernetes,
     kubernetesTest,
     example,
@@ -345,6 +363,7 @@ lazy val testables = (project in file("testables"))
     circe,
     sharedJVM,
     s3,
+    dynamo,
     batch,
     ecs
   )
