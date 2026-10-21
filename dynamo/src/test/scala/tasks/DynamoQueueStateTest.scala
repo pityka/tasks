@@ -108,7 +108,6 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
           knownLaunchers = Map(LauncherName("competitor") -> None),
           counters = Map.empty,
           nodes = NodeRegistryState.State.empty,
-          completedResults = Map.empty,
           mainProcesses = Set.empty,
           ver = 1L
         )
@@ -250,7 +249,6 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
           knownLaunchers = Map(LauncherName("race") -> None),
           counters = Map.empty,
           nodes = NodeRegistryState.State.empty,
-          completedResults = Map.empty,
           mainProcesses = Set.empty,
           ver = 1L
         )

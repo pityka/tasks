@@ -19,9 +19,13 @@ private[tasks] object DynamoDiff {
   import DynamoQueueState.StatusQueued
   import DynamoQueueState.StatusScheduled
   import DynamoQueueState.TasksPartitionKey
+  import DynamoQueueState.ResultsPartitionKey
   import DynamoQueueState.ResourcesPartitionKey
   import DynamoQueueState.ResourcesSortKey
   import DynamoQueueState.MaxOpsPerTransaction
+  import DynamoQueueState.ChunkPayloadBytes
+  import DynamoQueueState.ChunkIndexWidth
+  import DynamoQueueState.ChunkSeparator
 
   case class TaskItemFields(
       sch: ScheduleTask,
@@ -36,7 +40,6 @@ private[tasks] object DynamoDiff {
       knownLaunchers: Map[LauncherName, Option[Node]],
       counters: Map[LauncherName, Long],
       nodes: NodeRegistryState.State,
-      completedResults: Map[Address, ProxyResult],
       mainProcesses: Set[String]
   )
 
@@ -120,7 +123,6 @@ private[tasks] object DynamoDiff {
       knownLaunchers: Map[LauncherName, Option[Node]],
       counters: Map[LauncherName, Long],
       nodes: NodeRegistryState.State,
-      completedResults: Map[Address, ProxyResult],
       mainProcesses: Set[String],
       ver: Long
   ): Map[String, AttributeValue] = {
@@ -130,10 +132,6 @@ private[tasks] object DynamoDiff {
       }
     val countersMap: Map[String, AttributeValue] =
       counters.map { case (name, value) => name.name -> n(value) }
-    val completedMap: Map[String, AttributeValue] =
-      completedResults.map { case (address, result) =>
-        address.value -> b(encode(result))
-      }
     val mainProcList: List[AttributeValue] =
       mainProcesses.toList.sorted.map(s)
     Map(
@@ -142,7 +140,6 @@ private[tasks] object DynamoDiff {
       Attr.KnownLaunchers -> m(knownLaunchersMap),
       Attr.Counters -> m(countersMap),
       Attr.Nodes -> b(encode(nodes)),
-      Attr.CompletedResults -> m(completedMap),
       Attr.MainProcesses -> l(mainProcList),
       Attr.Ver -> n(ver)
     )
@@ -170,14 +167,6 @@ private[tasks] object DynamoDiff {
         }
     val nodes: NodeRegistryState.State =
       decode[NodeRegistryState.State](attrs(Attr.Nodes).b().asByteArray())
-    val completedResults: Map[Address, ProxyResult] =
-      attrs(Attr.CompletedResults)
-        .m()
-        .asScala
-        .toMap
-        .map { case (addr, av) =>
-          Address(addr) -> decode[ProxyResult](av.b().asByteArray())
-        }
     val mainProcesses: Set[String] =
       attrs(Attr.MainProcesses).l().asScala.toList.map(_.s()).toSet
     val ver = attrs(Attr.Ver).n().toLong
@@ -186,15 +175,71 @@ private[tasks] object DynamoDiff {
         knownLaunchers = knownLaunchers,
         counters = counters,
         nodes = nodes,
-        completedResults = completedResults,
         mainProcesses = mainProcesses
       ),
       ver
     )
   }
 
+  private val chunkIndexFormat: String = "%0" + ChunkIndexWidth + "d"
+
+  private[tasks] def chunkSk(addressValue: String, index: Int): String =
+    addressValue + ChunkSeparator + chunkIndexFormat.format(index)
+
+  private[tasks] def parseAddressFromSk(sk: String): String =
+    sk.substring(0, sk.lastIndexOf(ChunkSeparator))
+
+  private[tasks] def splitIntoChunks(bytes: Array[Byte]): List[Array[Byte]] =
+    if (bytes.length <= ChunkPayloadBytes) List(bytes)
+    else bytes.grouped(ChunkPayloadBytes).toList
+
+  private[tasks] def completedResultChunks(
+      completedResults: Map[Address, ProxyResult]
+  ): Map[String, Array[Byte]] =
+    completedResults.flatMap { case (address, result) =>
+      val serialized = encode(result)
+      splitIntoChunks(serialized).zipWithIndex.map { case (chunk, i) =>
+        chunkSk(address.value, i) -> chunk
+      }
+    }
+
+  def encodeResultChunkAttrs(
+      sk: String,
+      chunk: Array[Byte],
+      ver: Long
+  ): Map[String, AttributeValue] = Map(
+    Attr.Pk -> s(ResultsPartitionKey),
+    Attr.Sk -> s(sk),
+    Attr.Blob -> b(chunk),
+    Attr.Ver -> n(ver)
+  )
+
+  def decodeResultChunkItem(
+      item: java.util.Map[String, AttributeValue]
+  ): (String, (Array[Byte], Long)) = {
+    val attrs = item.asScala
+    val sk = attrs(Attr.Sk).s()
+    val chunk = attrs(Attr.Blob).b().asByteArray()
+    val ver = attrs(Attr.Ver).n().toLong
+    (sk, (chunk, ver))
+  }
+
+  def assembleCompletedResults(
+      chunkMap: Map[String, (Array[Byte], Long)]
+  ): Map[Address, ProxyResult] = {
+    val byAddress =
+      chunkMap.toList.groupBy { case (sk, _) => parseAddressFromSk(sk) }
+    byAddress.map { case (addressValue, entries) =>
+      val sorted = entries.sortBy(_._1)
+      val fullBytes =
+        sorted.flatMap { case (_, (bytes, _)) => bytes }.toArray
+      Address(addressValue) -> decode[ProxyResult](fullBytes)
+    }
+  }
+
   def assembleState(
       taskMap: Map[String, (ScheduleTask, TaskItemFields, Long)],
+      completedResults: Map[Address, ProxyResult],
       resources: ResourcesFields
   ): State = {
     val queuedTasks = taskMap.values
@@ -221,7 +266,7 @@ private[tasks] object DynamoDiff {
       knownLaunchers = resources.knownLaunchers,
       counters = resources.counters,
       nodes = resources.nodes,
-      completedResults = resources.completedResults,
+      completedResults = completedResults,
       mainProcesses = resources.mainProcesses
     )
   }
@@ -258,7 +303,6 @@ private[tasks] object DynamoDiff {
       knownLaunchers = state.knownLaunchers,
       counters = state.counters,
       nodes = state.nodes,
-      completedResults = state.completedResults,
       mainProcesses = state.mainProcesses
     )
 
@@ -328,7 +372,6 @@ private[tasks] object DynamoDiff {
       knownLaunchers = resources.knownLaunchers,
       counters = resources.counters,
       nodes = resources.nodes,
-      completedResults = resources.completedResults,
       mainProcesses = resources.mainProcesses,
       ver = newVer
     )
@@ -341,6 +384,59 @@ private[tasks] object DynamoDiff {
       .expressionAttributeValues(Map(":ver" -> n(baseVer)).asJava)
       .build()
     TransactWriteItem.builder().put(put).build()
+  }
+
+  private def putNewResultChunk(
+      table: String,
+      sk: String,
+      chunk: Array[Byte]
+  ): TransactWriteItem = {
+    val put = Put
+      .builder()
+      .tableName(table)
+      .item(encodeResultChunkAttrs(sk, chunk, 1L).asJava)
+      .conditionExpression("attribute_not_exists(#pk)")
+      .expressionAttributeNames(Map("#pk" -> Attr.Pk).asJava)
+      .build()
+    TransactWriteItem.builder().put(put).build()
+  }
+
+  private def updateResultChunk(
+      table: String,
+      sk: String,
+      chunk: Array[Byte],
+      baseVer: Long
+  ): TransactWriteItem = {
+    val put = Put
+      .builder()
+      .tableName(table)
+      .item(encodeResultChunkAttrs(sk, chunk, baseVer + 1).asJava)
+      .conditionExpression("#ver = :ver")
+      .expressionAttributeNames(Map("#ver" -> Attr.Ver).asJava)
+      .expressionAttributeValues(Map(":ver" -> n(baseVer)).asJava)
+      .build()
+    TransactWriteItem.builder().put(put).build()
+  }
+
+  private def deleteResultChunk(
+      table: String,
+      sk: String,
+      baseVer: Long
+  ): TransactWriteItem = {
+    val del = Delete
+      .builder()
+      .tableName(table)
+      .key(
+        Map(
+          Attr.Pk -> s(ResultsPartitionKey),
+          Attr.Sk -> s(sk)
+        ).asJava
+      )
+      .conditionExpression("#ver = :ver")
+      .expressionAttributeNames(Map("#ver" -> Attr.Ver).asJava)
+      .expressionAttributeValues(Map(":ver" -> n(baseVer)).asJava)
+      .build()
+    TransactWriteItem.builder().delete(del).build()
   }
 
   private def resourcesConditionCheck(
@@ -368,13 +464,14 @@ private[tasks] object DynamoDiff {
       oldState: State,
       newState: State,
       baseTaskVersions: Map[String, Long],
+      baseResultChunkVersions: Map[String, Long],
       baseResourcesVersion: Long
   ): Plan = {
     val oldItems = taskItemsOf(oldState)
     val newItems = taskItemsOf(newState)
-    val allKeys = oldItems.keySet ++ newItems.keySet
+    val allTaskKeys = oldItems.keySet ++ newItems.keySet
 
-    val taskOps: List[TransactWriteItem] = allKeys.toList.sorted.flatMap { sk =>
+    val taskOps: List[TransactWriteItem] = allTaskKeys.toList.sorted.flatMap { sk =>
       (oldItems.get(sk), newItems.get(sk)) match {
         case (Some(_), None) =>
           val baseVer = baseTaskVersions.getOrElse(sk, 0L)
@@ -388,6 +485,28 @@ private[tasks] object DynamoDiff {
         case (None, None) => None
       }
     }
+
+    val oldResultChunks = completedResultChunks(oldState.completedResults)
+    val newResultChunks = completedResultChunks(newState.completedResults)
+    val allResultKeys = oldResultChunks.keySet ++ newResultChunks.keySet
+
+    val resultOps: List[TransactWriteItem] =
+      allResultKeys.toList.sorted.flatMap { sk =>
+        (oldResultChunks.get(sk), newResultChunks.get(sk)) match {
+          case (Some(_), None) =>
+            val baseVer = baseResultChunkVersions.getOrElse(sk, 0L)
+            Some(deleteResultChunk(table, sk, baseVer))
+          case (None, Some(chunk)) =>
+            Some(putNewResultChunk(table, sk, chunk))
+          case (Some(oldChunk), Some(newChunk))
+              if java.util.Arrays.equals(oldChunk, newChunk) =>
+            None
+          case (Some(_), Some(chunk)) =>
+            val baseVer = baseResultChunkVersions.getOrElse(sk, 0L)
+            Some(updateResultChunk(table, sk, chunk, baseVer))
+          case (None, None) => None
+        }
+      }
 
     val oldResources = resourcesOf(oldState)
     val newResources = resourcesOf(newState)
@@ -405,32 +524,29 @@ private[tasks] object DynamoDiff {
         )
       else None
 
-    if (taskOps.isEmpty && resourcesOp.isEmpty) Plan(Nil)
+    val barrierOps = taskOps ++ resultOps
+
+    if (barrierOps.isEmpty && resourcesOp.isEmpty) Plan(Nil)
     else {
-      val taskChunks: List[List[TransactWriteItem]] =
-        if (taskOps.isEmpty) Nil
-        else {
-          val chunkSize =
-            if (resourcesOp.isDefined) MaxOpsPerTransaction - 2
-            else MaxOpsPerTransaction - 1
-          taskOps.grouped(math.max(1, chunkSize)).toList
+      val perChunkSize =
+        if (resourcesOp.isDefined) MaxOpsPerTransaction - 2
+        else MaxOpsPerTransaction - 1
+      val dataChunks: List[List[TransactWriteItem]] =
+        if (barrierOps.isEmpty) Nil
+        else barrierOps.grouped(math.max(1, perChunkSize)).toList
+
+      val barrier = resourcesConditionCheck(table, baseResourcesVersion)
+
+      val middleChunks: List[List[TransactWriteItem]] =
+        (resourcesOp, dataChunks) match {
+          case (_, Nil) => Nil
+          case (None, chunks) =>
+            chunks.map(chunk => chunk :+ barrier)
+          case (Some(resPut), chunks) =>
+            val init = chunks.init
+            val last = chunks.last
+            init.map(chunk => chunk :+ barrier) :+ (last :+ resPut)
         }
-
-      val resourcesBarrier =
-        if (taskChunks.nonEmpty && resourcesOp.isEmpty)
-          resourcesConditionCheck(table, baseResourcesVersion)
-        else
-          resourcesConditionCheck(table, baseResourcesVersion)
-
-      val middleChunks: List[List[TransactWriteItem]] = (resourcesOp, taskChunks) match {
-        case (_, Nil) => Nil
-        case (None, chunks) =>
-          chunks.map(chunk => chunk :+ resourcesBarrier)
-        case (Some(resPut), chunks) =>
-          val init = chunks.init
-          val last = chunks.last
-          init.map(chunk => chunk :+ resourcesBarrier) :+ (last :+ resPut)
-      }
 
       val finalChunks: List[List[TransactWriteItem]] =
         if (middleChunks.isEmpty && resourcesOp.isDefined)

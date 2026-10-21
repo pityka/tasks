@@ -16,7 +16,12 @@ class DynamoReadCacheTest extends FunSuite with Matchers {
 
   private val tableName = "cache-table"
 
-  test("repeated get() calls within the TTL hit the cache (one Query)") {
+  // Each load does two Query calls (tasks partition + results partition) plus
+  // one GetItem for the resources singleton.
+  private val queriesPerLoad = 2
+  private val getItemsPerLoad = 1
+
+  test("repeated get() calls within the TTL hit the cache (one load)") {
     val client = new FakeDynamoDbAsyncClient(tableName)
     DynamoQueueState
       .makeTransaction(
@@ -29,11 +34,11 @@ class DynamoReadCacheTest extends FunSuite with Matchers {
         tx.get *> tx.get *> tx.get
       }
       .unsafeRunSync()
-    client.queryCount.get shouldBe 1
-    client.getItemCount.get shouldBe 1
+    client.queryCount.get shouldBe queriesPerLoad
+    client.getItemCount.get shouldBe getItemsPerLoad
   }
 
-  test("get() after the TTL expires re-queries") {
+  test("get() after the TTL expires re-loads") {
     val client = new FakeDynamoDbAsyncClient(tableName)
     DynamoQueueState
       .makeTransaction(
@@ -46,11 +51,11 @@ class DynamoReadCacheTest extends FunSuite with Matchers {
         tx.get *> IO.sleep(50.milliseconds) *> tx.get
       }
       .unsafeRunSync()
-    client.queryCount.get shouldBe 2
-    client.getItemCount.get shouldBe 2
+    client.queryCount.get shouldBe queriesPerLoad * 2
+    client.getItemCount.get shouldBe getItemsPerLoad * 2
   }
 
-  test("flatModify invalidates the cache so the next get() re-queries") {
+  test("flatModify invalidates the cache so the next get() re-loads") {
     val client = new FakeDynamoDbAsyncClient(tableName)
     DynamoQueueState
       .makeTransaction(
@@ -69,7 +74,7 @@ class DynamoReadCacheTest extends FunSuite with Matchers {
           ) *> tx.get
       }
       .unsafeRunSync()
-    client.queryCount.get shouldBe 2
+    client.queryCount.get shouldBe queriesPerLoad * 2
   }
 
   test("flatModify that produces no diff does not invalidate the cache") {
@@ -86,7 +91,7 @@ class DynamoReadCacheTest extends FunSuite with Matchers {
           tx.flatModify(state => (state, IO.unit)) *> tx.get
       }
       .unsafeRunSync()
-    client.queryCount.get shouldBe 1
+    client.queryCount.get shouldBe queriesPerLoad
     client.transactWriteCount.get shouldBe 0
   }
 

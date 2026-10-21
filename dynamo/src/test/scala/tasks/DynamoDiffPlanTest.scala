@@ -38,6 +38,7 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
       oldState = State.empty,
       newState = State.empty,
       baseTaskVersions = Map.empty,
+      baseResultChunkVersions = Map.empty,
       baseResourcesVersion = 0L
     )
     plan.chunks shouldBe empty
@@ -51,6 +52,7 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
         QueueImpl.LauncherJoined(LauncherName("l"), None)
       ),
       baseTaskVersions = Map.empty,
+      baseResultChunkVersions = Map.empty,
       baseResourcesVersion = 0L
     )
     plan.chunks.size shouldBe 1
@@ -70,6 +72,7 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
       oldState = State.empty,
       newState = newState,
       baseTaskVersions = Map.empty,
+      baseResultChunkVersions = Map.empty,
       baseResourcesVersion = 0L
     )
     plan.chunks.size shouldBe 1
@@ -86,6 +89,7 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
       oldState = State.empty,
       newState = State.empty.update(QueueImpl.Enqueued(sch, List(proxy))),
       baseTaskVersions = Map.empty,
+      baseResultChunkVersions = Map.empty,
       baseResourcesVersion = 5L
     )
     plan.chunks.size shouldBe 1
@@ -111,6 +115,7 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
       oldState = State.empty,
       newState = newState,
       baseTaskVersions = Map.empty,
+      baseResultChunkVersions = Map.empty,
       baseResourcesVersion = 0L
     )
     plan.chunks.size should be > 1
@@ -145,6 +150,7 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
       oldState = oldState,
       newState = State.empty,
       baseTaskVersions = Map(sch.description.hash -> baseVer),
+      baseResultChunkVersions = Map.empty,
       baseResourcesVersion = 0L
     )
     plan.chunks.size shouldBe 1
@@ -168,6 +174,7 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
       oldState = oldState,
       newState = newState,
       baseTaskVersions = Map(sch.description.hash -> baseVer),
+      baseResultChunkVersions = Map.empty,
       baseResourcesVersion = 0L
     )
     val putOp = plan.chunks.head.find(op =>
@@ -189,6 +196,7 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
       oldState = State.empty,
       newState = State.empty.update(QueueImpl.Enqueued(sch, List(proxy))),
       baseTaskVersions = Map.empty,
+      baseResultChunkVersions = Map.empty,
       baseResourcesVersion = 0L
     )
     val putOp = plan.chunks.head.find(op =>

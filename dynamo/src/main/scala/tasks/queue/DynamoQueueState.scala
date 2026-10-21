@@ -29,11 +29,16 @@ object DynamoQueueState {
   private[tasks] val MaxOpsPerTransaction: Int = 100
 
   private[tasks] val TasksPartitionKey: String = "tasks"
+  private[tasks] val ResultsPartitionKey: String = "results"
   private[tasks] val ResourcesPartitionKey: String = "resources"
   private[tasks] val ResourcesSortKey: String = "singleton"
 
   private[tasks] val StatusQueued: String = "Q"
   private[tasks] val StatusScheduled: String = "S"
+
+  private[tasks] val ChunkPayloadBytes: Int = 300 * 1024
+  private[tasks] val ChunkIndexWidth: Int = 6
+  private[tasks] val ChunkSeparator: String = "#"
 
   private[tasks] object Attr {
     val Pk = "pk"
@@ -50,6 +55,7 @@ object DynamoQueueState {
     val Nodes = "nodes"
     val CompletedResults = "completedResults"
     val MainProcesses = "mainProcesses"
+    val Blob = "blob"
   }
 
   def clientResource(region: Region): Resource[IO, DynamoDbAsyncClient] =
@@ -145,6 +151,7 @@ object DynamoQueueState {
   private[tasks] case class Cached(
       state: State,
       taskVersions: Map[String, Long],
+      resultChunkVersions: Map[String, Long],
       resourcesVersion: Long,
       confirmedAtNanos: Long
   )
@@ -233,7 +240,6 @@ object DynamoQueueState {
         knownLaunchers = Map.empty,
         counters = Map.empty,
         nodes = NodeRegistryState.State.empty,
-        completedResults = Map.empty,
         mainProcesses = Set.empty,
         ver = 0L
       )
@@ -259,18 +265,18 @@ object DynamoQueueState {
       readMutex: Mutex[IO]
   ) extends Transaction[State] {
 
-    private def queryAllTasks: IO[Map[String, (ScheduleTask, DynamoDiff.TaskItemFields, Long)]] = {
+    private def queryPartition(pk: String): IO[List[java.util.Map[String, AttributeValue]]] = {
       def loop(
           startKey: Option[java.util.Map[String, AttributeValue]],
-          acc: Map[String, (ScheduleTask, DynamoDiff.TaskItemFields, Long)]
-      ): IO[Map[String, (ScheduleTask, DynamoDiff.TaskItemFields, Long)]] = {
+          acc: List[java.util.Map[String, AttributeValue]]
+      ): IO[List[java.util.Map[String, AttributeValue]]] = {
         val requestBuilder = QueryRequest
           .builder()
           .tableName(table)
           .keyConditionExpression("#pk = :pk")
           .expressionAttributeNames(Map("#pk" -> Attr.Pk).asJava)
           .expressionAttributeValues(
-            Map(":pk" -> AttributeValue.builder().s(TasksPartitionKey).build()).asJava
+            Map(":pk" -> AttributeValue.builder().s(pk).build()).asJava
           )
           .consistentRead(true)
         val request = startKey match {
@@ -279,14 +285,24 @@ object DynamoQueueState {
         }
         IO.fromCompletableFuture(IO(client.query(request))).flatMap { response =>
           val items = response.items().asScala.toList
-          val next = acc ++ items.map(DynamoDiff.decodeTaskItem).toMap
+          val next = acc ++ items
           if (response.hasLastEvaluatedKey && !response.lastEvaluatedKey().isEmpty)
             loop(Some(response.lastEvaluatedKey()), next)
           else IO.pure(next)
         }
       }
-      loop(None, Map.empty)
+      loop(None, Nil)
     }
+
+    private def queryAllTasks: IO[Map[String, (ScheduleTask, DynamoDiff.TaskItemFields, Long)]] =
+      queryPartition(TasksPartitionKey).map(items =>
+        items.map(DynamoDiff.decodeTaskItem).toMap
+      )
+
+    private def queryAllResultChunks: IO[Map[String, (Array[Byte], Long)]] =
+      queryPartition(ResultsPartitionKey).map(items =>
+        items.map(DynamoDiff.decodeResultChunkItem).toMap
+      )
 
     private def getResources: IO[(DynamoDiff.ResourcesFields, Long)] = {
       val request = GetItemRequest
@@ -308,7 +324,6 @@ object DynamoQueueState {
               knownLaunchers = Map.empty,
               counters = Map.empty,
               nodes = NodeRegistryState.State.empty,
-              completedResults = Map.empty,
               mainProcesses = Set.empty
             ),
             0L
@@ -316,37 +331,41 @@ object DynamoQueueState {
       }
     }
 
-    private def forceRead: IO[(State, Map[String, Long], Long)] = for {
+    private def forceRead: IO[(State, Map[String, Long], Map[String, Long], Long)] = for {
       taskMap <- queryAllTasks
+      resultChunkMap <- queryAllResultChunks
       resourcesPair <- getResources
       now <- IO.monotonic
-      state = DynamoDiff.assembleState(taskMap, resourcesPair._1)
+      completedResults = DynamoDiff.assembleCompletedResults(resultChunkMap)
+      state = DynamoDiff.assembleState(taskMap, completedResults, resourcesPair._1)
       taskVersions = taskMap.map { case (sk, (_, _, ver)) => sk -> ver }
+      resultChunkVersions = resultChunkMap.map { case (sk, (_, ver)) => sk -> ver }
       _ <- cached.set(
         Some(
           Cached(
             state = state,
             taskVersions = taskVersions,
+            resultChunkVersions = resultChunkVersions,
             resourcesVersion = resourcesPair._2,
             confirmedAtNanos = now.toNanos
           )
         )
       )
-    } yield (state, taskVersions, resourcesPair._2)
+    } yield (state, taskVersions, resultChunkVersions, resourcesPair._2)
 
-    private def readLatest: IO[(State, Map[String, Long], Long)] =
+    private def readLatest: IO[(State, Map[String, Long], Map[String, Long], Long)] =
       IO.monotonic.flatMap { now =>
         cached.get.flatMap {
           case Some(c)
               if now.toNanos - c.confirmedAtNanos <= readCacheTtl.toNanos =>
-            IO.pure((c.state, c.taskVersions, c.resourcesVersion))
+            IO.pure((c.state, c.taskVersions, c.resultChunkVersions, c.resourcesVersion))
           case _ =>
             readMutex.lock.surround {
               IO.monotonic.flatMap { now2 =>
                 cached.get.flatMap {
                   case Some(c)
                       if now2.toNanos - c.confirmedAtNanos <= readCacheTtl.toNanos =>
-                    IO.pure((c.state, c.taskVersions, c.resourcesVersion))
+                    IO.pure((c.state, c.taskVersions, c.resultChunkVersions, c.resourcesVersion))
                   case _ => forceRead
                 }
               }
@@ -379,7 +398,7 @@ object DynamoQueueState {
     override def flatModify[B](update: State => (State, IO[B])): IO[B] = {
       def commit(attempt: Int): IO[IO[B]] =
         readLatest.flatMap {
-          case (baseState, baseTaskVersions, baseResourcesVersion) =>
+          case (baseState, baseTaskVersions, baseResultChunkVersions, baseResourcesVersion) =>
             val (newState, sideEffect) = update(baseState)
             if (newState == baseState) IO.pure(sideEffect)
             else {
@@ -388,6 +407,7 @@ object DynamoQueueState {
                 oldState = baseState,
                 newState = newState,
                 baseTaskVersions = baseTaskVersions,
+                baseResultChunkVersions = baseResultChunkVersions,
                 baseResourcesVersion = baseResourcesVersion
               )
               if (plan.chunks.isEmpty) IO.pure(sideEffect)

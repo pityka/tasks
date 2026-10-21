@@ -160,12 +160,6 @@ class DynamoCodecRoundTripTest extends FunSuite with Matchers {
       knownLaunchers = Map(launcherA -> Some(node), launcherB -> None),
       counters = Map(launcherA -> 7L, launcherB -> 11L),
       nodes = nodes,
-      completedResults = Map(
-        Address("c-1") -> QueueImpl.ProxyResultSuccess(
-          SchedulerFixtures.untypedResult(),
-          retrievedFromCache = false
-        )
-      ),
       mainProcesses = Set("session-x", "session-y"),
       ver = 99L
     )
@@ -177,7 +171,6 @@ class DynamoCodecRoundTripTest extends FunSuite with Matchers {
     fields.counters shouldBe Map(launcherA -> 7L, launcherB -> 11L)
     fields.nodes shouldBe nodes
     fields.mainProcesses shouldBe Set("session-x", "session-y")
-    fields.completedResults.keySet shouldBe Set(Address("c-1"))
   }
 
 }
