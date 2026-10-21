@@ -57,19 +57,35 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
 
   override def putItem(request: PutItemRequest): CompletableFuture[PutItemResponse] = this.synchronized {
     putItemCount.incrementAndGet()
+    if (request.hasExpressionAttributeNames && request.expressionAttributeNames().isEmpty)
+      return failed(
+        DynamoDbException
+          .builder()
+          .statusCode(400)
+          .message("ExpressionAttributeNames must not be empty")
+          .build()
+      )
+    if (request.hasExpressionAttributeValues && request.expressionAttributeValues().isEmpty)
+      return failed(
+        DynamoDbException
+          .builder()
+          .statusCode(400)
+          .message("ExpressionAttributeValues must not be empty")
+          .build()
+      )
     if (request.tableName() != tableName)
       return failed(new RuntimeException(s"wrong table: ${request.tableName()}"))
     val item = request.item().asScala.toMap
     val key = extractKey(item, Map.empty)
     val existing = store.get.get(key)
     val condition = Option(request.conditionExpression())
-    val names = Option(request.expressionAttributeNames())
+    val namesMap = Option(request.expressionAttributeNames())
       .map(_.asScala.toMap)
       .getOrElse(Map.empty[String, String])
-    val values = Option(request.expressionAttributeValues())
+    val valuesMap = Option(request.expressionAttributeValues())
       .map(_.asScala.toMap)
       .getOrElse(Map.empty[String, AttributeValue])
-    val passes = evaluateCondition(condition, names, values, existing)
+    val passes = evaluateCondition(condition, namesMap, valuesMap, existing)
     if (!passes)
       failed(
         ConditionalCheckFailedException
@@ -120,6 +136,53 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
     beforeTransactWrite.get.apply()
     transactWriteCount.incrementAndGet()
     val items = request.transactItems().asScala.toList
+    val emptyMapFailure = items.flatMap { tw =>
+      def check(
+          hasNames: Boolean,
+          names: java.util.Map[String, String],
+          hasValues: Boolean,
+          values: java.util.Map[String, AttributeValue]
+      ): Option[String] = {
+        if (hasNames && names.isEmpty)
+          Some("ExpressionAttributeNames must not be empty")
+        else if (hasValues && values.isEmpty)
+          Some("ExpressionAttributeValues must not be empty")
+        else None
+      }
+      if (tw.put() != null)
+        check(
+          tw.put().hasExpressionAttributeNames,
+          tw.put().expressionAttributeNames(),
+          tw.put().hasExpressionAttributeValues,
+          tw.put().expressionAttributeValues()
+        )
+      else if (tw.delete() != null)
+        check(
+          tw.delete().hasExpressionAttributeNames,
+          tw.delete().expressionAttributeNames(),
+          tw.delete().hasExpressionAttributeValues,
+          tw.delete().expressionAttributeValues()
+        )
+      else if (tw.conditionCheck() != null)
+        check(
+          tw.conditionCheck().hasExpressionAttributeNames,
+          tw.conditionCheck().expressionAttributeNames(),
+          tw.conditionCheck().hasExpressionAttributeValues,
+          tw.conditionCheck().expressionAttributeValues()
+        )
+      else None
+    }.headOption
+    emptyMapFailure match {
+      case Some(msg) =>
+        return failed(
+          DynamoDbException
+            .builder()
+            .statusCode(400)
+            .message(msg)
+            .build()
+        )
+      case None => ()
+    }
     val snapshot = store.get
 
     val evaluations: List[Either[CancellationReason, Map[ItemKey, Option[Map[String, AttributeValue]]]]] =

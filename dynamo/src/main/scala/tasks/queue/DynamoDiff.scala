@@ -265,28 +265,36 @@ private[tasks] object DynamoDiff {
   private def resourcesEqual(a: ResourcesFields, b: ResourcesFields): Boolean =
     a == b
 
-  private def putTaskItem(
+  private def putNewTaskItem(
+      table: String,
+      sk: String,
+      item: TaskItemFields
+  ): TransactWriteItem = {
+    val put = Put
+      .builder()
+      .tableName(table)
+      .item(encodeTaskAttrs(sk, item, 1L).asJava)
+      .conditionExpression("attribute_not_exists(#pk)")
+      .expressionAttributeNames(Map("#pk" -> Attr.Pk).asJava)
+      .build()
+    TransactWriteItem.builder().put(put).build()
+  }
+
+  private def updateTaskItem(
       table: String,
       sk: String,
       item: TaskItemFields,
-      ver: Long,
-      condition: Option[(String, Map[String, AttributeValue])]
+      baseVer: Long
   ): TransactWriteItem = {
-    val builder = Put
+    val put = Put
       .builder()
       .tableName(table)
-      .item(encodeTaskAttrs(sk, item, ver).asJava)
-    val configured = condition match {
-      case None => builder
-      case Some((expr, values)) =>
-        builder
-          .conditionExpression(expr)
-          .expressionAttributeNames(
-            Map("#ver" -> Attr.Ver, "#pk" -> Attr.Pk).asJava
-          )
-          .expressionAttributeValues(values.asJava)
-    }
-    TransactWriteItem.builder().put(configured.build()).build()
+      .item(encodeTaskAttrs(sk, item, baseVer + 1).asJava)
+      .conditionExpression("#ver = :ver")
+      .expressionAttributeNames(Map("#ver" -> Attr.Ver).asJava)
+      .expressionAttributeValues(Map(":ver" -> n(baseVer)).asJava)
+      .build()
+    TransactWriteItem.builder().put(put).build()
   }
 
   private def deleteTaskItem(
@@ -372,19 +380,11 @@ private[tasks] object DynamoDiff {
           val baseVer = baseTaskVersions.getOrElse(sk, 0L)
           Some(deleteTaskItem(table, sk, baseVer))
         case (None, Some(item)) =>
-          val condition = (
-            "attribute_not_exists(#pk)",
-            Map.empty[String, AttributeValue]
-          )
-          Some(putTaskItem(table, sk, item, 1L, Some(condition)))
+          Some(putNewTaskItem(table, sk, item))
         case (Some(oldItem), Some(newItem)) if oldItem == newItem => None
         case (Some(_), Some(newItem)) =>
           val baseVer = baseTaskVersions.getOrElse(sk, 0L)
-          val condition = (
-            "#ver = :ver",
-            Map(":ver" -> n(baseVer))
-          )
-          Some(putTaskItem(table, sk, newItem, baseVer + 1, Some(condition)))
+          Some(updateTaskItem(table, sk, newItem, baseVer))
         case (None, None) => None
       }
     }
