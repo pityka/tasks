@@ -23,6 +23,8 @@ private[tasks] object DynamoDiff {
   import DynamoQueueState.ResourcesPartitionKey
   import DynamoQueueState.ResourcesSortKey
   import DynamoQueueState.MaxOpsPerTransaction
+  import DynamoQueueState.MaxDataBytesPerTransaction
+  import DynamoQueueState.MaxDataOpsPerChunk
   import DynamoQueueState.ChunkPayloadBytes
   import DynamoQueueState.ChunkIndexWidth
   import DynamoQueueState.ChunkSeparator
@@ -524,17 +526,45 @@ private[tasks] object DynamoDiff {
         )
       else None
 
-    val barrierOps = taskOps ++ resultOps
+    val taskUnits: List[(List[TransactWriteItem], Int)] =
+      taskOps.map(op => List(op) -> estimateOpBytes(op))
 
-    if (barrierOps.isEmpty && resourcesOp.isEmpty) Plan(Nil)
+    val resultUnits: List[(List[TransactWriteItem], Int)] = {
+      val grouped = resultOps.groupBy(opAddress)
+      grouped.toList.map { case (addressValue, ops) =>
+        val bytes = ops.map(estimateOpBytes).sum
+        if (bytes > MaxDataBytesPerTransaction) {
+          val address = Address(addressValue)
+          val resultOpt = newState.completedResults
+            .get(address)
+            .orElse(oldState.completedResults.get(address))
+          val fromScheduled = oldState.scheduledTasks.values
+            .find(_.proxies.exists(_.address == address))
+            .map(_.sch.description)
+          val fromQueued = oldState.queuedTasks.values.collectFirst {
+            case (sch, proxies) if proxies.exists(_.address == address) =>
+              sch.description
+          }
+          val taskHint = fromScheduled.orElse(fromQueued)
+          throw new DynamoQueueState.OversizedUnitException(
+            formatOversizedMessage(
+              addressValue = addressValue,
+              bytes = bytes,
+              limit = MaxDataBytesPerTransaction,
+              result = resultOpt,
+              taskDescription = taskHint
+            )
+          )
+        }
+        ops -> bytes
+      }
+    }
+
+    val units: List[(List[TransactWriteItem], Int)] = taskUnits ++ resultUnits
+
+    if (units.isEmpty && resourcesOp.isEmpty) Plan(Nil)
     else {
-      val perChunkSize =
-        if (resourcesOp.isDefined) MaxOpsPerTransaction - 2
-        else MaxOpsPerTransaction - 1
-      val dataChunks: List[List[TransactWriteItem]] =
-        if (barrierOps.isEmpty) Nil
-        else barrierOps.grouped(math.max(1, perChunkSize)).toList
-
+      val dataChunks: List[List[TransactWriteItem]] = packUnits(units)
       val barrier = resourcesConditionCheck(table, baseResourcesVersion)
 
       val middleChunks: List[List[TransactWriteItem]] =
@@ -555,6 +585,126 @@ private[tasks] object DynamoDiff {
 
       Plan(finalChunks)
     }
+  }
+
+  private def packUnits(
+      units: List[(List[TransactWriteItem], Int)]
+  ): List[List[TransactWriteItem]] = {
+    val builder = scala.collection.mutable.ListBuffer.empty[List[TransactWriteItem]]
+    var current = List.empty[TransactWriteItem]
+    var currentBytes = 0
+    units.foreach { case (unitOps, unitBytes) =>
+      val newSize = current.size + unitOps.size
+      val newBytes = currentBytes + unitBytes
+      if (
+        current.nonEmpty &&
+        (newSize > MaxDataOpsPerChunk || newBytes > MaxDataBytesPerTransaction)
+      ) {
+        builder += current
+        current = unitOps
+        currentBytes = unitBytes
+      } else {
+        current = current ++ unitOps
+        currentBytes = newBytes
+      }
+    }
+    if (current.nonEmpty) builder += current
+    builder.toList
+  }
+
+  private def opAddress(op: TransactWriteItem): String = {
+    val sk =
+      if (op.put() != null) op.put().item().get(Attr.Sk).s()
+      else if (op.delete() != null) op.delete().key().get(Attr.Sk).s()
+      else throw new IllegalArgumentException("result op must be Put or Delete")
+    parseAddressFromSk(sk)
+  }
+
+  private val OversizedPreviewChars: Int = 512
+
+  private def truncate(s: String, max: Int): String =
+    if (s.length <= max) s
+    else s.substring(0, max) + s"… [truncated, total ${s.length} chars]"
+
+  private def describeResult(result: ProxyResult): String = result match {
+    case QueueImpl.ProxyResultSuccess(untyped, retrievedFromCache) =>
+      val inlineBase64 = untyped.data.value
+      val filesCount = untyped.files.size
+      val mutableFilesCount = untyped.mutableFiles.fold(0)(_.size)
+      s"ProxyResultSuccess(" +
+        s"files=$filesCount, mutableFiles=$mutableFilesCount, " +
+        s"retrievedFromCache=$retrievedFromCache, " +
+        s"inlineBase64Length=${inlineBase64.length}, " +
+        s"inlineBase64Prefix='${truncate(inlineBase64, OversizedPreviewChars)}'" +
+        ")"
+    case QueueImpl.ProxyResultFailure(cause) =>
+      val stack = cause.getStackTrace
+        .take(5)
+        .map(e => s"    at ${e.getClassName}.${e.getMethodName}(${e.getFileName}:${e.getLineNumber})")
+        .mkString("\n")
+      val msg = Option(cause.getMessage).getOrElse("<null>")
+      s"ProxyResultFailure(" +
+        s"cause=${cause.getClass.getName}, " +
+        s"messageLength=${msg.length}, " +
+        s"messagePrefix='${truncate(msg, OversizedPreviewChars)}'" +
+        (if (stack.nonEmpty) s", stackHead=\n$stack" else "") +
+        ")"
+  }
+
+  private def formatOversizedMessage(
+      addressValue: String,
+      bytes: Int,
+      limit: Int,
+      result: Option[ProxyResult],
+      taskDescription: Option[HashedTaskDescription]
+  ): String = {
+    val taskLine = taskDescription match {
+      case Some(d) =>
+        s"\n  originating task: id=${d.taskId.id} version=${d.taskId.version} dataHash=${d.dataHash}"
+      case None =>
+        "\n  originating task: (not found in current state)"
+    }
+    val resultLine = result match {
+      case Some(r) => s"\n  payload: ${describeResult(r)}"
+      case None    => "\n  payload: (not present in state; stale snapshot?)"
+    }
+    s"ProxyResult for proxy '$addressValue' serializes to $bytes bytes which exceeds " +
+      s"the DynamoDB per-transaction limit of $limit bytes. " +
+      s"Return large task outputs via SharedFile instead of inlining them in the result." +
+      taskLine +
+      resultLine
+  }
+
+  private def attributeBytes(av: AttributeValue): Int = {
+    var size = 0
+    if (av.s() != null) size += av.s().getBytes("UTF-8").length
+    if (av.n() != null) size += av.n().getBytes("UTF-8").length
+    if (av.b() != null) size += av.b().asByteArray().length
+    if (av.bool() != null) size += 1
+    if (av.hasL)
+      av.l().asScala.foreach(x => size += attributeBytes(x))
+    if (av.hasM)
+      av.m().asScala.foreach { case (k, v) =>
+        size += k.getBytes("UTF-8").length
+        size += attributeBytes(v)
+      }
+    if (av.hasSs)
+      av.ss().asScala.foreach(x => size += x.getBytes("UTF-8").length)
+    size
+  }
+
+  private def itemBytes(item: java.util.Map[String, AttributeValue]): Int =
+    item.asScala.foldLeft(0) { case (acc, (k, v)) =>
+      acc + k.getBytes("UTF-8").length + attributeBytes(v)
+    }
+
+  private[tasks] def estimateOpBytes(op: TransactWriteItem): Int = {
+    if (op.put() != null) itemBytes(op.put().item())
+    else if (op.delete() != null) itemBytes(op.delete().key()) + 64
+    else if (op.conditionCheck() != null)
+      itemBytes(op.conditionCheck().key()) + 64
+    else if (op.update() != null) 256
+    else 0
   }
 
 }

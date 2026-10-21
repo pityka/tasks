@@ -8,10 +8,40 @@ import scala.jdk.CollectionConverters._
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient
 import software.amazon.awssdk.services.dynamodb.model._
 
+object FakeDynamoDbAsyncClient {
+  val MaxItemBytes: Int = 400 * 1024
+  val MaxTransactionBytes: Int = 4 * 1024 * 1024
+}
+
 final class FakeDynamoDbAsyncClient(val tableName: String)
     extends DynamoDbAsyncClient {
 
   case class ItemKey(pk: String, sk: String)
+
+  private def estimateItemBytes(
+      attrs: Map[String, AttributeValue]
+  ): Int = {
+    def one(av: AttributeValue): Int = {
+      var size = 0
+      if (av.s() != null) size += av.s().getBytes("UTF-8").length
+      if (av.n() != null) size += av.n().getBytes("UTF-8").length
+      if (av.b() != null) size += av.b().asByteArray().length
+      if (av.bool() != null) size += 1
+      if (av.hasL)
+        av.l().asScala.foreach(x => size += one(x))
+      if (av.hasM)
+        av.m().asScala.foreach { case (k, v) =>
+          size += k.getBytes("UTF-8").length
+          size += one(v)
+        }
+      if (av.hasSs)
+        av.ss().asScala.foreach(s => size += s.getBytes("UTF-8").length)
+      size
+    }
+    attrs.foldLeft(0) { case (acc, (k, v)) =>
+      acc + k.getBytes("UTF-8").length + one(v)
+    }
+  }
 
   private val store: AtomicReference[Map[ItemKey, Map[String, AttributeValue]]] =
     new AtomicReference(Map.empty)
@@ -71,6 +101,15 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
           .builder()
           .statusCode(400)
           .message("ExpressionAttributeValues must not be empty")
+          .build()
+      )
+    val itemBytes = estimateItemBytes(request.item().asScala.toMap)
+    if (itemBytes > FakeDynamoDbAsyncClient.MaxItemBytes)
+      return failed(
+        DynamoDbException
+          .builder()
+          .statusCode(400)
+          .message("Item size has exceeded the maximum allowed size")
           .build()
       )
     if (request.tableName() != tableName)
@@ -183,6 +222,40 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
         )
       case None => ()
     }
+
+    val oversizedItem = items.flatMap { tw =>
+      if (tw.put() != null) {
+        val size = estimateItemBytes(tw.put().item().asScala.toMap)
+        if (size > FakeDynamoDbAsyncClient.MaxItemBytes) Some(size) else None
+      } else None
+    }.headOption
+    oversizedItem.foreach { _ =>
+      return failed(
+        DynamoDbException
+          .builder()
+          .statusCode(400)
+          .message("Item size has exceeded the maximum allowed size")
+          .build()
+      )
+    }
+
+    val totalBytes = items.foldLeft(0) { (acc, tw) =>
+      acc + (if (tw.put() != null)
+               estimateItemBytes(tw.put().item().asScala.toMap)
+             else 0)
+    }
+    if (totalBytes > FakeDynamoDbAsyncClient.MaxTransactionBytes)
+      return failed(
+        DynamoDbException
+          .builder()
+          .statusCode(400)
+          .message(
+            "Transaction request cannot include multiple operations on one item; " +
+              "or, aggregate size of items exceeds the limit"
+          )
+          .build()
+      )
+
     val snapshot = store.get
 
     val evaluations: List[Either[CancellationReason, Map[ItemKey, Option[Map[String, AttributeValue]]]]] =

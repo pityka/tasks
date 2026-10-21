@@ -27,6 +27,11 @@ object DynamoQueueState {
   val DefaultReadCacheTtl: FiniteDuration = 150.milliseconds
 
   private[tasks] val MaxOpsPerTransaction: Int = 100
+  private[tasks] val MaxDataBytesPerTransaction: Int = 3 * 1024 * 1024
+  private[tasks] val MaxDataOpsPerChunk: Int = 98
+
+  final class OversizedUnitException(message: String)
+      extends RuntimeException(message)
 
   private[tasks] val TasksPartitionKey: String = "tasks"
   private[tasks] val ResultsPartitionKey: String = "results"

@@ -195,6 +195,168 @@ class DynamoCompletedResultsTest extends FunSuite with Matchers {
   }
 
   test(
+    "a single flatModify storing many large completions splits across multiple TransactWriteItems to respect the 4 MB txn cap"
+  ) {
+    val client = newClient()
+    val count = 20
+    val perResultBytes = 300 * 1024
+    val bigMessage = new String(
+      Array.fill[Byte](perResultBytes)(0x43.toByte),
+      java.nio.charset.StandardCharsets.ISO_8859_1
+    )
+    val events = (0 until count).toList.map { i =>
+      QueueImpl.ResultStoredForProxy(
+        Address(s"heavy-$i"),
+        QueueImpl.ProxyResultFailure(new RuntimeException(bigMessage))
+      )
+    }
+    val state = DynamoQueueState
+      .makeTransaction(
+        client = client,
+        table = tableName,
+        retryBaseDelay = 1.millisecond
+      )
+      .use { tx =>
+        tx.flatModify(oldState =>
+          (events.foldLeft(oldState)(_.update(_)), IO.unit)
+        ) *> tx.get
+      }
+      .unsafeRunSync()
+    state.completedResults.size shouldBe count
+    client.transactWriteCount.get should be > 1
+  }
+
+  test(
+    "a single ProxyResult whose chunks together exceed the per-txn data budget fails loudly at plan time without writing anything"
+  ) {
+    val client = newClient()
+    val address = Address("ginormous")
+    val serializedBytes = DynamoQueueState.MaxDataBytesPerTransaction + 512 * 1024
+    val payload = new String(
+      Array.fill[Byte](serializedBytes)(0x45.toByte),
+      java.nio.charset.StandardCharsets.ISO_8859_1
+    )
+    val result = QueueImpl.ProxyResultFailure(new RuntimeException(payload))
+    val outcome = DynamoQueueState
+      .makeTransaction(
+        client = client,
+        table = tableName,
+        retryBaseDelay = 1.millisecond
+      )
+      .use { tx =>
+        tx.flatModify(state =>
+          (state.update(QueueImpl.ResultStoredForProxy(address, result)), IO.unit)
+        )
+      }
+      .attempt
+      .unsafeRunSync()
+    val error = outcome.left.toOption.getOrElse(fail("expected plan to fail"))
+    error shouldBe a[DynamoQueueState.OversizedUnitException]
+    val msg = error.getMessage
+    msg should include("ginormous")
+    msg should include("SharedFile")
+    msg should include("ProxyResultFailure")
+    msg should include("RuntimeException")
+    msg should include("messageLength=")
+    msg should include("messagePrefix=")
+    msg should include("stackHead=")
+
+    val resultChunks = client.rawStore.keys.count(_.pk == DynamoQueueState.ResultsPartitionKey)
+    resultChunks shouldBe 0
+  }
+
+  test(
+    "oversized ProxyResultSuccess diagnostic names files, inline length, and payload prefix"
+  ) {
+    val client = newClient()
+    val address = Address("plus-size-success")
+    val huge = new String(
+      Array.fill[Byte](DynamoQueueState.MaxDataBytesPerTransaction + 512 * 1024)(
+        0x46.toByte
+      ),
+      java.nio.charset.StandardCharsets.ISO_8859_1
+    )
+    val result = QueueImpl.ProxyResultSuccess(
+      tasks.queue.UntypedResult(
+        files = Set.empty,
+        data = tasks.queue.Base64Data(huge),
+        mutableFiles = None
+      ),
+      retrievedFromCache = false
+    )
+    val outcome = DynamoQueueState
+      .makeTransaction(
+        client = client,
+        table = tableName,
+        retryBaseDelay = 1.millisecond
+      )
+      .use { tx =>
+        tx.flatModify(state =>
+          (state.update(QueueImpl.ResultStoredForProxy(address, result)), IO.unit)
+        )
+      }
+      .attempt
+      .unsafeRunSync()
+    val error = outcome.left.toOption.getOrElse(fail("expected plan to fail"))
+    val msg = error.getMessage
+    msg should include("plus-size-success")
+    msg should include("ProxyResultSuccess")
+    msg should include("files=0")
+    msg should include("inlineBase64Length=")
+    msg should include("inlineBase64Prefix=")
+  }
+
+  test(
+    "oversized ProxyResult names the originating task when the proxy is still on a scheduled task"
+  ) {
+    val client = newClient()
+    val launcher = LauncherName("l-hint")
+    val allocated = SchedulerFixtures.allocated()
+    val sch = SchedulerFixtures.scheduleTask("hinted-task", "hinted-hash")
+    val address = Address("hintedproxy")
+    val proxy = Proxy(address)
+    val huge = new String(
+      Array.fill[Byte](DynamoQueueState.MaxDataBytesPerTransaction + 256 * 1024)(
+        0x47.toByte
+      ),
+      java.nio.charset.StandardCharsets.ISO_8859_1
+    )
+    val result = QueueImpl.ProxyResultFailure(new RuntimeException(huge))
+    val outcome = DynamoQueueState
+      .makeTransaction(
+        client = client,
+        table = tableName,
+        retryBaseDelay = 1.millisecond
+      )
+      .use { tx =>
+        tx.flatModify(state =>
+          (state.update(QueueImpl.Enqueued(sch, List(proxy))), IO.unit)
+        ) *>
+          tx.flatModify(state =>
+            (
+              state.update(
+                QueueImpl.TaskScheduled(sch, launcher, allocated, None)
+              ),
+              IO.unit
+            )
+          ) *>
+          tx.flatModify(state =>
+            (
+              state.update(QueueImpl.ResultStoredForProxy(address, result)),
+              IO.unit
+            )
+          )
+      }
+      .attempt
+      .unsafeRunSync()
+    val error = outcome.left.toOption.getOrElse(fail("expected plan to fail"))
+    val msg = error.getMessage
+    msg should include("hintedproxy")
+    msg should include("id=hinted-task")
+    msg should include("dataHash=hinted-hash")
+  }
+
+  test(
     "SessionProxiesDropped sweeps per-proxy result items for addresses in the dead session"
   ) {
     val client = newClient()
