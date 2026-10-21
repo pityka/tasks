@@ -215,17 +215,32 @@ hard-failing. See the gotcha about output-type changes below.
 
 ## 5. Invalidation and the gotchas that bite
 
-**To invalidate deliberately, bump the version integer** in the task definition.
-That is the one intended knob:
+**Two knobs for invalidation, with different consequences for the storage
+layout.** The task's output folder — the file-service prefix under which the
+body's `SharedFile`s and the cache metadata are written — is derived from the
+**name only**, not from the version:
 
-```scala
-val increment = Task[In, Out]("increment", 2) { in => implicit env => ... }
-```
+- **Bump the version integer** when old results *should be overwritten*. The
+  output folder stays the same, so a new run that produces files with the same
+  suffixes will overwrite the old bytes in place. Once the new version has
+  executed against the storage, **reverting is no longer possible** — the
+  previous data is gone. Choose this when you want the old result to disappear.
 
-- **Changing the body without bumping the version serves a stale result.** The
+  ```scala
+  val increment = Task[In, Out]("increment", 2) { in => implicit env => ... }
+  ```
+
+- **Change the task name** when there is any *risk you may want to revert*.
+  A new name produces a new output folder; the old folder and its files are
+  left untouched, so you can go back to the previous version simply by
+  reverting the name change. Choose this for anything whose output other
+  pipelines or users might still depend on.
+
+- **Changing the body without bumping either knob serves a stale result.** The
   cache never inspects the body — only name, version, and input hash. If you fix
-  a bug in a task body and want old results discarded, you *must* increment the
-  version. This is the single most common mistake.
+  a bug in a task body and want old results discarded, you *must* bump the
+  version (overwrite) or change the name (new folder). This is the single most
+  common mistake.
 - **Changing the output type is subtle.** Different input *shape* changes the
   serialized bytes and so naturally produces a new key. But a changed *output*
   type does not change the key. Old bytes may still deserialize into the new type
@@ -259,6 +274,23 @@ file service, and only the small handle is serialized into the cache entry. On a
 cache hit you get the handle back immediately and fetch bytes lazily, on any
 machine, only if you read them. This is what keeps replay of file-producing
 workflows cheap.
+
+**Rule of thumb for input/output size.** Up to a few kilobytes of inline data
+in a task's `In`/`Out` type is fine — small case classes, identifiers, counts,
+short strings. Beyond that, serialize the payload to a `SharedFile` and return
+the handle. Large inline bytes bloat the cache entry, the queue messages, and
+every subsequent serialization/deserialization round-trip, and they defeat the
+cheap-replay property above.
+
+**In larger pipelines, don't use raw `SharedFile` as a task input or output
+type.** A bare `SharedFile` carries no information about what the bytes mean,
+how they were produced, or what codec reads them, so downstream tasks lose the
+type-level distinction between e.g. an aligned BAM and a VCF. Wrap each kind
+of file in a small named case class (one field, a `SharedFile`, plus whatever
+metadata the file needs), give that wrapper its own codec, and use *that* as
+the task's input/output. The wrapper documents intent, lets the compiler catch
+mis-wirings, and leaves room to attach extra fields later without an
+invalidating input-shape change.
 
 Inside a task body, create files with the **scoped** constructors — their names
 are prefixed by the task's input-derived path, so they can't silently collide
@@ -301,13 +333,22 @@ val fib: ParentTaskDefinition[In, Int] =
       case 1 => IO.pure(1)
       case n =>
         for {
-          a <- fib(In(n - 1))
-          b <- fib(In(n - 2))
+          ab <- (fib(In(n - 1)), fib(In(n - 2))).parTupled
+          (a, b) = ab
           r <- Jobs.reduce(Reduce(a, b))(ResourceRequest(cpu = 1, memory = 1))
         } yield r
     }
   }
 ```
+
+**Parallel submission is expressed with cats-effect's `IO` par combinators.**
+Each child submission returns an `IO`; a `for` / `flatMap` chain runs them
+sequentially even though the queue could schedule them concurrently. To fan a
+parent out, combine the child `IO`s with the standard parallel combinators —
+`parTupled`, `parMapN`, `parSequence`, `parTraverse` — so submission (and
+therefore scheduling and execution) proceeds in parallel. `IO.both` and
+`IO.parSequenceN(n)` are the usual choices when you want unbounded or bounded
+concurrency over a `List[IO[A]]`.
 
 Submit a parent with `fib(In(10))` (no resource request; it takes optional
 `priorityBase`, `labels`, `noCache`). Because parent results are cached, a
@@ -347,8 +388,9 @@ keeps that shared Postgres state from becoming a replay bottleneck.
 - [ ] Every task input/output has an implicit `JsonValueCodec` (in its companion).
 - [ ] Each task is a `val` on an `object`; body closes over nothing but stable vals.
 - [ ] Set `tasks.fileservice.storageURI` to shared, durable storage.
-- [ ] Task **name is stable**; **bump the version** whenever the body or output meaning changes.
+- [ ] Task **name is stable**. To invalidate: **bump the version** when old data should be overwritten in place (no reversion possible after that run); **change the name** when there is any risk you may want to revert, so the new output goes to a new folder and the old one is preserved.
 - [ ] Anything that should distinguish two results is in the **input** (not the resource request, not the code version).
-- [ ] Large outputs are returned as `SharedFile.scoped(...)`, not inline bytes.
+- [ ] Inline input/output stays within a few kilobytes; anything larger is a `SharedFile`, and in larger pipelines the handle is wrapped in a named case class rather than exposed as a raw `SharedFile`.
+- [ ] Parent tasks fan out with `IO`'s par combinators (`parTupled`, `parMapN`, `parSequence`, `parTraverse`), not sequential `flatMap`.
 - [ ] Non-deterministic tasks either fold the variance into the input or pass `noCache = true`.
 - [ ] For replay of a big cached DAG: keep storage reachable, rely on cache hits needing no workers, and lower `tasks.resultPollInterval` if delivery latency matters.
