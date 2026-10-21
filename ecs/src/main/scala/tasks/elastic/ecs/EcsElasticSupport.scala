@@ -208,7 +208,7 @@ class EcsCreateNode(
         if (skipped.isEmpty) IO.unit
         else
           IO(
-            scribe.info(
+            scribe.debug(
               s"ECS skipping ${skipped.size} capacity provider(s) for request " +
                 s"vcpu=${request.cpu} memMiB=${request.memory} " +
                 s"gpu=${request.gpu.size}: ${skipped.mkString("; ")}"
@@ -325,7 +325,7 @@ class EcsCreateNode(
           .handleErrorWith(_ => IO.pure(base))
           .flatTap(msg =>
             IO(
-              scribe.warn(
+              scribe.debug(
                 s"$msg. This request will be retried."
               )
             )

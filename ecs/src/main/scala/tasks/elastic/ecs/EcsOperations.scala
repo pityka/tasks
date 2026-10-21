@@ -240,7 +240,7 @@ object EcsOperations {
         else requestBuilder.tags(sdkTags.asJava).build
 
       IO(
-        scribe.info(
+        scribe.debug(
           s"ecs.runTask(cluster=$cluster, target=$target, " +
             s"taskDefinition=${spec.taskDefinition}, cpuUnits=${spec.cpuUnits}, " +
             s"memoryMiB=${spec.memoryMib}, gpus=${spec.gpus}, " +
