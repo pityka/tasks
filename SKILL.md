@@ -9,7 +9,7 @@ description: >
   with no workers and no queue-state writes). Use when writing or reviewing
   Scala that imports `tasks._`, defines `Task(...)`/`ParentTask(...)`, calls
   `withTaskSystem`/`defaultTaskSystem`, or depends on tasks-core / tasks-s3 /
-  tasks-postgres.
+  tasks-postgres / tasks-dynamo.
 ---
 
 # Using the `tasks` library
@@ -54,7 +54,7 @@ compute cache key = (task name, task version, hash(serialized input))
 ## 2. Setup and a complete example
 
 Dependencies (`build.sbt`): add `tasks-core`; add `tasks-s3` for S3 storage,
-`tasks-postgres` for a durable shared queue.
+`tasks-postgres` or `tasks-dynamo` for a durable shared queue (see §8).
 
 Two imports carry the API and the serialization bridge:
 
@@ -357,7 +357,120 @@ recursion — see §4.4.
 
 ---
 
-## 8. Configuration reference (caching-relevant keys)
+## 8. Shared queue state (Postgres or DynamoDB)
+
+In a single-process deployment the queue lives in memory and nothing extra needs
+to be configured. The **external queue state** is the shared bus for every
+mutation the queue tracks — enqueue, dispatch, completion, launcher
+join/crash, counter heartbeats, node registry events. Reach for it whenever
+events need to be observed by someone other than the process that produced
+them. Two situations where that is routine:
+
+1. **Multiple application (main) processes sharing deduplicated work.** Each
+   main submits tasks against the same backend; the queue serializes dispatch
+   so each unique task runs at most once no matter which main submits it.
+2. **Workers reporting results back to a main process they do not have a
+   direct connection to.** A worker that finishes a task writes
+   `ResultStoredForProxy` into the shared state; whichever main owns that proxy
+   polls `completedResults` out of the shared state (`QueueImpl.pollResult`,
+   QueueImpl.scala:1427) and delivers it to the caller. With an in-memory
+   queue the result sits in a process-local map and is only reachable by the
+   submitting main itself — fine when every main can messenger every worker
+   directly, insufficient otherwise.
+
+Secondary benefits that follow from the same mechanism: in-flight scheduled
+work, launcher membership, and node-registry state survive a main-process
+restart, since all of it lives in the backend.
+
+The wiring is the same shape for both backends: construct a `Resource[IO,
+Option[Transaction[QueueImpl.State]]]` and pass it as `externalQueueState` to
+the overload of `withTaskSystem` that accepts it. The library drives all queue
+mutations through that `Transaction`.
+
+### DynamoDB
+
+Add `tasks-dynamo` to `build.sbt` and construct a `DynamoDbAsyncClient` plus a
+`Transaction[QueueImpl.State]` from `DynamoQueueState.makeTransaction`. The
+backend decomposes state across one DDB item per task plus one small
+"resources" item and uses `TransactWriteItems` to keep multi-master dispatch
+decisions race-free.
+
+```scala
+import cats.effect.IO
+import cats.effect.kernel.Resource
+import software.amazon.awssdk.regions.Region
+import tasks._
+import tasks.queue.DynamoQueueState
+
+val queueState: Resource[IO, Option[tasks.util.Transaction[tasks.queue.QueueImpl.State]]] =
+  DynamoQueueState
+    .clientResource(Region.US_EAST_1)
+    .flatMap { client =>
+      DynamoQueueState.makeTransaction(
+        client = client,
+        table = "my-tasks-queue-state",
+        retryBaseDelay = DynamoQueueState.DefaultRetryBaseDelay,
+        readCacheTtl = DynamoQueueState.DefaultReadCacheTtl,
+        ensureTable = true
+      )
+    }
+    .map(Some(_))
+
+val program: IO[Either[cats.effect.ExitCode, Unit]] =
+  withTaskSystem(
+    config = Some(ConfigFactory.parseString(
+      "tasks.fileservice.storageURI=s3://my-bucket/prefix"
+    )),
+    s3Client = tasks.fileservice.s3.S3.makeS3ClientResource("us-east-1"),
+    elasticSupport = Resource.pure(None),
+    externalQueueState = queueState
+  ) { implicit ts => Jobs.increment(In(41))(ResourceRequest(cpu = 1, memory = 1000)).void }
+```
+
+- **Table.** One table, hash + range primary key (`pk: S`, `sk: S`). Set
+  `ensureTable = true` to create it with `PAY_PER_REQUEST` billing on first use;
+  leave it `false` (the default via the short-form overloads) in environments
+  where the IAM role cannot `CreateTable`.
+- **Options are code-only.** No HOCON keys for the Dynamo backend; every knob
+  is a constructor argument. Defaults (`DynamoQueueState.DefaultRetryBaseDelay`,
+  `DynamoQueueState.DefaultReadCacheTtl`) are public and documented through the
+  overload set, matching the shape of `S3QueueState.makeTransaction`.
+- **IAM.** The caller needs `GetItem`, `PutItem`, `Query`, `TransactWriteItems`
+  on the chosen table, plus `DescribeTable` and `CreateTable` when
+  `ensureTable = true`.
+- **SharedFile stays on S3.** Only the queue state moves to DynamoDB; result
+  bytes and `SharedFile`s continue to live under `tasks.fileservice.storageURI`.
+- **Transactional item cap.** A single `TransactWriteItems` call is bounded at
+  100 operations. Bulk events such as `SessionProxiesDropped` are chunked
+  automatically; individual flatModify calls (schedule, done, cache-hit, …)
+  always fit in one transaction.
+
+### Postgres
+
+Use `tasks-postgres` when you already run a Postgres and prefer serializable
+transactions over DynamoDB CAS:
+
+```scala
+val queueState =
+  tasks.queue.Postgres
+    .makeTransaction(
+      table = "tasks_queue_state",
+      host = "db.internal",
+      port = 5432,
+      user = "tasks",
+      database = "tasks",
+      password = Some(sys.env("TASKS_DB_PASSWORD"))
+    )
+    .map(Some(_))
+```
+
+The semantics match the DynamoDB backend: the same `Transaction[QueueImpl.State]`
+contract, concurrency safety via DB transactions, retried on serialization
+failures.
+
+---
+
+## 9. Configuration reference (caching-relevant keys)
 
 Config is HOCON via sconfig; pass a `Config` (or a string) to the constructor,
 or override any key with a system property. Full defaults live in
@@ -375,14 +488,15 @@ or override any key with a system property. Full defaults live in
 | `tasks.askInterval` | `500 ms` | Worker/queue write-heavy ping; unrelated to replay latency. |
 
 For horizontal scaling of the application role (multiple identical app
-processes), use `tasks-postgres` to externalize the queue state **and** keep the
-cache on globally accessible storage (S3, or an NFS mount with atomic rename) —
-or disable persistent caching. The no-write-on-replay property in §4.2 is what
-keeps that shared Postgres state from becoming a replay bottleneck.
+processes), externalize the queue state with `tasks-postgres` or `tasks-dynamo`
+(see §8) **and** keep the cache on globally accessible storage (S3, or an NFS
+mount with atomic rename) — or disable persistent caching. The no-write-on-replay
+property in §4.2 is what keeps that shared backend from becoming a replay
+bottleneck.
 
 ---
 
-## 9. Client checklist
+## 10. Client checklist
 
 - [ ] `import tasks._` and `import tasks.jsonitersupport._`.
 - [ ] Every task input/output has an implicit `JsonValueCodec` (in its companion).

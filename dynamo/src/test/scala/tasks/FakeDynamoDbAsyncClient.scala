@@ -55,7 +55,7 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
     ItemKey(pk, sk)
   }
 
-  override def putItem(request: PutItemRequest): CompletableFuture[PutItemResponse] = {
+  override def putItem(request: PutItemRequest): CompletableFuture[PutItemResponse] = this.synchronized {
     putItemCount.incrementAndGet()
     if (request.tableName() != tableName)
       return failed(new RuntimeException(s"wrong table: ${request.tableName()}"))
@@ -116,7 +116,7 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
 
   override def transactWriteItems(
       request: TransactWriteItemsRequest
-  ): CompletableFuture[TransactWriteItemsResponse] = {
+  ): CompletableFuture[TransactWriteItemsResponse] = this.synchronized {
     beforeTransactWrite.get.apply()
     transactWriteCount.incrementAndGet()
     val items = request.transactItems().asScala.toList
