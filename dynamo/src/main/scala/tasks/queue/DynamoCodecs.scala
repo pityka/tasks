@@ -1,7 +1,7 @@
 package tasks.queue
 
-import com.github.plokhotnyuk.jsoniter_scala.core._
-import com.github.plokhotnyuk.jsoniter_scala.macros._
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonKeyCodec
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 
 import tasks.elastic.NodeRegistryState
 import tasks.queue.QueueImpl.Dispatch
@@ -10,51 +10,29 @@ import tasks.shared.PendingJobId
 import tasks.shared.RunningJobId
 import tasks.util.message.MessageData.ScheduleTask
 import tasks.util.message.Node
-import tasks.wire._
 
 private[tasks] object DynamoCodecs {
 
-  private val readerConfig = ReaderConfig
-    .withMaxBufSize(2147483645)
-    .withMaxCharBufSize(2147483645)
-
   implicit val pendingJobIdKeyCodec: JsonKeyCodec[PendingJobId] =
-    new JsonKeyCodec[PendingJobId] {
-      def decodeKey(in: JsonReader): PendingJobId =
-        PendingJobId(in.readKeyAsString())
-      def encodeKey(x: PendingJobId, out: JsonWriter): Unit =
-        out.writeKey(x.value)
-    }
-
+    QueueStateCodecs.pendingJobIdKeyCodec
   implicit val runningJobIdKeyCodec: JsonKeyCodec[RunningJobId] =
-    new JsonKeyCodec[RunningJobId] {
-      def decodeKey(in: JsonReader): RunningJobId =
-        RunningJobId(in.readKeyAsString())
-      def encodeKey(x: RunningJobId, out: JsonWriter): Unit =
-        out.writeKey(x.value)
-    }
-
+    QueueStateCodecs.runningJobIdKeyCodec
   implicit val scheduleTaskCodec: JsonValueCodec[ScheduleTask] =
-    JsonCodecMaker.make
-
-  implicit val proxyCodec: JsonValueCodec[Proxy] = JsonCodecMaker.make
-
-  implicit val dispatchCodec: JsonValueCodec[Dispatch] = JsonCodecMaker.make
-
+    QueueStateCodecs.scheduleTaskCodec
+  implicit val proxyCodec: JsonValueCodec[Proxy] = QueueStateCodecs.proxyCodec
+  implicit val dispatchCodec: JsonValueCodec[Dispatch] =
+    QueueStateCodecs.dispatchCodec
   implicit val proxyResultCodec: JsonValueCodec[ProxyResult] =
-    JsonCodecMaker.make
-
+    QueueStateCodecs.proxyResultCodec
   implicit val optionalNodeCodec: JsonValueCodec[Option[Node]] =
-    JsonCodecMaker.make
-
+    QueueStateCodecs.optionalNodeCodec
   implicit val nodeRegistryStateCodec: JsonValueCodec[NodeRegistryState.State] =
-    JsonCodecMaker.make
+    QueueStateCodecs.nodeRegistryStateCodec
 
   def encode[A](a: A)(implicit codec: JsonValueCodec[A]): Array[Byte] =
-    writeToArray[A](a)
+    QueueStateCodecs.encode(a)(codec)
 
-  def decode[A](bytes: Array[Byte])(implicit
-      codec: JsonValueCodec[A]
-  ): A = readFromArray[A](bytes, readerConfig)
+  def decode[A](bytes: Array[Byte])(implicit codec: JsonValueCodec[A]): A =
+    QueueStateCodecs.decode(bytes)(codec)
 
 }

@@ -31,19 +31,16 @@ object DynamoQueueState {
   private[tasks] val MaxDataOpsPerChunk: Int = 98
 
   final class OversizedUnitException(message: String)
-      extends RuntimeException(message)
+      extends tasks.util.transactional.TransactionalStateDiff.OversizedUnitException(
+        message
+      )
 
   private[tasks] val TasksPartitionKey: String = "tasks"
   private[tasks] val ResultsPartitionKey: String = "results"
   private[tasks] val ResourcesPartitionKey: String = "resources"
   private[tasks] val ResourcesSortKey: String = "singleton"
 
-  private[tasks] val StatusQueued: String = "Q"
-  private[tasks] val StatusScheduled: String = "S"
-
   private[tasks] val ChunkPayloadBytes: Int = 300 * 1024
-  private[tasks] val ChunkIndexWidth: Int = 6
-  private[tasks] val ChunkSeparator: String = "#"
 
   private[tasks] object Attr {
     val Pk = "pk"

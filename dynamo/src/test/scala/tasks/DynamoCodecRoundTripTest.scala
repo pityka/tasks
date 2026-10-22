@@ -7,6 +7,7 @@ import tasks.elastic.NodeRegistryState
 import tasks.queue.DynamoCodecs._
 import tasks.queue.DynamoDiff
 import tasks.queue.DynamoQueueState
+import tasks.queue.QueueStateDiff
 import tasks.queue.Proxy
 import tasks.queue.QueueImpl
 import tasks.shared._
@@ -101,7 +102,7 @@ class DynamoCodecRoundTripTest extends FunSuite with Matchers {
   test("task item encode/decode preserves every field") {
     val fields = DynamoDiff.TaskItemFields(
       sch = sampleSchedule("rt-2"),
-      status = DynamoQueueState.StatusScheduled,
+      status = QueueStateDiff.StatusScheduled,
       proxies = List(Proxy(Address("p-a")), Proxy(Address("p-b"))),
       dispatches = List(
         QueueImpl.Dispatch(LauncherName("l-x"), SchedulerFixtures.allocated()),
@@ -124,7 +125,7 @@ class DynamoCodecRoundTripTest extends FunSuite with Matchers {
   test("task item encode/decode with placementValue=None omits the attribute") {
     val fields = DynamoDiff.TaskItemFields(
       sch = sampleSchedule("rt-3"),
-      status = DynamoQueueState.StatusQueued,
+      status = QueueStateDiff.StatusQueued,
       proxies = Nil,
       dispatches = Nil,
       placementValue = None,
