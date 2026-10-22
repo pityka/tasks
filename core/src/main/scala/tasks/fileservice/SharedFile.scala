@@ -30,6 +30,7 @@ package tasks.fileservice
 import java.io.File
 import tasks.util.Uri
 import tasks.TaskSystemComponents
+import tasks.TaskSystemComponentsBase
 import tasks.Implicits._
 import tasks.HasSharedFiles
 import tasks.fs
@@ -78,40 +79,40 @@ case class SharedFile(
   override def toString =
     s"SharedFile($path, size=$byteSize, hash=$hash)"
 
-  def file(implicit tsc: TaskSystemComponents): Resource[IO, File] =
+  def file(implicit tsc: TaskSystemComponentsBase): Resource[IO, File] =
     SharedFileHelper.getPathToFile(this)
 
-  def filePersistent(implicit tsc: TaskSystemComponents): Resource[IO, File] =
+  def filePersistent(implicit tsc: TaskSystemComponentsBase): Resource[IO, File] =
     SharedFileHelper.getPathToFile(this, keepLocalCache = true)
 
-  def fileNonCached(implicit tsc: TaskSystemComponents): Resource[IO, File] =
+  def fileNonCached(implicit tsc: TaskSystemComponentsBase): Resource[IO, File] =
     SharedFileHelper.getPathToFileNonCachedFile(this)
 
-  def history(implicit tsc: TaskSystemComponents): IO[History] =
+  def history(implicit tsc: TaskSystemComponentsBase): IO[History] =
     SharedFileHelper.getHistory(this)
 
-  def stream(implicit tsc: TaskSystemComponents): Stream[IO, Byte] =
+  def stream(implicit tsc: TaskSystemComponentsBase): Stream[IO, Byte] =
     SharedFileHelper.stream(this, 0L)
 
   def stream(fromOffset: Long)(implicit
-      tsc: TaskSystemComponents
+      tsc: TaskSystemComponentsBase
   ): Stream[IO, Byte] =
     SharedFileHelper.stream(this, fromOffset)
 
-  def isAccessible(implicit tsc: TaskSystemComponents): IO[Boolean] =
+  def isAccessible(implicit tsc: TaskSystemComponentsBase): IO[Boolean] =
     SharedFileHelper.isAccessible(this, true)
 
-  def uri(implicit tsc: TaskSystemComponents): IO[Uri] =
+  def uri(implicit tsc: TaskSystemComponentsBase): IO[Uri] =
     SharedFileHelper.getUri(this)
 
   def name: String = path.name
 
-  def delete(implicit tsc: TaskSystemComponents): IO[Boolean] =
+  def delete(implicit tsc: TaskSystemComponentsBase): IO[Boolean] =
     SharedFileHelper.delete(this)
 
-  def utf8(implicit tsc: TaskSystemComponents): IO[String] =
+  def utf8(implicit tsc: TaskSystemComponentsBase): IO[String] =
     stream(0L).through(fs2.text.utf8.decode).compile.string
-  def bytes(implicit tsc: TaskSystemComponents): IO[scodec.bits.ByteVector] =
+  def bytes(implicit tsc: TaskSystemComponentsBase): IO[scodec.bits.ByteVector] =
     stream.compile.to(scodec.bits.ByteVector)
 }
 
@@ -119,7 +120,7 @@ object SharedFile {
 
   implicit val codec: JsonValueCodec[SharedFile] = JsonCodecMaker.make
 
-  def apply(uri: Uri)(implicit tsc: TaskSystemComponents): IO[SharedFile] =
+  def apply(uri: Uri)(implicit tsc: TaskSystemComponentsBase): IO[SharedFile] =
     SharedFileHelper.create(RemoteFilePath(uri), tsc.fs.remote)
 
   def fromFolder(parallelism: Int)(
@@ -136,7 +137,7 @@ object SharedFile {
 
   def getByName(
       name: String
-  )(implicit tsc: TaskSystemComponents): IO[Option[SharedFile]] =
+  )(implicit tsc: TaskSystemComponentsBase): IO[Option[SharedFile]] =
     SharedFileHelper.getByName(name, retrieveSizeAndHash = true)
 
   def scoped(file: File, suffix: String)(implicit

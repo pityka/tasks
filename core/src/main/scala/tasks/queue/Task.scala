@@ -153,7 +153,7 @@ private[tasks] object UntypedResult {
 }
 
 sealed trait ComputationEnvironment {
-  implicit def components: TaskSystemComponents
+  implicit def components: TaskSystemComponentsBase
   implicit def launcher: LauncherHandle
   def taskActor: Task
   def taskHash: HashedTaskDescription
@@ -171,18 +171,21 @@ sealed trait ComputationEnvironment {
 
   implicit def fileServiceComponent: FileServiceComponent
   implicit def filePrefix: FileServicePrefix
-  implicit def queue: Queue
-  implicit def cache: TaskResultCache
   implicit def prefix: Prefix
 
-  def toTaskSystemComponents: TaskSystemComponents
+  def toTaskSystemComponents: TaskSystemComponentsBase
 }
 
 sealed trait LeafComputationEnvironment extends ComputationEnvironment {
   def resourceAllocated: ResourceAllocated
 }
 
-sealed trait ParentComputationEnvironment extends ComputationEnvironment
+sealed trait ParentComputationEnvironment extends ComputationEnvironment {
+  implicit def components: TaskSystemComponents
+  implicit def queue: Queue
+  implicit def cache: TaskResultCache
+  def toTaskSystemComponents: TaskSystemComponents
+}
 
 private[tasks] final class RuntimeComputationEnvironment(
     val resourceAllocated: ResourceAllocated,

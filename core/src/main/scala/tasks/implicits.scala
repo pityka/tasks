@@ -35,12 +35,12 @@ import tasks.caching.TaskResultCache
 private[tasks] object Implicits {
 
   implicit def filePrefix(implicit
-      component: TaskSystemComponents
+      component: TaskSystemComponentsBase
   ): FileServicePrefix =
     component.filePrefix
 
   implicit def nodeLocalCache(implicit
-      component: TaskSystemComponents
+      component: TaskSystemComponentsBase
   ): NodeLocalCache.State =
     component.nodeLocalCache
 
@@ -49,7 +49,7 @@ private[tasks] object Implicits {
   ): Queue = component.queue
 
   implicit def historyContext(implicit
-      component: TaskSystemComponents
+      component: TaskSystemComponentsBase
   ): HistoryContext =
     component.historyContext
 

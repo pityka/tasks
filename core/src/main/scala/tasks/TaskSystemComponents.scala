@@ -58,6 +58,26 @@ import cats.effect.kernel.Deferred
 import cats.effect.kernel.Ref
 import cats.effect.ExitCode
 
+sealed trait TaskSystemComponentsBase {
+  private[tasks] def fs: FileServiceComponent
+  private[tasks] def nodeLocalCache: NodeLocalCache.State
+  private[tasks] def filePrefix: FileServicePrefix
+  private[tasks] def tasksConfig: TasksConfig
+  private[tasks] def historyContext: HistoryContext
+  private[tasks] def priority: Priority
+  private[tasks] def labels: Labels
+  private[tasks] def lineage: TaskLineage
+  private[tasks] def messenger: Messenger
+  private[tasks] def sessionId: String
+
+  def withChildPrefix(name: String): TaskSystemComponentsBase
+  def withChildPrefix(names: Seq[String]): TaskSystemComponentsBase
+  def replaceFilePrefix(names: Seq[String]): TaskSystemComponentsBase
+  def withFilePrefix[B](
+      prefix: Seq[String]
+  )(fun: TaskSystemComponentsBase => B): B
+}
+
 case class TaskSystemComponents private[tasks] (
     private[tasks] val queue: Queue,
     private[tasks] val fs: FileServiceComponent,
@@ -71,20 +91,20 @@ case class TaskSystemComponents private[tasks] (
     private[tasks] val lineage: TaskLineage,
     private[tasks] val messenger: Messenger,
     private[tasks] val sessionId: String
-) {
+) extends TaskSystemComponentsBase {
 
-  def withChildPrefix(name: String) =
+  override def withChildPrefix(name: String): TaskSystemComponents =
     this.copy(filePrefix = this.filePrefix.append(name))
 
-  def withChildPrefix(names: Seq[String]) =
+  override def withChildPrefix(names: Seq[String]): TaskSystemComponents =
     this.copy(filePrefix = this.filePrefix.append(names))
 
-  def replaceFilePrefix(names: Seq[String]) =
+  override def replaceFilePrefix(names: Seq[String]): TaskSystemComponents =
     this.copy(filePrefix = FileServicePrefix(names.toVector))
 
-  def withFilePrefix[B](
+  override def withFilePrefix[B](
       prefix: Seq[String]
-  )(fun: TaskSystemComponents => B): B =
+  )(fun: TaskSystemComponentsBase => B): B =
     fun(this.withChildPrefix(prefix))
 }
 

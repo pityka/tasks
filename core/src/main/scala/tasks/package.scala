@@ -254,7 +254,7 @@ package object tasks extends MacroCalls {
     )
 
   implicit def tasksConfig(implicit
-      component: TaskSystemComponents
+      component: TaskSystemComponentsBase
   ): TasksConfig =
     component.tasksConfig
 
@@ -263,12 +263,17 @@ package object tasks extends MacroCalls {
   ): CodeVersion = c.codeVersion
 
   implicit def fs(implicit
-      component: TaskSystemComponents
+      component: TaskSystemComponentsBase
   ): FileServiceComponent =
     component.fs
 
   implicit def ts(implicit
       component: ComputationEnvironment
+  ): TaskSystemComponentsBase =
+    component.components
+
+  implicit def tsParent(implicit
+      component: ParentComputationEnvironment
   ): TaskSystemComponents =
     component.components
 
@@ -593,7 +598,7 @@ package object tasks extends MacroCalls {
 
   def fromFileList[O](files: Seq[Seq[String]], parallelism: Int)(
       fromFiles: Seq[SharedFile] => O
-  )(full: => IO[O])(implicit tsc: TaskSystemComponents): IO[O] = {
+  )(full: => IO[O])(implicit tsc: TaskSystemComponentsBase): IO[O] = {
     val filesWithNonEmptyPath = files.filter(_.nonEmpty)
     for {
       maybeSharedFiles <- IO.parSequenceN(parallelism)(

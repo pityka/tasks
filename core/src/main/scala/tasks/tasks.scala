@@ -92,36 +92,6 @@ trait HasPersistent[+A] { self: A =>
   def persistent: A
 }
 
-/** Capability witness required by [[TaskDefinition.apply]] and
-  * [[ParentTaskDefinition.apply]]. Provided implicitly in exactly two places:
-  * top-level code (where the user holds a [[TaskSystemComponents]] and no
-  * enclosing leaf body) and parent task bodies (via the implicit
-  * [[ParentComputationEnvironment]]). Leaves see neither, so attempting to
-  * submit a child task from a leaf body fails to compile.
-  */
-final class SubmitContext private[tasks] (
-    private[tasks] val components: TaskSystemComponents
-)
-
-object SubmitContext {
-
-  /** Available inside parent task bodies. */
-  implicit def fromParent(implicit
-      pce: ParentComputationEnvironment
-  ): SubmitContext = new SubmitContext(pce.components)
-
-  /** Available at top-level, i.e. when an implicit [[TaskSystemComponents]] is
-    * in scope but no enclosing [[ComputationEnvironment]] is. The
-    * [[NotInLeaf]] guard is what excludes leaf bodies: when a
-    * `ComputationEnvironment` is implicitly in scope, `NotInLeaf` does not
-    * resolve, so this derivation falls through.
-    */
-  implicit def fromTopLevel(implicit
-      tsc: TaskSystemComponents,
-      ng: NotInLeaf
-  ): SubmitContext = new SubmitContext(tsc)
-}
-
 final class TaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
     private[tasks] val rs: Spore[Unit, Deserializer[A]],
     private[tasks] val ws: Spore[Unit, Serializer[B]],
@@ -137,8 +107,7 @@ final class TaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
       priorityBase: Priority = Priority(0),
       labels: Labels = Labels.empty,
       noCache: Boolean = false
-  )(implicit submit: SubmitContext): IO[B] = {
-    val components = submit.components
+  )(implicit components: TaskSystemComponents): IO[B] = {
     implicit val queue = components.queue
     implicit val cache = components.cache
     implicit val prefix = components.filePrefix
@@ -181,12 +150,6 @@ final class TaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
 
 }
 
-/** A parent task. Submits children but performs no resource-bearing work of
-  * its own — it always runs with a zero ResourceRequest. The body type is
-  * `A => ParentComputationEnvironment => IO[B]`, and the bodies of parent
-  * tasks (alone among task bodies) are eligible to submit children because
-  * [[ParentComputationEnvironment]] is what derives a [[SubmitContext]].
-  */
 final class ParentTaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
     private[tasks] val rs: Spore[Unit, Deserializer[A]],
     private[tasks] val ws: Spore[Unit, Serializer[B]],
@@ -202,8 +165,7 @@ final class ParentTaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
       priorityBase: Priority = Priority(0),
       labels: Labels = Labels.empty,
       noCache: Boolean = false
-  )(implicit submit: SubmitContext): IO[B] = {
-    val components = submit.components
+  )(implicit components: TaskSystemComponents): IO[B] = {
     implicit val queue = components.queue
     implicit val cache = components.cache
     implicit val prefix = components.filePrefix
