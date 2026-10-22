@@ -229,7 +229,8 @@ lazy val s3 = project
       "software.amazon.awssdk" % "sso" % "2.28.0" % "test", // scala-steward:off
       "software.amazon.awssdk" % "ssooidc" % "2.28.0" % "test", // scala-steward:off
       "org.typelevel" %% "cats-effect-testkit" % "3.6.3" % "test",
-      "org.scalatest" %% "scalatest" % "3.2.19" % "test"
+      "org.scalatest" %% "scalatest" % "3.2.19" % "test",
+      "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
     )
   )
   .dependsOn(core)

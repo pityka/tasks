@@ -7,10 +7,14 @@ import cats.effect.std.Mutex
 
 import scala.concurrent.duration._
 
+import com.github.plokhotnyuk.jsoniter_scala.core._
+import com.github.plokhotnyuk.jsoniter_scala.macros._
+
 import software.amazon.awssdk.awscore.AwsRequestOverrideConfiguration
 import software.amazon.awssdk.core.async.AsyncRequestBody
 import software.amazon.awssdk.core.async.AsyncResponseTransformer
 import software.amazon.awssdk.services.s3.S3AsyncClient
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.GetObjectResponse
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException
@@ -24,6 +28,29 @@ object S3QueueState {
   val DefaultRetryBaseDelay = 20.milliseconds
 
   val DefaultYieldDelay = 150.milliseconds
+
+  case class LeaseConfig(
+      key: String,
+      ttl: FiniteDuration,
+      acquireBaseDelay: FiniteDuration
+  )
+
+  object LeaseConfig {
+    val DefaultTtl: FiniteDuration = 30.seconds
+    val DefaultAcquireBaseDelay: FiniteDuration = 50.milliseconds
+
+    def forStateKey(stateKey: String): LeaseConfig =
+      LeaseConfig(
+        key = stateKey + ".lease",
+        ttl = DefaultTtl,
+        acquireBaseDelay = DefaultAcquireBaseDelay
+      )
+  }
+
+  private[tasks] case class LeaseBody(h: String, e: Long)
+  private[tasks] object LeaseBody {
+    implicit val codec: JsonValueCodec[LeaseBody] = JsonCodecMaker.make
+  }
 
   val preconditionFailedStatusCode = 412
 
@@ -175,6 +202,42 @@ object S3QueueState {
       rateLimits: RateLimits,
       yieldDelay: FiniteDuration
   ): Resource[IO, tasks.util.Transaction[State]] =
+    makeTransaction(
+      client = client,
+      bucket = bucket,
+      key = key,
+      retryBaseDelay = retryBaseDelay,
+      rateLimits = rateLimits,
+      yieldDelay = yieldDelay,
+      leaseConfig = Some(LeaseConfig.forStateKey(key))
+    )
+
+  def makeTransaction(
+      client: S3AsyncClient,
+      bucket: String,
+      key: String,
+      retryBaseDelay: FiniteDuration,
+      leaseConfig: Option[LeaseConfig]
+  ): Resource[IO, tasks.util.Transaction[State]] =
+    makeTransaction(
+      client = client,
+      bucket = bucket,
+      key = key,
+      retryBaseDelay = retryBaseDelay,
+      rateLimits = RateLimits.default,
+      yieldDelay = DefaultYieldDelay,
+      leaseConfig = leaseConfig
+    )
+
+  def makeTransaction(
+      client: S3AsyncClient,
+      bucket: String,
+      key: String,
+      retryBaseDelay: FiniteDuration,
+      rateLimits: RateLimits,
+      yieldDelay: FiniteDuration,
+      leaseConfig: Option[LeaseConfig]
+  ): Resource[IO, tasks.util.Transaction[State]] =
     for {
       readLimiter <- rateLimiter(
         "read",
@@ -188,6 +251,8 @@ object S3QueueState {
       )
       cached <- Resource.eval(Ref.of[IO, Option[Cached]](None))
       yieldUntilNanos <- Resource.eval(Ref.of[IO, Long](0L))
+      leaseHeld <- Resource.eval(Ref.of[IO, Option[String]](None))
+      holderId <- Resource.eval(IO(java.util.UUID.randomUUID().toString))
       writeMutex <- Resource.eval(Mutex[IO])
       readMutex <- Resource.eval(Mutex[IO])
     } yield new S3Transaction(
@@ -196,10 +261,13 @@ object S3QueueState {
       key = key,
       retryBaseDelay = retryBaseDelay,
       yieldDelay = yieldDelay,
+      leaseConfig = leaseConfig,
+      holderId = holderId,
       readLimiter = readLimiter,
       writeLimiter = writeLimiter,
       cached = cached,
       yieldUntilNanos = yieldUntilNanos,
+      leaseHeld = leaseHeld,
       writeMutex = writeMutex,
       readMutex = readMutex,
       readCacheTtl = DefaultReadCacheTtl
@@ -332,10 +400,13 @@ object S3QueueState {
       key: String,
       retryBaseDelay: FiniteDuration,
       yieldDelay: FiniteDuration,
+      leaseConfig: Option[LeaseConfig],
+      holderId: String,
       readLimiter: RateLimiter,
       writeLimiter: RateLimiter,
       cached: Ref[IO, Option[Cached]],
       yieldUntilNanos: Ref[IO, Long],
+      leaseHeld: Ref[IO, Option[String]],
       writeMutex: Mutex[IO],
       readMutex: Mutex[IO],
       readCacheTtl: FiniteDuration
@@ -475,7 +546,168 @@ object S3QueueState {
 
     override def get: IO[State] = readLatest.map(_._1)
 
-    override def flatModify[B](update: State => (State, IO[B])): IO[B] = {
+    private def readLeaseIfExists: IO[Option[(LeaseBody, String)]] = {
+      val cfg = leaseConfig.get
+      val request = GetObjectRequest.builder().bucket(bucket).key(cfg.key).build()
+      readLimiter(
+        IO.fromCompletableFuture(
+          IO(
+            client.getObject(
+              request,
+              AsyncResponseTransformer.toBytes[GetObjectResponse]
+            )
+          )
+        )
+      ).map { response =>
+        val body = readFromArray[LeaseBody](response.asByteArray())
+        Some((body, response.response().eTag())): Option[(LeaseBody, String)]
+      }.recover { case _: NoSuchKeyException => None }
+    }
+
+    private def putLease(
+        bytes: Array[Byte],
+        condition: AwsRequestOverrideConfiguration
+    ): IO[Option[String]] = {
+      val cfg = leaseConfig.get
+      val request = PutObjectRequest
+        .builder()
+        .bucket(bucket)
+        .key(cfg.key)
+        .overrideConfiguration(condition)
+        .build()
+      writeLimiter(
+        IO.fromCompletableFuture(
+          IO(client.putObject(request, AsyncRequestBody.fromBytes(bytes)))
+        )
+      ).map(response => Option(response.eTag())).recover {
+        case e: S3Exception
+            if e.statusCode() == preconditionFailedStatusCode ||
+              e.statusCode() == conflictingOperationStatusCode =>
+          None
+      }
+    }
+
+    private def acquireLease: IO[String] = {
+      val cfg = leaseConfig.get
+      def tryOnce: IO[Option[String]] =
+        IO.monotonic.flatMap { now =>
+          val expiresAtNanos = now.toNanos + cfg.ttl.toNanos
+          val bytes = writeToArray(LeaseBody(holderId, expiresAtNanos))
+          readLeaseIfExists.flatMap {
+            case None =>
+              val cond = AwsRequestOverrideConfiguration
+                .builder()
+                .putHeader("If-None-Match", "*")
+                .build()
+              putLease(bytes, cond)
+            case Some((body, existingETag)) =>
+              val mine = body.h == holderId
+              val expired = body.e <= now.toNanos
+              if (!mine && !expired) IO.pure(None)
+              else {
+                val cond = AwsRequestOverrideConfiguration
+                  .builder()
+                  .putHeader("If-Match", existingETag)
+                  .build()
+                putLease(bytes, cond)
+              }
+          }
+        }
+
+      def loop: IO[String] =
+        tryOnce.flatMap {
+          case Some(etag) => leaseHeld.set(Some(etag)).as(etag)
+          case None =>
+            jitteredLeaseRetry *>
+              IO.monotonic.flatMap(now => armYield(now.toNanos)) *>
+              loop
+        }
+
+      loop
+    }
+
+    private def releaseLease: IO[Unit] =
+      leaseConfig match {
+        case None => IO.unit
+        case Some(cfg) =>
+          leaseHeld.getAndSet(None).flatMap {
+            case None => IO.unit
+            case Some(etag) =>
+              val cond = AwsRequestOverrideConfiguration
+                .builder()
+                .putHeader("If-Match", etag)
+                .build()
+              val request = DeleteObjectRequest
+                .builder()
+                .bucket(bucket)
+                .key(cfg.key)
+                .overrideConfiguration(cond)
+                .build()
+              writeLimiter(
+                IO.fromCompletableFuture(IO(client.deleteObject(request)))
+              ).void.recover { case _: S3Exception => () }
+          }
+      }
+
+    private def jitteredLeaseRetry: IO[Unit] = {
+      val cfg = leaseConfig.get
+      val baseNanos = cfg.acquireBaseDelay.toNanos
+      val jitterNanos = (scala.util.Random.nextDouble() * baseNanos).toLong
+      IO.sleep(
+        FiniteDuration(
+          baseNanos + jitterNanos,
+          java.util.concurrent.TimeUnit.NANOSECONDS
+        )
+      )
+    }
+
+    override def flatModify[B](update: State => (State, IO[B])): IO[B] =
+      leaseConfig match {
+        case None    => flatModifyCas(update)
+        case Some(_) => flatModifyLeased(update)
+      }
+
+    private def flatModifyLeased[B](update: State => (State, IO[B])): IO[B] = {
+      def attempt(attemptNo: Int): IO[IO[B]] = {
+        val preRead: IO[Unit] =
+          if (attemptNo == 0) readLatest.void else IO.unit
+        preRead *> yieldIfPending *>
+          acquireLease.bracket { _ =>
+            forceRead.flatMap { case (state, stateETag) =>
+              val (updated, sideEffect) = update(state)
+              if (updated == state)
+                IO.pure(Right(sideEffect): Either[Unit, IO[B]])
+              else
+                putIfMatch(updated, stateETag).flatMap {
+                  case Some(newETag) =>
+                    IO.monotonic.flatMap { now =>
+                      val noteFight =
+                        if (attemptNo > 0) armYield(now.toNanos) else IO.unit
+                      cached.set(
+                        Some(Cached(updated, Some(newETag), now.toNanos))
+                      ) *> noteFight.as(Right(sideEffect): Either[Unit, IO[B]])
+                    }
+                  case None =>
+                    IO(
+                      scribe.warn(
+                        "S3 lease fencing: our state PUT under a held lease was rejected (likely a stolen lease). Retrying."
+                      )
+                    ) *>
+                      IO.monotonic
+                        .flatMap(now => armYield(now.toNanos))
+                        .as(Left(()): Either[Unit, IO[B]])
+                }
+            }
+          }(_ => releaseLease).flatMap {
+            case Right(se) => IO.pure(se)
+            case Left(_)   => jitteredRetry *> attempt(attemptNo + 1)
+          }
+      }
+
+      IO.uncancelable(poll => poll(attempt(0)).flatten)
+    }
+
+    private def flatModifyCas[B](update: State => (State, IO[B])): IO[B] = {
       def commit(
           attempt: Int,
           reusable: Option[(Option[String], State, IO[B])]

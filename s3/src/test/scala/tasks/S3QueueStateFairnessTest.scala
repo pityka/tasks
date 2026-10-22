@@ -7,7 +7,6 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
 
 import scala.concurrent.duration._
 
@@ -39,7 +38,7 @@ class S3QueueStateFairnessTest extends FunSuite with Matchers {
     "after a commit that had to retry past a 412, the next commit yields for yieldDelay"
   ) {
     val yieldDelay = 200.milliseconds
-    val client = new FakeS3AsyncClient(new AtomicReference(None))
+    val client = new FakeS3AsyncClient()
 
     val elapsed = transactionFor(client, yieldDelay)
       .use { tx =>
@@ -47,8 +46,8 @@ class S3QueueStateFairnessTest extends FunSuite with Matchers {
           val raceOnce = new AtomicBoolean(false)
           client.beforePut.set { () =>
             if (!raceOnce.getAndSet(true)) {
-              val currentBytes = client.stored.get.get._2
-              client.stored.set(Some(("\"stranger\"", currentBytes)))
+              val currentBytes = client.storedFor(stateKey).get._2
+              client.setStored(stateKey, ("\"stranger\"", currentBytes))
             }
           }
         } *>
@@ -67,7 +66,7 @@ class S3QueueStateFairnessTest extends FunSuite with Matchers {
     "a sequence of commits with no competitor finishes well under yieldDelay — no wasted sleeps"
   ) {
     val yieldDelay = 500.milliseconds
-    val client = new FakeS3AsyncClient(new AtomicReference(None))
+    val client = new FakeS3AsyncClient()
 
     val elapsed = transactionFor(client, yieldDelay)
       .use { tx =>
@@ -87,13 +86,13 @@ class S3QueueStateFairnessTest extends FunSuite with Matchers {
     "if readLatest observes an unknown ETag committed by someone else, the next commit yields"
   ) {
     val yieldDelay = 150.milliseconds
-    val client = new FakeS3AsyncClient(new AtomicReference(None))
+    val client = new FakeS3AsyncClient()
 
     val elapsed = transactionFor(client, yieldDelay)
       .use { tx =>
         tx.flatModify(state => (state.update(join("seed")), IO.unit)) *> IO {
-          val cur = client.stored.get.get
-          client.stored.set(Some(("\"other-main\"", cur._2)))
+          val cur = client.storedFor(stateKey).get
+          client.setStored(stateKey, ("\"other-main\"", cur._2))
         } *>
           IO.sleep(1500.milliseconds) *>
           IO.monotonic.flatMap { t0 =>
