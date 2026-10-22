@@ -29,11 +29,15 @@ object DynamoQueueState {
   private[tasks] val MaxOpsPerTransaction: Int = 100
   private[tasks] val MaxDataBytesPerTransaction: Int = 3 * 1024 * 1024
   private[tasks] val MaxDataOpsPerChunk: Int = 98
+  private[tasks] val MaxItemBytes: Int = 380 * 1024
 
   final class OversizedUnitException(message: String)
       extends tasks.util.transactional.TransactionalStateDiff.OversizedUnitException(
         message
       )
+
+  final class OversizedItemException(message: String)
+      extends RuntimeException(message)
 
   private[tasks] val TasksPartitionKey: String = "tasks"
   private[tasks] val ResultsPartitionKey: String = "results"

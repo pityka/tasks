@@ -19,6 +19,13 @@ private[tasks] object SchedulerFixtures {
     Spore[AnyRef, AnyRef](fqcn = "", dependencies = Seq.empty)
 
   def scheduleTask(taskId: String, dataHash: String): ScheduleTask =
+    scheduleTask(taskId, dataHash, inlineInput = "")
+
+  def scheduleTask(
+      taskId: String,
+      dataHash: String,
+      inlineInput: String
+  ): ScheduleTask =
     ScheduleTask(
       description = HashedTaskDescription(TaskId(taskId, 1), dataHash),
       inputDeserializer = emptySpore,
@@ -35,7 +42,7 @@ private[tasks] object SchedulerFixtures {
           nodeSelector = None
         )
       ),
-      input = InputData(Base64Data(""), noCache = false),
+      input = InputData(Base64Data(inlineInput), noCache = false),
       fileServicePrefix = tasks.fileservice.FileServicePrefix(Vector.empty),
       tryCache = true,
       priority = Priority(0),

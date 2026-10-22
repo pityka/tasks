@@ -465,7 +465,18 @@ private[tasks] object DynamoDiff {
     val taskUnits: List[TransactionalStateDiff.WriteUnit[TransactWriteItem]] =
       diff.taskOps.map { op =>
         val item = toTaskTransact(table, op)
-        TransactionalStateDiff.WriteUnit(List(item), estimateOpBytes(item))
+        val bytes = estimateOpBytes(item)
+        if (bytes > DynamoQueueState.MaxItemBytes) {
+          throw new DynamoQueueState.OversizedItemException(
+            formatOversizedTaskItemMessage(
+              sk = op.key,
+              bytes = bytes,
+              limit = DynamoQueueState.MaxItemBytes,
+              task = taskFieldsFromOp(oldState, newState, op)
+            )
+          )
+        }
+        TransactionalStateDiff.WriteUnit(List(item), bytes)
       }
 
     val resultUnits: List[TransactionalStateDiff.WriteUnit[TransactWriteItem]] = {
@@ -514,10 +525,61 @@ private[tasks] object DynamoDiff {
 
     val barrier = resourcesConditionCheck(table, baseResourcesVersion)
     val terminal = diff.resourcesChange.map(resourcesTerminalOp(table, _))
+    terminal.foreach { op =>
+      val bytes = estimateOpBytes(op)
+      if (bytes > DynamoQueueState.MaxItemBytes)
+        throw new DynamoQueueState.OversizedItemException(
+          s"The DynamoDB resources singleton item serializes to $bytes bytes " +
+            s"which exceeds the DynamoDB per-item limit of ${DynamoQueueState.MaxItemBytes} bytes. " +
+            s"knownLaunchers=${newState.knownLaunchers.size}, " +
+            s"counters=${newState.counters.size}, " +
+            s"mainProcesses=${newState.mainProcesses.size}, " +
+            s"completedCount=${newState.completedCount.size}, " +
+            s"failedCount=${newState.failedCount.size}, " +
+            s"cacheHitCount=${newState.cacheHitCount.size}, " +
+            s"nodes.running=${newState.nodes.running.size}, " +
+            s"nodes.pending=${newState.nodes.pending.size}, " +
+            s"nodes.inFlightRequests=${newState.nodes.inFlightRequests.size}."
+        )
+    }
 
     Plan(
       TransactionalStateDiff.withSingletonBarrier(dataChunks, barrier, terminal)
     )
+  }
+
+  private def taskFieldsFromOp(
+      oldState: State,
+      newState: State,
+      op: TransactionalStateDiff.Op[TaskItemFields]
+  ): Option[(ScheduleTask, String)] = {
+    val sk = op.key
+    val fromNew = QueueStateDiff.taskItemsOf(newState).get(sk).map(f => (f.sch, f.status))
+    val fromOld = QueueStateDiff.taskItemsOf(oldState).get(sk).map(f => (f.sch, f.status))
+    fromNew.orElse(fromOld)
+  }
+
+  private def formatOversizedTaskItemMessage(
+      sk: String,
+      bytes: Int,
+      limit: Int,
+      task: Option[(ScheduleTask, String)]
+  ): String = {
+    val taskLine = task match {
+      case Some((sch, status)) =>
+        val d = sch.description
+        s"\n  task: id=${d.taskId.id} version=${d.taskId.version} " +
+          s"dataHash=${d.dataHash} status=$status " +
+          s"inputBase64Length=${sch.input.b64.value.length} " +
+          s"inputBase64Prefix='${truncate(sch.input.b64.value, OversizedPreviewChars)}'"
+      case None =>
+        s"\n  task sk=$sk (full task not found in state snapshot)"
+    }
+    s"DynamoDB task item for sk=$sk serializes to $bytes bytes which exceeds " +
+      s"the DynamoDB per-item limit of $limit bytes. " +
+      s"The ScheduleTask (including its serialized input) is too large to persist as one DDB item. " +
+      s"Move the task input bytes behind a SharedFile reference instead of inlining them in the task input." +
+      taskLine
   }
 
   private val OversizedPreviewChars: Int = 512
