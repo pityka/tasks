@@ -120,7 +120,6 @@ private[tasks] final class QueueMetrics(
       }
   }
 
-
   def onTaskScheduled(
       description: HashedTaskDescription,
       waitSeconds: Option[Double]

@@ -49,7 +49,8 @@ case class UntypedResult(
     data: Base64Data,
     mutableFiles: Option[Set[SharedFile]]
 ) {
-  override def toString = s"UntypedResult($files,$mutableFiles, [b64 data omitted])"
+  override def toString =
+    s"UntypedResult($files,$mutableFiles, [b64 data omitted])"
 }
 
 private[tasks] case class DependenciesAndRuntimeMetadata(

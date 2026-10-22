@@ -30,7 +30,13 @@ class ReleaseShutdownNodeSelectionTest extends FunSuite with Matchers {
   }
 
   private val shape =
-    ResourceAvailable(cpu = 1, memory = 100, scratch = 0, gpu = Nil, image = None)
+    ResourceAvailable(
+      cpu = 1,
+      memory = 100,
+      scratch = 0,
+      gpu = Nil,
+      image = None
+    )
 
   private val runningId = RunningJobId("running-1")
   private val pendingSeedId = PendingJobId("pending-seed")
@@ -65,8 +71,7 @@ class ReleaseShutdownNodeSelectionTest extends FunSuite with Matchers {
       createNode = None,
       convertRunningToPending = None,
       unmanagedResource = ResourceAvailable.empty,
-      meterProvider =
-        org.typelevel.otel4s.metrics.MeterProvider.noop[IO],
+      meterProvider = org.typelevel.otel4s.metrics.MeterProvider.noop[IO],
       mainProcessSession = Some(session)
     )
   }

@@ -42,7 +42,10 @@ class BatchQueueRoutingTest extends AnyFunSuite with Matchers {
       maxVcpus = 100,
       instances = List(cap(2, 1024), cap(16, 32000))
     )
-    BatchCreateNode.canHostRequest(queue, req(cpu = 8, memory = 8000)) shouldBe true
+    BatchCreateNode.canHostRequest(
+      queue,
+      req(cpu = 8, memory = 8000)
+    ) shouldBe true
   }
 
   test("canHostRequest: cpu too small for any instance") {
@@ -52,7 +55,10 @@ class BatchQueueRoutingTest extends AnyFunSuite with Matchers {
       maxVcpus = 100,
       instances = List(cap(2, 1024), cap(4, 32000))
     )
-    BatchCreateNode.canHostRequest(queue, req(cpu = 8, memory = 1024)) shouldBe false
+    BatchCreateNode.canHostRequest(
+      queue,
+      req(cpu = 8, memory = 1024)
+    ) shouldBe false
   }
 
   test("canHostRequest: memory too small for any instance") {
@@ -62,7 +68,10 @@ class BatchQueueRoutingTest extends AnyFunSuite with Matchers {
       maxVcpus = 100,
       instances = List(cap(16, 1024), cap(16, 4096))
     )
-    BatchCreateNode.canHostRequest(queue, req(cpu = 4, memory = 16000)) shouldBe false
+    BatchCreateNode.canHostRequest(
+      queue,
+      req(cpu = 4, memory = 16000)
+    ) shouldBe false
   }
 
   test("canHostRequest: gpus too few on any instance") {
@@ -72,7 +81,10 @@ class BatchQueueRoutingTest extends AnyFunSuite with Matchers {
       maxVcpus = 100,
       instances = List(cap(16, 32000, gpus = 1))
     )
-    BatchCreateNode.canHostRequest(queue, req(cpu = 4, memory = 4000, gpu = 2)) shouldBe false
+    BatchCreateNode.canHostRequest(
+      queue,
+      req(cpu = 4, memory = 4000, gpu = 2)
+    ) shouldBe false
   }
 
   test("canHostRequest: gpu request satisfied when instance has enough gpus") {
@@ -82,7 +94,10 @@ class BatchQueueRoutingTest extends AnyFunSuite with Matchers {
       maxVcpus = 100,
       instances = List(cap(16, 32000, gpus = 4))
     )
-    BatchCreateNode.canHostRequest(queue, req(cpu = 4, memory = 4000, gpu = 2)) shouldBe true
+    BatchCreateNode.canHostRequest(
+      queue,
+      req(cpu = 4, memory = 4000, gpu = 2)
+    ) shouldBe true
   }
 
   // largestInstanceVcpus
@@ -150,7 +165,9 @@ class BatchQueueRoutingTest extends AnyFunSuite with Matchers {
     ) shouldBe Some(spot)
   }
 
-  test("chooseQueue: on-demand-only, no room, no spot -> fall back to on-demand") {
+  test(
+    "chooseQueue: on-demand-only, no room, no spot -> fall back to on-demand"
+  ) {
     val od =
       q("od", spot = false, maxVcpus = 100, instances = List(cap(16, 32000)))
     BatchCreateNode.chooseQueue(
@@ -172,7 +189,9 @@ class BatchQueueRoutingTest extends AnyFunSuite with Matchers {
     ) shouldBe Some(small)
   }
 
-  test("chooseQueue: GPU request ignores on-demand/spot preference and tight-fits") {
+  test(
+    "chooseQueue: GPU request ignores on-demand/spot preference and tight-fits"
+  ) {
     val cpuOd = q(
       "cpu-od",
       spot = false,

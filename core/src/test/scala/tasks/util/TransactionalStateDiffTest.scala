@@ -39,7 +39,9 @@ class TransactionalStateDiffTest extends FunSuite with Matchers {
     )
   }
 
-  test("diffCollection emits a Delete carrying the base version for each removed key") {
+  test(
+    "diffCollection emits a Delete carrying the base version for each removed key"
+  ) {
     val ops = TransactionalStateDiff.diffCollection[String](
       oldItems = Map("a" -> "A", "b" -> "B"),
       newItems = Map("a" -> "A"),
@@ -48,7 +50,9 @@ class TransactionalStateDiffTest extends FunSuite with Matchers {
     ops shouldBe List(Delete("b", 7L))
   }
 
-  test("diffCollection emits an Update carrying the base version for each changed key") {
+  test(
+    "diffCollection emits an Update carrying the base version for each changed key"
+  ) {
     val ops = TransactionalStateDiff.diffCollection[String](
       oldItems = Map("a" -> "A", "b" -> "B"),
       newItems = Map("a" -> "A!", "b" -> "B"),
@@ -108,7 +112,9 @@ class TransactionalStateDiffTest extends FunSuite with Matchers {
     ) shouldBe None
   }
 
-  test("diffSingleton returns a single Update at baseVersion when values differ") {
+  test(
+    "diffSingleton returns a single Update at baseVersion when values differ"
+  ) {
     TransactionalStateDiff.diffSingleton(
       key = "res",
       oldItem = "a",
@@ -126,7 +132,8 @@ class TransactionalStateDiffTest extends FunSuite with Matchers {
   }
 
   test("packUnits packs several small units into a single chunk") {
-    val units = (0 until 5).toList.map(i => WriteUnit[String](List(s"op-$i"), 1))
+    val units =
+      (0 until 5).toList.map(i => WriteUnit[String](List(s"op-$i"), 1))
     val chunks = TransactionalStateDiff.packUnits(
       units,
       maxOpsPerChunk = 10,
@@ -136,8 +143,11 @@ class TransactionalStateDiffTest extends FunSuite with Matchers {
     chunks.head.size shouldBe 5
   }
 
-  test("packUnits splits by op count when a chunk would exceed maxOpsPerChunk") {
-    val units = (0 until 7).toList.map(i => WriteUnit[String](List(s"op-$i"), 1))
+  test(
+    "packUnits splits by op count when a chunk would exceed maxOpsPerChunk"
+  ) {
+    val units =
+      (0 until 7).toList.map(i => WriteUnit[String](List(s"op-$i"), 1))
     val chunks = TransactionalStateDiff.packUnits(
       units,
       maxOpsPerChunk = 3,
@@ -147,8 +157,11 @@ class TransactionalStateDiffTest extends FunSuite with Matchers {
     chunks.map(_.size) shouldBe List(3, 3, 1)
   }
 
-  test("packUnits splits by byte count when a chunk would exceed maxBytesPerChunk") {
-    val units = (0 until 4).toList.map(i => WriteUnit[String](List(s"op-$i"), 30))
+  test(
+    "packUnits splits by byte count when a chunk would exceed maxBytesPerChunk"
+  ) {
+    val units =
+      (0 until 4).toList.map(i => WriteUnit[String](List(s"op-$i"), 30))
     val chunks = TransactionalStateDiff.packUnits(
       units,
       maxOpsPerChunk = 100,
@@ -158,7 +171,9 @@ class TransactionalStateDiffTest extends FunSuite with Matchers {
     all(chunks.map(_.size)) shouldBe 1
   }
 
-  test("packUnits never splits a WriteUnit (ops of one unit stay in the same chunk)") {
+  test(
+    "packUnits never splits a WriteUnit (ops of one unit stay in the same chunk)"
+  ) {
     val units = List(
       WriteUnit[String](List("a1", "a2", "a3"), 30),
       WriteUnit[String](List("b1", "b2"), 20)
@@ -173,21 +188,24 @@ class TransactionalStateDiffTest extends FunSuite with Matchers {
     chunks.last shouldBe List("b1", "b2")
   }
 
-  test("packUnits throws OversizedUnitException with the caller-supplied message") {
+  test(
+    "packUnits throws OversizedUnitException with the caller-supplied message"
+  ) {
     val oversized = WriteUnit[String](List("big"), 200)
     val thrown = intercept[TransactionalStateDiff.OversizedUnitException] {
       TransactionalStateDiff.packUnits(
         units = List(oversized),
         maxOpsPerChunk = 10,
         maxBytesPerChunk = 100,
-        describeOversized =
-          (u: WriteUnit[String]) => s"nope: ${u.bytes} bytes"
+        describeOversized = (u: WriteUnit[String]) => s"nope: ${u.bytes} bytes"
       )
     }
     thrown.getMessage shouldBe "nope: 200 bytes"
   }
 
-  test("withSingletonBarrier returns Nil when there are no chunks and no terminal op") {
+  test(
+    "withSingletonBarrier returns Nil when there are no chunks and no terminal op"
+  ) {
     TransactionalStateDiff.withSingletonBarrier[String](
       dataChunks = Nil,
       barrier = "B",

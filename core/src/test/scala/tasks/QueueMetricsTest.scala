@@ -243,7 +243,13 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
     val launcher = tasks.util.message.LauncherName("w1")
     val allocated = tasks.shared.VersionedResourceAllocated(
       tasks.shared.CodeVersion("v1"),
-      tasks.shared.ResourceAllocated(cpu = 1, memory = 1, scratch = 0, gpu = Nil, image = None)
+      tasks.shared.ResourceAllocated(
+        cpu = 1,
+        memory = 1,
+        scratch = 0,
+        gpu = Nil,
+        image = None
+      )
     )
     val afterSchedule = QueueImpl.State.empty
       .update(QueueImpl.Enqueued(sch, Nil, enqueueMillis = 1_000L))
