@@ -1000,7 +1000,7 @@ private[tasks] class QueueImpl(
                 }
 
               val updatedState: IO[Unit] = IO(
-                scribe.info(
+                scribe.debug(
                   "RequestNodes",
                   scribe.data(
                     Map(
