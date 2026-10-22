@@ -151,8 +151,14 @@ class QueueStateDiffTest extends FunSuite with Matchers {
   ) {
     val address = Address("fatty")
     val payloadBytes = 300 * 1024
+    val randomBytes = {
+      val rng = new scala.util.Random(42L)
+      val out = new Array[Byte](payloadBytes * 2 + 100)
+      rng.nextBytes(out)
+      out
+    }
     val big = new String(
-      Array.fill[Byte](payloadBytes * 2 + 100)(0x41.toByte),
+      randomBytes,
       java.nio.charset.StandardCharsets.ISO_8859_1
     )
     val result: ProxyResult =
