@@ -60,6 +60,22 @@ private[tasks] object DynamoDiff {
     TaskId(k.substring(0, idx), k.substring(idx + 1).toInt)
   }
 
+  private[tasks] def gzip(bytes: Array[Byte]): Array[Byte] = {
+    val out = new java.io.ByteArrayOutputStream()
+    val gz = new java.util.zip.GZIPOutputStream(out)
+    try gz.write(bytes)
+    finally gz.close()
+    out.toByteArray
+  }
+
+  private[tasks] def gunzip(bytes: Array[Byte]): Array[Byte] = {
+    val gz = new java.util.zip.GZIPInputStream(
+      new java.io.ByteArrayInputStream(bytes)
+    )
+    try gz.readAllBytes()
+    finally gz.close()
+  }
+
   def encodeTaskAttrs(
       sk: String,
       item: TaskItemFields,
@@ -71,7 +87,7 @@ private[tasks] object DynamoDiff {
       Attr.Pk -> s(TasksPartitionKey),
       Attr.Sk -> s(sk),
       Attr.Status -> s(item.status),
-      Attr.Sch -> b(encode(item.sch)),
+      Attr.Sch -> b(gzip(encode(item.sch))),
       Attr.Proxies -> l(proxiesList),
       Attr.Dispatches -> l(dispatchesList),
       Attr.ResultDelivered -> bool(item.resultDelivered),
@@ -93,7 +109,7 @@ private[tasks] object DynamoDiff {
     val attrs = item.asScala
     val sk = attrs(Attr.Sk).s()
     val status = attrs(Attr.Status).s()
-    val sch = decode[ScheduleTask](attrs(Attr.Sch).b().asByteArray())
+    val sch = decode[ScheduleTask](gunzip(attrs(Attr.Sch).b().asByteArray()))
     val proxies = attrs(Attr.Proxies)
       .l()
       .asScala
@@ -146,7 +162,7 @@ private[tasks] object DynamoDiff {
       Attr.Sk -> s(ResourcesSortKey),
       Attr.KnownLaunchers -> m(knownLaunchersMap),
       Attr.Counters -> m(countersMap),
-      Attr.Nodes -> b(encode(nodes)),
+      Attr.Nodes -> b(gzip(encode(nodes))),
       Attr.MainProcesses -> l(mainProcList),
       Attr.CompletedCount -> m(taskIdLongMap(completedCount)),
       Attr.FailedCount -> m(taskIdLongMap(failedCount)),
@@ -176,7 +192,9 @@ private[tasks] object DynamoDiff {
           LauncherName(name) -> av.n().toLong
         }
     val nodes: NodeRegistryState.State =
-      decode[NodeRegistryState.State](attrs(Attr.Nodes).b().asByteArray())
+      decode[NodeRegistryState.State](
+        gunzip(attrs(Attr.Nodes).b().asByteArray())
+      )
     val mainProcesses: Set[String] =
       attrs(Attr.MainProcesses).l().asScala.toList.map(_.s()).toSet
 
@@ -568,17 +586,21 @@ private[tasks] object DynamoDiff {
     val taskLine = task match {
       case Some((sch, status)) =>
         val d = sch.description
+        val rawSchBytes = encode(sch).length
+        val compressedSchBytes = gzip(encode(sch)).length
         s"\n  task: id=${d.taskId.id} version=${d.taskId.version} " +
           s"dataHash=${d.dataHash} status=$status " +
+          s"serializedScheduleTaskBytes=$rawSchBytes " +
+          s"compressedScheduleTaskBytes=$compressedSchBytes " +
           s"inputBase64Length=${sch.input.b64.value.length} " +
           s"inputBase64Prefix='${truncate(sch.input.b64.value, OversizedPreviewChars)}'"
       case None =>
         s"\n  task sk=$sk (full task not found in state snapshot)"
     }
-    s"DynamoDB task item for sk=$sk serializes to $bytes bytes which exceeds " +
-      s"the DynamoDB per-item limit of $limit bytes. " +
-      s"The ScheduleTask (including its serialized input) is too large to persist as one DDB item. " +
-      s"Move the task input bytes behind a SharedFile reference instead of inlining them in the task input." +
+    s"DynamoDB task item for sk=$sk serializes to $bytes bytes (after gzip) " +
+      s"which exceeds the DynamoDB per-item limit of $limit bytes. " +
+      s"The ScheduleTask (including its serialized input) is too large to persist as one DDB item even compressed. " +
+      s"Move the heavy parts of the task input (bulk bytes) behind a SharedFile reference instead of inlining them." +
       taskLine
   }
 

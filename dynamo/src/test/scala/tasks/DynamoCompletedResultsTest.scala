@@ -13,6 +13,21 @@ import tasks.queue.DynamoQueueState
 import tasks.queue.Proxy
 import tasks.queue.QueueImpl
 import tasks.util.message.Address
+
+object DynamoCompletedResultsTest {
+  private def randomBytes(count: Int, seed: Long): Array[Byte] = {
+    val rng = new scala.util.Random(seed)
+    val out = new Array[Byte](count)
+    rng.nextBytes(out)
+    out
+  }
+
+  private def randomIso(count: Int, seed: Long): String =
+    new String(
+      randomBytes(count, seed),
+      java.nio.charset.StandardCharsets.ISO_8859_1
+    )
+}
 import tasks.util.message.LauncherName
 
 class DynamoCompletedResultsTest extends FunSuite with Matchers {
@@ -146,9 +161,9 @@ class DynamoCompletedResultsTest extends FunSuite with Matchers {
   ) {
     val client = newClient()
     val address = Address("fatty")
-    val bigMessage = new String(
-      Array.fill[Byte](DynamoQueueState.ChunkPayloadBytes * 3)(0x41.toByte),
-      java.nio.charset.StandardCharsets.ISO_8859_1
+    val bigMessage = DynamoCompletedResultsTest.randomIso(
+      DynamoQueueState.ChunkPayloadBytes * 3,
+      seed = 101
     )
     val result = QueueImpl.ProxyResultFailure(new RuntimeException(bigMessage))
     val state = runEvents(
@@ -200,11 +215,11 @@ class DynamoCompletedResultsTest extends FunSuite with Matchers {
     val client = newClient()
     val count = 20
     val perResultBytes = 300 * 1024
-    val bigMessage = new String(
-      Array.fill[Byte](perResultBytes)(0x43.toByte),
-      java.nio.charset.StandardCharsets.ISO_8859_1
-    )
     val events = (0 until count).toList.map { i =>
+      val bigMessage = DynamoCompletedResultsTest.randomIso(
+        perResultBytes,
+        seed = 200L + i
+      )
       QueueImpl.ResultStoredForProxy(
         Address(s"heavy-$i"),
         QueueImpl.ProxyResultFailure(new RuntimeException(bigMessage))
@@ -232,10 +247,7 @@ class DynamoCompletedResultsTest extends FunSuite with Matchers {
     val client = newClient()
     val address = Address("ginormous")
     val serializedBytes = DynamoQueueState.MaxDataBytesPerTransaction + 512 * 1024
-    val payload = new String(
-      Array.fill[Byte](serializedBytes)(0x45.toByte),
-      java.nio.charset.StandardCharsets.ISO_8859_1
-    )
+    val payload = DynamoCompletedResultsTest.randomIso(serializedBytes, seed = 300)
     val result = QueueImpl.ProxyResultFailure(new RuntimeException(payload))
     val outcome = DynamoQueueState
       .makeTransaction(
@@ -270,11 +282,9 @@ class DynamoCompletedResultsTest extends FunSuite with Matchers {
   ) {
     val client = newClient()
     val address = Address("plus-size-success")
-    val huge = new String(
-      Array.fill[Byte](DynamoQueueState.MaxDataBytesPerTransaction + 512 * 1024)(
-        0x46.toByte
-      ),
-      java.nio.charset.StandardCharsets.ISO_8859_1
+    val huge = DynamoCompletedResultsTest.randomIso(
+      DynamoQueueState.MaxDataBytesPerTransaction + 512 * 1024,
+      seed = 400
     )
     val result = QueueImpl.ProxyResultSuccess(
       tasks.queue.UntypedResult(
@@ -315,11 +325,9 @@ class DynamoCompletedResultsTest extends FunSuite with Matchers {
     val sch = SchedulerFixtures.scheduleTask("hinted-task", "hinted-hash")
     val address = Address("hintedproxy")
     val proxy = Proxy(address)
-    val huge = new String(
-      Array.fill[Byte](DynamoQueueState.MaxDataBytesPerTransaction + 256 * 1024)(
-        0x47.toByte
-      ),
-      java.nio.charset.StandardCharsets.ISO_8859_1
+    val huge = DynamoCompletedResultsTest.randomIso(
+      DynamoQueueState.MaxDataBytesPerTransaction + 256 * 1024,
+      seed = 500
     )
     val result = QueueImpl.ProxyResultFailure(new RuntimeException(huge))
     val outcome = DynamoQueueState

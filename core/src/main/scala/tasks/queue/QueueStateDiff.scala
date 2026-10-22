@@ -61,12 +61,28 @@ private[tasks] object QueueStateDiff {
     if (bytes.length <= chunkPayloadBytes) List(bytes)
     else bytes.grouped(chunkPayloadBytes).toList
 
+  private def gzipBytes(bytes: Array[Byte]): Array[Byte] = {
+    val out = new java.io.ByteArrayOutputStream()
+    val gz = new java.util.zip.GZIPOutputStream(out)
+    try gz.write(bytes)
+    finally gz.close()
+    out.toByteArray
+  }
+
+  private def gunzipBytes(bytes: Array[Byte]): Array[Byte] = {
+    val gz = new java.util.zip.GZIPInputStream(
+      new java.io.ByteArrayInputStream(bytes)
+    )
+    try gz.readAllBytes()
+    finally gz.close()
+  }
+
   private[queue] def completedResultChunks(
       completedResults: Map[Address, ProxyResult],
       chunkPayloadBytes: Int
   ): Map[String, Array[Byte]] =
     completedResults.flatMap { case (address, result) =>
-      val serialized = encode(result)
+      val serialized = gzipBytes(encode(result))
       splitIntoChunks(serialized, chunkPayloadBytes).zipWithIndex.map {
         case (chunk, i) => chunkSk(address.value, i) -> chunk
       }
@@ -81,7 +97,7 @@ private[tasks] object QueueStateDiff {
       val sorted = entries.sortBy(_._1)
       val fullBytes =
         sorted.flatMap { case (_, (bytes, _)) => bytes }.toArray
-      Address(addressValue) -> decode[ProxyResult](fullBytes)
+      Address(addressValue) -> decode[ProxyResult](gunzipBytes(fullBytes))
     }
   }
 
