@@ -124,13 +124,12 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
   }
 
   test(
-    "counters read cumulative completed/failed/cacheHit from shared state"
+    "counters read cumulative completed/failed from shared state"
   ) {
     val state = QueueImpl.State.empty.copy(
       completedCount =
         Map(TaskId("alignment", 3) -> 2L, TaskId("variant_call", 1) -> 1L),
-      failedCount = Map(TaskId("alignment", 3) -> 1L),
-      cacheHitCount = Map(TaskId("alignment", 3) -> 1L)
+      failedCount = Map(TaskId("alignment", 3) -> 1L)
     )
 
     val metrics = collect(IO.pure(state))(_ => IO.unit)
@@ -150,10 +149,25 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
       "alignment",
       "3"
     ) shouldBe 1L
+  }
+
+  test(
+    "cache_hit counter is process-local — onCacheHit increments it without touching the shared state"
+  ) {
+    val metrics = collect() { qm =>
+      qm.onCacheHit(descA) *>
+        qm.onCacheHit(descA) *>
+        qm.onCacheHit(descB)
+    }
     sumPointsByTask(
       find(metrics, "tasks.cache_hit.count"),
       "alignment",
       "3"
+    ) shouldBe 2L
+    sumPointsByTask(
+      find(metrics, "tasks.cache_hit.count"),
+      "variant_call",
+      "1"
     ) shouldBe 1L
   }
 

@@ -21,6 +21,7 @@ import cats.effect.kernel.{Ref, Resource}
 import org.typelevel.otel4s.{Attribute, Attributes}
 import org.typelevel.otel4s.metrics.{
   BucketBoundaries,
+  Counter,
   Histogram,
   Meter,
   MeterProvider,
@@ -29,6 +30,7 @@ import org.typelevel.otel4s.metrics.{
 import tasks.util.config.TasksConfig
 
 private[tasks] final class QueueMetrics(
+    cacheHitCounter: Counter[IO, Long],
     executionDuration: Histogram[IO, Double],
     queueWaitTime: Histogram[IO, Double],
     cap: Int,
@@ -138,6 +140,9 @@ private[tasks] final class QueueMetrics(
     attrsFor(description.taskId).flatMap { attrs =>
       executionDuration.record(elapsedNanos / 1e9, attrs)
     }
+
+  def onCacheHit(description: HashedTaskDescription): IO[Unit] =
+    attrsFor(description.taskId).flatMap(cacheHitCounter.inc(_))
 }
 
 private[tasks] object QueueMetrics {
@@ -216,6 +221,16 @@ private[tasks] object QueueMetrics {
           .withExplicitBucketBoundaries(queueWaitTimeBuckets)
           .create
       )
+      cacheHit <- Resource.eval(
+        meter
+          .counter[Long]("tasks.cache_hit.count")
+          .withDescription(
+            "Cumulative cache hits. Cache hits do not touch the shared " +
+              "queue state so this counter stays process-local by design, " +
+              "to keep cache-hit replay a read-only workload."
+          )
+          .create
+      )
       admittedRef <- Resource.eval(Ref.of[IO, Set[(String, Int)]](Set.empty))
       overflowWarnedRef <- Resource.eval(Ref.of[IO, Boolean](false))
       admittedLabelsRef <- Resource.eval(Ref.of[IO, Set[String]](Set.empty))
@@ -224,6 +239,7 @@ private[tasks] object QueueMetrics {
       // The QueueMetrics instance is needed for attrsFor — declared here so the
       // gauge callbacks can call it and share the same admittance set.
       qm = new QueueMetrics(
+        cacheHitCounter = cacheHit,
         executionDuration = execution,
         queueWaitTime = waitTime,
         cap = cap,
@@ -267,25 +283,6 @@ private[tasks] object QueueMetrics {
             obs,
             st =>
               sequenceRecords(st.failedCount.toVector) { case (taskId, c) =>
-                qm.attrsFor(taskId).flatMap(attrs => obs.record(c, attrs))
-              }
-          )
-        }
-
-      cacheHitCount <- Resource
-        .eval(
-          meter
-            .observableCounter[Long]("tasks.cache_hit.count")
-            .withDescription(
-              "Cumulative cache hits."
-            )
-            .createObserver
-        )
-        .map { obs =>
-          Binding(
-            obs,
-            st =>
-              sequenceRecords(st.cacheHitCount.toVector) { case (taskId, c) =>
                 qm.attrsFor(taskId).flatMap(attrs => obs.record(c, attrs))
               }
           )
@@ -429,8 +426,7 @@ private[tasks] object QueueMetrics {
         nodesInflight,
         cumulativeRequested,
         completedCount,
-        failedCount,
-        cacheHitCount
+        failedCount
       ) ::: nodeRegistry ::: launcherAvailable ::: queuedResources ::: labels
 
       _ <- meter.batchCallback(

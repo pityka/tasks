@@ -92,8 +92,7 @@ class SerializableQueueStateTest extends FunSuite with Matchers {
     ),
     enqueueTimestamps = Map(QueueImpl.project(queued) -> 7L),
     completedCount = Map(TaskId("completed", 1) -> 11L),
-    failedCount = Map(TaskId("flaky", 2) -> 3L),
-    cacheHitCount = Map(TaskId("hit", 1) -> 17L)
+    failedCount = Map(TaskId("flaky", 2) -> 3L)
   )
 
   test("a populated queue state survives an encode/decode round trip") {

@@ -179,8 +179,7 @@ object QueueImpl {
       mainProcesses: Set[String],
       enqueueTimestamps: Map[ScheduleTaskEqualityProjection, Long],
       completedCount: Map[TaskId, Long],
-      failedCount: Map[TaskId, Long],
-      cacheHitCount: Map[TaskId, Long]
+      failedCount: Map[TaskId, Long]
   ) {
 
     def freeCapacityOfRunningNodes: List[ResourceAvailable] = {
@@ -344,12 +343,7 @@ object QueueImpl {
             }
           )
         case CacheHit(sch, _) =>
-          val taskId = sch.description.taskId
-          copy(
-            scheduledTasks = scheduledTasks - project(sch),
-            cacheHitCount =
-              cacheHitCount.updated(taskId, cacheHitCount.getOrElse(taskId, 0L) + 1L)
-          )
+          copy(scheduledTasks = scheduledTasks - project(sch))
 
         case ResultStoredForProxy(proxy, result) =>
           copy(completedResults = completedResults.updated(proxy, result))
@@ -416,8 +410,7 @@ object QueueImpl {
         mainProcesses = Set(),
         enqueueTimestamps = Map(),
         completedCount = Map(),
-        failedCount = Map(),
-        cacheHitCount = Map()
+        failedCount = Map()
       )
 
   }
@@ -772,7 +765,7 @@ private[tasks] class QueueImpl(
               ProxyResultSuccess(result, retrievedFromCache = true)
             )
           }
-        }
+        } *> metrics.onCacheHit(sch.description)
       }
       case Right(None) => {
         scribe.debug(

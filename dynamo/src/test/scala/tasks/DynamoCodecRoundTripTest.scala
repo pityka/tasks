@@ -166,7 +166,6 @@ class DynamoCodecRoundTripTest extends FunSuite with Matchers {
       mainProcesses = Set("session-x", "session-y"),
       completedCount = Map.empty,
       failedCount = Map.empty,
-      cacheHitCount = Map.empty,
       ver = 99L
     )
     val javaAttrs =

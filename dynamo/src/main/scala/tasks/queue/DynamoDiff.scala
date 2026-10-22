@@ -144,7 +144,6 @@ private[tasks] object DynamoDiff {
       mainProcesses: Set[String],
       completedCount: Map[TaskId, Long],
       failedCount: Map[TaskId, Long],
-      cacheHitCount: Map[TaskId, Long],
       ver: Long
   ): Map[String, AttributeValue] = {
     val knownLaunchersMap: Map[String, AttributeValue] =
@@ -166,7 +165,6 @@ private[tasks] object DynamoDiff {
       Attr.MainProcesses -> l(mainProcList),
       Attr.CompletedCount -> m(taskIdLongMap(completedCount)),
       Attr.FailedCount -> m(taskIdLongMap(failedCount)),
-      Attr.CacheHitCount -> m(taskIdLongMap(cacheHitCount)),
       Attr.Ver -> n(ver)
     )
   }
@@ -211,7 +209,6 @@ private[tasks] object DynamoDiff {
 
     val completedCount = taskIdLongMap(Attr.CompletedCount)
     val failedCount = taskIdLongMap(Attr.FailedCount)
-    val cacheHitCount = taskIdLongMap(Attr.CacheHitCount)
     val ver = attrs(Attr.Ver).n().toLong
     (
       ResourcesFields(
@@ -220,8 +217,7 @@ private[tasks] object DynamoDiff {
         nodes = nodes,
         mainProcesses = mainProcesses,
         completedCount = completedCount,
-        failedCount = failedCount,
-        cacheHitCount = cacheHitCount
+        failedCount = failedCount
       ),
       ver
     )
@@ -331,7 +327,6 @@ private[tasks] object DynamoDiff {
       mainProcesses = resources.mainProcesses,
       completedCount = resources.completedCount,
       failedCount = resources.failedCount,
-      cacheHitCount = resources.cacheHitCount,
       ver = newVer
     )
     val put = Put
@@ -554,7 +549,6 @@ private[tasks] object DynamoDiff {
             s"mainProcesses=${newState.mainProcesses.size}, " +
             s"completedCount=${newState.completedCount.size}, " +
             s"failedCount=${newState.failedCount.size}, " +
-            s"cacheHitCount=${newState.cacheHitCount.size}, " +
             s"nodes.running=${newState.nodes.running.size}, " +
             s"nodes.pending=${newState.nodes.pending.size}, " +
             s"nodes.inFlightRequests=${newState.nodes.inFlightRequests.size}."

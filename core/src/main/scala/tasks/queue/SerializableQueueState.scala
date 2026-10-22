@@ -25,8 +25,7 @@ private[tasks] case class SerializableQueueState(
     mainProcesses: List[String] = Nil,
     enqueueTimestamps: List[(ScheduleTaskEqualityProjection, Long)] = Nil,
     completedCount: List[(TaskId, Long)] = Nil,
-    failedCount: List[(TaskId, Long)] = Nil,
-    cacheHitCount: List[(TaskId, Long)] = Nil
+    failedCount: List[(TaskId, Long)] = Nil
 ) {
   def toState = QueueImpl.State(
     queuedTasks = queuedTasks.toMap,
@@ -38,8 +37,7 @@ private[tasks] case class SerializableQueueState(
     mainProcesses = mainProcesses.toSet,
     enqueueTimestamps = enqueueTimestamps.toMap,
     completedCount = completedCount.toMap,
-    failedCount = failedCount.toMap,
-    cacheHitCount = cacheHitCount.toMap
+    failedCount = failedCount.toMap
   )
 }
 
@@ -54,8 +52,7 @@ private[tasks] object SerializableQueueState {
     mainProcesses = state.mainProcesses.toList.sorted,
     enqueueTimestamps = state.enqueueTimestamps.toList,
     completedCount = state.completedCount.toList,
-    failedCount = state.failedCount.toList,
-    cacheHitCount = state.cacheHitCount.toList
+    failedCount = state.failedCount.toList
   )
 
   import com.github.plokhotnyuk.jsoniter_scala.core._

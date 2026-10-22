@@ -33,8 +33,7 @@ private[tasks] object QueueStateDiff {
       nodes: NodeRegistryState.State,
       mainProcesses: Set[String],
       completedCount: Map[TaskId, Long],
-      failedCount: Map[TaskId, Long],
-      cacheHitCount: Map[TaskId, Long]
+      failedCount: Map[TaskId, Long]
   )
 
   final case class Diff(
@@ -135,8 +134,7 @@ private[tasks] object QueueStateDiff {
       nodes = state.nodes,
       mainProcesses = state.mainProcesses,
       completedCount = state.completedCount,
-      failedCount = state.failedCount,
-      cacheHitCount = state.cacheHitCount
+      failedCount = state.failedCount
     )
 
   private[queue] def assembleState(
@@ -178,8 +176,7 @@ private[tasks] object QueueStateDiff {
       mainProcesses = resources.mainProcesses,
       enqueueTimestamps = enqueueTimestamps,
       completedCount = resources.completedCount,
-      failedCount = resources.failedCount,
-      cacheHitCount = resources.cacheHitCount
+      failedCount = resources.failedCount
     )
   }
 

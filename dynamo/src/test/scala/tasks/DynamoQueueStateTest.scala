@@ -111,7 +111,6 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
           mainProcesses = Set.empty,
           completedCount = Map.empty,
           failedCount = Map.empty,
-          cacheHitCount = Map.empty,
           ver = 1L
         )
         client.setItem(
@@ -255,7 +254,6 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
           mainProcesses = Set.empty,
           completedCount = Map.empty,
           failedCount = Map.empty,
-          cacheHitCount = Map.empty,
           ver = 1L
         )
         client.setItem(

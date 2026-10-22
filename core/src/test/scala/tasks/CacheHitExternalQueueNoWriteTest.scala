@@ -38,7 +38,7 @@ object CacheHitExternalQueueNoWriteTest {
 
   final class CountingTransaction(
       underlying: Transaction[QueueImpl.State],
-      completedResultWrites: Ref[IO, Int]
+      stateMutations: Ref[IO, Int]
   ) extends Transaction[QueueImpl.State] {
     def get: IO[QueueImpl.State] = underlying.get
     def flatModify[B](
@@ -47,8 +47,7 @@ object CacheHitExternalQueueNoWriteTest {
       underlying.flatModify { state =>
         val (newState, io) = f(state)
         val count =
-          if (newState.completedResults != state.completedResults)
-            completedResultWrites.update(_ + 1)
+          if (newState != state) stateMutations.update(_ + 1)
           else IO.unit
         (newState, count *> io)
       }
@@ -96,7 +95,7 @@ class CacheHitExternalQueueNoWriteTestSuite extends FunSuite with Matchers {
     )
 
   test(
-    "cache-hit replay against an external queue state performs no completed-result writes"
+    "cache-hit replay against an external queue state performs no shared-state writes at all"
   ) {
     val replayCount = 20
 
