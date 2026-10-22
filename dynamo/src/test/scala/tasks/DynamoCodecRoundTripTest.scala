@@ -108,7 +108,8 @@ class DynamoCodecRoundTripTest extends FunSuite with Matchers {
         QueueImpl.Dispatch(LauncherName("l-y"), SchedulerFixtures.allocated(cpu = 4))
       ),
       placementValue = Some("rack-7"),
-      resultDelivered = true
+      resultDelivered = true,
+      enqueueTimestamp = None
     )
     val attrs = DynamoDiff.encodeTaskAttrs("sk-1", fields, ver = 42L)
     val javaAttrs =
@@ -127,7 +128,8 @@ class DynamoCodecRoundTripTest extends FunSuite with Matchers {
       proxies = Nil,
       dispatches = Nil,
       placementValue = None,
-      resultDelivered = false
+      resultDelivered = false,
+      enqueueTimestamp = Some(1234567L)
     )
     val attrs = DynamoDiff.encodeTaskAttrs("sk-2", fields, ver = 1L)
     attrs.contains(DynamoQueueState.Attr.PlacementValue) shouldBe false
@@ -161,6 +163,9 @@ class DynamoCodecRoundTripTest extends FunSuite with Matchers {
       counters = Map(launcherA -> 7L, launcherB -> 11L),
       nodes = nodes,
       mainProcesses = Set("session-x", "session-y"),
+      completedCount = Map.empty,
+      failedCount = Map.empty,
+      cacheHitCount = Map.empty,
       ver = 99L
     )
     val javaAttrs =

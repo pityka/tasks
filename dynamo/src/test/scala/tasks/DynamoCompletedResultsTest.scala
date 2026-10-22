@@ -330,7 +330,7 @@ class DynamoCompletedResultsTest extends FunSuite with Matchers {
       )
       .use { tx =>
         tx.flatModify(state =>
-          (state.update(QueueImpl.Enqueued(sch, List(proxy))), IO.unit)
+          (state.update(QueueImpl.Enqueued(sch, List(proxy), 0L)), IO.unit)
         ) *>
           tx.flatModify(state =>
             (

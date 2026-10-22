@@ -61,6 +61,10 @@ object DynamoQueueState {
     val CompletedResults = "completedResults"
     val MainProcesses = "mainProcesses"
     val Blob = "blob"
+    val EnqueueTimestamps = "enqueueTimestamps"
+    val CompletedCount = "completedCount"
+    val FailedCount = "failedCount"
+    val CacheHitCount = "cacheHitCount"
   }
 
   def clientResource(region: Region): Resource[IO, DynamoDbAsyncClient] =
@@ -246,6 +250,9 @@ object DynamoQueueState {
         counters = Map.empty,
         nodes = NodeRegistryState.State.empty,
         mainProcesses = Set.empty,
+        completedCount = Map.empty,
+        failedCount = Map.empty,
+        cacheHitCount = Map.empty,
         ver = 0L
       )
       .asJava
@@ -329,7 +336,10 @@ object DynamoQueueState {
               knownLaunchers = Map.empty,
               counters = Map.empty,
               nodes = NodeRegistryState.State.empty,
-              mainProcesses = Set.empty
+              mainProcesses = Set.empty,
+              completedCount = Map.empty,
+              failedCount = Map.empty,
+              cacheHitCount = Map.empty
             ),
             0L
           )

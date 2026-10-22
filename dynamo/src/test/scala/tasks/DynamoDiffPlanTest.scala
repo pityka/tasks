@@ -66,7 +66,7 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
     val proxy = Proxy(Address("p-one"))
     val newState = State.empty
       .update(QueueImpl.MainProcessJoined("session-a"))
-      .update(QueueImpl.Enqueued(sch, List(proxy)))
+      .update(QueueImpl.Enqueued(sch, List(proxy), 0L))
     val plan = DynamoDiff.plan(
       table = table,
       oldState = State.empty,
@@ -87,7 +87,7 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
     val plan = DynamoDiff.plan(
       table = table,
       oldState = State.empty,
-      newState = State.empty.update(QueueImpl.Enqueued(sch, List(proxy))),
+      newState = State.empty.update(QueueImpl.Enqueued(sch, List(proxy), 0L)),
       baseTaskVersions = Map.empty,
       baseResultChunkVersions = Map.empty,
       baseResourcesVersion = 5L
@@ -108,7 +108,7 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
     )
     val proxy = Proxy(Address("p-bulk"))
     val newState = bulk.foldLeft(State.empty) { (acc, sch) =>
-      acc.update(QueueImpl.Enqueued(sch, List(proxy)))
+      acc.update(QueueImpl.Enqueued(sch, List(proxy), 0L))
     }.update(QueueImpl.MainProcessJoined("s"))
     val plan = DynamoDiff.plan(
       table = table,
@@ -143,7 +143,7 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
   ) {
     val sch = SchedulerFixtures.scheduleTask("del", "del-hash")
     val proxy = Proxy(Address("p-del"))
-    val oldState = State.empty.update(QueueImpl.Enqueued(sch, List(proxy)))
+    val oldState = State.empty.update(QueueImpl.Enqueued(sch, List(proxy), 0L))
     val baseVer = 7L
     val plan = DynamoDiff.plan(
       table = table,
@@ -165,9 +165,9 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
     val sch = SchedulerFixtures.scheduleTask("upd", "upd-hash")
     val proxyA = Proxy(Address("p-upd-a"))
     val proxyB = Proxy(Address("p-upd-b"))
-    val oldState = State.empty.update(QueueImpl.Enqueued(sch, List(proxyA)))
-    val newState = State.empty.update(QueueImpl.Enqueued(sch, List(proxyA)))
-      .update(QueueImpl.Enqueued(sch, List(proxyB)))
+    val oldState = State.empty.update(QueueImpl.Enqueued(sch, List(proxyA), 0L))
+    val newState = State.empty.update(QueueImpl.Enqueued(sch, List(proxyA), 0L))
+      .update(QueueImpl.Enqueued(sch, List(proxyB), 0L))
     val baseVer = 3L
     val plan = DynamoDiff.plan(
       table = table,
@@ -194,7 +194,7 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
     val plan = DynamoDiff.plan(
       table = table,
       oldState = State.empty,
-      newState = State.empty.update(QueueImpl.Enqueued(sch, List(proxy))),
+      newState = State.empty.update(QueueImpl.Enqueued(sch, List(proxy), 0L)),
       baseTaskVersions = Map.empty,
       baseResultChunkVersions = Map.empty,
       baseResourcesVersion = 0L

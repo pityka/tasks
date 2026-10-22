@@ -35,15 +35,26 @@ private[tasks] object DynamoDiff {
       proxies: List[Proxy],
       dispatches: List[Dispatch],
       placementValue: Option[String],
-      resultDelivered: Boolean
+      resultDelivered: Boolean,
+      enqueueTimestamp: Option[Long]
   )
 
   case class ResourcesFields(
       knownLaunchers: Map[LauncherName, Option[Node]],
       counters: Map[LauncherName, Long],
       nodes: NodeRegistryState.State,
-      mainProcesses: Set[String]
+      mainProcesses: Set[String],
+      completedCount: Map[TaskId, Long],
+      failedCount: Map[TaskId, Long],
+      cacheHitCount: Map[TaskId, Long]
   )
+
+  private def taskIdKey(id: TaskId): String = s"${id.id}@${id.version}"
+
+  private def parseTaskIdKey(k: String): TaskId = {
+    val idx = k.lastIndexOf('@')
+    TaskId(k.substring(0, idx), k.substring(idx + 1).toInt)
+  }
 
   case class Plan(
       chunks: List[List[TransactWriteItem]]
@@ -84,9 +95,13 @@ private[tasks] object DynamoDiff {
       Attr.ResultDelivered -> bool(item.resultDelivered),
       Attr.Ver -> n(ver)
     )
-    item.placementValue match {
+    val withPlacement = item.placementValue match {
       case None     => base
       case Some(pv) => base + (Attr.PlacementValue -> s(pv))
+    }
+    item.enqueueTimestamp match {
+      case None     => withPlacement
+      case Some(ts) => withPlacement + (Attr.EnqueueTimestamps -> n(ts))
     }
   }
 
@@ -109,6 +124,8 @@ private[tasks] object DynamoDiff {
       .map(av => decode[Dispatch](av.b().asByteArray()))
     val placementValue = attrs.get(Attr.PlacementValue).map(_.s())
     val resultDelivered = attrs(Attr.ResultDelivered).bool().booleanValue()
+    val enqueueTimestamp =
+      attrs.get(Attr.EnqueueTimestamps).map(_.n().toLong)
     val ver = attrs(Attr.Ver).n().toLong
     val fields = TaskItemFields(
       sch = sch,
@@ -116,7 +133,8 @@ private[tasks] object DynamoDiff {
       proxies = proxies,
       dispatches = dispatches,
       placementValue = placementValue,
-      resultDelivered = resultDelivered
+      resultDelivered = resultDelivered,
+      enqueueTimestamp = enqueueTimestamp
     )
     (sk, (sch, fields, ver))
   }
@@ -126,6 +144,9 @@ private[tasks] object DynamoDiff {
       counters: Map[LauncherName, Long],
       nodes: NodeRegistryState.State,
       mainProcesses: Set[String],
+      completedCount: Map[TaskId, Long],
+      failedCount: Map[TaskId, Long],
+      cacheHitCount: Map[TaskId, Long],
       ver: Long
   ): Map[String, AttributeValue] = {
     val knownLaunchersMap: Map[String, AttributeValue] =
@@ -136,6 +157,8 @@ private[tasks] object DynamoDiff {
       counters.map { case (name, value) => name.name -> n(value) }
     val mainProcList: List[AttributeValue] =
       mainProcesses.toList.sorted.map(s)
+    def taskIdLongMap(src: Map[TaskId, Long]): Map[String, AttributeValue] =
+      src.map { case (taskId, c) => taskIdKey(taskId) -> n(c) }
     Map(
       Attr.Pk -> s(ResourcesPartitionKey),
       Attr.Sk -> s(ResourcesSortKey),
@@ -143,6 +166,9 @@ private[tasks] object DynamoDiff {
       Attr.Counters -> m(countersMap),
       Attr.Nodes -> b(encode(nodes)),
       Attr.MainProcesses -> l(mainProcList),
+      Attr.CompletedCount -> m(taskIdLongMap(completedCount)),
+      Attr.FailedCount -> m(taskIdLongMap(failedCount)),
+      Attr.CacheHitCount -> m(taskIdLongMap(cacheHitCount)),
       Attr.Ver -> n(ver)
     )
   }
@@ -171,13 +197,31 @@ private[tasks] object DynamoDiff {
       decode[NodeRegistryState.State](attrs(Attr.Nodes).b().asByteArray())
     val mainProcesses: Set[String] =
       attrs(Attr.MainProcesses).l().asScala.toList.map(_.s()).toSet
+
+    def taskIdLongMap(key: String): Map[TaskId, Long] =
+      attrs
+        .get(key)
+        .map(av =>
+          av.m()
+            .asScala
+            .toMap
+            .map { case (k, av) => parseTaskIdKey(k) -> av.n().toLong }
+        )
+        .getOrElse(Map.empty)
+
+    val completedCount = taskIdLongMap(Attr.CompletedCount)
+    val failedCount = taskIdLongMap(Attr.FailedCount)
+    val cacheHitCount = taskIdLongMap(Attr.CacheHitCount)
     val ver = attrs(Attr.Ver).n().toLong
     (
       ResourcesFields(
         knownLaunchers = knownLaunchers,
         counters = counters,
         nodes = nodes,
-        mainProcesses = mainProcesses
+        mainProcesses = mainProcesses,
+        completedCount = completedCount,
+        failedCount = failedCount,
+        cacheHitCount = cacheHitCount
       ),
       ver
     )
@@ -262,6 +306,12 @@ private[tasks] object DynamoDiff {
         )
       }
       .toMap
+    val enqueueTimestamps = taskMap.values
+      .filter(_._2.status == StatusQueued)
+      .flatMap { case (sch, fields, _) =>
+        fields.enqueueTimestamp.map(ts => QueueImpl.project(sch) -> ts)
+      }
+      .toMap
     State(
       queuedTasks = queuedTasks,
       scheduledTasks = scheduledTasks,
@@ -269,7 +319,11 @@ private[tasks] object DynamoDiff {
       counters = resources.counters,
       nodes = resources.nodes,
       completedResults = completedResults,
-      mainProcesses = resources.mainProcesses
+      mainProcesses = resources.mainProcesses,
+      enqueueTimestamps = enqueueTimestamps,
+      completedCount = resources.completedCount,
+      failedCount = resources.failedCount,
+      cacheHitCount = resources.cacheHitCount
     )
   }
 
@@ -283,7 +337,8 @@ private[tasks] object DynamoDiff {
         proxies = proxies,
         dispatches = Nil,
         placementValue = None,
-        resultDelivered = false
+        resultDelivered = false,
+        enqueueTimestamp = state.enqueueTimestamps.get(projection)
       )
     }
     val scheduled = state.scheduledTasks.map {
@@ -294,7 +349,8 @@ private[tasks] object DynamoDiff {
           proxies = scheduledTask.proxies,
           dispatches = scheduledTask.dispatches,
           placementValue = scheduledTask.placementValue,
-          resultDelivered = scheduledTask.resultDelivered
+          resultDelivered = scheduledTask.resultDelivered,
+          enqueueTimestamp = None
         )
     }
     queued ++ scheduled
@@ -305,7 +361,10 @@ private[tasks] object DynamoDiff {
       knownLaunchers = state.knownLaunchers,
       counters = state.counters,
       nodes = state.nodes,
-      mainProcesses = state.mainProcesses
+      mainProcesses = state.mainProcesses,
+      completedCount = state.completedCount,
+      failedCount = state.failedCount,
+      cacheHitCount = state.cacheHitCount
     )
 
   private def resourcesEqual(a: ResourcesFields, b: ResourcesFields): Boolean =
@@ -375,6 +434,9 @@ private[tasks] object DynamoDiff {
       counters = resources.counters,
       nodes = resources.nodes,
       mainProcesses = resources.mainProcesses,
+      completedCount = resources.completedCount,
+      failedCount = resources.failedCount,
+      cacheHitCount = resources.cacheHitCount,
       ver = newVer
     )
     val put = Put

@@ -89,7 +89,7 @@ class DynamoMultiMasterTest extends FunSuite with Matchers {
     val finalState = pair(client)
       .use { case (txA, txB) =>
         txA.flatModify(state =>
-          (state.update(QueueImpl.Enqueued(sch, List(proxy))), IO.unit)
+          (state.update(QueueImpl.Enqueued(sch, List(proxy), 0L)), IO.unit)
         ) *> {
           val scheduleA = txA.flatModify { state =>
             scheduleAttempts.incrementAndGet()
@@ -139,7 +139,7 @@ class DynamoMultiMasterTest extends FunSuite with Matchers {
           // Now our task-only commit will see stale resources ver, retry, succeed.
           txA.flatModify { state =>
             attempts.incrementAndGet()
-            (state.update(QueueImpl.Enqueued(sch, List(proxy))), IO.unit)
+            (state.update(QueueImpl.Enqueued(sch, List(proxy), 0L)), IO.unit)
           } *> txA.get
       }
       .unsafeRunSync()

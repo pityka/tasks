@@ -109,6 +109,9 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
           counters = Map.empty,
           nodes = NodeRegistryState.State.empty,
           mainProcesses = Set.empty,
+          completedCount = Map.empty,
+          failedCount = Map.empty,
+          cacheHitCount = Map.empty,
           ver = 1L
         )
         client.setItem(
@@ -144,7 +147,7 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
       .use { tx =>
         tx.flatModify { state =>
           (
-            state.update(QueueImpl.Enqueued(sch, List(proxy))),
+            state.update(QueueImpl.Enqueued(sch, List(proxy), 0L)),
             IO.unit
           )
         } *> tx.get
@@ -164,7 +167,7 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
     val finalState = transactionResource(client)
       .use { tx =>
         tx.flatModify(state =>
-          (state.update(QueueImpl.Enqueued(sch, List(proxy))), IO.unit)
+          (state.update(QueueImpl.Enqueued(sch, List(proxy), 0L)), IO.unit)
         ) *>
           tx.flatModify(state =>
             (
@@ -191,7 +194,7 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
     val finalState = transactionResource(client)
       .use { tx =>
         tx.flatModify(state =>
-          (state.update(QueueImpl.Enqueued(sch, List(proxy))), IO.unit)
+          (state.update(QueueImpl.Enqueued(sch, List(proxy), 0L)), IO.unit)
         ) *>
           tx.flatModify(state =>
             (
@@ -218,7 +221,7 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
     val finalState = transactionResource(client)
       .use { tx =>
         tx.flatModify(state =>
-          (state.update(QueueImpl.Enqueued(sch, List(proxy))), IO.unit)
+          (state.update(QueueImpl.Enqueued(sch, List(proxy), 0L)), IO.unit)
         ) *>
           tx.flatModify(state =>
             (
@@ -250,6 +253,9 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
           counters = Map.empty,
           nodes = NodeRegistryState.State.empty,
           mainProcesses = Set.empty,
+          completedCount = Map.empty,
+          failedCount = Map.empty,
+          cacheHitCount = Map.empty,
           ver = 1L
         )
         client.setItem(
@@ -263,7 +269,7 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
       .use { tx =>
         tx.flatModify { state =>
           calls.incrementAndGet()
-          (state.update(QueueImpl.Enqueued(sch, List(proxy))), IO.unit)
+          (state.update(QueueImpl.Enqueued(sch, List(proxy), 0L)), IO.unit)
         } *> tx.get
       }
       .unsafeRunSync()
@@ -295,7 +301,7 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
           acc *> tx.flatModify(state =>
             (
               state.update(
-                QueueImpl.Enqueued(sch, List(liveProxy, deadProxy))
+                QueueImpl.Enqueued(sch, List(liveProxy, deadProxy), 0L)
               ),
               IO.unit
             )
@@ -330,8 +336,8 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
       QueueImpl.MainProcessJoined("session-1"),
       QueueImpl.LauncherJoined(launcher, None),
       QueueImpl.Incremented(launcher),
-      QueueImpl.Enqueued(schQ, List(proxy)),
-      QueueImpl.Enqueued(schS, List(proxy)),
+      QueueImpl.Enqueued(schQ, List(proxy), 0L),
+      QueueImpl.Enqueued(schS, List(proxy), 0L),
       QueueImpl.TaskScheduled(schS, launcher, allocated, Some("rack-A")),
       QueueImpl.ResultStoredForProxy(address, result),
       QueueImpl.NodeEvent(

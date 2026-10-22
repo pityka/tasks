@@ -69,7 +69,7 @@ class DynamoEventSemanticsTest extends FunSuite with Matchers {
     val allocated = SchedulerFixtures.allocated()
     val state = runEvents(
       List(
-        QueueImpl.Enqueued(sch, List(proxy)),
+        QueueImpl.Enqueued(sch, List(proxy), 0L),
         QueueImpl.TaskScheduled(sch, launcherA, allocated, None),
         QueueImpl.TaskScheduled(sch, launcherB, allocated, None)
       )
@@ -86,7 +86,7 @@ class DynamoEventSemanticsTest extends FunSuite with Matchers {
     val allocated = SchedulerFixtures.allocated()
     val state = runEvents(
       List(
-        QueueImpl.Enqueued(sch, List(proxy)),
+        QueueImpl.Enqueued(sch, List(proxy), 0L),
         QueueImpl.TaskScheduled(sch, launcherA, allocated, None),
         QueueImpl.TaskScheduled(sch, launcherB, allocated, None),
         SchedulerFixtures.taskDoneEvent(sch, launcherA, allocated)
@@ -103,7 +103,7 @@ class DynamoEventSemanticsTest extends FunSuite with Matchers {
     val launcher = LauncherName("l-fnc")
     val state = runEvents(
       List(
-        QueueImpl.Enqueued(sch, List(proxy)),
+        QueueImpl.Enqueued(sch, List(proxy), 0L),
         QueueImpl.TaskFailed(sch, launcher, completesCaller = false)
       )
     )
@@ -117,7 +117,7 @@ class DynamoEventSemanticsTest extends FunSuite with Matchers {
     val launcher = LauncherName("l-fc")
     val state = runEvents(
       List(
-        QueueImpl.Enqueued(sch, List(proxy)),
+        QueueImpl.Enqueued(sch, List(proxy), 0L),
         QueueImpl.TaskFailed(sch, launcher, completesCaller = true)
       )
     )
@@ -133,7 +133,7 @@ class DynamoEventSemanticsTest extends FunSuite with Matchers {
     val allocated = SchedulerFixtures.allocated()
     val state = runEvents(
       List(
-        QueueImpl.Enqueued(sch, List(proxy)),
+        QueueImpl.Enqueued(sch, List(proxy), 0L),
         QueueImpl.TaskScheduled(sch, launcherA, allocated, None),
         QueueImpl.TaskScheduled(sch, launcherB, allocated, None),
         QueueImpl.TaskLauncherStoppedFor(sch, launcherA)
@@ -152,7 +152,7 @@ class DynamoEventSemanticsTest extends FunSuite with Matchers {
     val proxyB = Proxy(Address("pm-b"))
     val state = runEvents(
       List(
-        QueueImpl.Enqueued(sch, List(proxyA)),
+        QueueImpl.Enqueued(sch, List(proxyA), 0L),
         QueueImpl.TaskScheduled(sch, launcher, allocated, None),
         QueueImpl.ProxyAddedToScheduledMessage(sch, List(proxyB))
       )
@@ -193,8 +193,8 @@ class DynamoEventSemanticsTest extends FunSuite with Matchers {
     val proxyB = Proxy(Address("de-b"))
     val state = runEvents(
       List(
-        QueueImpl.Enqueued(sch, List(proxyA)),
-        QueueImpl.Enqueued(sch, List(proxyB))
+        QueueImpl.Enqueued(sch, List(proxyA), 0L),
+        QueueImpl.Enqueued(sch, List(proxyB), 0L)
       )
     )
     state.queuedTasks.size shouldBe 1
