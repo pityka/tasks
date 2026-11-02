@@ -1,4 +1,4 @@
-package tasks
+package test
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers

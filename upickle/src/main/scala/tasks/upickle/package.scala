@@ -31,19 +31,43 @@ package object upicklesupport {
         }
       )
 
-  implicit val uri: ReadWriter[Uri] =
-    upickle.default.macroRW[tasks.util.Uri]
+  implicit val uri: ReadWriter[Uri] = {
+    val implRW: ReadWriter[tasks.util.Uri.UriImpl] =
+      upickle.default.macroRW[tasks.util.Uri.UriImpl]
+    implRW.bimap[Uri](
+      u => u.asInstanceOf[tasks.util.Uri.UriImpl],
+      impl => impl
+    )
+  }
 
-  implicit val rpath: ReadWriter[tasks.fileservice.RemoteFilePath] =
-    upickle.default.macroRW[tasks.fileservice.RemoteFilePath]
+  implicit val rpath: ReadWriter[tasks.fileservice.RemoteFilePath] = {
+    val implRW: ReadWriter[tasks.fileservice.RemoteFilePath.RemoteFilePathImpl] =
+      upickle.default.macroRW[tasks.fileservice.RemoteFilePath.RemoteFilePathImpl]
+    implRW.bimap[tasks.fileservice.RemoteFilePath](
+      r => r.asInstanceOf[tasks.fileservice.RemoteFilePath.RemoteFilePathImpl],
+      impl => impl
+    )
+  }
 
-  implicit val mpath: ReadWriter[tasks.fileservice.ManagedFilePath] =
-    upickle.default.macroRW[tasks.fileservice.ManagedFilePath]
+  implicit val mpath: ReadWriter[tasks.fileservice.ManagedFilePath] = {
+    val implRW: ReadWriter[tasks.fileservice.ManagedFilePath.ManagedFilePathImpl] =
+      upickle.default.macroRW[tasks.fileservice.ManagedFilePath.ManagedFilePathImpl]
+    implRW.bimap[tasks.fileservice.ManagedFilePath](
+      m => m.asInstanceOf[tasks.fileservice.ManagedFilePath.ManagedFilePathImpl],
+      impl => impl
+    )
+  }
 
   implicit val filepath: ReadWriter[tasks.fileservice.FilePath] =
     upickle.default.macroRW[tasks.fileservice.FilePath]
 
-  implicit val sharedFileRW: ReadWriter[tasks.fileservice.SharedFile] =
-    upickle.default.macroRW[tasks.fileservice.SharedFile]
+  implicit val sharedFileRW: ReadWriter[tasks.fileservice.SharedFile] = {
+    val implRW: ReadWriter[tasks.fileservice.SharedFile.SharedFileImpl] =
+      upickle.default.macroRW[tasks.fileservice.SharedFile.SharedFileImpl]
+    implRW.bimap[tasks.fileservice.SharedFile](
+      sf => sf.asInstanceOf[tasks.fileservice.SharedFile.SharedFileImpl],
+      impl => impl
+    )
+  }
 
 }

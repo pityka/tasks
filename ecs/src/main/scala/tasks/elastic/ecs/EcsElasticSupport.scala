@@ -477,7 +477,7 @@ object EcsElasticSupport {
 
           scribe.info(s"ECS elastic backend: $ecsConfig")
 
-          new ElasticSupport(
+          ElasticSupport(
             hostConfig = Some((tasksConfig: TasksConfig) =>
               new EcsHostConfiguration(tasksConfig, advertisedLabels)
             ),
@@ -486,6 +486,7 @@ object EcsElasticSupport {
             createNodeFactory =
               new EcsCreateNodeFactory(ops, ecsConfig, clients.region),
             getNodeName = EcsGetNodeName,
+            convertRunningToPending = ConvertRunningToPending.identity,
             needsPackageServer = false
           )
         }

@@ -14,13 +14,14 @@
  * copies or substantial portions of the Software.
  */
 
-package tasks
+package test
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should._
 import org.scalatest._
 import org.ekrich.config.{Config, ConfigFactory}
 
+import tasks._
 import tasks.jsonitersupport._
 
 import com.github.plokhotnyuk.jsoniter_scala.macros._
@@ -86,7 +87,7 @@ tasks.elastic.logQueueStatus = false
   }
 
   private def withAppOnlyHostConfig(base: ElasticSupport): ElasticSupport =
-    new ElasticSupport(
+    ElasticSupport(
       hostConfig = Some((_: TasksConfig) => appAndQueueOnlyHostConfig),
       shutdownFromNodeRegistry = base.shutdownFromNodeRegistry,
       shutdownFromWorker = base.shutdownFromWorker,

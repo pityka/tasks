@@ -139,7 +139,7 @@ object DynamoQueueState {
       (if (ensureTable) ensureTableExists(client, table) else IO.unit) *>
         ensureResourcesItem(client, table)
 
-    val resources = for {
+    for {
       _ <- Resource.eval(setup)
       cached <- Resource.eval(Ref.of[IO, Option[Cached]](None))
       writeMutex <- Resource.eval(Mutex[IO])
@@ -153,8 +153,6 @@ object DynamoQueueState {
       writeMutex = writeMutex,
       readMutex = readMutex
     )
-
-    resources.map(tx => tx: Transaction[State])
   }
 
   private[tasks] case class Cached(

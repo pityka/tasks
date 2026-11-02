@@ -41,7 +41,7 @@ object ResultWithSharedFilesTest extends TestHelpers {
 
   case class Intermediate(sf: SharedFile)
   case class IntermediateMutable(sf: SharedFile, mut: Option[SharedFile])
-      extends WithSharedFiles(mutables = mut.toSeq)
+      extends WithSharedFiles(Nil, mut.toSeq)
 
   object Intermediate {
     implicit val codec: JsonValueCodec[Intermediate] = JsonCodecMaker.make

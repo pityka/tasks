@@ -113,7 +113,7 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
   }
 
   case class MutableResult(sf: SharedFile)
-      extends WithSharedFiles(mutables = List(sf))
+      extends WithSharedFiles(Nil, List(sf))
 
   object MutableResult {
     implicit val codec: JsonValueCodec[MutableResult] = JsonCodecMaker.make

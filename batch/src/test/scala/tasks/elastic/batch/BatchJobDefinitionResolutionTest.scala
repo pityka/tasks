@@ -1,7 +1,9 @@
-package tasks.elastic.batch
+package test
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
+
+import tasks.elastic.batch._
 
 class BatchJobDefinitionResolutionTest extends AnyFunSuite with Matchers {
 

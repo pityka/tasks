@@ -25,13 +25,14 @@
  * SOFTWARE.
  */
 
-package tasks
+package test
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import cats.effect.unsafe.implicits.global
 
 import org.scalatest.matchers.should.Matchers
 
+import tasks._
 import tasks.util._
 import tasks.jsonitersupport._
 import tasks.fileservice.ManagedFilePath

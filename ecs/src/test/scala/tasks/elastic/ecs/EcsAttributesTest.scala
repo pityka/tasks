@@ -1,8 +1,9 @@
-package tasks.elastic.ecs
+package test
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 
+import tasks.elastic.ecs.EcsAttributes
 import tasks.shared.NodeSelector
 
 class EcsAttributesTest extends AnyFunSuite with Matchers {

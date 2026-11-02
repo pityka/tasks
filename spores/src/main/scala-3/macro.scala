@@ -1,8 +1,6 @@
 package tasks.queue
 import scala.quoted.*
-import scala.annotation.experimental
 
-@experimental
 object SporeMacros:
 
   def failIfInner(using Quotes) = {
@@ -85,8 +83,8 @@ object SporeMacros:
       isStatic(s)
     }
 
-    def symbolIsSpore(sym: Symbol): Boolean = {
-      sym.info match {
+    def isSporeType(tpe: TypeRepr): Boolean = {
+      tpe.widen match {
         case t: AppliedType =>
           t.tycon =:= TypeRepr.of[Spore[?, ?]].asInstanceOf[AppliedType].tycon
 
@@ -97,37 +95,34 @@ object SporeMacros:
 
     object FindReferencesToSpores
         extends quotes.reflect.TreeAccumulator[List[(Tree, Symbol)]] {
+      def checkTermRef(term: Term)(
+          acc: List[(Tree, Symbol)]
+      ): List[(Tree, Symbol)] = {
+        val sym = term.symbol
+        val tpe = term.tpe
+        if ((!sym.isNoSymbol && !isSymbolValid(sym)) || isSporeType(tpe)) {
+          if (!isSporeType(tpe)) {
+            report.errorAndAbort(
+              s"Reference to an invalid symbol: $sym.",
+              term.pos
+            )
+          } else if (params.head.symbol == sym)
+            acc
+          else {
+            (term, sym) :: acc
+          }
+        } else acc
+      }
+
       override def foldTree(
           foundReferencesToSpores: List[(Tree, Symbol)],
           tree: Tree
       )(owner: Symbol): List[(Tree, Symbol)] = {
         tree match {
-
-          case Ident(_) | This(_) | Super(_, _) =>
-            val sym = tree.symbol
-            if (
-              (!sym.isNoSymbol && !isSymbolValid(tree.symbol)) || symbolIsSpore(
-                sym
-              )
-            ) {
-              if (!symbolIsSpore(sym)) {
-                report.errorAndAbort(
-                  s"Reference to an invalid symbol: $sym.",
-                  tree.pos
-                )
-
-              } else if (params.head.symbol == tree.symbol)
-                foundReferencesToSpores
-              else {
-                // report.info(
-                //   s"Found references to spore within spore",
-                //   tree.asExpr
-                // )
-                (tree, tree.symbol) :: foundReferencesToSpores
-              }
-            } else foundReferencesToSpores
-
-          case sym =>
+          case tree: Ident => checkTermRef(tree)(foundReferencesToSpores)
+          case tree: This  => checkTermRef(tree)(foundReferencesToSpores)
+          case tree: Super => checkTermRef(tree)(foundReferencesToSpores)
+          case _ =>
             foldOverTree(foundReferencesToSpores, tree)(owner)
         }
       }
@@ -155,7 +150,7 @@ object SporeMacros:
         override def transformTerm(tree: Term)(owner: Symbol): Term =
           tree match {
             case Ident(_)
-                if symbolIsSpore(tree.symbol) && referencesToSpores.contains(
+                if isSporeType(tree.tpe) && referencesToSpores.contains(
                   tree.symbol
                 ) =>
               val idx = referencesToSpores.indexOf(tree.symbol)
@@ -166,7 +161,7 @@ object SporeMacros:
               }
               Select
                 .unique(tree2.asTerm, "asInstanceOf")
-                .appliedToType(tree.symbol.info)
+                .appliedToType(tree.tpe.widen)
             case _ =>
               super.transformTerm(tree)(owner)
           }

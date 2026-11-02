@@ -25,24 +25,40 @@
 
 package tasks.util
 
-final case class Uri(uri: String) {
-  private[tasks] def jUri = new java.net.URI(uri)
-  private[tasks] def http4s = org.http4s.Uri.fromString(uri).toOption.get
+sealed trait Uri {
+  def uri: String
+  private[tasks] final def jUri = new java.net.URI(uri)
+  private[tasks] final def http4s = org.http4s.Uri.fromString(uri).toOption.get
   override def toString = uri
-  private[tasks] def scheme =
+  private[tasks] final def scheme =
     if (jUri.getScheme == null) "file" else jUri.getScheme
-  private[tasks] def authority = jUri.getAuthority
-  private[tasks] def path = jUri.getPath
+  private[tasks] final def authority = jUri.getAuthority
+  private[tasks] final def path = jUri.getPath
 }
 
 object Uri {
 
+  private[tasks] final case class UriImpl(uri: String) extends Uri
+
+  def apply(uri: String): Uri = UriImpl(uri)
+
   def apply(scheme: String, hostname: String, port: Int, path: String): Uri =
-    Uri(s"${scheme}://${hostname}:${port}$path")
+    UriImpl(s"${scheme}://${hostname}:${port}$path")
+
+  def unapply(u: Uri): Some[String] = Some(u.uri)
 
   import com.github.plokhotnyuk.jsoniter_scala.macros._
   import com.github.plokhotnyuk.jsoniter_scala.core._
 
-  implicit val codec: JsonValueCodec[Uri] = JsonCodecMaker.make
+  implicit val codec: JsonValueCodec[Uri] = {
+    val innerCodec: JsonValueCodec[UriImpl] = JsonCodecMaker.make
+    new JsonValueCodec[Uri] {
+      val nullValue: Uri = null
+      def encodeValue(x: Uri, out: JsonWriter): Unit =
+        innerCodec.encodeValue(x.asInstanceOf[UriImpl], out)
+      def decodeValue(in: JsonReader, default: Uri): Uri =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 
 }

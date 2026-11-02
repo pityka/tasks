@@ -58,9 +58,18 @@ object EcsNodeSelectorPlacementTest {
     (specs, node)
   }
 
-  def request(selector: Option[NodeSelector]): ResourceRequest =
-    ResourceRequest(cpu = 4, memory = 8000, scratch = 0, gpu = 0)
-      .copy(nodeSelector = selector)
+  def request(selector: Option[NodeSelector]): ResourceRequest = {
+    val base = ResourceRequest(cpu = 4, memory = 8000, scratch = 0, gpu = 0)
+    ResourceRequest(
+      base.cpu,
+      base.memory,
+      base.scratch,
+      base.gpu,
+      base.image,
+      selector,
+      base.replication
+    )
+  }
 
   def place(
       node: EcsCreateNode,

@@ -4,7 +4,22 @@ package tasks.util
   *
   * No name resolution.
   */
-case class SimpleSocketAddress(hostName: String, port: Int) {
-  def getHostName = hostName
-  def getPort = port
+sealed trait SimpleSocketAddress {
+  def hostName: String
+  def port: Int
+  final def getHostName = hostName
+  final def getPort = port
+}
+
+object SimpleSocketAddress {
+  private[tasks] final case class SimpleSocketAddressImpl(
+      hostName: String,
+      port: Int
+  ) extends SimpleSocketAddress
+
+  def apply(hostName: String, port: Int): SimpleSocketAddress =
+    SimpleSocketAddressImpl(hostName, port)
+
+  def unapply(s: SimpleSocketAddress): Some[(String, Int)] =
+    Some((s.hostName, s.port))
 }

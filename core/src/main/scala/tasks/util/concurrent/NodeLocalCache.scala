@@ -4,7 +4,7 @@ import cats.effect._
 import cats.instances.list._
 import cats.syntax.all._
 
-object NodeLocalCache {
+private[tasks] object NodeLocalCache {
 
   type StateR[A] = Ref[IO, State[A]]
 

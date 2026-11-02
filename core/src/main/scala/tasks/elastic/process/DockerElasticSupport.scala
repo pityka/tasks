@@ -4,32 +4,48 @@ import cats.effect._
 import tasks.elastic.ElasticSupport
 import tasks.shared.ResourceAllocated
 
-final case class DockerConfig(
-    image: Option[String],
-    network: String,
-    environment: Map[String, String],
-    contexts: List[ProcessContext]
-) extends ProcessConfig {
+sealed trait DockerConfig extends ProcessConfig {
+  def image: Option[String]
+  def network: String
+  def environment: Map[String, String]
+  def contexts: List[ProcessContext]
 
-  val minimumResourceAllocation = true
+  final val minimumResourceAllocation = true
 
-  def withImage(value: String): DockerConfig = copy(image = Some(value))
+  final def withImage(value: String): DockerConfig =
+    DockerConfig(Some(value), network, environment, contexts)
 
-  def withNetwork(value: String): DockerConfig = copy(network = value)
+  final def withNetwork(value: String): DockerConfig =
+    DockerConfig(image, value, environment, contexts)
 
-  def withEnvironment(entries: (String, String)*): DockerConfig =
-    copy(environment = environment ++ entries)
+  final def withEnvironment(entries: (String, String)*): DockerConfig =
+    DockerConfig(image, network, environment ++ entries, contexts)
 
-  def withContext(value: ProcessContext): DockerConfig =
-    copy(contexts = contexts :+ value)
+  final def withContext(value: ProcessContext): DockerConfig =
+    DockerConfig(image, network, environment, contexts :+ value)
 }
 
 object DockerConfig {
 
+  private[tasks] final case class DockerConfigImpl(
+      image: Option[String],
+      network: String,
+      environment: Map[String, String],
+      contexts: List[ProcessContext]
+  ) extends DockerConfig
+
   val defaultImage = "eclipse-temurin:17.0.13_11-jre-ubi9-minimal"
 
+  def apply(
+      image: Option[String],
+      network: String,
+      environment: Map[String, String],
+      contexts: List[ProcessContext]
+  ): DockerConfig =
+    DockerConfigImpl(image, network, environment, contexts)
+
   def apply(contexts: List[ProcessContext]): DockerConfig =
-    DockerConfig(
+    DockerConfigImpl(
       image = None,
       network = "host",
       environment = Map.empty,

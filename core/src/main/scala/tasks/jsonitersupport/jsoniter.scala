@@ -34,9 +34,6 @@ package object jsonitersupport {
           .map(e => e.toString + "\n" + e.getStackTrace.mkString(";\n"))
     }
 
-  implicit val sharedFileCodec: JsonValueCodec[SharedFile] =
-    JsonCodecMaker.make[SharedFile]
-
   // standard types
 
   implicit val stringCodec: JsonValueCodec[String] =

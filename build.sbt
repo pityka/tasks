@@ -57,8 +57,8 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.18",
-  crossScalaVersions := Seq("2.13.18", "3.6.4"),
+  scalaVersion := "3.9.0",
+  crossScalaVersions := Seq("2.13.18", "3.9.0"),
   parallelExecution in Test := false,
   scalacOptions ++= (CrossVersion.partialVersion(scalaVersion.value) match {
     case Some((2, 13)) =>
@@ -95,14 +95,14 @@ lazy val commonSettings = Seq(
       )
     case _ =>
       Seq(
-        "-experimental",
         "-encoding",
         "utf-8",
         "-feature",
         "-language:postfixOps",
         "-language:implicitConversions",
         "-unchecked",
-        "-deprecation"
+        "-deprecation",
+        "-Wconf:msg=Implicit parameters should be provided with a `using` clause:s,msg=no longer supported for vararg splices:s,msg=eta-expansion is unnecessary:s,msg=which is reserved for internal compiler use:s,msg=Discarded non-Unit value of type Left:s,msg=is defined in the compilation unit:s,msg=reflectiveSelectableFromLangReflectiveCalls:s,msg=trait App in package scala is deprecated:s"
       )
   })
 ) ++ Seq(
@@ -110,8 +110,12 @@ lazy val commonSettings = Seq(
   ThisBuild / parallelExecution := false,
   cancelable in Global := true,
   scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
-  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings")),  
+  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings")),
   Compile / doc / sources := Seq.empty
+)
+
+lazy val stableBinarySettings = Seq(
+  versionPolicyIntention := Compatibility.BinaryCompatible
 )
 
 lazy val circeVersion = "0.14.9"
@@ -134,6 +138,7 @@ lazy val shared = crossProject(JVMPlatform)
     )
   )
   .settings(commonSettings: _*)
+  .settings(stableBinarySettings)
 
 lazy val sharedJVM = shared.jvm
 
@@ -142,6 +147,7 @@ lazy val sharedJVM = shared.jvm
 lazy val spores = project
   .in(file("spores"))
   .settings(commonSettings: _*)
+  .settings(stableBinarySettings)
   .settings(
     name := "tasks-spores",
     libraryDependencies ++= Seq(
@@ -161,6 +167,7 @@ lazy val spores = project
 lazy val core = project
   .in(file("core"))
   .settings(commonSettings: _*)
+  .settings(stableBinarySettings)
   .settings(
     name := "tasks-core",
     libraryDependencies ++= Seq(
@@ -305,6 +312,7 @@ lazy val example = project
 lazy val upicklesupport = project
   .in(file("upickle"))
   .settings(commonSettings: _*)
+  .settings(stableBinarySettings)
   .settings(
     name := "tasks-upickle",
     libraryDependencies ++= Seq(
@@ -316,6 +324,7 @@ lazy val upicklesupport = project
 lazy val circe = project
   .in(file("circe"))
   .settings(commonSettings: _*)
+  .settings(stableBinarySettings)
   .settings(
     name := "tasks-circe",
     libraryDependencies ++= Seq(

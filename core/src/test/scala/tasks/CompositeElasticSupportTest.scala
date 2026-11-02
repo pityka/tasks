@@ -1,4 +1,4 @@
-package tasks
+package test
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
@@ -72,7 +72,7 @@ object CompositeElasticSupportTest {
 
     def record(what: String) = calls.update(_ :+ s"$name:$what")
 
-    new ElasticSupport(
+    ElasticSupport(
       hostConfig = hostConfig,
       shutdownFromNodeRegistry = new ShutdownNode {
         def shutdownRunningNode(nodeName: RunningJobId): IO[Unit] =
@@ -325,7 +325,7 @@ class CompositeElasticSupportTestSuite extends FunSuite with Matchers {
 
   test("a shutdown which throws is contained") {
     val calls = recorder
-    val throwing = new ElasticSupport(
+    val throwing = ElasticSupport(
       hostConfig = None,
       shutdownFromNodeRegistry = new ShutdownNode {
         def shutdownRunningNode(nodeName: RunningJobId): IO[Unit] =
@@ -504,12 +504,13 @@ class CompositeElasticSupportTestSuite extends FunSuite with Matchers {
 
   test("a package server is needed if any member needs one") {
     val calls = recorder
-    val noServer = new ElasticSupport(
+    val noServer = ElasticSupport(
       hostConfig = None,
       shutdownFromNodeRegistry = fake("x", calls).shutdownFromNodeRegistry,
       shutdownFromWorker = fake("x", calls).shutdownFromWorker,
       createNodeFactory = fake("x", calls).createNodeFactory,
       getNodeName = fake("x", calls).getNodeName,
+      convertRunningToPending = ConvertRunningToPending.identity,
       needsPackageServer = false
     )
 

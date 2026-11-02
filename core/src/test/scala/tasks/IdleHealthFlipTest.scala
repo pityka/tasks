@@ -14,7 +14,7 @@
  * copies or substantial portions of the Software.
  */
 
-package tasks
+package test
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
@@ -28,6 +28,7 @@ import org.http4s.{Method, Request, Status, Uri}
 import org.http4s.client.Client
 import org.http4s.ember.client.EmberClientBuilder
 
+import tasks._
 import tasks.jsonitersupport._
 import tasks.JvmElasticSupport.JvmGrid
 

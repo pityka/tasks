@@ -26,7 +26,6 @@
 package tasks.elastic
 
 import tasks.queue.{QueueActor}
-import tasks.shared.monitor._
 import tasks.shared._
 import tasks.util.config._
 import tasks.wire._

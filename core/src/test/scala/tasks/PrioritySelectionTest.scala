@@ -1,10 +1,11 @@
-package tasks
+package test
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import cats.effect.unsafe.implicits.global
 
 import org.scalatest.matchers.should.Matchers
 
+import tasks._
 import tasks.jsonitersupport._
 import org.ekrich.config.ConfigFactory
 import cats.effect.IO
@@ -38,14 +39,14 @@ object PrioritySelectionTest extends TestHelpers {
     withTaskSystem(testConfig2) { implicit ts =>
       // First poll fires immediately on empty queue.
       // We have askInterval (3s) to submit all tasks before the next poll.
-      val lowPrio = priorityTask(Input(1))(
-        ResourceRequest(1, 500),
-        priorityBase = tasks.shared.Priority(1)
-      )
-      val highPrio = priorityTask(Input(2))(
-        ResourceRequest(1, 500),
-        priorityBase = tasks.shared.Priority(100)
-      )
+      val lowPrio = priorityTask(
+        Input(1),
+        tasks.SubmitOptions.default.withPriorityBase(tasks.shared.Priority(1))
+      )(ResourceRequest(1, 500))
+      val highPrio = priorityTask(
+        Input(2),
+        tasks.SubmitOptions.default.withPriorityBase(tasks.shared.Priority(100))
+      )(ResourceRequest(1, 500))
       for {
         _ <- IO.both(lowPrio, highPrio)
       } yield {

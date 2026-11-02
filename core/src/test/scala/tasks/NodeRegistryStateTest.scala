@@ -28,7 +28,14 @@ class NodeRegistryStateTest extends AnyFunSuite with Matchers {
     val s1 = s0.update(
       NodeIsPending(
         PendingJobId("job-a"),
-        resource = shapeA.copy(cpu = 2),
+        resource = ResourceAvailable(
+          2,
+          shapeA.memory,
+          shapeA.scratch,
+          shapeA.gpu,
+          shapeA.image,
+          shapeA.labels
+        ),
         committedResource = shapeA
       )
     )

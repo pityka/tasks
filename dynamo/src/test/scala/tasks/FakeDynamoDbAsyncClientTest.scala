@@ -1,4 +1,4 @@
-package tasks
+package test
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
@@ -13,6 +13,8 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import software.amazon.awssdk.services.dynamodb.model._
+
+import tasks.FakeDynamoDbAsyncClient
 
 class FakeDynamoDbAsyncClientTest extends FunSuite with Matchers {
 

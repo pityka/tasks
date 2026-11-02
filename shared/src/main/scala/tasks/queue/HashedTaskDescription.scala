@@ -3,20 +3,53 @@ package tasks.queue
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 
-case class TaskId(id: String, version: Int)
+sealed trait TaskId {
+  def id: String
+  def version: Int
+}
 object TaskId {
-  implicit val codec: JsonValueCodec[TaskId] = JsonCodecMaker.make
+  private[tasks] final case class TaskIdImpl(id: String, version: Int)
+      extends TaskId
+
+  def apply(id: String, version: Int): TaskId = TaskIdImpl(id, version)
+
+  def unapply(t: TaskId): Some[(String, Int)] = Some((t.id, t.version))
+
+  implicit val codec: JsonValueCodec[TaskId] = {
+    val innerCodec: JsonValueCodec[TaskIdImpl] = JsonCodecMaker.make
+    new JsonValueCodec[TaskId] {
+      val nullValue: TaskId = null
+      def encodeValue(x: TaskId, out: JsonWriter): Unit =
+        innerCodec.encodeValue(x.asInstanceOf[TaskIdImpl], out)
+      def decodeValue(in: JsonReader, default: TaskId): TaskId =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 }
 
-case class Base64Data(value: String) {}
-object Base64Data {
+private[tasks] case class Base64Data(value: String)
+private[tasks] object Base64Data {
   implicit val codec: JsonValueCodec[Base64Data] = JsonCodecMaker.make
 }
-case class HashedTaskDescription(taskId: TaskId, dataHash: String) {
-  def hash = s"${taskId.id}-${taskId.version}-$dataHash"
+
+sealed trait HashedTaskDescription {
+  def taskId: TaskId
+  def dataHash: String
+  final def hash = s"${taskId.id}-${taskId.version}-$dataHash"
 }
 
 object HashedTaskDescription {
+  private[tasks] final case class HashedTaskDescriptionImpl(
+      taskId: TaskId,
+      dataHash: String
+  ) extends HashedTaskDescription
+
+  def apply(taskId: TaskId, dataHash: String): HashedTaskDescription =
+    HashedTaskDescriptionImpl(taskId, dataHash)
+
+  def unapply(h: HashedTaskDescription): Some[(TaskId, String)] =
+    Some((h.taskId, h.dataHash))
+
   implicit def toLogFeature(rm: HashedTaskDescription): scribe.LogFeature =
     scribe.data(
       Map(
@@ -24,7 +57,22 @@ object HashedTaskDescription {
         "hashed-taskdescription-data-hash" -> rm.dataHash
       )
     )
-  implicit val codec: JsonValueCodec[HashedTaskDescription] =
-    JsonCodecMaker.make
+  implicit val codec: JsonValueCodec[HashedTaskDescription] = {
+    val innerCodec: JsonValueCodec[HashedTaskDescriptionImpl] =
+      JsonCodecMaker.make
+    new JsonValueCodec[HashedTaskDescription] {
+      val nullValue: HashedTaskDescription = null
+      def encodeValue(x: HashedTaskDescription, out: JsonWriter): Unit =
+        innerCodec.encodeValue(
+          x.asInstanceOf[HashedTaskDescriptionImpl],
+          out
+        )
+      def decodeValue(
+          in: JsonReader,
+          default: HashedTaskDescription
+      ): HashedTaskDescription =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 
 }

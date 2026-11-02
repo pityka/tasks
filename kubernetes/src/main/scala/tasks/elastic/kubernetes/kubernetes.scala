@@ -335,7 +335,7 @@ object K8SElasticSupport {
       }
       scribe.info(s"Kubernetes elastic backend: $k8sConfig")
 
-      new ElasticSupport(
+      ElasticSupport(
         hostConfig = Some((tasksConfig: TasksConfig) =>
           new K8SHostConfig(tasksConfig, k8sConfig)
         ),

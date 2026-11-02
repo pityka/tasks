@@ -56,7 +56,7 @@ object CompositeElasticSupport {
       needsPackageServer: Boolean
   ): ElasticSupport = {
     validate(members)
-    new ElasticSupport(
+    ElasticSupport(
       hostConfig = Some(hostConfigOf(members)),
       shutdownFromNodeRegistry = new CompositeShutdownNode(members),
       shutdownFromWorker = new CompositeShutdownSelfNode(members),

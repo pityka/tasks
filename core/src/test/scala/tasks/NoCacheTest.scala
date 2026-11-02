@@ -25,13 +25,14 @@
  * SOFTWARE.
  */
 
-package tasks
+package test
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import cats.effect.unsafe.implicits.global
 
 import org.scalatest.matchers.should.Matchers
 
+import tasks._
 import tasks.util._
 import tasks.jsonitersupport._
 import cats.effect.IO
@@ -60,11 +61,12 @@ object NoCacheTest extends TestHelpers with Matchers {
       )
     ) { implicit ts =>
       (
-        increment(Input(0))(
-          ResourceRequest(1, 500),
-          labels = tasks.shared.Labels(List(0.toString -> 0.toString)),
-          noCache = true
-        )
+        increment(
+          Input(0),
+          tasks.SubmitOptions.default
+            .withLabels(tasks.shared.Labels(List(0.toString -> 0.toString)))
+            .withNoCache(true)
+        )(ResourceRequest(1, 500))
       )
 
     }

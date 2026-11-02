@@ -36,13 +36,79 @@ import cats.effect.IO
 import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
 
-final class ElasticSupport(
-    val hostConfig: Option[TasksConfig => HostConfiguration],
-    val shutdownFromNodeRegistry: ShutdownNode,
-    val shutdownFromWorker: ShutdownSelfNode,
-    val createNodeFactory: CreateNodeFactory,
-    val getNodeName: GetNodeName,
-    val convertRunningToPending: ConvertRunningToPending =
+trait ElasticSupport {
+  def hostConfig: Option[TasksConfig => HostConfiguration]
+  def shutdownFromNodeRegistry: ShutdownNode
+  def shutdownFromWorker: ShutdownSelfNode
+  def createNodeFactory: CreateNodeFactory
+  def getNodeName: GetNodeName
+  def convertRunningToPending: ConvertRunningToPending =
+    ConvertRunningToPending.identity
+  def needsPackageServer: Boolean = true
+}
+
+object ElasticSupport {
+  private[tasks] final case class ElasticSupportImpl(
+      hostConfig: Option[TasksConfig => HostConfiguration],
+      shutdownFromNodeRegistry: ShutdownNode,
+      shutdownFromWorker: ShutdownSelfNode,
+      createNodeFactory: CreateNodeFactory,
+      getNodeName: GetNodeName,
+      override val convertRunningToPending: ConvertRunningToPending,
+      override val needsPackageServer: Boolean
+  ) extends ElasticSupport
+
+  def apply(
+      hostConfig: Option[TasksConfig => HostConfiguration],
+      shutdownFromNodeRegistry: ShutdownNode,
+      shutdownFromWorker: ShutdownSelfNode,
+      createNodeFactory: CreateNodeFactory,
+      getNodeName: GetNodeName,
+      convertRunningToPending: ConvertRunningToPending,
+      needsPackageServer: Boolean
+  ): ElasticSupport =
+    ElasticSupportImpl(
+      hostConfig,
+      shutdownFromNodeRegistry,
+      shutdownFromWorker,
+      createNodeFactory,
+      getNodeName,
+      convertRunningToPending,
+      needsPackageServer
+    )
+
+  def apply(
+      hostConfig: Option[TasksConfig => HostConfiguration],
+      shutdownFromNodeRegistry: ShutdownNode,
+      shutdownFromWorker: ShutdownSelfNode,
+      createNodeFactory: CreateNodeFactory,
+      getNodeName: GetNodeName,
+      convertRunningToPending: ConvertRunningToPending
+  ): ElasticSupport =
+    apply(
+      hostConfig,
+      shutdownFromNodeRegistry,
+      shutdownFromWorker,
+      createNodeFactory,
+      getNodeName,
+      convertRunningToPending,
+      true
+    )
+
+  def apply(
+      hostConfig: Option[TasksConfig => HostConfiguration],
+      shutdownFromNodeRegistry: ShutdownNode,
+      shutdownFromWorker: ShutdownSelfNode,
+      createNodeFactory: CreateNodeFactory,
+      getNodeName: GetNodeName
+  ): ElasticSupport =
+    apply(
+      hostConfig,
+      shutdownFromNodeRegistry,
+      shutdownFromWorker,
+      createNodeFactory,
+      getNodeName,
       ConvertRunningToPending.identity,
-    val needsPackageServer: Boolean = true
-) { self => }
+      true
+    )
+}

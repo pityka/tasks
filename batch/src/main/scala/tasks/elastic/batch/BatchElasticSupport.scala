@@ -364,8 +364,13 @@ class BatchCreateNode(
         }
         .flatMap { case (targetQueueInfo, selectedResources) =>
           val targetQueue = targetQueueInfo.name
-          val labeledResources = selectedResources.copy(
-            labels = selectedResources.labels +
+          val labeledResources = ResourceAvailable(
+            selectedResources.cpu,
+            selectedResources.memory,
+            selectedResources.scratch,
+            selectedResources.gpu,
+            selectedResources.image,
+            selectedResources.labels +
               s"${BatchCreateNode.queueLabelPrefix}$targetQueue"
           )
           val submit = IO.interruptible {
@@ -733,7 +738,7 @@ object BatchElasticSupport {
 
           scribe.info(s"AWS Batch elastic backend: $batchConfig")
 
-          new ElasticSupport(
+          ElasticSupport(
             hostConfig = Some((tasksConfig: TasksConfig) =>
               new DefaultHostConfigurationFromConfig()(tasksConfig)
             ),

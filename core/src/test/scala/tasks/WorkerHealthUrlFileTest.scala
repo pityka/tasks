@@ -14,7 +14,7 @@
  * copies or substantial portions of the Software.
  */
 
-package tasks
+package test
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
@@ -24,6 +24,7 @@ import cats.effect.kernel.Resource
 import cats.effect.unsafe.implicits.global
 
 import org.ekrich.config.ConfigFactory
+import tasks._
 import tasks.jsonitersupport._
 import tasks.JvmElasticSupport.JvmGrid
 

@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package tasks
+package test
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString}
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
@@ -94,13 +94,27 @@ class NodeSelectorTest extends FunSuite with Matchers {
     workerA.canFulfillRequest(baseReq) shouldBe true
     workerB.canFulfillRequest(baseReq) shouldBe true
 
-    val affinityReq =
-      baseReq.copy(nodeSelector = Some(Has("gpu:a100")))
+    val affinityReq = ResourceRequest(
+      baseReq.cpu,
+      baseReq.memory,
+      baseReq.scratch,
+      baseReq.gpu,
+      baseReq.image,
+      Some(Has("gpu:a100")),
+      baseReq.replication
+    )
     workerA.canFulfillRequest(affinityReq) shouldBe true
     workerB.canFulfillRequest(affinityReq) shouldBe false
 
-    val avoidanceReq =
-      baseReq.copy(nodeSelector = Some(Not(Has("gpu:a100"))))
+    val avoidanceReq = ResourceRequest(
+      baseReq.cpu,
+      baseReq.memory,
+      baseReq.scratch,
+      baseReq.gpu,
+      baseReq.image,
+      Some(Not(Has("gpu:a100"))),
+      baseReq.replication
+    )
     workerA.canFulfillRequest(avoidanceReq) shouldBe false
     workerB.canFulfillRequest(avoidanceReq) shouldBe true
   }

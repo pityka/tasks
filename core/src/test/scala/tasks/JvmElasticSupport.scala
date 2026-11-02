@@ -134,7 +134,7 @@ object JvmElasticSupport {
           // from the controller held by the test that constructed the grid.
           elasticSupport = Resource.pure(
             Some(
-              new ElasticSupport(
+              ElasticSupport(
                 hostConfig = None,
                 shutdownFromNodeRegistry = new Shutdown(state),
                 shutdownFromWorker = new ShutdownSelf(state),
@@ -253,7 +253,7 @@ object JvmElasticSupport {
         val controller = new JvmNodeControl(state)
 
         controller ->
-          new ElasticSupport(
+          ElasticSupport(
             hostConfig = None,
             shutdownFromNodeRegistry = new Shutdown(state),
             shutdownFromWorker = new ShutdownSelf(state),

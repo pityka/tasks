@@ -36,55 +36,55 @@ import scribe.LogFeature
 
 object QueueImpl {
 
-  case class ScheduleTaskEqualityProjection(
+  private[tasks] case class ScheduleTaskEqualityProjection(
       description: HashedTaskDescription
   )
 
-  sealed trait Event
-  case class Enqueued(
+  private[tasks] sealed trait Event
+  private[tasks] case class Enqueued(
       sch: ScheduleTask,
       proxies: List[Proxy],
       enqueueMillis: Long
   ) extends Event
-  case class Incremented(launcher: LauncherName) extends Event
-  case class ProxyAddedToScheduledMessage(
+  private[tasks] case class Incremented(launcher: LauncherName) extends Event
+  private[tasks] case class ProxyAddedToScheduledMessage(
       sch: ScheduleTask,
       proxies: List[Proxy]
   ) extends Event
-  case class LauncherJoined(launcher: LauncherName, node: Option[Node])
+  private[tasks] case class LauncherJoined(launcher: LauncherName, node: Option[Node])
       extends Event
-  case class TaskScheduled(
+  private[tasks] case class TaskScheduled(
       sch: ScheduleTask,
       launcher: LauncherName,
       allocated: VersionedResourceAllocated,
       placementValue: Option[String]
   ) extends Event
-  case class TaskDone(
+  private[tasks] case class TaskDone(
       sch: ScheduleTask,
       launcher: LauncherName,
       result: UntypedResultWithMetadata,
       elapsedTime: ElapsedTimeNanoSeconds,
       resourceAllocated: ResourceAllocated
   ) extends Event
-  case class TaskFailed(
+  private[tasks] case class TaskFailed(
       sch: ScheduleTask,
       launcher: LauncherName,
       completesCaller: Boolean
   ) extends Event
-  case class TaskLauncherStoppedFor(
+  private[tasks] case class TaskLauncherStoppedFor(
       sch: ScheduleTask,
       launcher: LauncherName
   ) extends Event
-  case class LauncherCrashed(crashedLauncher: LauncherName) extends Event
-  case class SessionProxiesDropped(session: String) extends Event
-  case class MainProcessJoined(session: String) extends Event
-  case class MainProcessLeft(session: String) extends Event
+  private[tasks] case class LauncherCrashed(crashedLauncher: LauncherName) extends Event
+  private[tasks] case class SessionProxiesDropped(session: String) extends Event
+  private[tasks] case class MainProcessJoined(session: String) extends Event
+  private[tasks] case class MainProcessLeft(session: String) extends Event
 
-  sealed trait LauncherStopReason {
+  private[tasks] sealed trait LauncherStopReason {
     def proxiesCanNoLongerPoll: Boolean
     def shouldRequestReplacementNodes: Boolean
   }
-  object LauncherStopReason {
+  private[tasks] object LauncherStopReason {
     case object SelfReportedByThisProcess extends LauncherStopReason {
       def proxiesCanNoLongerPoll = true
       def shouldRequestReplacementNodes = false
@@ -98,29 +98,29 @@ object QueueImpl {
       def shouldRequestReplacementNodes = true
     }
   }
-  case class CacheHit(sch: ScheduleTask, result: UntypedResult) extends Event
-  case class NodeEvent(ev: NodeRegistryState.Event) extends Event
+  private[tasks] case class CacheHit(sch: ScheduleTask, result: UntypedResult) extends Event
+  private[tasks] case class NodeEvent(ev: NodeRegistryState.Event) extends Event
 
-  case class ResultStoredForProxy(proxy: Address, result: ProxyResult)
+  private[tasks] case class ResultStoredForProxy(proxy: Address, result: ProxyResult)
       extends Event
-  case class ResultDeliveredToProxy(proxy: Address) extends Event
+  private[tasks] case class ResultDeliveredToProxy(proxy: Address) extends Event
 
-  sealed trait ProxyResult
-  case class ProxyResultSuccess(
+  private[tasks] sealed trait ProxyResult
+  private[tasks] case class ProxyResultSuccess(
       result: UntypedResult,
       retrievedFromCache: Boolean
   ) extends ProxyResult
-  case class ProxyResultFailure(cause: Throwable) extends ProxyResult
+  private[tasks] case class ProxyResultFailure(cause: Throwable) extends ProxyResult
 
-  def project(sch: ScheduleTask) =
+  private[tasks] def project(sch: ScheduleTask) =
     ScheduleTaskEqualityProjection(sch.description)
 
-  case class Dispatch(
+  private[tasks] case class Dispatch(
       launcher: LauncherName,
       allocated: VersionedResourceAllocated
   )
 
-  case class ScheduledTask(
+  private[tasks] case class ScheduledTask(
       sch: ScheduleTask,
       dispatches: List[Dispatch],
       proxies: List[Proxy],
@@ -150,7 +150,7 @@ object QueueImpl {
     }
   }
 
-  object ScheduledTask {
+  private[tasks] object ScheduledTask {
     def dispatchedOnce(
         sch: ScheduleTask,
         launcher: LauncherName,
@@ -166,7 +166,7 @@ object QueueImpl {
       )
   }
 
-  case class State(
+  private[tasks] case class State(
       queuedTasks: Map[
         ScheduleTaskEqualityProjection,
         (ScheduleTask, List[Proxy])

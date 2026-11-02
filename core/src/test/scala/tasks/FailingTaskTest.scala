@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package tasks
+package test
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import cats.effect.unsafe.implicits.global
@@ -30,6 +30,7 @@ import cats.effect.unsafe.implicits.global
 import org.scalatest.matchers.should.Matchers
 import org.ekrich.config.ConfigFactory
 
+import tasks._
 import tasks.jsonitersupport._
 import cats.effect.IO
 

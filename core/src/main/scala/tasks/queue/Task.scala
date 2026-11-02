@@ -44,7 +44,7 @@ import tasks.caching.TaskResultCache
 import tasks.util.Messenger
 import tasks.queue.Launcher.LauncherHandle
 
-case class UntypedResult(
+private[tasks] case class UntypedResult(
     files: Set[SharedFile],
     data: Base64Data,
     mutableFiles: Option[Set[SharedFile]]
@@ -57,11 +57,7 @@ private[tasks] case class DependenciesAndRuntimeMetadata(
     logs: Seq[LogRecord]
 )
 
-private[tasks] object DependenciesAndRuntimeMetadata {
-  implicit val codec: JsonValueCodec[DependenciesAndRuntimeMetadata] =
-    JsonCodecMaker.make
-
-}
+private[tasks] object DependenciesAndRuntimeMetadata
 
 private[tasks] case class TaskInvocationId(
     id: TaskId,
@@ -98,13 +94,13 @@ private[tasks] object ResultMetadata {
   implicit val codec: JsonValueCodec[ResultMetadata] = JsonCodecMaker.make
 }
 
-final case class UntypedResultWithMetadata(
-    private[tasks] untypedResult: UntypedResult,
-    private[tasks] metadata: ResultMetadata,
-    private[tasks] noCache: Boolean
+private[tasks] final case class UntypedResultWithMetadata(
+    untypedResult: UntypedResult,
+    metadata: ResultMetadata,
+    noCache: Boolean
 )
 
-object UntypedResultWithMetadata {
+private[tasks] object UntypedResultWithMetadata {
   implicit def toLogFeature(rm: UntypedResultWithMetadata): scribe.LogFeature =
     scribe.data(
       Map(

@@ -1,7 +1,6 @@
 package tasks.queue
 import scala.quoted.*
 
-@scala.annotation.experimental
 object SerdeMacro {
 
   def create[A: Type](des: Expr[Deserializer[A]], ser: Expr[Serializer[A]])(

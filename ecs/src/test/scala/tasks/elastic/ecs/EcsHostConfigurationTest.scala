@@ -1,9 +1,10 @@
-package tasks.elastic.ecs
+package test
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 import org.ekrich.config.ConfigFactory
 
+import tasks.elastic.ecs.EcsHostConfiguration
 import tasks.util.config.TasksConfig
 
 class EcsHostConfigurationTest extends AnyFunSuite with Matchers {

@@ -1,10 +1,11 @@
-package tasks
+package test
 
 import cats.effect.unsafe.implicits.global
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
 
+import tasks._
 import tasks.jsonitersupport._
 import tasks.fileservice.ManagedFilePath
 import tasks.queue.{FilePrefix, Prefix}

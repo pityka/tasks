@@ -67,10 +67,13 @@ object HasSharedFiles {
  * See the WithSharedFilesTestSuite.scala for examples
  */
 abstract class WithSharedFiles(
-    members: Seq[Any] = Nil,
-    mutables: Seq[Any] = Nil
+    members: Seq[Any],
+    mutables: Seq[Any]
 ) extends Product
     with HasSharedFiles {
+
+  def this() = this(Nil, Nil)
+  def this(members: Seq[Any]) = this(members, Nil)
 
   import HasSharedFiles.recurse
 
@@ -102,11 +105,20 @@ final class TaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
   def writer1 = implicitly[Serializer[A]]
   def reader2 = implicitly[Deserializer[B]]
 
-  def apply(a: A)(
+  def apply(a: A)(resource: ResourceRequest)(implicit
+      components: ExtendedTaskSystemComponents
+  ): IO[B] = submit(a, resource, Priority(0), Labels.empty, false)
+
+  def apply(a: A, opts: SubmitOptions)(resource: ResourceRequest)(implicit
+      components: ExtendedTaskSystemComponents
+  ): IO[B] = submit(a, resource, opts.priorityBase, opts.labels, opts.noCache)
+
+  private def submit(
+      a: A,
       resource: ResourceRequest,
-      priorityBase: Priority = Priority(0),
-      labels: Labels = Labels.empty,
-      noCache: Boolean = false
+      priorityBase: Priority,
+      labels: Labels,
+      noCache: Boolean
   )(implicit components: ExtendedTaskSystemComponents): IO[B] = {
     implicit val queue = components.queue
     implicit val cache = components.cache
@@ -160,11 +172,19 @@ final class ParentTaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
   def writer1 = implicitly[Serializer[A]]
   def reader2 = implicitly[Deserializer[B]]
 
-  def apply(
+  def apply(a: A)(implicit
+      components: ExtendedTaskSystemComponents
+  ): IO[B] = submit(a, Priority(0), Labels.empty, false)
+
+  def apply(a: A, opts: SubmitOptions)(implicit
+      components: ExtendedTaskSystemComponents
+  ): IO[B] = submit(a, opts.priorityBase, opts.labels, opts.noCache)
+
+  private def submit(
       a: A,
-      priorityBase: Priority = Priority(0),
-      labels: Labels = Labels.empty,
-      noCache: Boolean = false
+      priorityBase: Priority,
+      labels: Labels,
+      noCache: Boolean
   )(implicit components: ExtendedTaskSystemComponents): IO[B] = {
     implicit val queue = components.queue
     implicit val cache = components.cache

@@ -25,13 +25,14 @@
  * SOFTWARE.
  */
 
-package tasks
+package test
 import cats.effect.unsafe.implicits.global
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import org.scalatest.matchers.should.Matchers
 
+import tasks._
 import tasks.util._
 import cats.effect.IO
 import tasks.jsonitersupport._
@@ -61,10 +62,12 @@ object ExecOnceTest extends TestHelpers with Matchers {
       )
     ) { implicit ts =>
       (IO.parTraverseN(100)((1 to 10000).toList) { input =>
-        increment(Input(0))(
-          ResourceRequest(1, 500),
-          labels = tasks.shared.Labels(List(input.toString -> input.toString))
-        )
+        increment(
+          Input(0),
+          tasks.SubmitOptions.default.withLabels(
+            tasks.shared.Labels(List(input.toString -> input.toString))
+          )
+        )(ResourceRequest(1, 500))
       })
 
     }

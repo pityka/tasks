@@ -51,19 +51,54 @@ final case class ProcessContext(
     copy(externalHostname = Some(value))
 
   def withCpu(value: Int): ProcessContext =
-    copy(resources = resources.copy(cpu = value))
+    copy(resources = ResourceAvailable(
+      value,
+      resources.memory,
+      resources.scratch,
+      resources.gpu,
+      resources.image,
+      resources.labels
+    ))
 
   def withMemory(value: Int): ProcessContext =
-    copy(resources = resources.copy(memory = value))
+    copy(resources = ResourceAvailable(
+      resources.cpu,
+      value,
+      resources.scratch,
+      resources.gpu,
+      resources.image,
+      resources.labels
+    ))
 
   def withScratch(value: Int): ProcessContext =
-    copy(resources = resources.copy(scratch = value))
+    copy(resources = ResourceAvailable(
+      resources.cpu,
+      resources.memory,
+      value,
+      resources.gpu,
+      resources.image,
+      resources.labels
+    ))
 
   def withGpu(value: List[Int]): ProcessContext =
-    copy(resources = resources.copy(gpu = value.distinct.sorted))
+    copy(resources = ResourceAvailable(
+      resources.cpu,
+      resources.memory,
+      resources.scratch,
+      value.distinct.sorted,
+      resources.image,
+      resources.labels
+    ))
 
   def withLabels(value: Set[String]): ProcessContext =
-    copy(resources = resources.copy(labels = value))
+    copy(resources = ResourceAvailable(
+      resources.cpu,
+      resources.memory,
+      resources.scratch,
+      resources.gpu,
+      resources.image,
+      value
+    ))
 }
 
 object ProcessContext {
@@ -115,7 +150,7 @@ object ProcessElasticSupport {
       settings <- ProcessSettings.make(processConfig)
       ref <- Ref.of[IO, Map[RunningJobId, ProcessId]](Map.empty)
     } yield {
-      new ElasticSupport(
+      ElasticSupport(
         hostConfig = None,
         shutdownFromNodeRegistry =
           new ProcessShutdownFromRegistry(ref, shutdownCommand),

@@ -1,4 +1,4 @@
-package tasks.fileservice.s3
+package test
 
 import cats.effect.unsafe.implicits.global
 import org.scalatest.funsuite.AnyFunSuite
@@ -12,6 +12,8 @@ import software.amazon.awssdk.services.s3.model.{
   GetObjectRequest,
   GetObjectResponse
 }
+
+import tasks.fileservice.s3.S3
 
 import java.nio.file.{Files, Path}
 

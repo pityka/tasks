@@ -106,7 +106,7 @@ object RequestNodeBatchSizeTest extends TestHelpers {
   ): Resource[IO, Option[ElasticSupport]] =
     Resource.pure(
       Some(
-        new ElasticSupport(
+        ElasticSupport(
           hostConfig = None,
           shutdownFromNodeRegistry = new NoOpShutdown,
           shutdownFromWorker = new NoOpShutdown,

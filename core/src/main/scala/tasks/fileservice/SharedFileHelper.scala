@@ -51,16 +51,16 @@ private[tasks] object SharedFileHelper {
     service.storage.buffer(prefix.propose(name).toManaged)
 
   private[tasks] def createForTesting(name: String) =
-    new SharedFile(ManagedFilePath(Vector(name)), 0, 0)
+    SharedFile(ManagedFilePath(Vector(name)), 0, 0)
   private[tasks] def createForTesting(name: String, size: Long, hash: Int) =
-    new SharedFile(ManagedFilePath(Vector(name)), size, hash)
+    SharedFile(ManagedFilePath(Vector(name)), size, hash)
 
   def create(size: Long, hash: Int, path: ManagedFilePath): SharedFile =
-    new SharedFile(path, size, hash)
+    SharedFile(path, size, hash)
 
   def create(path: RemoteFilePath, storage: RemoteFileStorage): IO[SharedFile] =
     storage.getSizeAndHash(path).map { case (size, hash) =>
-      new SharedFile(path, size, hash)
+      SharedFile(path, size, hash)
     }
 
   val isLocal = (f: File) => f.canRead

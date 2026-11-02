@@ -25,11 +25,12 @@
  * SOFTWARE.
  */
 
-package tasks
+package test
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 
 import org.scalatest.matchers.should.Matchers
+import tasks._
 import tasks.queue.Spore
 
 import tasks.util._
@@ -96,7 +97,7 @@ object MySpore {
   val g1 = mkSpore[String]
   val g2 = mkSpore[Int]
 
-  def freeze[A, B](s: Spore[A, B]) = s.copy[A, B]()
+  def freeze[A, B](s: Spore[A, B]) = s.as[A, B]
 
   def useSpore(s: Spore[String, Option[Int]]) = {
     val s1 = "3"
@@ -131,7 +132,7 @@ object MySpore {
 
 class SporeTestSuite extends FunSuite with Matchers {
 
-  def freeze[A, B](s: Spore[A, B]) = s.copy[A, B]()
+  def freeze[A, B](s: Spore[A, B]) = s.as[A, B]
 
   test("spores should revive") {
     freeze(MySpore.s)(Some(3)) shouldBe "Some(3)"

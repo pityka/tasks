@@ -43,7 +43,7 @@ import cats.effect.kernel.Deferred
 import cats.effect.kernel.Ref
 import tasks.util.message._
 import tasks.util.Actor
-case class Proxy(address: tasks.util.message.Address)
+private[tasks] case class Proxy(address: tasks.util.message.Address)
 
 /* Local proxy of the remotely executed task */
 private[tasks] class ProxyTask[Input, Output](

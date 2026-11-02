@@ -48,16 +48,32 @@ sealed trait FilePath {
   def name: String
 }
 
-case class ManagedFilePath(pathElements: Vector[String]) extends FilePath {
-  override def toString = "/" + pathElements.mkString("/")
-  def name = pathElements.last
+sealed trait ManagedFilePath extends FilePath {
+  def pathElements: Vector[String]
+}
+object ManagedFilePath {
+  private[tasks] final case class ManagedFilePathImpl(
+      pathElements: Vector[String]
+  ) extends ManagedFilePath {
+    override def toString = "/" + pathElements.mkString("/")
+    def name = pathElements.last
+  }
+  def apply(pathElements: Vector[String]): ManagedFilePath =
+    ManagedFilePathImpl(pathElements)
+  def unapply(m: ManagedFilePath): Some[Vector[String]] = Some(m.pathElements)
 }
 
-case class RemoteFilePath(uri: Uri) extends FilePath {
-  override def toString = uri.toString
-  def name = uri.path.toString.split("/").filter(_.size > 0).last
+sealed trait RemoteFilePath extends FilePath {
+  def uri: Uri
 }
 object RemoteFilePath {
+  private[tasks] final case class RemoteFilePathImpl(uri: Uri)
+      extends RemoteFilePath {
+    override def toString = uri.toString
+    def name = uri.path.toString.split("/").filter(_.size > 0).last
+  }
+  def apply(uri: Uri): RemoteFilePath = RemoteFilePathImpl(uri)
+  def unapply(r: RemoteFilePath): Some[Uri] = Some(r.uri)
   implicit def toLogFeature(rm: RemoteFilePath): scribe.LogFeature =
     scribe.data(
       Map(
@@ -66,59 +82,79 @@ object RemoteFilePath {
     )
 }
 
-case class SharedFile(
-    path: FilePath,
-    byteSize: Long,
-    hash: Int
-) extends HasSharedFiles {
+sealed trait SharedFile extends HasSharedFiles {
+  def path: FilePath
+  def byteSize: Long
+  def hash: Int
 
-  private[tasks] def mutableFiles = Nil
+  private[tasks] final def mutableFiles = Nil
 
-  private[tasks] def immutableFiles = List(this)
+  private[tasks] final def immutableFiles = List(this)
 
   override def toString =
     s"SharedFile($path, size=$byteSize, hash=$hash)"
 
-  def file(implicit tsc: TaskSystemComponents): Resource[IO, File] =
+  final def file(implicit tsc: TaskSystemComponents): Resource[IO, File] =
     SharedFileHelper.getPathToFile(this)
 
-  def filePersistent(implicit tsc: TaskSystemComponents): Resource[IO, File] =
+  final def filePersistent(implicit tsc: TaskSystemComponents): Resource[IO, File] =
     SharedFileHelper.getPathToFile(this, keepLocalCache = true)
 
-  def fileNonCached(implicit tsc: TaskSystemComponents): Resource[IO, File] =
+  final def fileNonCached(implicit tsc: TaskSystemComponents): Resource[IO, File] =
     SharedFileHelper.getPathToFileNonCachedFile(this)
 
-  def history(implicit tsc: TaskSystemComponents): IO[History] =
+  final def history(implicit tsc: TaskSystemComponents): IO[History] =
     SharedFileHelper.getHistory(this)
 
-  def stream(implicit tsc: TaskSystemComponents): Stream[IO, Byte] =
+  final def stream(implicit tsc: TaskSystemComponents): Stream[IO, Byte] =
     SharedFileHelper.stream(this, 0L)
 
-  def stream(fromOffset: Long)(implicit
+  final def stream(fromOffset: Long)(implicit
       tsc: TaskSystemComponents
   ): Stream[IO, Byte] =
     SharedFileHelper.stream(this, fromOffset)
 
-  def isAccessible(implicit tsc: TaskSystemComponents): IO[Boolean] =
+  final def isAccessible(implicit tsc: TaskSystemComponents): IO[Boolean] =
     SharedFileHelper.isAccessible(this, true)
 
-  def uri(implicit tsc: TaskSystemComponents): IO[Uri] =
+  final def uri(implicit tsc: TaskSystemComponents): IO[Uri] =
     SharedFileHelper.getUri(this)
 
-  def name: String = path.name
+  final def name: String = path.name
 
-  def delete(implicit tsc: TaskSystemComponents): IO[Boolean] =
+  final def delete(implicit tsc: TaskSystemComponents): IO[Boolean] =
     SharedFileHelper.delete(this)
 
-  def utf8(implicit tsc: TaskSystemComponents): IO[String] =
+  final def utf8(implicit tsc: TaskSystemComponents): IO[String] =
     stream(0L).through(fs2.text.utf8.decode).compile.string
-  def bytes(implicit tsc: TaskSystemComponents): IO[scodec.bits.ByteVector] =
+  final def bytes(implicit tsc: TaskSystemComponents): IO[scodec.bits.ByteVector] =
     stream.compile.to(scodec.bits.ByteVector)
 }
 
 object SharedFile {
 
-  implicit val codec: JsonValueCodec[SharedFile] = JsonCodecMaker.make
+  private[tasks] final case class SharedFileImpl(
+      path: FilePath,
+      byteSize: Long,
+      hash: Int
+  ) extends SharedFile
+
+  def apply(path: FilePath, byteSize: Long, hash: Int): SharedFile =
+    SharedFileImpl(path, byteSize, hash)
+
+  def unapply(s: SharedFile): Some[(FilePath, Long, Int)] =
+    Some((s.path, s.byteSize, s.hash))
+
+  implicit val codec: JsonValueCodec[SharedFile] = {
+    val innerCodec: JsonValueCodec[SharedFileImpl] = JsonCodecMaker.make
+    new JsonValueCodec[SharedFile] {
+      val nullValue: SharedFile = null
+      def encodeValue(x: SharedFile, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
+        innerCodec.encodeValue(x.asInstanceOf[SharedFileImpl], out)
+      def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: SharedFile): SharedFile =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 
   def apply(uri: Uri)(implicit tsc: TaskSystemComponents): IO[SharedFile] =
     SharedFileHelper.create(RemoteFilePath(uri), tsc.fs.remote)

@@ -27,7 +27,6 @@ import cats.effect.IO
 
 import scala.quoted.*
 
-@scala.annotation.experimental
 private[tasks] object TaskDefinitionMacros {
 
   def taskDefinitionFromTree[A: Type, C: Type](

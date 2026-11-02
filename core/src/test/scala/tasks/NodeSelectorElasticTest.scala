@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package tasks
+package test
 
 import scala.concurrent.duration._
 
@@ -34,6 +34,7 @@ import cats.effect.IO
 import cats.effect.kernel.Resource
 import cats.effect.unsafe.implicits.global
 
+import tasks._
 import tasks.jsonitersupport._
 import tasks.JvmElasticSupport.JvmGrid
 import tasks.shared.NodeSelector

@@ -22,13 +22,14 @@
  * SOFTWARE.
  */
 
-package tasks
+package test
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should._
 import org.scalatest._
 import org.ekrich.config.ConfigFactory
 
+import tasks._
 import tasks.jsonitersupport._
 
 import com.github.plokhotnyuk.jsoniter_scala.macros._

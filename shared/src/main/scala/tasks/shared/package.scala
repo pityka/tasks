@@ -1,13 +1,22 @@
 package tasks
 
-import com.github.plokhotnyuk.jsoniter_scala.core._
-
 package object shared {
 
-  case class CodeVersion(s: String)
+  sealed trait CodeVersion { def s: String }
+  object CodeVersion {
+    private[tasks] final case class CodeVersionImpl(s: String)
+        extends CodeVersion
+    def apply(s: String): CodeVersion = CodeVersionImpl(s)
+    def unapply(v: CodeVersion): Some[String] = Some(v.s)
+  }
 
-  case class Priority(s: Int)
+  sealed trait Priority { def s: Int }
+  object Priority {
+    private[tasks] final case class PriorityImpl(s: Int) extends Priority
+    def apply(s: Int): Priority = PriorityImpl(s)
+    def unapply(p: Priority): Some[Int] = Some(p.s)
+  }
 
-  case class ElapsedTimeNanoSeconds(s: Long)
+  private[tasks] case class ElapsedTimeNanoSeconds(s: Long)
 
 }

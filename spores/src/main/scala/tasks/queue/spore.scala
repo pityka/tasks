@@ -1,17 +1,18 @@
 package tasks.queue
 
-case class SporeException(message: String, cause: Throwable)
+private[tasks] case class SporeException(message: String, cause: Throwable)
     extends Exception(message, cause)
 
-case class Spore[A, B](fqcn: String, dependencies: Seq[Spore[Any, Any]])
-    extends Revivable[A, B] {
-  def as[A0, B0] = Spore[A0, B0](fqcn, dependencies)
+sealed trait Spore[A, B] extends Revivable[A, B] {
+  def fqcn: String
+  def dependencies: Seq[Spore[Any, Any]]
 
-  lazy val revived = revive
+  final def as[A0, B0]: Spore[A0, B0] = Spore[A0, B0](fqcn, dependencies)
 
-  def apply(a: A): B = {
+  final lazy val revived = revive
+
+  final def apply(a: A): B = {
     val r: SporeFun[A, B] = revived
-
     r.call(a)
   }
 }
@@ -19,10 +20,22 @@ case class Spore[A, B](fqcn: String, dependencies: Seq[Spore[Any, Any]])
 object Spore {
   import com.github.plokhotnyuk.jsoniter_scala.macros._
   import com.github.plokhotnyuk.jsoniter_scala.core._
-  case class SporeDTO(fqcn: String, deps: Seq[SporeDTO]) {
+
+  private[tasks] final case class SporeImpl[A, B](
+      fqcn: String,
+      dependencies: Seq[Spore[Any, Any]]
+  ) extends Spore[A, B]
+
+  def apply[A, B](fqcn: String, dependencies: Seq[Spore[Any, Any]]): Spore[A, B] =
+    SporeImpl[A, B](fqcn, dependencies)
+
+  def unapply[A, B](s: Spore[A, B]): Some[(String, Seq[Spore[Any, Any]])] =
+    Some((s.fqcn, s.dependencies))
+
+  private[tasks] case class SporeDTO(fqcn: String, deps: Seq[SporeDTO]) {
     def toSpore[A, B]: Spore[A, B] = Spore(fqcn, deps.map(_.toSpore))
   }
-  object SporeDTO {
+  private[tasks] object SporeDTO {
     def apply[A, B](spore: Spore[A, B]): SporeDTO =
       SporeDTO(fqcn = spore.fqcn, deps = spore.dependencies.map(SporeDTO(_)))
   }

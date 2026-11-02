@@ -14,7 +14,7 @@
  * copies or substantial portions of the Software.
  */
 
-package tasks
+package test
 
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
 import org.scalatest.matchers.should.Matchers
@@ -25,6 +25,7 @@ import cats.effect.ExitCode
 
 import org.ekrich.config.ConfigFactory
 
+import tasks.{Task, withTaskSystem, TestHelpers, codeVersionFromTasksConfig, tasksConfig}
 import tasks.jsonitersupport._
 import tasks.elastic._
 import tasks.shared._
@@ -98,7 +99,7 @@ object MaxNodesCumulativeRaceTest extends TestHelpers {
   def elasticSupport(counter: Ref[IO, Int]): Resource[IO, Option[ElasticSupport]] =
     Resource.pure(
       Some(
-        new ElasticSupport(
+        ElasticSupport(
           hostConfig = None,
           shutdownFromNodeRegistry = new NoOpShutdown,
           shutdownFromWorker = new NoOpShutdown,
@@ -133,8 +134,7 @@ object MaxNodesCumulativeRaceTest extends TestHelpers {
         // the master, so the queue stays full and the elastic scaler is pressured
         // to spawn nodes repeatedly.
         val n = 100
-        import cats.syntax.all._
-        val submit = (1 to n).toList.parTraverse { i =>
+        val submit = IO.parTraverseN(n)((1 to n).toList) { i =>
           sleepingTask(Input(i))(tasks.ResourceRequest(cpu=(1,1), memory=1,scratch=0,gpu=0)).attempt.void
         }.start
 

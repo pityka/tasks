@@ -46,13 +46,35 @@ object NodeSelector {
   case object Always extends NodeSelector
 
   /** Worker must advertise `label`. */
-  case class Has(label: String) extends NodeSelector
+  sealed trait Has extends NodeSelector { def label: String }
+  object Has {
+    private[tasks] final case class HasImpl(label: String) extends Has
+    def apply(label: String): Has = HasImpl(label)
+    def unapply(h: Has): Some[String] = Some(h.label)
+  }
 
-  case class Not(selector: NodeSelector) extends NodeSelector
+  sealed trait Not extends NodeSelector { def selector: NodeSelector }
+  object Not {
+    private[tasks] final case class NotImpl(selector: NodeSelector) extends Not
+    def apply(selector: NodeSelector): Not = NotImpl(selector)
+    def unapply(n: Not): Some[NodeSelector] = Some(n.selector)
+  }
 
-  case class And(selectors: List[NodeSelector]) extends NodeSelector
+  sealed trait And extends NodeSelector { def selectors: List[NodeSelector] }
+  object And {
+    private[tasks] final case class AndImpl(selectors: List[NodeSelector])
+        extends And
+    def apply(selectors: List[NodeSelector]): And = AndImpl(selectors)
+    def unapply(a: And): Some[List[NodeSelector]] = Some(a.selectors)
+  }
 
-  case class Or(selectors: List[NodeSelector]) extends NodeSelector
+  sealed trait Or extends NodeSelector { def selectors: List[NodeSelector] }
+  object Or {
+    private[tasks] final case class OrImpl(selectors: List[NodeSelector])
+        extends Or
+    def apply(selectors: List[NodeSelector]): Or = OrImpl(selectors)
+    def unapply(o: Or): Some[List[NodeSelector]] = Some(o.selectors)
+  }
 
   def matches(selector: NodeSelector, available: Set[String]): Boolean =
     selector match {
@@ -63,8 +85,42 @@ object NodeSelector {
       case Or(xs)     => xs.exists(matches(_, available))
     }
 
-  implicit val codec: JsonValueCodec[NodeSelector] =
-    JsonCodecMaker.make(CodecMakerConfig.withAllowRecursiveTypes(true))
+  private[shared] object view {
+    sealed trait V
+    case object Always extends V
+    final case class Has(label: String) extends V
+    final case class Not(selector: V) extends V
+    final case class And(selectors: List[V]) extends V
+    final case class Or(selectors: List[V]) extends V
+  }
+
+  private[shared] def toView(n: NodeSelector): view.V = n match {
+    case NodeSelector.Always       => view.Always
+    case NodeSelector.Has(l)       => view.Has(l)
+    case NodeSelector.Not(s)       => view.Not(toView(s))
+    case NodeSelector.And(xs)      => view.And(xs.map(toView))
+    case NodeSelector.Or(xs)       => view.Or(xs.map(toView))
+  }
+
+  private[shared] def fromView(v: view.V): NodeSelector = v match {
+    case view.Always       => NodeSelector.Always
+    case view.Has(l)       => NodeSelector.Has(l)
+    case view.Not(s)       => NodeSelector.Not(fromView(s))
+    case view.And(xs)      => NodeSelector.And(xs.map(fromView))
+    case view.Or(xs)       => NodeSelector.Or(xs.map(fromView))
+  }
+
+  implicit val codec: JsonValueCodec[NodeSelector] = {
+    val innerCodec: JsonValueCodec[view.V] =
+      JsonCodecMaker.make(CodecMakerConfig.withAllowRecursiveTypes(true))
+    new JsonValueCodec[NodeSelector] {
+      val nullValue: NodeSelector = null
+      def encodeValue(x: NodeSelector, out: JsonWriter): Unit =
+        innerCodec.encodeValue(toView(x), out)
+      def decodeValue(in: JsonReader, default: NodeSelector): NodeSelector =
+        fromView(innerCodec.decodeValue(in, null))
+    }
+  }
 }
 
 /** Reads the `name:value` labels advertised by a worker
@@ -101,35 +157,65 @@ object Label {
   *
   * The caller receives the first success or the last failure.
   */
-case class Replication(maximum: Int, placementAttribute: Option[String]) {
-  require(maximum >= 1, s"maximum must be positive, got $maximum")
+sealed trait Replication {
+  def maximum: Int
+  def placementAttribute: Option[String]
 }
 
 object Replication {
-  def apply(maximum: Int): Replication = Replication(maximum, None)
+  private[tasks] final case class ReplicationImpl(
+      maximum: Int,
+      placementAttribute: Option[String]
+  ) extends Replication {
+    require(maximum >= 1, s"maximum must be positive, got $maximum")
+  }
+
+  def apply(maximum: Int, placementAttribute: Option[String]): Replication =
+    ReplicationImpl(maximum, placementAttribute)
+
+  def apply(maximum: Int): Replication = ReplicationImpl(maximum, None)
 
   def apply(maximum: Int, placementAttribute: String): Replication =
-    Replication(maximum, Some(placementAttribute))
+    ReplicationImpl(maximum, Some(placementAttribute))
 
-  implicit val codec: JsonValueCodec[Replication] = JsonCodecMaker.make
+  implicit val codec: JsonValueCodec[Replication] = {
+    val innerCodec: JsonValueCodec[ReplicationImpl] = JsonCodecMaker.make
+    new JsonValueCodec[Replication] {
+      val nullValue: Replication = null
+      def encodeValue(x: Replication, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
+        innerCodec.encodeValue(x.asInstanceOf[ReplicationImpl], out)
+      def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: Replication): Replication =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 }
 
-case class ResourceRequest(
-    cpu: (Int, Int),
-    memory: Int,
-    scratch: Int,
-    gpu: Int,
-    image: Option[String],
-    nodeSelector: Option[NodeSelector],
-    replication: Option[Replication]
-) {
-  def maximumCopies: Int = replication.fold(1)(_.maximum)
+sealed trait ResourceRequest {
+  def cpu: (Int, Int)
+  def memory: Int
+  def scratch: Int
+  def gpu: Int
+  def image: Option[String]
+  def nodeSelector: Option[NodeSelector]
+  def replication: Option[Replication]
 
-  def placementAttribute: Option[String] =
+  final def maximumCopies: Int = replication.fold(1)(_.maximum)
+
+  final def placementAttribute: Option[String] =
     replication.filter(_.maximum > 1).flatMap(_.placementAttribute)
 }
 
 object ResourceRequest {
+
+  private[tasks] final case class ResourceRequestImpl(
+      cpu: (Int, Int),
+      memory: Int,
+      scratch: Int,
+      gpu: Int,
+      image: Option[String],
+      nodeSelector: Option[NodeSelector],
+      replication: Option[Replication]
+  ) extends ResourceRequest
 
   implicit def toLogFeature(rm: ResourceRequest): scribe.LogFeature =
     scribe.data(
@@ -149,8 +235,19 @@ object ResourceRequest {
       )
     )
 
+  def apply(
+      cpu: (Int, Int),
+      memory: Int,
+      scratch: Int,
+      gpu: Int,
+      image: Option[String],
+      nodeSelector: Option[NodeSelector],
+      replication: Option[Replication]
+  ): ResourceRequest =
+    ResourceRequestImpl(cpu, memory, scratch, gpu, image, nodeSelector, replication)
+
   def apply(cpu: Int, memory: Int, scratch: Int, gpu: Int): ResourceRequest =
-    ResourceRequest((cpu, cpu), memory, scratch, gpu, None, None, None)
+    ResourceRequestImpl((cpu, cpu), memory, scratch, gpu, None, None, None)
 
   def apply(
       cpu: (Int, Int),
@@ -159,7 +256,7 @@ object ResourceRequest {
       gpu: Int,
       image: Option[String]
   ): ResourceRequest =
-    ResourceRequest(cpu, memory, scratch, gpu, image, None, None)
+    ResourceRequestImpl(cpu, memory, scratch, gpu, image, None, None)
 
   def apply(
       cpu: (Int, Int),
@@ -169,57 +266,90 @@ object ResourceRequest {
       image: Option[String],
       nodeSelector: Option[NodeSelector]
   ): ResourceRequest =
-    ResourceRequest(cpu, memory, scratch, gpu, image, nodeSelector, None)
+    ResourceRequestImpl(cpu, memory, scratch, gpu, image, nodeSelector, None)
 
-  implicit val codec: JsonValueCodec[ResourceRequest] =
-    JsonCodecMaker.make(CodecMakerConfig.withAllowRecursiveTypes(true))
+  implicit val codec: JsonValueCodec[ResourceRequest] = {
+    val innerCodec: JsonValueCodec[ResourceRequestImpl] =
+      JsonCodecMaker.make(CodecMakerConfig.withAllowRecursiveTypes(true))
+    new JsonValueCodec[ResourceRequest] {
+      val nullValue: ResourceRequest = null
+      def encodeValue(x: ResourceRequest, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
+        innerCodec.encodeValue(x.asInstanceOf[ResourceRequestImpl], out)
+      def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: ResourceRequest): ResourceRequest =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 
 }
 
-case class ResourceAllocated(
-    cpu: Int,
-    memory: Int,
-    scratch: Int,
-    gpu: List[Int],
-    image: Option[String]
-) {
-  require(
-    gpu == gpu.distinct && gpu == gpu.sorted,
-    s"gpu must be sorted and unique, got $gpu"
-  )
+sealed trait ResourceAllocated {
+  def cpu: Int
+  def memory: Int
+  def scratch: Int
+  def gpu: List[Int]
+  def image: Option[String]
 }
 
 object ResourceAllocated {
-  implicit val codec: JsonValueCodec[ResourceAllocated] = JsonCodecMaker.make
+  private[tasks] final case class ResourceAllocatedImpl(
+      cpu: Int,
+      memory: Int,
+      scratch: Int,
+      gpu: List[Int],
+      image: Option[String]
+  ) extends ResourceAllocated {
+    require(
+      gpu == gpu.distinct && gpu == gpu.sorted,
+      s"gpu must be sorted and unique, got $gpu"
+    )
+  }
+
+  def apply(
+      cpu: Int,
+      memory: Int,
+      scratch: Int,
+      gpu: List[Int],
+      image: Option[String]
+  ): ResourceAllocated =
+    ResourceAllocatedImpl(cpu, memory, scratch, gpu, image)
+
+  def unapply(r: ResourceAllocated): Some[(Int, Int, Int, List[Int], Option[String])] =
+    Some((r.cpu, r.memory, r.scratch, r.gpu, r.image))
+
+  implicit val codec: JsonValueCodec[ResourceAllocated] = {
+    val innerCodec: JsonValueCodec[ResourceAllocatedImpl] = JsonCodecMaker.make
+    new JsonValueCodec[ResourceAllocated] {
+      val nullValue: ResourceAllocated = null
+      def encodeValue(x: ResourceAllocated, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
+        innerCodec.encodeValue(x.asInstanceOf[ResourceAllocatedImpl], out)
+      def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: ResourceAllocated): ResourceAllocated =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 }
 
-case class ResourceAvailable(
-    cpu: Int,
-    memory: Int,
-    scratch: Int,
-    gpu: List[Int],
-    image: Option[String],
-    labels: Set[String] = Set.empty
-) {
+sealed trait ResourceAvailable {
+  def cpu: Int
+  def memory: Int
+  def scratch: Int
+  def gpu: List[Int]
+  def image: Option[String]
+  def labels: Set[String]
 
-  require(
-    gpu == gpu.distinct && gpu == gpu.sorted,
-    s"gpu must be sorted and unique, got $gpu"
-  )
-  val numGpu = gpu.size
+  final def numGpu = gpu.size
 
-  def canFulfillRequest(r: ResourceAllocated) =
+  final def canFulfillRequest(r: ResourceAllocated) =
     cpu >= r.cpu && memory >= r.memory && scratch >= r.scratch &&
       r.gpu.forall(gpu.contains) &&
       r.image.forall(reqImage => image.contains(reqImage))
 
-  def canFulfillRequest(r: ResourceRequest) =
+  final def canFulfillRequest(r: ResourceRequest) =
     cpu >= r.cpu._1 && memory >= r.memory && scratch >= r.scratch && numGpu >= r.gpu && r.image
       .map(requestedImage => image.exists(_ == requestedImage))
       .getOrElse(true) &&
       r.nodeSelector.forall(NodeSelector.matches(_, labels))
 
-  def substract(r: ResourceRequest) = {
+  final def substract(r: ResourceRequest) = {
     val remainingCPU = math.max((cpu - r.cpu._2), 0)
     ResourceAvailable(
       remainingCPU,
@@ -231,7 +361,7 @@ case class ResourceAvailable(
     )
   }
 
-  def substract(r: ResourceAllocated) = {
+  final def substract(r: ResourceAllocated) = {
     val rGpu = r.gpu.toSet
     ResourceAvailable(
       cpu - r.cpu,
@@ -243,7 +373,7 @@ case class ResourceAvailable(
     )
   }
 
-  def substractAll = ResourceAvailable(
+  final def substractAll = ResourceAvailable(
     cpu = 0,
     memory = 0,
     scratch = 0,
@@ -252,7 +382,7 @@ case class ResourceAvailable(
     labels = labels
   )
 
-  def addBack(r: ResourceAllocated) = {
+  final def addBack(r: ResourceAllocated) = {
     assert((gpu.toSet & r.gpu.toSet).isEmpty, s"$gpu + ${r.gpu}")
     ResourceAvailable(
       cpu = cpu + r.cpu,
@@ -264,7 +394,7 @@ case class ResourceAvailable(
     )
   }
 
-  def all =
+  final def all =
     ResourceAllocated(
       cpu,
       memory,
@@ -272,7 +402,7 @@ case class ResourceAvailable(
       gpu,
       image
     )
-  def minimum(r: ResourceRequest) =
+  final def minimum(r: ResourceRequest) =
     ResourceAllocated(
       r.cpu._1,
       r.memory,
@@ -281,7 +411,7 @@ case class ResourceAvailable(
       r.image
     )
 
-  def maximum(r: ResourceRequest) = {
+  final def maximum(r: ResourceRequest) = {
     val allocatedMemory = math.min(r.memory, memory)
     val allocatedCPU = math.min(cpu, r.cpu._2)
     val allocatedScratch = math.min(scratch, r.scratch)
@@ -302,6 +432,39 @@ case class ResourceAvailable(
 }
 
 object ResourceAvailable {
+  private[tasks] final case class ResourceAvailableImpl(
+      cpu: Int,
+      memory: Int,
+      scratch: Int,
+      gpu: List[Int],
+      image: Option[String],
+      labels: Set[String]
+  ) extends ResourceAvailable {
+    require(
+      gpu == gpu.distinct && gpu == gpu.sorted,
+      s"gpu must be sorted and unique, got $gpu"
+    )
+  }
+
+  def apply(
+      cpu: Int,
+      memory: Int,
+      scratch: Int,
+      gpu: List[Int],
+      image: Option[String],
+      labels: Set[String]
+  ): ResourceAvailable =
+    ResourceAvailableImpl(cpu, memory, scratch, gpu, image, labels)
+
+  def apply(
+      cpu: Int,
+      memory: Int,
+      scratch: Int,
+      gpu: List[Int],
+      image: Option[String]
+  ): ResourceAvailable =
+    ResourceAvailableImpl(cpu, memory, scratch, gpu, image, Set.empty)
+
   implicit def toLogFeature(rm: ResourceAvailable): scribe.LogFeature =
     scribe.data(
       Map(
@@ -314,19 +477,38 @@ object ResourceAvailable {
       )
     )
   val empty = ResourceAvailable(0, 0, 0, Nil, None)
-  implicit val codec: JsonValueCodec[ResourceAvailable] = JsonCodecMaker.make
+  implicit val codec: JsonValueCodec[ResourceAvailable] = {
+    val innerCodec: JsonValueCodec[ResourceAvailableImpl] = JsonCodecMaker.make
+    new JsonValueCodec[ResourceAvailable] {
+      val nullValue: ResourceAvailable = null
+      def encodeValue(x: ResourceAvailable, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
+        innerCodec.encodeValue(x.asInstanceOf[ResourceAvailableImpl], out)
+      def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: ResourceAvailable): ResourceAvailable =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 }
 
-case class VersionedResourceRequest(
-    codeVersion: CodeVersion,
-    cpuMemoryRequest: ResourceRequest
-) {
-  def cpu = cpuMemoryRequest.cpu
-  def memory = cpuMemoryRequest.memory
-  def scratch = cpuMemoryRequest.scratch
+sealed trait VersionedResourceRequest {
+  def codeVersion: CodeVersion
+  def cpuMemoryRequest: ResourceRequest
+  final def cpu = cpuMemoryRequest.cpu
+  final def memory = cpuMemoryRequest.memory
+  final def scratch = cpuMemoryRequest.scratch
 }
 
 object VersionedResourceRequest {
+  private[tasks] final case class VersionedResourceRequestImpl(
+      codeVersion: CodeVersion,
+      cpuMemoryRequest: ResourceRequest
+  ) extends VersionedResourceRequest
+
+  def apply(
+      codeVersion: CodeVersion,
+      cpuMemoryRequest: ResourceRequest
+  ): VersionedResourceRequest =
+    VersionedResourceRequestImpl(codeVersion, cpuMemoryRequest)
+
   def apply(
       codeVersion: CodeVersion,
       cpu: Int,
@@ -335,26 +517,51 @@ object VersionedResourceRequest {
       gpu: Int,
       image: Option[String]
   ): VersionedResourceRequest =
-    VersionedResourceRequest(
+    VersionedResourceRequestImpl(
       codeVersion,
       ResourceRequest((cpu, cpu), memory, scratch, gpu, image)
     )
 
-  implicit val codec: JsonValueCodec[VersionedResourceRequest] =
-    JsonCodecMaker.make
+  def unapply(v: VersionedResourceRequest): Some[(CodeVersion, ResourceRequest)] =
+    Some((v.codeVersion, v.cpuMemoryRequest))
+
+  implicit val codec: JsonValueCodec[VersionedResourceRequest] = {
+    val innerCodec: JsonValueCodec[VersionedResourceRequestImpl] =
+      JsonCodecMaker.make
+    new JsonValueCodec[VersionedResourceRequest] {
+      val nullValue: VersionedResourceRequest = null
+      def encodeValue(x: VersionedResourceRequest, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
+        innerCodec.encodeValue(x.asInstanceOf[VersionedResourceRequestImpl], out)
+      def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: VersionedResourceRequest): VersionedResourceRequest =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 }
 
-case class VersionedResourceAllocated(
-    codeVersion: CodeVersion,
-    cpuMemoryAllocated: ResourceAllocated
-) {
-  def cpu = cpuMemoryAllocated.cpu
-  def memory = cpuMemoryAllocated.memory
-  def scratch = cpuMemoryAllocated.scratch
-  def gpu = cpuMemoryAllocated.gpu
+sealed trait VersionedResourceAllocated {
+  def codeVersion: CodeVersion
+  def cpuMemoryAllocated: ResourceAllocated
+  final def cpu = cpuMemoryAllocated.cpu
+  final def memory = cpuMemoryAllocated.memory
+  final def scratch = cpuMemoryAllocated.scratch
+  final def gpu = cpuMemoryAllocated.gpu
 }
 
 object VersionedResourceAllocated {
+  private[tasks] final case class VersionedResourceAllocatedImpl(
+      codeVersion: CodeVersion,
+      cpuMemoryAllocated: ResourceAllocated
+  ) extends VersionedResourceAllocated
+
+  def apply(
+      codeVersion: CodeVersion,
+      cpuMemoryAllocated: ResourceAllocated
+  ): VersionedResourceAllocated =
+    VersionedResourceAllocatedImpl(codeVersion, cpuMemoryAllocated)
+
+  def unapply(v: VersionedResourceAllocated): Some[(CodeVersion, ResourceAllocated)] =
+    Some((v.codeVersion, v.cpuMemoryAllocated))
+
   implicit def toLogFeature(rm: VersionedResourceAllocated): scribe.LogFeature =
     scribe.data(
       Map(
@@ -367,38 +574,47 @@ object VersionedResourceAllocated {
         )
       )
     )
-  implicit val codec: JsonValueCodec[VersionedResourceAllocated] =
-    JsonCodecMaker.make
+  implicit val codec: JsonValueCodec[VersionedResourceAllocated] = {
+    val innerCodec: JsonValueCodec[VersionedResourceAllocatedImpl] =
+      JsonCodecMaker.make
+    new JsonValueCodec[VersionedResourceAllocated] {
+      val nullValue: VersionedResourceAllocated = null
+      def encodeValue(x: VersionedResourceAllocated, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
+        innerCodec.encodeValue(x.asInstanceOf[VersionedResourceAllocatedImpl], out)
+      def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: VersionedResourceAllocated): VersionedResourceAllocated =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 }
 
-case class VersionedResourceAvailable(
-    codeVersion: CodeVersion,
-    cpuMemoryAvailable: ResourceAvailable
-) {
-  def canFulfillRequest(r: VersionedResourceRequest) =
+sealed trait VersionedResourceAvailable {
+  def codeVersion: CodeVersion
+  def cpuMemoryAvailable: ResourceAvailable
+
+  final def canFulfillRequest(r: VersionedResourceRequest) =
     r.codeVersion == codeVersion && cpuMemoryAvailable.canFulfillRequest(
       r.cpuMemoryRequest
     )
 
-  def substract(r: VersionedResourceRequest) =
+  final def substract(r: VersionedResourceRequest) =
     VersionedResourceAvailable(
       codeVersion,
       cpuMemoryAvailable.substract(r.cpuMemoryRequest)
     )
 
-  def substract(r: VersionedResourceAllocated) =
+  final def substract(r: VersionedResourceAllocated) =
     VersionedResourceAvailable(
       codeVersion,
       cpuMemoryAvailable.substract(r.cpuMemoryAllocated)
     )
 
-  def addBack(r: VersionedResourceAllocated) =
+  final def addBack(r: VersionedResourceAllocated) =
     VersionedResourceAvailable(
       codeVersion,
       cpuMemoryAvailable.addBack(r.cpuMemoryAllocated)
     )
 
-  def maximum(r: VersionedResourceRequest) =
+  final def maximum(r: VersionedResourceRequest) =
     VersionedResourceAllocated(
       codeVersion,
       cpuMemoryAvailable.maximum(r.cpuMemoryRequest)
@@ -407,6 +623,17 @@ case class VersionedResourceAvailable(
 }
 
 object VersionedResourceAvailable {
+  private[tasks] final case class VersionedResourceAvailableImpl(
+      codeVersion: CodeVersion,
+      cpuMemoryAvailable: ResourceAvailable
+  ) extends VersionedResourceAvailable
+
+  def apply(
+      codeVersion: CodeVersion,
+      cpuMemoryAvailable: ResourceAvailable
+  ): VersionedResourceAvailable =
+    VersionedResourceAvailableImpl(codeVersion, cpuMemoryAvailable)
+
   implicit def toLogFeature(rm: VersionedResourceAvailable): scribe.LogFeature =
     scribe.data(
       Map(
@@ -421,50 +648,104 @@ object VersionedResourceAvailable {
           .mkString(",")
       )
     )
-  implicit val codec: JsonValueCodec[VersionedResourceAvailable] =
-    JsonCodecMaker.make
+  implicit val codec: JsonValueCodec[VersionedResourceAvailable] = {
+    val innerCodec: JsonValueCodec[VersionedResourceAvailableImpl] =
+      JsonCodecMaker.make
+    new JsonValueCodec[VersionedResourceAvailable] {
+      val nullValue: VersionedResourceAvailable = null
+      def encodeValue(x: VersionedResourceAvailable, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
+        innerCodec.encodeValue(x.asInstanceOf[VersionedResourceAvailableImpl], out)
+      def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: VersionedResourceAvailable): VersionedResourceAvailable =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 }
 
-case class RunningJobId(value: String)
-
+sealed trait RunningJobId { def value: String }
 object RunningJobId {
+  private[tasks] final case class RunningJobIdImpl(value: String)
+      extends RunningJobId
+  def apply(value: String): RunningJobId = RunningJobIdImpl(value)
+  def unapply(r: RunningJobId): Some[String] = Some(r.value)
   implicit def toLogFeature(rm: RunningJobId): scribe.LogFeature = scribe.data(
-    Map(
-      "running-job-id" -> rm.value
-    )
+    Map("running-job-id" -> rm.value)
   )
-  implicit val codec: JsonValueCodec[RunningJobId] =
-    JsonCodecMaker.make
+  implicit val codec: JsonValueCodec[RunningJobId] = {
+    val innerCodec: JsonValueCodec[RunningJobIdImpl] = JsonCodecMaker.make
+    new JsonValueCodec[RunningJobId] {
+      val nullValue: RunningJobId = null
+      def encodeValue(x: RunningJobId, out: JsonWriter): Unit =
+        innerCodec.encodeValue(x.asInstanceOf[RunningJobIdImpl], out)
+      def decodeValue(in: JsonReader, default: RunningJobId): RunningJobId =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 }
 
-case class PendingJobId(value: String)
-
+sealed trait PendingJobId { def value: String }
 object PendingJobId {
+  private[tasks] final case class PendingJobIdImpl(value: String)
+      extends PendingJobId
+  def apply(value: String): PendingJobId = PendingJobIdImpl(value)
+  def unapply(p: PendingJobId): Some[String] = Some(p.value)
   implicit def toLogFeature(rm: PendingJobId): scribe.LogFeature = scribe.data(
-    Map(
-      "pending-job-id" -> rm.value
-    )
+    Map("pending-job-id" -> rm.value)
   )
-  implicit val codec: JsonValueCodec[PendingJobId] =
-    JsonCodecMaker.make
+  implicit val codec: JsonValueCodec[PendingJobId] = {
+    val innerCodec: JsonValueCodec[PendingJobIdImpl] = JsonCodecMaker.make
+    new JsonValueCodec[PendingJobId] {
+      val nullValue: PendingJobId = null
+      def encodeValue(x: PendingJobId, out: JsonWriter): Unit =
+        innerCodec.encodeValue(x.asInstanceOf[PendingJobIdImpl], out)
+      def decodeValue(in: JsonReader, default: PendingJobId): PendingJobId =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 }
 
-case class Labels(values: List[(String, String)]) {
-  def ++(other: Labels) = Labels(values ++ other.values)
-
+sealed trait Labels {
+  def values: List[(String, String)]
+  final def ++(other: Labels): Labels = Labels(values ++ other.values)
 }
 object Labels {
-  implicit val codec: JsonValueCodec[Labels] =
-    JsonCodecMaker.make
-  val empty = Labels(Nil)
+  private[tasks] final case class LabelsImpl(values: List[(String, String)])
+      extends Labels
+  def apply(values: List[(String, String)]): Labels = LabelsImpl(values)
+  def unapply(l: Labels): Some[List[(String, String)]] = Some(l.values)
+  val empty: Labels = LabelsImpl(Nil)
+  implicit val codec: JsonValueCodec[Labels] = {
+    val innerCodec: JsonValueCodec[LabelsImpl] = JsonCodecMaker.make
+    new JsonValueCodec[Labels] {
+      val nullValue: Labels = null
+      def encodeValue(x: Labels, out: JsonWriter): Unit =
+        innerCodec.encodeValue(x.asInstanceOf[LabelsImpl], out)
+      def decodeValue(in: JsonReader, default: Labels): Labels =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 }
 
-case class LogRecord(
-    data: String,
-    timestamp: Instant
-)
-
+sealed trait LogRecord {
+  def data: String
+  def timestamp: Instant
+}
 object LogRecord {
-  implicit val codec: JsonValueCodec[LogRecord] =
-    JsonCodecMaker.make
+  private[tasks] final case class LogRecordImpl(
+      data: String,
+      timestamp: Instant
+  ) extends LogRecord
+  def apply(data: String, timestamp: Instant): LogRecord =
+    LogRecordImpl(data, timestamp)
+  def unapply(l: LogRecord): Some[(String, Instant)] =
+    Some((l.data, l.timestamp))
+  implicit val codec: JsonValueCodec[LogRecord] = {
+    val innerCodec: JsonValueCodec[LogRecordImpl] = JsonCodecMaker.make
+    new JsonValueCodec[LogRecord] {
+      val nullValue: LogRecord = null
+      def encodeValue(x: LogRecord, out: JsonWriter): Unit =
+        innerCodec.encodeValue(x.asInstanceOf[LogRecordImpl], out)
+      def decodeValue(in: JsonReader, default: LogRecord): LogRecord =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 }

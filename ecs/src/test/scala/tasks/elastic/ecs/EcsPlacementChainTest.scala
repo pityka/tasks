@@ -426,8 +426,16 @@ class EcsPlacementChainTest extends AnyFunSuite with Matchers {
       run = _ => IO.pure(placed("task/workers/never"))
     )
 
-    val withImage =
-      request(cpu = 4, memory = 8000).copy(image = Some("unmapped:tag"))
+    val baseReq = request(cpu = 4, memory = 8000)
+    val withImage = ResourceRequest(
+      baseReq.cpu,
+      baseReq.memory,
+      baseReq.scratch,
+      baseReq.gpu,
+      Some("unmapped:tag"),
+      baseReq.nodeSelector,
+      baseReq.replication
+    )
     val result = node
       .requestOneNewJobFromJobScheduler(withImage)
       .unsafeRunSync()

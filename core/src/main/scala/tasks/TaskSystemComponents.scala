@@ -78,7 +78,7 @@ sealed trait TaskSystemComponents {
   )(fun: TaskSystemComponents => B): B
 }
 
-case class ExtendedTaskSystemComponents private[tasks] (
+final class ExtendedTaskSystemComponents private[tasks] (
     private[tasks] val queue: Queue,
     private[tasks] val fs: FileServiceComponent,
     private[tasks] val cache: TaskResultCache,
@@ -94,18 +94,36 @@ case class ExtendedTaskSystemComponents private[tasks] (
 ) extends TaskSystemComponents {
 
   override def withChildPrefix(name: String): ExtendedTaskSystemComponents =
-    this.copy(filePrefix = this.filePrefix.append(name))
+    copyWithFilePrefix(this.filePrefix.append(name))
 
   override def withChildPrefix(names: Seq[String]): ExtendedTaskSystemComponents =
-    this.copy(filePrefix = this.filePrefix.append(names))
+    copyWithFilePrefix(this.filePrefix.append(names))
 
   override def replaceFilePrefix(names: Seq[String]): ExtendedTaskSystemComponents =
-    this.copy(filePrefix = FileServicePrefix(names.toVector))
+    copyWithFilePrefix(FileServicePrefix(names.toVector))
 
   override def withFilePrefix[B](
       prefix: Seq[String]
   )(fun: TaskSystemComponents => B): B =
     fun(this.withChildPrefix(prefix))
+
+  private[tasks] def copyWithFilePrefix(
+      filePrefix: FileServicePrefix
+  ): ExtendedTaskSystemComponents =
+    new ExtendedTaskSystemComponents(
+      queue,
+      fs,
+      cache,
+      nodeLocalCache,
+      filePrefix,
+      tasksConfig,
+      historyContext,
+      priority,
+      labels,
+      lineage,
+      messenger,
+      sessionId
+    )
 }
 
 object ExtendedTaskSystemComponents {
@@ -770,7 +788,15 @@ object ExtendedTaskSystemComponents {
                   nodeLocalCache,
                   VersionedResourceAvailable(
                     config.codeVersion,
-                    if (zeroCPULauncherOnApp) available.copy(cpu = 0)
+                    if (zeroCPULauncherOnApp)
+                      ResourceAvailable(
+                        0,
+                        available.memory,
+                        available.scratch,
+                        available.gpu,
+                        available.image,
+                        available.labels
+                      )
                     else available
                   ),
                   refreshInterval = refreshInterval,
@@ -804,7 +830,7 @@ object ExtendedTaskSystemComponents {
               cache: TaskResultCache,
               nodeLocalCache: NodeLocalCache.State,
               messenger: Messenger
-          ) = ExtendedTaskSystemComponents(
+          ) = new ExtendedTaskSystemComponents(
             queue = queue,
             fs = fileServiceComponent,
             cache = cache,

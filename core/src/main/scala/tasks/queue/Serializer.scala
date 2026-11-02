@@ -30,16 +30,26 @@ object Deserializer {
   }
 }
 
-case class SerDe[AA](
-    ser: Spore[Unit, Serializer[AA]],
-    deser: Spore[Unit, Deserializer[AA]]
-)
+sealed trait SerDe[AA] {
+  def ser: Spore[Unit, Serializer[AA]]
+  def deser: Spore[Unit, Deserializer[AA]]
+}
 
 object SerDe {
-  import com.github.plokhotnyuk.jsoniter_scala.macros._
-  import com.github.plokhotnyuk.jsoniter_scala.core._
+  private[tasks] final case class SerDeImpl[AA](
+      ser: Spore[Unit, Serializer[AA]],
+      deser: Spore[Unit, Deserializer[AA]]
+  ) extends SerDe[AA]
 
-  implicit def codec[A]: JsonValueCodec[SerDe[A]] = JsonCodecMaker.make
+  def apply[AA](
+      ser: Spore[Unit, Serializer[AA]],
+      deser: Spore[Unit, Deserializer[AA]]
+  ): SerDe[AA] = SerDeImpl(ser, deser)
+
+  def unapply[AA](
+      s: SerDe[AA]
+  ): Some[(Spore[Unit, Serializer[AA]], Spore[Unit, Deserializer[AA]])] =
+    Some((s.ser, s.deser))
 
   implicit def makeFromComponents[A](implicit
       r: tasks.SDeserializer[A],

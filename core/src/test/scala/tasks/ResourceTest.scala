@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package tasks
+package test
 
 import tasks.shared._
 import org.scalatest.funsuite.{AnyFunSuite => FunSuite}
