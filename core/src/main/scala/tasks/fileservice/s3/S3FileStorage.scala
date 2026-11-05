@@ -60,14 +60,17 @@ private[tasks] class S3Storage(
       path: ManagedFilePath,
       retrieveSizeAndHash: Boolean
   ): IO[Option[SharedFile]] =
-    s3
-      .getObjectMetadata(bucketName, assembleName(path))
-      .map { meta =>
-        meta.map { meta =>
-          val (size1, hash1) = getLengthAndHash(meta)
-          SharedFileHelper.create(size1, hash1, path)
-        }
-      }
+    tasks.util.retryIO(s"s3 contains $path")(
+      s3
+        .getObjectMetadata(bucketName, assembleName(path))
+        .map { meta =>
+          meta.map { meta =>
+            val (size1, hash1) = getLengthAndHash(meta)
+            SharedFileHelper.create(size1, hash1, path)
+          }
+        },
+      config.s3RetryMaxAttempts
+    )(scribe.Logger[ManagedFileStorage])
 
   override def buffer(
       path: ManagedFilePath
@@ -75,17 +78,20 @@ private[tasks] class S3Storage(
     s3.buffer(bucketName, assembleName(path))
 
   def contains(path: ManagedFilePath, size: Long, hash: Int): IO[Boolean] =
-    s3
-      .getObjectMetadata(bucketName, assembleName(path))
-      .map {
-        case Some(meta) =>
-          if (size < 0) true
-          else {
-            val (size1, hash1) = getLengthAndHash(meta)
-            size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1)
-          }
-        case None => false
-      }
+    tasks.util.retryIO(s"s3 contains $path")(
+      s3
+        .getObjectMetadata(bucketName, assembleName(path))
+        .map {
+          case Some(meta) =>
+            if (size < 0) true
+            else {
+              val (size1, hash1) = getLengthAndHash(meta)
+              size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1)
+            }
+          case None => false
+        },
+      config.s3RetryMaxAttempts
+    )(scribe.Logger[ManagedFileStorage])
 
   private def getLengthAndHash(meta: ObjectMetaData) = {
     val size1: Long = meta.contentLength

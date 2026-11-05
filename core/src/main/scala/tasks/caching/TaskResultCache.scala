@@ -105,15 +105,6 @@ private[tasks] class TaskResultCache(
               SharedFileHelper.isAccessible(sf, checkContent)(fileService)
             }
             .map(seq => (seq, seq.forall(identity)))
-            .handleError { case e =>
-              scribe.warn(
-                s"Checking. Got something, but failed to verify after cache with error.",
-                scheduleTask,
-                e,
-                cacheLookup
-              )
-              (Nil, false)
-            }
             .map {
               case (accessibility, false) =>
                 val inaccessibleFiles =

@@ -826,6 +826,19 @@ private[tasks] class QueueImpl(
       val effect = cache
         .checkResult(sch, sender)
         .flatMap(r => handleCacheAnwser(r, proxies))
+        .handleErrorWith { case e =>
+          IO(
+            scribe.error(
+              e,
+              "Cache check failed; delivering ProxyResultFailure to proxies.",
+              sch
+            )
+          ) *> localResults.update { current =>
+            proxies.foldLeft(current) { case (acc, p) =>
+              acc.updated(p.address, ProxyResultFailure(e))
+            }
+          }
+        }
         .start
         .void
       (state, effect)
