@@ -181,41 +181,43 @@ object DynamoQueueState {
       .map(_ => true)
       .recover { case _: ResourceNotFoundException => false }
 
-    val create = IO.fromCompletableFuture(
-      IO(
-        client.createTable(
-          CreateTableRequest
-            .builder()
-            .tableName(table)
-            .attributeDefinitions(
-              AttributeDefinition
-                .builder()
-                .attributeName(Attr.Pk)
-                .attributeType(ScalarAttributeType.S)
-                .build(),
-              AttributeDefinition
-                .builder()
-                .attributeName(Attr.Sk)
-                .attributeType(ScalarAttributeType.S)
-                .build()
-            )
-            .keySchema(
-              KeySchemaElement
-                .builder()
-                .attributeName(Attr.Pk)
-                .keyType(KeyType.HASH)
-                .build(),
-              KeySchemaElement
-                .builder()
-                .attributeName(Attr.Sk)
-                .keyType(KeyType.RANGE)
-                .build()
-            )
-            .billingMode(BillingMode.PAY_PER_REQUEST)
-            .build()
+    val create = IO
+      .fromCompletableFuture(
+        IO(
+          client.createTable(
+            CreateTableRequest
+              .builder()
+              .tableName(table)
+              .attributeDefinitions(
+                AttributeDefinition
+                  .builder()
+                  .attributeName(Attr.Pk)
+                  .attributeType(ScalarAttributeType.S)
+                  .build(),
+                AttributeDefinition
+                  .builder()
+                  .attributeName(Attr.Sk)
+                  .attributeType(ScalarAttributeType.S)
+                  .build()
+              )
+              .keySchema(
+                KeySchemaElement
+                  .builder()
+                  .attributeName(Attr.Pk)
+                  .keyType(KeyType.HASH)
+                  .build(),
+                KeySchemaElement
+                  .builder()
+                  .attributeName(Attr.Sk)
+                  .keyType(KeyType.RANGE)
+                  .build()
+              )
+              .billingMode(BillingMode.PAY_PER_REQUEST)
+              .build()
+          )
         )
       )
-    ).void
+      .void
 
     val waitActive: IO[Unit] = {
       def loop: IO[Unit] =
@@ -233,9 +235,7 @@ object DynamoQueueState {
       loop
     }
 
-    describe.flatMap(exists =>
-      if (exists) IO.unit else create *> waitActive
-    )
+    describe.flatMap(exists => if (exists) IO.unit else create *> waitActive)
   }
 
   private def ensureResourcesItem(
@@ -260,7 +260,8 @@ object DynamoQueueState {
       .conditionExpression("attribute_not_exists(#pk)")
       .expressionAttributeNames(Map("#pk" -> Attr.Pk).asJava)
       .build()
-    IO.fromCompletableFuture(IO(client.putItem(request))).void
+    IO.fromCompletableFuture(IO(client.putItem(request)))
+      .void
       .recover { case _: ConditionalCheckFailedException => () }
   }
 
@@ -274,7 +275,9 @@ object DynamoQueueState {
       readMutex: Mutex[IO]
   ) extends Transaction[State] {
 
-    private def queryPartition(pk: String): IO[List[java.util.Map[String, AttributeValue]]] = {
+    private def queryPartition(
+        pk: String
+    ): IO[List[java.util.Map[String, AttributeValue]]] = {
       def loop(
           startKey: Option[java.util.Map[String, AttributeValue]],
           acc: List[java.util.Map[String, AttributeValue]]
@@ -292,18 +295,24 @@ object DynamoQueueState {
           case None    => requestBuilder.build()
           case Some(k) => requestBuilder.exclusiveStartKey(k).build()
         }
-        IO.fromCompletableFuture(IO(client.query(request))).flatMap { response =>
-          val items = response.items().asScala.toList
-          val next = acc ++ items
-          if (response.hasLastEvaluatedKey && !response.lastEvaluatedKey().isEmpty)
-            loop(Some(response.lastEvaluatedKey()), next)
-          else IO.pure(next)
+        IO.fromCompletableFuture(IO(client.query(request))).flatMap {
+          response =>
+            val items = response.items().asScala.toList
+            val next = acc ++ items
+            if (
+              response.hasLastEvaluatedKey && !response
+                .lastEvaluatedKey()
+                .isEmpty
+            )
+              loop(Some(response.lastEvaluatedKey()), next)
+            else IO.pure(next)
         }
       }
       loop(None, Nil)
     }
 
-    private def queryAllTasks: IO[Map[String, (ScheduleTask, DynamoDiff.TaskItemFields, Long)]] =
+    private def queryAllTasks
+        : IO[Map[String, (ScheduleTask, DynamoDiff.TaskItemFields, Long)]] =
       queryPartition(TasksPartitionKey).map(items =>
         items.map(DynamoDiff.decodeTaskItem).toMap
       )
@@ -319,7 +328,10 @@ object DynamoQueueState {
         .tableName(table)
         .key(
           Map(
-            Attr.Pk -> AttributeValue.builder().s(ResourcesPartitionKey).build(),
+            Attr.Pk -> AttributeValue
+              .builder()
+              .s(ResourcesPartitionKey)
+              .build(),
             Attr.Sk -> AttributeValue.builder().s(ResourcesSortKey).build()
           ).asJava
         )
@@ -342,15 +354,22 @@ object DynamoQueueState {
       }
     }
 
-    private def forceRead: IO[(State, Map[String, Long], Map[String, Long], Long)] = for {
+    private def forceRead
+        : IO[(State, Map[String, Long], Map[String, Long], Long)] = for {
       taskMap <- queryAllTasks
       resultChunkMap <- queryAllResultChunks
       resourcesPair <- getResources
       now <- IO.monotonic
       completedResults = DynamoDiff.assembleCompletedResults(resultChunkMap)
-      state = DynamoDiff.assembleState(taskMap, completedResults, resourcesPair._1)
+      state = DynamoDiff.assembleState(
+        taskMap,
+        completedResults,
+        resourcesPair._1
+      )
       taskVersions = taskMap.map { case (sk, (_, _, ver)) => sk -> ver }
-      resultChunkVersions = resultChunkMap.map { case (sk, (_, ver)) => sk -> ver }
+      resultChunkVersions = resultChunkMap.map { case (sk, (_, ver)) =>
+        sk -> ver
+      }
       _ <- cached.set(
         Some(
           Cached(
@@ -364,19 +383,34 @@ object DynamoQueueState {
       )
     } yield (state, taskVersions, resultChunkVersions, resourcesPair._2)
 
-    private def readLatest: IO[(State, Map[String, Long], Map[String, Long], Long)] =
+    private def readLatest
+        : IO[(State, Map[String, Long], Map[String, Long], Long)] =
       IO.monotonic.flatMap { now =>
         cached.get.flatMap {
           case Some(c)
               if now.toNanos - c.confirmedAtNanos <= readCacheTtl.toNanos =>
-            IO.pure((c.state, c.taskVersions, c.resultChunkVersions, c.resourcesVersion))
+            IO.pure(
+              (
+                c.state,
+                c.taskVersions,
+                c.resultChunkVersions,
+                c.resourcesVersion
+              )
+            )
           case _ =>
             readMutex.lock.surround {
               IO.monotonic.flatMap { now2 =>
                 cached.get.flatMap {
                   case Some(c)
                       if now2.toNanos - c.confirmedAtNanos <= readCacheTtl.toNanos =>
-                    IO.pure((c.state, c.taskVersions, c.resultChunkVersions, c.resourcesVersion))
+                    IO.pure(
+                      (
+                        c.state,
+                        c.taskVersions,
+                        c.resultChunkVersions,
+                        c.resourcesVersion
+                      )
+                    )
                   case _ => forceRead
                 }
               }
@@ -398,7 +432,9 @@ object DynamoQueueState {
         .builder()
         .transactItems(chunk.asJava)
         .build()
-      IO.fromCompletableFuture(IO(client.transactWriteItems(request))).void.attempt
+      IO.fromCompletableFuture(IO(client.transactWriteItems(request)))
+        .void
+        .attempt
         .flatMap {
           case Right(_)                              => IO.pure(Right(()))
           case Left(e: TransactionCanceledException) => IO.pure(Left(e))
@@ -409,7 +445,12 @@ object DynamoQueueState {
     override def flatModify[B](update: State => (State, IO[B])): IO[B] = {
       def commit(attempt: Int): IO[IO[B]] =
         readLatest.flatMap {
-          case (baseState, baseTaskVersions, baseResultChunkVersions, baseResourcesVersion) =>
+          case (
+                baseState,
+                baseTaskVersions,
+                baseResultChunkVersions,
+                baseResourcesVersion
+              ) =>
             val (newState, sideEffect) = update(baseState)
             if (newState == baseState) IO.pure(sideEffect)
             else {

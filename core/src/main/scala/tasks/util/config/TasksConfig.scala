@@ -80,7 +80,8 @@ trait ConfigValuesForHostConfiguration {
     else None
 
   private[tasks] def hostPort = raw.getInt("hosts.port")
-  private[tasks] def mayUseArbitraryPort = raw.getBoolean("hosts.mayUseArbitraryPort")
+  private[tasks] def mayUseArbitraryPort =
+    raw.getBoolean("hosts.mayUseArbitraryPort")
 
   private[tasks] def masterAddress =
     if (raw.hasPath("hosts.master")) {
@@ -118,7 +119,8 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   private[tasks] val asString = raw.root.render
 
-  private[tasks] val codeVersion = tasks.shared.CodeVersion(raw.getString("tasks.codeVersion"))
+  private[tasks] val codeVersion =
+    tasks.shared.CodeVersion(raw.getString("tasks.codeVersion"))
 
   private[tasks] val cacheEnabled = raw.getBoolean("tasks.cache.enabled")
 
@@ -134,7 +136,8 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   private[tasks] val askInterval: FD = raw.getDuration("tasks.askInterval")
 
-  private[tasks] val resultPollInterval: FD = raw.getDuration("tasks.resultPollInterval")
+  private[tasks] val resultPollInterval: FD =
+    raw.getDuration("tasks.resultPollInterval")
 
   private[tasks] val askForWorkTimeout: FD =
     raw.getDuration("tasks.queue.askForWorkTimeout")
@@ -154,9 +157,11 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   private[tasks] val launcherActorHeartBeatInterval: FD =
     raw.getDuration("tasks.failuredetector.heartbeat-interval")
 
-  private[tasks] def fileSendChunkSize = raw.getBytes("tasks.fileSendChunkSize").toInt
+  private[tasks] def fileSendChunkSize =
+    raw.getBytes("tasks.fileSendChunkSize").toInt
 
-  private[tasks] def resubmitFailedTask = raw.getBoolean("tasks.resubmitFailedTask")
+  private[tasks] def resubmitFailedTask =
+    raw.getBoolean("tasks.resubmitFailedTask")
 
   private[tasks] def clearQueueStateWhenLastMainProcessExits =
     raw.getBoolean("tasks.clearQueueStateWhenLastMainProcessExits")
@@ -164,7 +169,8 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   private[tasks] def clearQueueStateWhenMainProcessJoins =
     raw.getBoolean("tasks.clearQueueStateWhenMainProcessJoins")
 
-  private[tasks] def verifySharedFileInCache = raw.getBoolean("tasks.verifySharedFileInCache")
+  private[tasks] def verifySharedFileInCache =
+    raw.getBoolean("tasks.verifySharedFileInCache")
 
   private[tasks] val disableRemoting = raw.getBoolean("tasks.disableRemoting")
 
@@ -182,7 +188,8 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   private[tasks] val storageURI =
     new java.net.URI(raw.getString("tasks.fileservice.storageURI"))
 
-  private[tasks] val proxyStorage = raw.getBoolean("tasks.fileservice.proxyStorage")
+  private[tasks] val proxyStorage =
+    raw.getBoolean("tasks.fileservice.proxyStorage")
 
   private[tasks] val parallelismOfCacheAccessibilityCheck =
     raw.getInt("tasks.cache.accessibility-check-parallelism")
@@ -192,7 +199,8 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   private[tasks] def zeroCPULauncherOnApp =
     raw.getBoolean("tasks.elastic.zeroCPULauncherOnApp")
 
-  private[tasks] def idleNodeTimeout: FD = raw.getDuration("tasks.elastic.idleNodeTimeout")
+  private[tasks] def idleNodeTimeout: FD =
+    raw.getDuration("tasks.elastic.idleNodeTimeout")
 
   private[tasks] def cacheTimeout: FD = raw.getDuration("tasks.cache.timeout")
 
@@ -200,11 +208,14 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   private[tasks] def maxPendingNodes = raw.getInt("tasks.elastic.maxPending")
 
-  private[tasks] def maxNodesCumulative = raw.getInt("tasks.elastic.maxNodesCumulative")
+  private[tasks] def maxNodesCumulative =
+    raw.getInt("tasks.elastic.maxNodesCumulative")
 
-  private[tasks] def jvmMaxHeapFactor = raw.getDouble("tasks.elastic.jvmMaxHeapFactor")
+  private[tasks] def jvmMaxHeapFactor =
+    raw.getDouble("tasks.elastic.jvmMaxHeapFactor")
 
-  private[tasks] def logQueueStatus = raw.getBoolean("tasks.elastic.logQueueStatus")
+  private[tasks] def logQueueStatus =
+    raw.getBoolean("tasks.elastic.logQueueStatus")
 
   private[tasks] def nodeRequestFailedLogInterval: FD =
     raw.getDuration("tasks.elastic.nodeRequestFailedLogInterval")
@@ -217,29 +228,39 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
       Some(raw.getString("tasks.s3.regionProfileName"))
     else None
 
-  private[tasks] val s3ServerSideEncryption = raw.getString("tasks.s3.serverSideEncryption")
+  private[tasks] val s3ServerSideEncryption =
+    raw.getString("tasks.s3.serverSideEncryption")
 
-  private[tasks] val s3CannedAcl = raw.getStringList("tasks.s3.cannedAcls").asScala.toList
+  private[tasks] val s3CannedAcl =
+    raw.getStringList("tasks.s3.cannedAcls").asScala.toList
 
   private[tasks] val s3GrantFullControl = raw
     .getStringList("tasks.s3.grantFullControl")
     .asScala
     .toList
 
-  private[tasks] val s3UploadParallelism = raw.getInt("tasks.s3.uploadParallelism")
+  private[tasks] val s3UploadParallelism =
+    raw.getInt("tasks.s3.uploadParallelism")
 
-  private[tasks] val s3UploadPartSizeMB = raw.getInt("tasks.s3.uploadPartSizeMB")
+  private[tasks] val s3UploadPartSizeMB =
+    raw.getInt("tasks.s3.uploadPartSizeMB")
 
-  private[tasks] val s3DownloadParallelism = raw.getInt("tasks.s3.downloadParallelism")
+  private[tasks] val s3DownloadParallelism =
+    raw.getInt("tasks.s3.downloadParallelism")
 
-  private[tasks] val s3DownloadPartSizeMB = raw.getInt("tasks.s3.downloadPartSizeMB")
+  private[tasks] val s3DownloadPartSizeMB =
+    raw.getInt("tasks.s3.downloadPartSizeMB")
 
-  private[tasks] val s3MultipartThreshold = raw.getLong("tasks.s3.multipartThreshold")
+  private[tasks] val s3MultipartThreshold =
+    raw.getLong("tasks.s3.multipartThreshold")
 
-  private[tasks] val s3RetryMaxAttempts = raw.getInt("tasks.s3.retryMaxAttempts")
+  private[tasks] val s3RetryMaxAttempts =
+    raw.getInt("tasks.s3.retryMaxAttempts")
 
-  private[tasks] val httpRemoteEnabled = raw.getBoolean("tasks.fileservice.remote.http")
-  private[tasks] val s3RemoteEnabled = raw.getBoolean("tasks.fileservice.remote.s3")
+  private[tasks] val httpRemoteEnabled =
+    raw.getBoolean("tasks.fileservice.remote.http")
+  private[tasks] val s3RemoteEnabled =
+    raw.getBoolean("tasks.fileservice.remote.s3")
 
   private[tasks] val addShutdownHook = raw.getBoolean("tasks.addShutdownHook")
 
@@ -250,9 +271,11 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   private[tasks] val createFilePrefixForTaskId =
     raw.getBoolean("tasks.createFilePrefixForTaskId")
 
-  private[tasks] def allowDeletion = raw.getBoolean("tasks.fileservice.allowDeletion")
+  private[tasks] def allowDeletion =
+    raw.getBoolean("tasks.fileservice.allowDeletion")
 
-  private[tasks] def allowOverwrite = raw.getBoolean("tasks.fileservice.allowOverwrite")
+  private[tasks] def allowOverwrite =
+    raw.getBoolean("tasks.fileservice.allowOverwrite")
 
   private[tasks] def allowOverwriteFor(path: String): Boolean =
     allowOverwrite || {

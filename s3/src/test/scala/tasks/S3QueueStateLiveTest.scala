@@ -57,7 +57,8 @@ class S3QueueStateLiveTest extends FunSuite with Matchers {
             DeleteObjectRequest.builder().bucket(bucket).key(k).build()
           )
         )
-      ).attempt.void
+      ).attempt
+        .void
     )
   }
 
@@ -86,7 +87,9 @@ class S3QueueStateLiveTest extends FunSuite with Matchers {
       QueueImpl.ResultStoredForProxy(
         Address(s"proxy-$k"),
         QueueImpl.ProxyResultFailure(
-          new RuntimeException(java.util.Base64.getEncoder.encodeToString(bytes))
+          new RuntimeException(
+            java.util.Base64.getEncoder.encodeToString(bytes)
+          )
         )
       )
     }

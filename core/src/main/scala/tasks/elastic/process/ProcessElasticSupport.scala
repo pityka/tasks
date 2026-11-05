@@ -51,54 +51,64 @@ final case class ProcessContext(
     copy(externalHostname = Some(value))
 
   def withCpu(value: Int): ProcessContext =
-    copy(resources = ResourceAvailable(
-      value,
-      resources.memory,
-      resources.scratch,
-      resources.gpu,
-      resources.image,
-      resources.labels
-    ))
+    copy(resources =
+      ResourceAvailable(
+        value,
+        resources.memory,
+        resources.scratch,
+        resources.gpu,
+        resources.image,
+        resources.labels
+      )
+    )
 
   def withMemory(value: Int): ProcessContext =
-    copy(resources = ResourceAvailable(
-      resources.cpu,
-      value,
-      resources.scratch,
-      resources.gpu,
-      resources.image,
-      resources.labels
-    ))
+    copy(resources =
+      ResourceAvailable(
+        resources.cpu,
+        value,
+        resources.scratch,
+        resources.gpu,
+        resources.image,
+        resources.labels
+      )
+    )
 
   def withScratch(value: Int): ProcessContext =
-    copy(resources = ResourceAvailable(
-      resources.cpu,
-      resources.memory,
-      value,
-      resources.gpu,
-      resources.image,
-      resources.labels
-    ))
+    copy(resources =
+      ResourceAvailable(
+        resources.cpu,
+        resources.memory,
+        value,
+        resources.gpu,
+        resources.image,
+        resources.labels
+      )
+    )
 
   def withGpu(value: List[Int]): ProcessContext =
-    copy(resources = ResourceAvailable(
-      resources.cpu,
-      resources.memory,
-      resources.scratch,
-      value.distinct.sorted,
-      resources.image,
-      resources.labels
-    ))
+    copy(resources =
+      ResourceAvailable(
+        resources.cpu,
+        resources.memory,
+        resources.scratch,
+        value.distinct.sorted,
+        resources.image,
+        resources.labels
+      )
+    )
 
   def withLabels(value: Set[String]): ProcessContext =
-    copy(resources = ResourceAvailable(
-      resources.cpu,
-      resources.memory,
-      resources.scratch,
-      resources.gpu,
-      resources.image,
-      value
-    ))
+    copy(resources =
+      ResourceAvailable(
+        resources.cpu,
+        resources.memory,
+        resources.scratch,
+        resources.gpu,
+        resources.image,
+        value
+      )
+    )
 }
 
 object ProcessContext {
@@ -392,7 +402,7 @@ private final class ProcessCreateNode(
           scribe.debug(
             s"Exec",
             scribe.data("exec-list", cmd.mkString("['", "','", "']")),
-            scribe.data("explain","command to spawn new process")
+            scribe.data("explain", "command to spawn new process")
           )
           fs2.io.process.ProcessBuilder
             .apply(cmd.head, cmd.drop(1))

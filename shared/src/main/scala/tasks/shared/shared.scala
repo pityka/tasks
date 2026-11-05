@@ -95,19 +95,19 @@ object NodeSelector {
   }
 
   private[shared] def toView(n: NodeSelector): view.V = n match {
-    case NodeSelector.Always       => view.Always
-    case NodeSelector.Has(l)       => view.Has(l)
-    case NodeSelector.Not(s)       => view.Not(toView(s))
-    case NodeSelector.And(xs)      => view.And(xs.map(toView))
-    case NodeSelector.Or(xs)       => view.Or(xs.map(toView))
+    case NodeSelector.Always  => view.Always
+    case NodeSelector.Has(l)  => view.Has(l)
+    case NodeSelector.Not(s)  => view.Not(toView(s))
+    case NodeSelector.And(xs) => view.And(xs.map(toView))
+    case NodeSelector.Or(xs)  => view.Or(xs.map(toView))
   }
 
   private[shared] def fromView(v: view.V): NodeSelector = v match {
-    case view.Always       => NodeSelector.Always
-    case view.Has(l)       => NodeSelector.Has(l)
-    case view.Not(s)       => NodeSelector.Not(fromView(s))
-    case view.And(xs)      => NodeSelector.And(xs.map(fromView))
-    case view.Or(xs)       => NodeSelector.Or(xs.map(fromView))
+    case view.Always  => NodeSelector.Always
+    case view.Has(l)  => NodeSelector.Has(l)
+    case view.Not(s)  => NodeSelector.Not(fromView(s))
+    case view.And(xs) => NodeSelector.And(xs.map(fromView))
+    case view.Or(xs)  => NodeSelector.Or(xs.map(fromView))
   }
 
   implicit val codec: JsonValueCodec[NodeSelector] = {
@@ -182,9 +182,15 @@ object Replication {
     val innerCodec: JsonValueCodec[ReplicationImpl] = JsonCodecMaker.make
     new JsonValueCodec[Replication] {
       val nullValue: Replication = null
-      def encodeValue(x: Replication, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
+      def encodeValue(
+          x: Replication,
+          out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter
+      ): Unit =
         innerCodec.encodeValue(x.asInstanceOf[ReplicationImpl], out)
-      def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: Replication): Replication =
+      def decodeValue(
+          in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader,
+          default: Replication
+      ): Replication =
         innerCodec.decodeValue(in, null)
     }
   }
@@ -244,7 +250,15 @@ object ResourceRequest {
       nodeSelector: Option[NodeSelector],
       replication: Option[Replication]
   ): ResourceRequest =
-    ResourceRequestImpl(cpu, memory, scratch, gpu, image, nodeSelector, replication)
+    ResourceRequestImpl(
+      cpu,
+      memory,
+      scratch,
+      gpu,
+      image,
+      nodeSelector,
+      replication
+    )
 
   def apply(cpu: Int, memory: Int, scratch: Int, gpu: Int): ResourceRequest =
     ResourceRequestImpl((cpu, cpu), memory, scratch, gpu, None, None, None)
@@ -273,9 +287,15 @@ object ResourceRequest {
       JsonCodecMaker.make(CodecMakerConfig.withAllowRecursiveTypes(true))
     new JsonValueCodec[ResourceRequest] {
       val nullValue: ResourceRequest = null
-      def encodeValue(x: ResourceRequest, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
+      def encodeValue(
+          x: ResourceRequest,
+          out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter
+      ): Unit =
         innerCodec.encodeValue(x.asInstanceOf[ResourceRequestImpl], out)
-      def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: ResourceRequest): ResourceRequest =
+      def decodeValue(
+          in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader,
+          default: ResourceRequest
+      ): ResourceRequest =
         innerCodec.decodeValue(in, null)
     }
   }
@@ -313,16 +333,24 @@ object ResourceAllocated {
   ): ResourceAllocated =
     ResourceAllocatedImpl(cpu, memory, scratch, gpu, image)
 
-  def unapply(r: ResourceAllocated): Some[(Int, Int, Int, List[Int], Option[String])] =
+  def unapply(
+      r: ResourceAllocated
+  ): Some[(Int, Int, Int, List[Int], Option[String])] =
     Some((r.cpu, r.memory, r.scratch, r.gpu, r.image))
 
   implicit val codec: JsonValueCodec[ResourceAllocated] = {
     val innerCodec: JsonValueCodec[ResourceAllocatedImpl] = JsonCodecMaker.make
     new JsonValueCodec[ResourceAllocated] {
       val nullValue: ResourceAllocated = null
-      def encodeValue(x: ResourceAllocated, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
+      def encodeValue(
+          x: ResourceAllocated,
+          out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter
+      ): Unit =
         innerCodec.encodeValue(x.asInstanceOf[ResourceAllocatedImpl], out)
-      def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: ResourceAllocated): ResourceAllocated =
+      def decodeValue(
+          in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader,
+          default: ResourceAllocated
+      ): ResourceAllocated =
         innerCodec.decodeValue(in, null)
     }
   }
@@ -481,9 +509,15 @@ object ResourceAvailable {
     val innerCodec: JsonValueCodec[ResourceAvailableImpl] = JsonCodecMaker.make
     new JsonValueCodec[ResourceAvailable] {
       val nullValue: ResourceAvailable = null
-      def encodeValue(x: ResourceAvailable, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
+      def encodeValue(
+          x: ResourceAvailable,
+          out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter
+      ): Unit =
         innerCodec.encodeValue(x.asInstanceOf[ResourceAvailableImpl], out)
-      def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: ResourceAvailable): ResourceAvailable =
+      def decodeValue(
+          in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader,
+          default: ResourceAvailable
+      ): ResourceAvailable =
         innerCodec.decodeValue(in, null)
     }
   }
@@ -522,7 +556,9 @@ object VersionedResourceRequest {
       ResourceRequest((cpu, cpu), memory, scratch, gpu, image)
     )
 
-  def unapply(v: VersionedResourceRequest): Some[(CodeVersion, ResourceRequest)] =
+  def unapply(
+      v: VersionedResourceRequest
+  ): Some[(CodeVersion, ResourceRequest)] =
     Some((v.codeVersion, v.cpuMemoryRequest))
 
   implicit val codec: JsonValueCodec[VersionedResourceRequest] = {
@@ -530,9 +566,18 @@ object VersionedResourceRequest {
       JsonCodecMaker.make
     new JsonValueCodec[VersionedResourceRequest] {
       val nullValue: VersionedResourceRequest = null
-      def encodeValue(x: VersionedResourceRequest, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
-        innerCodec.encodeValue(x.asInstanceOf[VersionedResourceRequestImpl], out)
-      def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: VersionedResourceRequest): VersionedResourceRequest =
+      def encodeValue(
+          x: VersionedResourceRequest,
+          out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter
+      ): Unit =
+        innerCodec.encodeValue(
+          x.asInstanceOf[VersionedResourceRequestImpl],
+          out
+        )
+      def decodeValue(
+          in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader,
+          default: VersionedResourceRequest
+      ): VersionedResourceRequest =
         innerCodec.decodeValue(in, null)
     }
   }
@@ -559,7 +604,9 @@ object VersionedResourceAllocated {
   ): VersionedResourceAllocated =
     VersionedResourceAllocatedImpl(codeVersion, cpuMemoryAllocated)
 
-  def unapply(v: VersionedResourceAllocated): Some[(CodeVersion, ResourceAllocated)] =
+  def unapply(
+      v: VersionedResourceAllocated
+  ): Some[(CodeVersion, ResourceAllocated)] =
     Some((v.codeVersion, v.cpuMemoryAllocated))
 
   implicit def toLogFeature(rm: VersionedResourceAllocated): scribe.LogFeature =
@@ -579,9 +626,18 @@ object VersionedResourceAllocated {
       JsonCodecMaker.make
     new JsonValueCodec[VersionedResourceAllocated] {
       val nullValue: VersionedResourceAllocated = null
-      def encodeValue(x: VersionedResourceAllocated, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
-        innerCodec.encodeValue(x.asInstanceOf[VersionedResourceAllocatedImpl], out)
-      def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: VersionedResourceAllocated): VersionedResourceAllocated =
+      def encodeValue(
+          x: VersionedResourceAllocated,
+          out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter
+      ): Unit =
+        innerCodec.encodeValue(
+          x.asInstanceOf[VersionedResourceAllocatedImpl],
+          out
+        )
+      def decodeValue(
+          in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader,
+          default: VersionedResourceAllocated
+      ): VersionedResourceAllocated =
         innerCodec.decodeValue(in, null)
     }
   }
@@ -653,9 +709,18 @@ object VersionedResourceAvailable {
       JsonCodecMaker.make
     new JsonValueCodec[VersionedResourceAvailable] {
       val nullValue: VersionedResourceAvailable = null
-      def encodeValue(x: VersionedResourceAvailable, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
-        innerCodec.encodeValue(x.asInstanceOf[VersionedResourceAvailableImpl], out)
-      def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: VersionedResourceAvailable): VersionedResourceAvailable =
+      def encodeValue(
+          x: VersionedResourceAvailable,
+          out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter
+      ): Unit =
+        innerCodec.encodeValue(
+          x.asInstanceOf[VersionedResourceAvailableImpl],
+          out
+        )
+      def decodeValue(
+          in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader,
+          default: VersionedResourceAvailable
+      ): VersionedResourceAvailable =
         innerCodec.decodeValue(in, null)
     }
   }

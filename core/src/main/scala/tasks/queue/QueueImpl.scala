@@ -51,8 +51,10 @@ object QueueImpl {
       sch: ScheduleTask,
       proxies: List[Proxy]
   ) extends Event
-  private[tasks] case class LauncherJoined(launcher: LauncherName, node: Option[Node])
-      extends Event
+  private[tasks] case class LauncherJoined(
+      launcher: LauncherName,
+      node: Option[Node]
+  ) extends Event
   private[tasks] case class TaskScheduled(
       sch: ScheduleTask,
       launcher: LauncherName,
@@ -75,7 +77,8 @@ object QueueImpl {
       sch: ScheduleTask,
       launcher: LauncherName
   ) extends Event
-  private[tasks] case class LauncherCrashed(crashedLauncher: LauncherName) extends Event
+  private[tasks] case class LauncherCrashed(crashedLauncher: LauncherName)
+      extends Event
   private[tasks] case class SessionProxiesDropped(session: String) extends Event
   private[tasks] case class MainProcessJoined(session: String) extends Event
   private[tasks] case class MainProcessLeft(session: String) extends Event
@@ -98,11 +101,14 @@ object QueueImpl {
       def shouldRequestReplacementNodes = true
     }
   }
-  private[tasks] case class CacheHit(sch: ScheduleTask, result: UntypedResult) extends Event
+  private[tasks] case class CacheHit(sch: ScheduleTask, result: UntypedResult)
+      extends Event
   private[tasks] case class NodeEvent(ev: NodeRegistryState.Event) extends Event
 
-  private[tasks] case class ResultStoredForProxy(proxy: Address, result: ProxyResult)
-      extends Event
+  private[tasks] case class ResultStoredForProxy(
+      proxy: Address,
+      result: ProxyResult
+  ) extends Event
   private[tasks] case class ResultDeliveredToProxy(proxy: Address) extends Event
 
   private[tasks] sealed trait ProxyResult
@@ -110,7 +116,8 @@ object QueueImpl {
       result: UntypedResult,
       retrievedFromCache: Boolean
   ) extends ProxyResult
-  private[tasks] case class ProxyResultFailure(cause: Throwable) extends ProxyResult
+  private[tasks] case class ProxyResultFailure(cause: Throwable)
+      extends ProxyResult
 
   private[tasks] def project(sch: ScheduleTask) =
     ScheduleTaskEqualityProjection(sch.description)
@@ -307,8 +314,10 @@ object QueueImpl {
           copy(
             scheduledTasks = releaseCopy(sch, launcher, delivered = true),
             queuedTasks = queuedTasks - project(sch),
-            completedCount =
-              completedCount.updated(taskId, completedCount.getOrElse(taskId, 0L) + 1L)
+            completedCount = completedCount.updated(
+              taskId,
+              completedCount.getOrElse(taskId, 0L) + 1L
+            )
           )
         case TaskFailed(sch, launcher, completesCaller) =>
           val taskId = sch.description.taskId
@@ -317,8 +326,10 @@ object QueueImpl {
               releaseCopy(sch, launcher, delivered = completesCaller),
             queuedTasks =
               if (completesCaller) queuedTasks - project(sch) else queuedTasks,
-            failedCount =
-              failedCount.updated(taskId, failedCount.getOrElse(taskId, 0L) + 1L)
+            failedCount = failedCount.updated(
+              taskId,
+              failedCount.getOrElse(taskId, 0L) + 1L
+            )
           )
         case TaskLauncherStoppedFor(sch, launcher) =>
           copy(scheduledTasks = releaseCopy(sch, launcher, delivered = false))
@@ -582,25 +593,27 @@ private[tasks] class QueueImpl(
         if (launchers.isEmpty)
           IO.sleep(config.launcherActorHeartBeatInterval)
         else
-          IO.parSequenceN(1)(launchers.map { launcher =>
-            IO(
-              scribe.debug(
-                s"Query counter",
-                launcher,
-                scribe.data(
-                  "explain",
-                  "if the request times out then we assume the launcher is stopped"
-                )
-              )
-            ) *>
-              HeartBeatIO.Counter.sideEffectWhenTimeout(
-                query = ref.get.map(_.counters.get(launcher).getOrElse(0L)),
-                sideEffect = handleLauncherStopped(
+          IO.parSequenceN(1)(
+            launchers.map { launcher =>
+              IO(
+                scribe.debug(
+                  s"Query counter",
                   launcher,
-                  LauncherStopReason.TimedOutByFailureDetector
+                  scribe.data(
+                    "explain",
+                    "if the request times out then we assume the launcher is stopped"
+                  )
                 )
-              )
-          }).void
+              ) *>
+                HeartBeatIO.Counter.sideEffectWhenTimeout(
+                  query = ref.get.map(_.counters.get(launcher).getOrElse(0L)),
+                  sideEffect = handleLauncherStopped(
+                    launcher,
+                    LauncherStopReason.TimedOutByFailureDetector
+                  )
+                )
+            }
+          ).void
       }
 
     def loop: IO[Unit] = round.attempt
@@ -877,7 +890,9 @@ private[tasks] class QueueImpl(
               "Scheduletask received multiple times from different proxies. Not queueing this one, but delivering result if ready. "
             )
           )
-          state.update(ProxyAddedToScheduledMessage(sch, List(proxy))) -> IO.unit
+          state.update(
+            ProxyAddedToScheduledMessage(sch, List(proxy))
+          ) -> IO.unit
 
         } else {
           enqueueOrCacheHit(sch, List(proxy), state, nowMillis)
@@ -1477,36 +1492,38 @@ private[tasks] class QueueImpl(
   }
 
   def pollResult(proxy: Address): IO[Option[ProxyResult]] =
-    localResults.modify { current =>
-      current.get(proxy) match {
-        case Some(result) => (current - proxy, Some(result))
-        case None         => (current, None)
-      }
-    }.flatMap {
-      case delivered @ Some(_) =>
-        IO(
-          scribe.debug(s"ResultPolled", scribe.data("proxy", proxy.toString))
-        ).as(delivered)
-      case None =>
-        ref.get.flatMap { current =>
-          if (!current.completedResults.contains(proxy))
-            IO.pure(Option.empty[ProxyResult])
-          else
-            ref.flatModify { state =>
-              state.completedResults.get(proxy) match {
-                case None => state -> IO.pure(Option.empty[ProxyResult])
-                case Some(result) =>
-                  scribe.debug(
-                    s"ResultPolled",
-                    scribe.data("proxy", proxy.toString)
-                  )
-                  state.update(ResultDeliveredToProxy(proxy)) -> IO.pure(
-                    Some(result)
-                  )
-              }
-            }
+    localResults
+      .modify { current =>
+        current.get(proxy) match {
+          case Some(result) => (current - proxy, Some(result))
+          case None         => (current, None)
         }
-    }
+      }
+      .flatMap {
+        case delivered @ Some(_) =>
+          IO(
+            scribe.debug(s"ResultPolled", scribe.data("proxy", proxy.toString))
+          ).as(delivered)
+        case None =>
+          ref.get.flatMap { current =>
+            if (!current.completedResults.contains(proxy))
+              IO.pure(Option.empty[ProxyResult])
+            else
+              ref.flatModify { state =>
+                state.completedResults.get(proxy) match {
+                  case None => state -> IO.pure(Option.empty[ProxyResult])
+                  case Some(result) =>
+                    scribe.debug(
+                      s"ResultPolled",
+                      scribe.data("proxy", proxy.toString)
+                    )
+                    state.update(ResultDeliveredToProxy(proxy)) -> IO.pure(
+                      Some(result)
+                    )
+                }
+              }
+          }
+      }
 
   def taskFailed(
       sch: ScheduleTask,
@@ -1537,7 +1554,9 @@ private[tasks] class QueueImpl(
               List.empty[IO[Unit]]
             )
           } else if (!known) (state, List.empty[IO[Unit]])
-          else if (state.scheduledTasks.get(project(sch)).exists(_.copies > 1)) {
+          else if (
+            state.scheduledTasks.get(project(sch)).exists(_.copies > 1)
+          ) {
             scribe.info(
               "CopyFailedWhileSiblingsRun",
               sch,

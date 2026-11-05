@@ -71,7 +71,9 @@ class S3ReadTest extends AnyFunSuite {
     }
   }
 
-  test("readFileMultipart fromOffset reads exactly contentLength - fromOffset bytes") {
+  test(
+    "readFileMultipart fromOffset reads exactly contentLength - fromOffset bytes"
+  ) {
     withS3 { s3 =>
       val total =
         s3.getObjectMetadata(bucket, key).unsafeRunSync().get.contentLength
@@ -91,7 +93,9 @@ class S3ReadTest extends AnyFunSuite {
     }
   }
 
-  test("readFile and readFileMultipart return identical bytes from the same fromOffset") {
+  test(
+    "readFile and readFileMultipart return identical bytes from the same fromOffset"
+  ) {
     withS3 { s3 =>
       val total =
         s3.getObjectMetadata(bucket, key).unsafeRunSync().get.contentLength
@@ -117,7 +121,9 @@ class S3ReadTest extends AnyFunSuite {
     }
   }
 
-  test("readFile fromOffset = N equals readFile fromOffset = N - delta dropping delta bytes") {
+  test(
+    "readFile fromOffset = N equals readFile fromOffset = N - delta dropping delta bytes"
+  ) {
     withS3 { s3 =>
       val total =
         s3.getObjectMetadata(bucket, key).unsafeRunSync().get.contentLength
@@ -139,7 +145,9 @@ class S3ReadTest extends AnyFunSuite {
     }
   }
 
-  test("readFileMultipart fromOffset = N equals readFileMultipart fromOffset = N - delta dropping delta bytes") {
+  test(
+    "readFileMultipart fromOffset = N equals readFileMultipart fromOffset = N - delta dropping delta bytes"
+  ) {
     withS3 { s3 =>
       val total =
         s3.getObjectMetadata(bucket, key).unsafeRunSync().get.contentLength
@@ -175,7 +183,9 @@ class S3ReadTest extends AnyFunSuite {
     }
   }
 
-  test("readFileMultipart fromOffset is consistent across partSize / concurrency configs") {
+  test(
+    "readFileMultipart fromOffset is consistent across partSize / concurrency configs"
+  ) {
     withS3 { s3 =>
       val total =
         s3.getObjectMetadata(bucket, key).unsafeRunSync().get.contentLength
@@ -188,7 +198,9 @@ class S3ReadTest extends AnyFunSuite {
           partSize = partSize,
           multiPartConcurrency = concurrency,
           fromOffset = offset
-        ).compile.to(ByteVector).unsafeRunSync()
+        ).compile
+          .to(ByteVector)
+          .unsafeRunSync()
       }
       val first = results.head
       assert(first.length == tailBytes)
@@ -213,7 +225,10 @@ class S3ReadTest extends AnyFunSuite {
         .range(s"bytes=$offset-")
         .build()
       s3.s3
-        .getObject(req, AsyncResponseTransformer.toFile[GetObjectResponse](path))
+        .getObject(
+          req,
+          AsyncResponseTransformer.toFile[GetObjectResponse](path)
+        )
         .get()
       ByteVector.view(Files.readAllBytes(path))
     } finally Files.deleteIfExists(path)
@@ -235,7 +250,9 @@ class S3ReadTest extends AnyFunSuite {
     }
   }
 
-  test("readFileMultipart fromOffset matches AsyncResponseTransformer.toFile download") {
+  test(
+    "readFileMultipart fromOffset matches AsyncResponseTransformer.toFile download"
+  ) {
     withS3 { s3 =>
       val total =
         s3.getObjectMetadata(bucket, key).unsafeRunSync().get.contentLength
@@ -274,10 +291,12 @@ class S3ReadTest extends AnyFunSuite {
         Config(2, 64),
         Config(1, 32),
         Config(1, 64),
-        Config(8, 10),
+        Config(8, 10)
       )
 
-      info(f"${"partSize"}%10s ${"concurrency"}%12s ${"time(ms)"}%10s ${"MB/s"}%10s")
+      info(
+        f"${"partSize"}%10s ${"concurrency"}%12s ${"time(ms)"}%10s ${"MB/s"}%10s"
+      )
       info("-" * 48)
 
       var expectedSize = -1L
@@ -287,7 +306,9 @@ class S3ReadTest extends AnyFunSuite {
         else assert(bytes == expectedSize, s"Size mismatch for $cfg")
         val sizeMB = bytes / (1024.0 * 1024.0)
         val throughput = sizeMB / ms * 1000
-        println(f"${cfg.partSizeMB}%10d ${cfg.concurrency}%12d ${ms}%10d ${throughput}%10.1f")
+        println(
+          f"${cfg.partSizeMB}%10d ${cfg.concurrency}%12d ${ms}%10d ${throughput}%10.1f"
+        )
         info(
           f"${cfg.partSizeMB}%10d ${cfg.concurrency}%12d ${ms}%10d ${throughput}%10.1f"
         )
