@@ -410,7 +410,7 @@ private[tasks] class FolderFileStorage(val basePath: File)(implicit
                         s"Equality check failed for a file at the same path. Importing file. $file to $finalFile"
                       )
 
-                      if (!config.allowOverwrite) {
+                      if (!config.allowOverwriteFor(managed.pathElements.mkString("/"))) {
                         def candidates(i: Int, past: List[File]): List[File] = {
                           val candidate = assemblePath(managed, ".old." + i)
                           if (candidate.canRead)
