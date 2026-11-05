@@ -257,14 +257,10 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
   private[tasks] def allowOverwriteFor(path: String): Boolean =
     allowOverwrite || {
       val patterns = raw
-        .getStringList("tasks.fileservice.allowOverwriteWhitelist")
+        .getStringList("tasks.fileservice.allowOverwriteRegexes")
         .asScala
         .toList
-      patterns.nonEmpty && {
-        val target = java.nio.file.Paths.get(path)
-        val fs = java.nio.file.FileSystems.getDefault
-        patterns.exists(glob => fs.getPathMatcher(s"glob:$glob").matches(target))
-      }
+      patterns.exists(regex => path.matches(regex))
     }
 
   private[tasks] def folderFileStorageCompleteFileCheck =
