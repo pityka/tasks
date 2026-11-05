@@ -118,12 +118,12 @@ class WireGoldenTest extends AnyFunSuite with Matchers {
 
   test("FilePath ManagedFilePath wire format is pinned") {
     wire[FilePath](ManagedFilePath(Vector("a", "b", "c"))) shouldBe
-      """{"type":"ManagedFilePathImpl","pathElements":["a","b","c"]}"""
+      """{"type":"ManagedFilePath","pathElements":["a","b","c"]}"""
   }
 
   test("SharedFile wire format is pinned") {
     wire(SharedFile(ManagedFilePath(Vector("f.txt")), 100L, 42)) shouldBe
-      """{"path":{"type":"ManagedFilePathImpl","pathElements":["f.txt"]},"byteSize":100,"hash":42}"""
+      """{"path":{"type":"ManagedFilePath","pathElements":["f.txt"]},"byteSize":100,"hash":42}"""
   }
 
   test("Spore wire format is pinned") {
@@ -167,7 +167,7 @@ class WireGoldenTest extends AnyFunSuite with Matchers {
 
   test("FilePath RemoteFilePath wire format is pinned") {
     wire[FilePath](tasks.fileservice.RemoteFilePath(Uri("http", "h", 80, "/f"))) shouldBe
-      """{"type":"RemoteFilePathImpl","uri":{"uri":"http://h:80/f"}}"""
+      """{"type":"RemoteFilePath","uri":{"uri":"http://h:80/f"}}"""
   }
 
   test("ResourceRequest with nodeSelector wire format is pinned") {
@@ -247,7 +247,7 @@ class WireGoldenTest extends AnyFunSuite with Matchers {
         Some(HistoryContextImpl(History.TaskVersion("t", 1), "v1", None))
       )
     ) shouldBe
-      """{"self":{"path":{"type":"ManagedFilePathImpl","pathElements":["x"]},"byteSize":10,"hash":1},"context":{"type":"HistoryContextImpl","task":{"taskID":"t","taskVersion":1},"codeVersion":"v1"}}"""
+      """{"self":{"path":{"type":"ManagedFilePath","pathElements":["x"]},"byteSize":10,"hash":1},"context":{"type":"HistoryContextImpl","task":{"taskID":"t","taskVersion":1},"codeVersion":"v1"}}"""
   }
 
   test("FileServicePrefix wire format is pinned") {

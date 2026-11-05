@@ -48,6 +48,35 @@ sealed trait FilePath {
   def name: String
 }
 
+object FilePath {
+  private[fileservice] object view {
+    sealed trait V
+    final case class ManagedFilePath(pathElements: Vector[String]) extends V
+    final case class RemoteFilePath(uri: Uri) extends V
+  }
+
+  private[fileservice] def toView(p: FilePath): view.V = p match {
+    case ManagedFilePath(elements) => view.ManagedFilePath(elements)
+    case RemoteFilePath(uri)       => view.RemoteFilePath(uri)
+  }
+
+  private[fileservice] def fromView(v: view.V): FilePath = v match {
+    case view.ManagedFilePath(elements) => ManagedFilePath(elements)
+    case view.RemoteFilePath(uri)       => RemoteFilePath(uri)
+  }
+
+  implicit val codec: JsonValueCodec[FilePath] = {
+    val innerCodec: JsonValueCodec[view.V] = JsonCodecMaker.make
+    new JsonValueCodec[FilePath] {
+      val nullValue: FilePath = null
+      def encodeValue(x: FilePath, out: JsonWriter): Unit =
+        innerCodec.encodeValue(toView(x), out)
+      def decodeValue(in: JsonReader, default: FilePath): FilePath =
+        fromView(innerCodec.decodeValue(in, null))
+    }
+  }
+}
+
 sealed trait ManagedFilePath extends FilePath {
   def pathElements: Vector[String]
 }
@@ -270,6 +299,3 @@ object SharedFile {
 
 }
 
-object FilePath {
-  implicit val codec: JsonValueCodec[FilePath] = JsonCodecMaker.make
-}
