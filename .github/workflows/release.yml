@@ -26,7 +26,7 @@ jobs:
           java-version: 17
       - uses: sbt/setup-sbt@v1
       - name: Test (Scala 3)
-        run: sbt ++3.6.4 testables/test
+        run: sbt + testables/test
 
   publish-central:
     needs: [test-scala-2, test-scala-3]
