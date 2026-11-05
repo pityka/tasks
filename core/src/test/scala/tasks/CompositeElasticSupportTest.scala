@@ -205,7 +205,9 @@ class CompositeElasticSupportTestSuite extends FunSuite with Matchers {
       .map(_._1) shouldBe Right(PendingJobId("second-node"))
   }
 
-  test("a member raising before returning an IO falls through to the next one") {
+  test(
+    "a member raising before returning an IO falls through to the next one"
+  ) {
     val calls = recorder
     val composite = CompositeElasticSupport(
       List(

@@ -64,7 +64,9 @@ object TestWorker {
     withTaskSystem(
       ConfigFactory.empty(),
       Resource.pure(None),
-      Resource.eval(LocalShellElasticSupport.make(ShellConfig(Nil)).map(Some(_)))
+      Resource.eval(
+        LocalShellElasticSupport.make(ShellConfig(Nil)).map(Some(_))
+      )
     ) { _ =>
       IO.unit
     }.unsafeRunSync()

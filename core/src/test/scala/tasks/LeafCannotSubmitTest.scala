@@ -23,7 +23,9 @@ class LeafCannotSubmitTest extends FunSuite with Matchers {
     """ shouldNot typeCheck
   }
 
-  test("leaf body cannot rebind ExtendedTaskSystemComponents from ce.components") {
+  test(
+    "leaf body cannot rebind ExtendedTaskSystemComponents from ce.components"
+  ) {
     """
     import tasks._
     import tasks.jsonitersupport._
@@ -41,7 +43,9 @@ class LeafCannotSubmitTest extends FunSuite with Matchers {
     """ shouldNot typeCheck
   }
 
-  test("leaf body cannot submit through a helper taking ExtendedTaskSystemComponents") {
+  test(
+    "leaf body cannot submit through a helper taking ExtendedTaskSystemComponents"
+  ) {
     """
     import tasks._
     import tasks.jsonitersupport._
@@ -62,7 +66,9 @@ class LeafCannotSubmitTest extends FunSuite with Matchers {
     """ shouldNot typeCheck
   }
 
-  test("top-level with ExtendedTaskSystemComponents in scope can submit (positive control)") {
+  test(
+    "top-level with ExtendedTaskSystemComponents in scope can submit (positive control)"
+  ) {
     """
     import tasks._
     import tasks.jsonitersupport._
@@ -74,7 +80,9 @@ class LeafCannotSubmitTest extends FunSuite with Matchers {
     """ should compile
   }
 
-  test("leaf body can call plumbing helpers that take TaskSystemComponents (positive control)") {
+  test(
+    "leaf body can call plumbing helpers that take TaskSystemComponents (positive control)"
+  ) {
     """
     import tasks._
     import tasks.queue.LeafComputationEnvironment

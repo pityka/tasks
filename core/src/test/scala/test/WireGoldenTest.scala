@@ -22,7 +22,9 @@ import tasks.fileservice.{
 
 class WireGoldenTest extends AnyFunSuite with Matchers {
 
-  def wire[T](x: T)(implicit codec: JsonValueCodec[T]): String = writeToString(x)
+  def wire[T](x: T)(implicit codec: JsonValueCodec[T]): String = writeToString(
+    x
+  )
 
   test("RunningJobId wire format is pinned") {
     wire(RunningJobId("rj-1")) shouldBe """{"value":"rj-1"}"""
@@ -166,7 +168,9 @@ class WireGoldenTest extends AnyFunSuite with Matchers {
   }
 
   test("FilePath RemoteFilePath wire format is pinned") {
-    wire[FilePath](tasks.fileservice.RemoteFilePath(Uri("http", "h", 80, "/f"))) shouldBe
+    wire[FilePath](
+      tasks.fileservice.RemoteFilePath(Uri("http", "h", 80, "/f"))
+    ) shouldBe
       """{"type":"RemoteFilePath","uri":{"uri":"http://h:80/f"}}"""
   }
 
