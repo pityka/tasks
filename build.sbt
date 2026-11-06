@@ -24,11 +24,7 @@ ThisBuild / credentials ++= {
   for {
     token <- sys.env.get("GITLAB_DEPLOY_TOKEN")
     user <- sys.env.get("GITLAB_DEPLOY_TOKEN_USER")
-  } yield Credentials(
-    "GitLab Packages Registry",
-    "gitlab.com",
-    user,
-    token)
+  } yield Credentials("GitLab Packages Registry", "gitlab.com", user, token)
 }.toSeq
 
 ThisBuild / versionScheme := Some("early-semver")
@@ -110,7 +106,10 @@ lazy val commonSettings = Seq(
   ThisBuild / parallelExecution := false,
   cancelable in Global := true,
   scalacOptions in (Compile, doc) ~= (_ filterNot (_ == "-Xfatal-warnings")),
-  scalacOptions in (Compile, console) ~= (_ filterNot (_ == "-Xfatal-warnings")),
+  scalacOptions in (
+    Compile,
+    console
+  ) ~= (_ filterNot (_ == "-Xfatal-warnings")),
   Compile / doc / sources := Seq.empty
 )
 
@@ -176,7 +175,7 @@ lazy val core = project
       "org.http4s" %% "http4s-ember-server" % http4sVersion,
       "org.http4s" %% "http4s-dsl" % http4sVersion,
       "org.ekrich" %% "sconfig" % "1.8.1",
-      "org.typelevel" %% "cats-effect" % "3.6.3",
+      "org.typelevel" %% "cats-effect" % "3.6.4",
       "io.github.pityka" %% "selfpackage" % "2.1.6",
       "org.scalatest" %% "scalatest" % "3.2.19" % "test",
       "com.outr" %% "scribe" % scribeVersion,
@@ -235,7 +234,7 @@ lazy val s3 = project
       "software.amazon.awssdk" % "s3" % "2.28.0", // scala-steward:off
       "software.amazon.awssdk" % "sso" % "2.28.0" % "test", // scala-steward:off
       "software.amazon.awssdk" % "ssooidc" % "2.28.0" % "test", // scala-steward:off
-      "org.typelevel" %% "cats-effect-testkit" % "3.6.3" % "test",
+      "org.typelevel" %% "cats-effect-testkit" % "3.6.4" % "test",
       "org.scalatest" %% "scalatest" % "3.2.19" % "test",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal"
     )
@@ -264,7 +263,7 @@ lazy val dynamo = project
       "software.amazon.awssdk" % "dynamodb" % "2.28.0", // scala-steward:off
       "software.amazon.awssdk" % "sso" % "2.28.0" % "test", // scala-steward:off
       "software.amazon.awssdk" % "ssooidc" % "2.28.0" % "test", // scala-steward:off
-      "org.typelevel" %% "cats-effect-testkit" % "3.6.3" % "test",
+      "org.typelevel" %% "cats-effect-testkit" % "3.6.4" % "test",
       "org.scalatest" %% "scalatest" % "3.2.19" % "test",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "compile-internal",
       "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterVersion % "test"
@@ -357,7 +356,7 @@ lazy val root = (project in file("."))
     dynamo,
     kubernetes,
     kubernetesTest,
-    example,
+    example
   )
 
 lazy val testables = (project in file("testables"))
