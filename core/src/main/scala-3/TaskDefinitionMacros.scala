@@ -29,6 +29,17 @@ import scala.quoted.*
 
 private[tasks] object TaskDefinitionMacros {
 
+  private def requireNonEmptyInput[A: Type](using Quotes): Unit = {
+    import quotes.reflect.*
+    val sym = TypeRepr.of[A].typeSymbol
+    val emptyProduct = sym.flags.is(Flags.Case) && sym.caseFields.isEmpty
+    val singleton = sym.flags.is(Flags.Module)
+    if (emptyProduct || singleton)
+      report.errorAndAbort(
+        "A task input must carry data. Put the task's dependencies into the input type."
+      )
+  }
+
   def taskDefinitionFromTree[A: Type, C: Type](
       serA: Expr[Serializer[A]],
       deserA: Expr[Deserializer[A]],
@@ -40,6 +51,8 @@ private[tasks] object TaskDefinitionMacros {
       comp: Expr[A => LeafComputationEnvironment => IO[C]]
   )(using Quotes) = {
     import quotes.reflect.*
+
+    requireNonEmptyInput[A]
 
     def valdef[T: Type](expr: Expr[T]) = {
       val name1 = Symbol.freshName("task")
@@ -90,6 +103,8 @@ private[tasks] object TaskDefinitionMacros {
       comp: Expr[A => ParentComputationEnvironment => IO[C]]
   )(using Quotes) = {
     import quotes.reflect.*
+
+    requireNonEmptyInput[A]
 
     def valdef[T: Type](expr: Expr[T]) = {
       val name1 = Symbol.freshName("task")
