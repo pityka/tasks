@@ -292,7 +292,9 @@ object DynamoQueueState {
           case None    => requestBuilder.build()
           case Some(k) => requestBuilder.exclusiveStartKey(k).build()
         }
-        IO.fromCompletableFuture(IO(client.query(request))).flatMap { response =>
+        withTransientRetry(0)(
+          IO.fromCompletableFuture(IO(client.query(request)))
+        ).flatMap { response =>
           val items = response.items().asScala.toList
           val next = acc ++ items
           if (response.hasLastEvaluatedKey && !response.lastEvaluatedKey().isEmpty)
@@ -325,7 +327,9 @@ object DynamoQueueState {
         )
         .consistentRead(true)
         .build()
-      IO.fromCompletableFuture(IO(client.getItem(request))).map { response =>
+      withTransientRetry(0)(
+        IO.fromCompletableFuture(IO(client.getItem(request)))
+      ).map { response =>
         if (response.hasItem) DynamoDiff.decodeResources(response.item())
         else
           (
@@ -390,6 +394,18 @@ object DynamoQueueState {
       IO.sleep(
         retryBaseDelay * math.pow(2d, math.min(attempt, 5).toDouble).toLong
       )
+
+    private def isTransientConflict(e: Throwable): Boolean = e match {
+      case _: TransactionConflictException => true
+      case _                               => false
+    }
+
+    private def withTransientRetry[A](attempt: Int)(io: IO[A]): IO[A] =
+      io.handleErrorWith {
+        case e if isTransientConflict(e) =>
+          backoff(attempt) *> withTransientRetry(attempt + 1)(io)
+        case e => IO.raiseError(e)
+      }
 
     private def submitTxn(
         chunk: List[TransactWriteItem]

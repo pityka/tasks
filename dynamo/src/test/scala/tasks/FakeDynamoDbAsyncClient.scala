@@ -54,6 +54,12 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
   val beforeTransactWrite: AtomicReference[() => Unit] =
     new AtomicReference(() => ())
 
+  val beforeQuery: AtomicReference[() => Unit] =
+    new AtomicReference(() => ())
+
+  val beforeGetItem: AtomicReference[() => Unit] =
+    new AtomicReference(() => ())
+
   def rawStore: Map[ItemKey, Map[String, AttributeValue]] = store.get()
 
   def currentItem(pk: String, sk: String): Option[Map[String, AttributeValue]] =
@@ -139,6 +145,7 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
   }
 
   override def getItem(request: GetItemRequest): CompletableFuture[GetItemResponse] = {
+    beforeGetItem.get.apply()
     getItemCount.incrementAndGet()
     val key = request.key().asScala.toMap
     val itemKey =
@@ -152,6 +159,7 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
   }
 
   override def query(request: QueryRequest): CompletableFuture[QueryResponse] = {
+    beforeQuery.get.apply()
     queryCount.incrementAndGet()
     val values = Option(request.expressionAttributeValues())
       .map(_.asScala.toMap)
