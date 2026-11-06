@@ -487,7 +487,7 @@ class S3(
   def readFile(
       bucket: String,
       key: String,
-      fromOffset: Long = 0L
+      fromOffset: Long
   ): fs2.Stream[IO, Byte] =
     fs2.Stream
       .eval(
@@ -541,7 +541,7 @@ class S3(
       key: String,
       partSize: Int,
       multiPartConcurrency: Int,
-      fromOffset: Long = 0L
+      fromOffset: Long
   ): fs2.Stream[IO, Byte] = {
     val chunkSizeBytes = partSize.toLong * 1048576L
 

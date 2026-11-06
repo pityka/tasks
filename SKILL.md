@@ -355,6 +355,9 @@ Submit a parent with `fib(In(10))` (no resource request; it takes optional
 re-run resolves `fib(In(10))` straight from cache and never re-expands the
 recursion — see §4.4.
 
+Whenever there is a large scale submission of more than 100 tasks, wrap those
+within a parent task.
+
 ---
 
 ## 8. Shared queue state (Postgres or DynamoDB)
