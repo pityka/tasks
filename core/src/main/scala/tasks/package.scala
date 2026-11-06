@@ -138,6 +138,12 @@ package object tasks extends MacroCalls {
 
   type ResourceRequest = tasks.shared.VersionedResourceRequest
 
+  type ComputationEnvironment = tasks.queue.ComputationEnvironment
+
+  type LeafComputationEnvironment = tasks.queue.LeafComputationEnvironment
+
+  type ParentComputationEnvironment = tasks.queue.ParentComputationEnvironment
+
   def ResourceRequest(cpu: (Int, Int), memory: Int, scratch: Int, gpu: Int)(
       implicit codeVersion: CodeVersion
   ) =

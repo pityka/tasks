@@ -137,6 +137,8 @@ withTaskSystem(
 ) { implicit ts => ??? }
 ```
 
+Tasks must have nonempty input data. 
+
 ---
 
 ## 3. What the cache key is (and is not)
