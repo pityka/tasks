@@ -39,6 +39,18 @@ private[tasks] object TaskDefinitionMacros {
     import cxt.universe._
     val a = weakTypeOf[A]
     val c = weakTypeOf[C]
+    val aSym = a.typeSymbol
+    val singleton = aSym.isModuleClass
+    val emptyProduct =
+      !singleton && aSym.isClass && aSym.asClass.isCaseClass && {
+        val ctor = aSym.asClass.primaryConstructor
+        ctor.isMethod && ctor.asMethod.paramLists.flatten.isEmpty
+      }
+    if (singleton || emptyProduct)
+      cxt.abort(
+        cxt.enclosingPosition,
+        "A task input must carry data. An empty input (an empty case class or a case object) gives the task one cache key for its whole life, so its result never recomputes when the data the task reads changes. Put the task's dependencies into the input type."
+      )
     val name1 = cxt.freshName(TermName("task"))
     val name2 = cxt.freshName(TermName("task"))
     val name3 = cxt.freshName(TermName("task"))
@@ -63,6 +75,18 @@ private[tasks] object TaskDefinitionMacros {
     import cxt.universe._
     val a = weakTypeOf[A]
     val c = weakTypeOf[C]
+    val aSym = a.typeSymbol
+    val singleton = aSym.isModuleClass
+    val emptyProduct =
+      !singleton && aSym.isClass && aSym.asClass.isCaseClass && {
+        val ctor = aSym.asClass.primaryConstructor
+        ctor.isMethod && ctor.asMethod.paramLists.flatten.isEmpty
+      }
+    if (singleton || emptyProduct)
+      cxt.abort(
+        cxt.enclosingPosition,
+        "A task input must carry data. An empty input (an empty case class or a case object) gives the task one cache key for its whole life, so its result never recomputes when the data the task reads changes. Put the task's dependencies into the input type."
+      )
     val name1 = cxt.freshName(TermName("task"))
     val name2 = cxt.freshName(TermName("task"))
     val name3 = cxt.freshName(TermName("task"))
