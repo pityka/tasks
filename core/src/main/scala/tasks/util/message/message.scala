@@ -144,7 +144,15 @@ private[tasks] object MessageData {
       result: Option[QueueImpl.ProxyResult]
   ) extends MessageData
 
-  case class InputData(b64: Base64Data, noCache: Boolean)
+  case class InputData(
+      b64: Base64Data,
+      noCache: Boolean,
+      spilled: Option[tasks.fileservice.SharedFile]
+  )
+  object InputData {
+    def apply(b64: Base64Data, noCache: Boolean): InputData =
+      InputData(b64, noCache, None)
+  }
   case class ScheduleTask(
       description: HashedTaskDescription,
       inputDeserializer: Spore[AnyRef, AnyRef],

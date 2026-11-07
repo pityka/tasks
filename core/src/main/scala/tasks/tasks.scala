@@ -147,7 +147,8 @@ final class TaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
         noCache = noCache,
         messenger = components.messenger,
         sessionId = components.sessionId,
-        config = components.tasksConfig
+        config = components.tasksConfig,
+        fileServiceComponent = components.fs
       )
       val r = tasks.util.Actor
         .makeFromBehavior[Proxy](behavior, components.messenger)
@@ -218,7 +219,8 @@ final class ParentTaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
         noCache = noCache,
         messenger = components.messenger,
         sessionId = components.sessionId,
-        config = components.tasksConfig
+        config = components.tasksConfig,
+        fileServiceComponent = components.fs
       )
       val r = tasks.util.Actor
         .makeFromBehavior[Proxy](behavior, components.messenger)

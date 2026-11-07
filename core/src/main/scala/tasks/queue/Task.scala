@@ -365,14 +365,23 @@ private[tasks] class Task(
     }
 
   def start(input: MessageData.InputData): IO[Unit] = {
-    import MessageData.InputData
-    val InputData(b64InputData, noCache) = input
+    val resolvedInput: IO[Base64Data] = input.spilled match {
+      case Some(sf) =>
+        SharedFileHelper
+          .stream(sf, 0L)(fileServiceComponent)
+          .compile
+          .to(Array)
+          .map(Base64DataHelpers(_))
+      case None => IO.pure(input.b64)
+    }
 
-    handleCompletion(
-      executeTaskProgram(b64InputData),
-      startTimeStamp = java.time.Instant.now,
-      noCache = noCache
-    )
+    resolvedInput.flatMap { b64InputData =>
+      handleCompletion(
+        executeTaskProgram(b64InputData),
+        startTimeStamp = java.time.Instant.now,
+        noCache = input.noCache
+      )
+    }
 
   }
 

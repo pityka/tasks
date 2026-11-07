@@ -66,7 +66,8 @@ private[tasks] class ProxyTask[Input, Output](
     noCache: Boolean,
     messenger: Messenger,
     sessionId: String,
-    config: tasks.util.config.TasksConfig
+    config: tasks.util.config.TasksConfig,
+    fileServiceComponent: FileServiceComponent
 ) extends tasks.util.Actor.ActorBehavior[Proxy](messenger) {
   val address: Address = Address(
     tasks.util.SessionId.tag(
@@ -93,24 +94,50 @@ private[tasks] class ProxyTask[Input, Output](
 
     val hashInput = persisted.getOrElse(input)
 
-    val scheduleTask = writer.hash(hashInput).map { dataHash =>
+    val serializedInput = writer(input)
+
+    val scheduleTask = writer.hash(hashInput).flatMap { dataHash =>
       val prefix = filePrefix.prefix(hashInput)
-      MessageData.ScheduleTask(
-        description = HashedTaskDescription(taskId, dataHash),
-        inputDeserializer = inputDeserializer.as[AnyRef, AnyRef],
-        outputSerializer = outputSerializer.as[AnyRef, AnyRef],
-        function = function.as[AnyRef, AnyRef],
-        resource = resourceConsumed,
-        input =
-          MessageData.InputData(Base64DataHelpers(writer(input)), noCache),
-        fileServicePrefix = fileServicePrefix,
-        tryCache = cache,
-        priority = priority,
-        labels = labels,
-        lineage = lineage,
-        proxy = address,
-        filePrefix = prefix.value
-      )
+      val inputDataIO =
+        if (serializedInput.length.toLong <= config.maxInlinePayloadBytes)
+          IO.pure(
+            MessageData.InputData(Base64DataHelpers(serializedInput), noCache)
+          )
+        else
+          SharedFileHelper
+            .createFromStream(
+              fs2.Stream.chunk(fs2.Chunk.array(serializedInput)),
+              "__meta__input__" + dataHash
+            )(
+              fileServicePrefix,
+              fileServiceComponent,
+              config,
+              tasks.fileservice.NoHistory
+            )
+            .map(sf =>
+              MessageData.InputData(
+                Base64DataHelpers(Array.emptyByteArray),
+                noCache,
+                Some(sf)
+              )
+            )
+      inputDataIO.map { inputData =>
+        MessageData.ScheduleTask(
+          description = HashedTaskDescription(taskId, dataHash),
+          inputDeserializer = inputDeserializer.as[AnyRef, AnyRef],
+          outputSerializer = outputSerializer.as[AnyRef, AnyRef],
+          function = function.as[AnyRef, AnyRef],
+          resource = resourceConsumed,
+          input = inputData,
+          fileServicePrefix = fileServicePrefix,
+          tryCache = cache,
+          priority = priority,
+          labels = labels,
+          lineage = lineage,
+          proxy = address,
+          filePrefix = prefix.value
+        )
+      }
     }
 
     scheduleTask.flatMap { scheduleTask =>

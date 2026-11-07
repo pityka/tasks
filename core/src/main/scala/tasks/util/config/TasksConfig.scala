@@ -156,6 +156,9 @@ class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
   private[tasks] def fileSendChunkSize = raw.getBytes("tasks.fileSendChunkSize").toInt
 
+  private[tasks] def maxInlinePayloadBytes: Long =
+    raw.getBytes("tasks.maxInlinePayloadBytes").toLong
+
   private[tasks] def resubmitFailedTask = raw.getBoolean("tasks.resubmitFailedTask")
 
   private[tasks] def clearQueueStateWhenLastMainProcessExits =
