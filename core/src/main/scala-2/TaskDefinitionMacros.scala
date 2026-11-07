@@ -39,6 +39,11 @@ private[tasks] object TaskDefinitionMacros {
     import cxt.universe._
     val a = weakTypeOf[A]
     val c = weakTypeOf[C]
+    val overridden =
+      cxt.inferImplicitValue(
+        typeOf[_root_.tasks.AllowEmptyInput],
+        silent = true
+      ) != EmptyTree
     val aSym = a.typeSymbol
     val singleton = aSym.isModuleClass
     val emptyProduct =
@@ -46,10 +51,10 @@ private[tasks] object TaskDefinitionMacros {
         val ctor = aSym.asClass.primaryConstructor
         ctor.isMethod && ctor.asMethod.paramLists.flatten.isEmpty
       }
-    if (singleton || emptyProduct)
+    if (!overridden && (singleton || emptyProduct))
       cxt.abort(
         cxt.enclosingPosition,
-        "A task input must carry data. An empty input (an empty case class or a case object) gives the task one cache key for its whole life, so its result never recomputes when the data the task reads changes. Put the task's dependencies into the input type."
+        "A task input must carry data. Put the task's dependencies into the input type, or import tasks.unsafe.allowEmptyInput to allow an empty input."
       )
     val name1 = cxt.freshName(TermName("task"))
     val name2 = cxt.freshName(TermName("task"))
@@ -75,6 +80,11 @@ private[tasks] object TaskDefinitionMacros {
     import cxt.universe._
     val a = weakTypeOf[A]
     val c = weakTypeOf[C]
+    val overridden =
+      cxt.inferImplicitValue(
+        typeOf[_root_.tasks.AllowEmptyInput],
+        silent = true
+      ) != EmptyTree
     val aSym = a.typeSymbol
     val singleton = aSym.isModuleClass
     val emptyProduct =
@@ -82,10 +92,10 @@ private[tasks] object TaskDefinitionMacros {
         val ctor = aSym.asClass.primaryConstructor
         ctor.isMethod && ctor.asMethod.paramLists.flatten.isEmpty
       }
-    if (singleton || emptyProduct)
+    if (!overridden && (singleton || emptyProduct))
       cxt.abort(
         cxt.enclosingPosition,
-        "A task input must carry data. An empty input (an empty case class or a case object) gives the task one cache key for its whole life, so its result never recomputes when the data the task reads changes. Put the task's dependencies into the input type."
+        "A task input must carry data. Put the task's dependencies into the input type, or import tasks.unsafe.allowEmptyInput to allow an empty input."
       )
     val name1 = cxt.freshName(TermName("task"))
     val name2 = cxt.freshName(TermName("task"))

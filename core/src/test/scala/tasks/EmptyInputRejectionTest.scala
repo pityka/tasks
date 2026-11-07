@@ -24,10 +24,30 @@ object EmptyInputRejectionFixtures {
     }
 }
 
+object EmptyInputHatchFixtures {
+  import tasks.unsafe.allowEmptyInput
+  final case class EmptyOk()
+  implicit val emptyOkCodec: JsonValueCodec[EmptyOk] =
+    new JsonValueCodec[EmptyOk] {
+      def nullValue: EmptyOk = null
+      def decodeValue(in: JsonReader, default: EmptyOk): EmptyOk = EmptyOk()
+      def encodeValue(x: EmptyOk, out: JsonWriter): Unit = out.writeVal(0)
+    }
+
+  val hatchTask =
+    Task[EmptyOk, Int]("rejection-hatch", 1) { in => implicit ce =>
+      IO.pure(0)
+    }
+}
+
 class EmptyInputRejectionTest extends AnyFunSuite {
 
   test("a task with a non-empty input compiles") {
     assert(EmptyInputRejectionFixtures.nonEmptyTask ne null)
+  }
+
+  test("tasks.unsafe.allowEmptyInput permits an empty input") {
+    assert(EmptyInputHatchFixtures.hatchTask ne null)
   }
 
   test("a task with an empty case class input does not compile") {
