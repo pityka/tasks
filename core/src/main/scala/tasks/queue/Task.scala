@@ -47,7 +47,8 @@ import tasks.queue.Launcher.LauncherHandle
 private[tasks] case class UntypedResult(
     files: Set[SharedFile],
     data: Base64Data,
-    mutableFiles: Option[Set[SharedFile]]
+    mutableFiles: Option[Set[SharedFile]],
+    spilled: Option[SharedFile]
 ) {
   override def toString = s"UntypedResult($files,$mutableFiles, [b64 data omitted])"
 }
@@ -120,6 +121,12 @@ private[tasks] object UntypedResultWithMetadata {
 }
 
 private[tasks] object UntypedResult {
+
+  def apply(
+      files: Set[SharedFile],
+      data: Base64Data,
+      mutableFiles: Option[Set[SharedFile]]
+  ): UntypedResult = UntypedResult(files, data, mutableFiles, None)
 
   implicit def toLogFeature(rm: UntypedResult): scribe.LogFeature = scribe.data(
     Map(
@@ -385,6 +392,32 @@ private[tasks] class Task(
 
   }
 
+  private def maybeSpillResult(result: UntypedResult): IO[UntypedResult] = {
+    val bytes = writeToArray(result)(UntypedResult.codec)
+    if (bytes.length.toLong <= tasksConfig.maxInlinePayloadBytes)
+      IO.pure(result)
+    else
+      SharedFileHelper
+        .createFromStream(
+          fs2.Stream.chunk(fs2.Chunk.array(bytes)),
+          "__meta__result__spill__" + taskHash.hash + "__" +
+            java.util.UUID.randomUUID().toString
+        )(
+          fileServicePrefix,
+          fileServiceComponent,
+          tasksConfig,
+          tasks.fileservice.NoHistory
+        )
+        .map(sf =>
+          UntypedResult(
+            Set(sf),
+            Base64DataHelpers(Array.emptyByteArray),
+            None,
+            Some(sf)
+          )
+        )
+  }
+
   private def runUntypedTask[A, C](
       rs: Spore[Unit, Deserializer[A]],
       ws: Spore[Unit, Serializer[C]],
@@ -417,8 +450,10 @@ private[tasks] class Task(
         fs(deserializedInputData)(ce).flatMap { result =>
           tasks.queue
             .extractDataDependencies(deserializedInputData)(ce)
-            .map { meta =>
-              (UntypedResult.make(result)(w), meta)
+            .flatMap { meta =>
+              maybeSpillResult(UntypedResult.make(result)(w)).map(ur =>
+                (ur, meta)
+              )
             }
         }
       }

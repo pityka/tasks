@@ -33,6 +33,7 @@ import tasks._
 import tasks.wire._
 import scala.concurrent.Promise
 import cats.effect.IO
+import com.github.plokhotnyuk.jsoniter_scala.core._
 import tasks.caching.TaskResultCache
 import tasks.util.message.MessageData
 import tasks.util.Messenger
@@ -151,6 +152,19 @@ private[tasks] class ProxyTask[Input, Output](
 
   }
 
+  private def resolveResult(result: UntypedResult): IO[UntypedResult] =
+    result.spilled match {
+      case None => IO.pure(result)
+      case Some(sf) =>
+        SharedFileHelper
+          .stream(sf, 0L)(fileServiceComponent)
+          .compile
+          .to(Array)
+          .map(bytes =>
+            readFromArray[UntypedResult](bytes)(UntypedResult.codec)
+          )
+    }
+
   private def handleResult(
       result: QueueImpl.ProxyResult,
       stopQueue: Actor.StopQueue
@@ -159,25 +173,27 @@ private[tasks] class ProxyTask[Input, Output](
       IO(scribe.error(cause, "Execution failed. ")) *>
         notifyListenersOnFailure(cause) *> stopProcessingMessages(stopQueue)
     case QueueImpl.ProxyResultSuccess(untypedOutput, retrievedFromCache) =>
-      reader(Base64DataHelpers.toBytes(untypedOutput.data)) match {
-        case Right(output) =>
-          IO(
-            scribe.debug(s"Result polled from queue. $untypedOutput, $output")
-          ) *> distributeResult(output) *> stopProcessingMessages(stopQueue)
-        case Left(error) if retrievedFromCache =>
-          IO(
-            scribe.error(
-              s"Result from cache failed to decode: $untypedOutput, $error. Task is rescheduled without caching."
-            )
-          ) *> startTask(cache = false)
-        case Left(error) =>
-          IO(
-            scribe.error(
-              error,
-              s"Result not from cache failed to decode: $untypedOutput, $error. Execution failed."
-            )
-          ) *> notifyListenersOnFailure(new RuntimeException(error)) *>
-            stopProcessingMessages(stopQueue)
+      resolveResult(untypedOutput).flatMap { resolved =>
+        reader(Base64DataHelpers.toBytes(resolved.data)) match {
+          case Right(output) =>
+            IO(
+              scribe.debug(s"Result polled from queue. $resolved, $output")
+            ) *> distributeResult(output) *> stopProcessingMessages(stopQueue)
+          case Left(error) if retrievedFromCache =>
+            IO(
+              scribe.error(
+                s"Result from cache failed to decode: $resolved, $error. Task is rescheduled without caching."
+              )
+            ) *> startTask(cache = false)
+          case Left(error) =>
+            IO(
+              scribe.error(
+                error,
+                s"Result not from cache failed to decode: $resolved, $error. Execution failed."
+              )
+            ) *> notifyListenersOnFailure(new RuntimeException(error)) *>
+              stopProcessingMessages(stopQueue)
+        }
       }
   }
 
@@ -227,25 +243,27 @@ private[tasks] class ProxyTask[Input, Output](
           from,
           _
         ) =>
-      reader(Base64DataHelpers.toBytes(untypedOutput.data)) match {
-        case Right(output) =>
-          scribe.debug(
-            s"MessageFromTask received from: $from, $untypedOutput, $output"
-          )
-          distributeResult(output) *> stopProcessingMessages(stopQueue)
-        case Left(error) if retrievedFromCache =>
-          scribe.error(
-            s"MessageFromTask received from cache and failed to decode: ${from}, $untypedOutput, $error. Task is rescheduled without caching."
-          )
-          startTask(cache = false)
-        case Left(error) =>
-          scribe.error(
-            error,
-            s"MessageFromTask received not from cache and failed to decode: ${from}, $untypedOutput, $error. Execution failed."
-          )
-          notifyListenersOnFailure(
-            new RuntimeException(error)
-          ) *> stopProcessingMessages(stopQueue)
+      resolveResult(untypedOutput).flatMap { resolved =>
+        reader(Base64DataHelpers.toBytes(resolved.data)) match {
+          case Right(output) =>
+            scribe.debug(
+              s"MessageFromTask received from: $from, $resolved, $output"
+            )
+            distributeResult(output) *> stopProcessingMessages(stopQueue)
+          case Left(error) if retrievedFromCache =>
+            scribe.error(
+              s"MessageFromTask received from cache and failed to decode: ${from}, $resolved, $error. Task is rescheduled without caching."
+            )
+            startTask(cache = false)
+          case Left(error) =>
+            scribe.error(
+              error,
+              s"MessageFromTask received not from cache and failed to decode: ${from}, $resolved, $error. Execution failed."
+            )
+            notifyListenersOnFailure(
+              new RuntimeException(error)
+            ) *> stopProcessingMessages(stopQueue)
+        }
       }
 
     case Message(MessageData.TaskFailedMessageToProxy(_, cause), _, _) =>
