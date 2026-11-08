@@ -99,6 +99,7 @@ private[tasks] class ProxyTask[Input, Output](
 
     val scheduleTask = writer.hash(hashInput).flatMap { dataHash =>
       val prefix = filePrefix.prefix(hashInput)
+      val spillPrefix = fileServicePrefix.append(taskId.id)
       val inputDataIO =
         if (serializedInput.length.toLong <= config.maxInlinePayloadBytes)
           IO.pure(
@@ -110,7 +111,7 @@ private[tasks] class ProxyTask[Input, Output](
               fs2.Stream.chunk(fs2.Chunk.array(serializedInput)),
               "__meta__input__" + dataHash
             )(
-              fileServicePrefix,
+              spillPrefix,
               fileServiceComponent,
               config,
               tasks.fileservice.NoHistory

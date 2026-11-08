@@ -36,6 +36,16 @@ object InputSpillTest {
     Task[In, BigOut]("output-spill-echo", 1) { in => _ =>
       IO.pure(BigOut(in.xs))
     }
+
+  val bcExecutions = new java.util.concurrent.atomic.AtomicInteger(0)
+
+  val bcEchoTask: TaskDefinition[In, BigOut] =
+    Task[In, BigOut]("bc-spill-echo", 1) { in => _ =>
+      IO {
+        bcExecutions.incrementAndGet()
+        BigOut(in.xs)
+      }
+    }
 }
 
 class InputSpillTestSuite extends FunSuite with Matchers with TestHelpers {
@@ -145,5 +155,45 @@ tasks.fileservice.storageURI=$storageURI
       )
     decoded shouldBe inline
     decoded.spilled shouldBe None
+  }
+
+  def configBC(storageURI: String, createFilePrefixForTaskId: Boolean) =
+    ConfigFactory.parseString(
+      s"""
+tasks.cache.enabled = true
+tasks.cache.sharefilecache.path = cachemeta
+tasks.disableRemoting = true
+hosts.numCPU = 4
+tasks.maxInlinePayloadBytes = 1
+tasks.createFilePrefixForTaskId = $createFilePrefixForTaskId
+tasks.fileservice.storageURI=$storageURI
+"""
+    )
+
+  test(
+    "a result spilled under the pre-change prefix still resolves on a cache hit after the switch to task-prefix spills"
+  ) {
+    val tmp = tasks.util.TempFile.createTempFile(".temp")
+    tmp.delete
+    val storage = tmp.getAbsolutePath
+    val input = In((1 to 1000).toList)
+
+    val populated =
+      withTaskSystem(
+        Some(configBC(storage, createFilePrefixForTaskId = false))
+      ) { implicit ts =>
+        bcEchoTask(input)(ResourceRequest(1, 500))
+      }.unsafeRunSync()
+    populated shouldBe Right(BigOut(input.xs))
+    bcExecutions.get shouldBe 1
+
+    val afterSwitch =
+      withTaskSystem(
+        Some(configBC(storage, createFilePrefixForTaskId = true))
+      ) { implicit ts =>
+        bcEchoTask(input)(ResourceRequest(1, 500))
+      }.unsafeRunSync()
+    afterSwitch shouldBe Right(BigOut(input.xs))
+    bcExecutions.get shouldBe 1
   }
 }
