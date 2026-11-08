@@ -96,6 +96,21 @@ tasks.fileservice.storageURI=$storageURI
     result shouldBe Right(BigOut(input.xs))
   }
 
+  test(
+    "a spilled output whose base64 data exceeds the default jsoniter maxCharBufSize round-trips"
+  ) {
+    val tmp = tasks.util.TempFile.createTempFile(".temp")
+    tmp.delete
+    val storage = tmp.getAbsolutePath
+    val input = In((1 to 1000000).toList)
+
+    val result = withTaskSystem(Some(config(storage, "1"))) { implicit ts =>
+      echoTask(input)(ResourceRequest(1, 500))
+    }.unsafeRunSync()
+
+    result shouldBe Right(BigOut(input.xs))
+  }
+
   test("a spilled output round-trips on a cache hit") {
     val tmp = tasks.util.TempFile.createTempFile(".temp")
     tmp.delete

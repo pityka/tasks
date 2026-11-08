@@ -152,6 +152,10 @@ private[tasks] class ProxyTask[Input, Output](
 
   }
 
+  private val spilledResultReaderConfig = ReaderConfig
+    .withMaxBufSize(2147483645)
+    .withMaxCharBufSize(2147483645)
+
   private def resolveResult(result: UntypedResult): IO[UntypedResult] =
     result.spilled match {
       case None => IO.pure(result)
@@ -161,7 +165,9 @@ private[tasks] class ProxyTask[Input, Output](
           .compile
           .to(Array)
           .map(bytes =>
-            readFromArray[UntypedResult](bytes)(UntypedResult.codec)
+            readFromArray[UntypedResult](bytes, spilledResultReaderConfig)(
+              UntypedResult.codec
+            )
           )
     }
 
