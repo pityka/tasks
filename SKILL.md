@@ -513,3 +513,8 @@ bottleneck.
 - [ ] Parent tasks fan out with `IO`'s par combinators (`parTupled`, `parMapN`, `parSequence`, `parTraverse`), not sequential `flatMap`.
 - [ ] Non-deterministic tasks either fold the variance into the input or pass `noCache = true`.
 - [ ] For replay of a big cached DAG: keep storage reachable, rely on cache hits needing no workers, and lower `tasks.resultPollInterval` if delivery latency matters.
+
+## Debugging
+
+When debugging errors on pipelines built with this library always go and check what is in the storage. 
+Use out of bands tools for that (aws s3, filesystem operations)
