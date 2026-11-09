@@ -12,6 +12,8 @@ description: >
   tasks-postgres / tasks-dynamo.
 ---
 
+You must not write code which invalidates existing cache hits unless you asked the user and they accepted. You must figure ou the state of the pipeline's completion if you don't know. Task input must evolve in a backward compatible manner. Read on to understand what that means.
+
 # Using the `tasks` library
 
 `tasks` gives you **persistent memoization of asynchronous, distributed
@@ -518,3 +520,6 @@ bottleneck.
 
 When debugging errors on pipelines built with this library always go and check what is in the storage. 
 Use out of bands tools for that (aws s3, filesystem operations)
+
+## Application development
+
