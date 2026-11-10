@@ -90,6 +90,29 @@ object S3 {
       tcpKeepAlive: Option[Boolean],
       maxConcurrentRequests: Option[Int],
       numRetries: Option[Int]
+  ): Resource[IO, tasks.fileservice.s3.S3] =
+    makeS3ClientResource(
+      regionProfileName,
+      httpMaxConcurrency,
+      httpMaxPendingConnectionAcquires,
+      httpConnectionAcquisitionTimeout,
+      connectionMaxIdleTime,
+      tcpKeepAlive,
+      None,
+      maxConcurrentRequests,
+      numRetries
+    )
+
+  def makeS3ClientResource(
+      regionProfileName: Option[String],
+      httpMaxConcurrency: Option[Int],
+      httpMaxPendingConnectionAcquires: Option[Int],
+      httpConnectionAcquisitionTimeout: Option[FiniteDuration],
+      connectionMaxIdleTime: Option[FiniteDuration],
+      tcpKeepAlive: Option[Boolean],
+      connectTimeout: Option[FiniteDuration],
+      maxConcurrentRequests: Option[Int],
+      numRetries: Option[Int]
   ): Resource[IO, tasks.fileservice.s3.S3] = {
     val rateLimiter: Resource[IO, Option[Semaphore[IO]]] =
       maxConcurrentRequests match {
@@ -109,6 +132,7 @@ object S3 {
               httpConnectionAcquisitionTimeout,
               connectionMaxIdleTime,
               tcpKeepAlive,
+              connectTimeout,
               numRetries
             )
 
@@ -157,6 +181,27 @@ object S3 {
       connectionMaxIdleTime: Option[FiniteDuration],
       tcpKeepAlive: Option[Boolean],
       numRetries: Option[Int]
+  ): S3AsyncClient =
+    makeAWSSDKClient(
+      regionProfileName,
+      httpMaxConcurrency,
+      httpMaxPendingConnectionAcquires,
+      httpConnectionAcquisitionTimeout,
+      connectionMaxIdleTime,
+      tcpKeepAlive,
+      None,
+      numRetries
+    )
+
+  def makeAWSSDKClient(
+      regionProfileName: Option[String],
+      httpMaxConcurrency: Option[Int],
+      httpMaxPendingConnectionAcquires: Option[Int],
+      httpConnectionAcquisitionTimeout: Option[FiniteDuration],
+      connectionMaxIdleTime: Option[FiniteDuration],
+      tcpKeepAlive: Option[Boolean],
+      connectTimeout: Option[FiniteDuration],
+      numRetries: Option[Int]
   ): S3AsyncClient = {
     val builder = S3AsyncClient
       .builder()
@@ -181,7 +226,11 @@ object S3 {
       )
     }
     val idleTime: Duration =
-      connectionMaxIdleTime.fold(Duration.ofSeconds(2))(d =>
+      connectionMaxIdleTime.fold(Duration.ofSeconds(5))(d =>
+        Duration.ofNanos(d.toNanos)
+      )
+    val connectTimeoutDuration: Duration =
+      connectTimeout.fold(Duration.ofSeconds(10))(d =>
         Duration.ofNanos(d.toNanos)
       )
     val keepAlive: java.lang.Boolean =
@@ -189,6 +238,7 @@ object S3 {
     val nettyBuilder = NettyNioAsyncHttpClient
       .builder()
       .connectionMaxIdleTime(idleTime)
+      .connectionTimeout(connectTimeoutDuration)
       .tcpKeepAlive(keepAlive)
     httpMaxConcurrency.foreach(nettyBuilder.maxConcurrency(_))
     httpMaxPendingConnectionAcquires.foreach(
