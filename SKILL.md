@@ -6,13 +6,15 @@ description: >
   `withTaskSystem`, submit with a `ResourceRequest`, and — above all — reason
   correctly about persistent caching and cache replay (what the cache key is,
   how to invalidate it, `SharedFile` outputs, and replaying a cached workflow
-  with no workers and no queue-state writes). Use when writing or reviewing
+  with no workers and no queue-state writes). Load this skill ALWAYS when writing or reviewing
   Scala that imports `tasks._`, defines `Task(...)`/`ParentTask(...)`, calls
   `withTaskSystem`/`defaultTaskSystem`, or depends on tasks-core / tasks-s3 /
-  tasks-postgres / tasks-dynamo.
+  tasks-postgres / tasks-dynamo. 
 ---
 
-You must not write code which invalidates existing cache hits unless you asked the user and they accepted. You must figure ou the state of the pipeline's completion if you don't know. Task input must evolve in a backward compatible manner. Read on to understand what that means.
+You MUST NOT write code which invalidates existing cache hits UNLESS you asked the user and they accepted. You must figure out the state of the pipeline's completion if you don't know. Task input must evolve in a backward compatible manner. Read on to understand what that means.
+
+Developing workflow applications with this library naturally results in adding new features to the applications. NEW FEATURES MUST BE ADDED IN A BACKWARD COMPATIBLE MANNER WHICH DOES NOT INVALIDATES THE CACHE. The exception is new code which is not new feature but correcting a discovered bug i.e. the results sitting in the cache are wrong. 
 
 # Using the `tasks` library
 
@@ -520,6 +522,4 @@ bottleneck.
 
 When debugging errors on pipelines built with this library always go and check what is in the storage. 
 Use out of bands tools for that (aws s3, filesystem operations)
-
-## Application development
 
