@@ -1,6 +1,5 @@
 package tasks
 
-import scala.language.experimental.macros
 import tasks.queue._
 import cats.effect.IO
 trait MacroCalls {
