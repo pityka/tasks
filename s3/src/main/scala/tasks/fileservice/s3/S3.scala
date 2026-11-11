@@ -52,7 +52,7 @@ object S3 {
       httpMaxPendingConnectionAcquires: Option[Int],
       httpConnectionAcquisitionTimeout: Option[FiniteDuration],
       maxConcurrentRequests: Option[Int]
-  ): Resource[IO, tasks.fileservice.s3.S3] =
+  ): Resource[IO, tasks.fileservice.s3.S3Client] =
     makeS3ClientResource(
       regionProfileName,
       httpMaxConcurrency,
@@ -69,7 +69,7 @@ object S3 {
       httpConnectionAcquisitionTimeout: Option[FiniteDuration],
       maxConcurrentRequests: Option[Int],
       numRetries: Option[Int]
-  ): Resource[IO, tasks.fileservice.s3.S3] =
+  ): Resource[IO, tasks.fileservice.s3.S3Client] =
     makeS3ClientResource(
       regionProfileName,
       httpMaxConcurrency,
@@ -90,7 +90,7 @@ object S3 {
       tcpKeepAlive: Option[Boolean],
       maxConcurrentRequests: Option[Int],
       numRetries: Option[Int]
-  ): Resource[IO, tasks.fileservice.s3.S3] =
+  ): Resource[IO, tasks.fileservice.s3.S3Client] =
     makeS3ClientResource(
       regionProfileName,
       httpMaxConcurrency,
@@ -113,7 +113,7 @@ object S3 {
       connectTimeout: Option[FiniteDuration],
       maxConcurrentRequests: Option[Int],
       numRetries: Option[Int]
-  ): Resource[IO, tasks.fileservice.s3.S3] = {
+  ): Resource[IO, tasks.fileservice.s3.S3Client] = {
     val rateLimiter: Resource[IO, Option[Semaphore[IO]]] =
       maxConcurrentRequests match {
         case Some(n) if n > 0 =>
@@ -142,7 +142,25 @@ object S3 {
     }
   }
 
-  def makeAWSSDKClient(
+  def wrapAwsSdkClient(
+      client: S3AsyncClient
+  ): Resource[IO, tasks.fileservice.s3.S3Client] =
+    wrapAwsSdkClient(client, None)
+
+  def wrapAwsSdkClient(
+      client: S3AsyncClient,
+      maxConcurrentRequests: Option[Int]
+  ): Resource[IO, tasks.fileservice.s3.S3Client] = {
+    val rateLimiter: Resource[IO, Option[Semaphore[IO]]] =
+      maxConcurrentRequests match {
+        case Some(n) if n > 0 =>
+          Resource.eval(Semaphore[IO](n.toLong).map(Some(_)))
+        case _ => Resource.pure(None)
+      }
+    rateLimiter.map(sem => new tasks.fileservice.s3.S3(client, sem))
+  }
+
+  private[tasks] def makeAWSSDKClient(
       regionProfileName: Option[String],
       httpMaxConcurrency: Option[Int],
       httpMaxPendingConnectionAcquires: Option[Int],
@@ -156,7 +174,7 @@ object S3 {
       Some(50)
     )
 
-  def makeAWSSDKClient(
+  private[tasks] def makeAWSSDKClient(
       regionProfileName: Option[String],
       httpMaxConcurrency: Option[Int],
       httpMaxPendingConnectionAcquires: Option[Int],
@@ -173,7 +191,7 @@ object S3 {
       numRetries
     )
 
-  def makeAWSSDKClient(
+  private[tasks] def makeAWSSDKClient(
       regionProfileName: Option[String],
       httpMaxConcurrency: Option[Int],
       httpMaxPendingConnectionAcquires: Option[Int],
@@ -193,7 +211,7 @@ object S3 {
       numRetries
     )
 
-  def makeAWSSDKClient(
+  private[tasks] def makeAWSSDKClient(
       regionProfileName: Option[String],
       httpMaxConcurrency: Option[Int],
       httpMaxPendingConnectionAcquires: Option[Int],
@@ -299,7 +317,7 @@ object S3 {
   *
   * @param s3
   */
-class S3(
+private[tasks] class S3(
     val s3: S3AsyncClient,
     rateLimiter: Option[Semaphore[IO]]
 ) extends tasks.fileservice.s3.S3Client {

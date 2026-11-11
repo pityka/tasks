@@ -229,6 +229,7 @@ lazy val ecs = project
 lazy val s3 = project
   .in(file("s3"))
   .settings(commonSettings: _*)
+  .settings(stableBinarySettings)
   .settings(
     name := "tasks-s3",
     libraryDependencies ++= Seq(
@@ -258,6 +259,7 @@ lazy val postgres = project
 lazy val dynamo = project
   .in(file("dynamo"))
   .settings(commonSettings: _*)
+  .settings(stableBinarySettings)
   .settings(
     name := "tasks-dynamo",
     libraryDependencies ++= Seq(

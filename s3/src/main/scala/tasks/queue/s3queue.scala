@@ -29,18 +29,31 @@ object S3QueueState {
 
   val DefaultYieldDelay = 150.milliseconds
 
-  case class LeaseConfig(
-      key: String,
-      ttl: FiniteDuration,
-      acquireBaseDelay: FiniteDuration
-  )
+  sealed trait LeaseConfig {
+    def key: String
+    def ttl: FiniteDuration
+    def acquireBaseDelay: FiniteDuration
+  }
 
   object LeaseConfig {
+    private[tasks] case class LeaseConfigImpl(
+        key: String,
+        ttl: FiniteDuration,
+        acquireBaseDelay: FiniteDuration
+    ) extends LeaseConfig
+
     val DefaultTtl: FiniteDuration = 30.seconds
     val DefaultAcquireBaseDelay: FiniteDuration = 50.milliseconds
 
+    def apply(
+        key: String,
+        ttl: FiniteDuration,
+        acquireBaseDelay: FiniteDuration
+    ): LeaseConfig =
+      LeaseConfigImpl(key, ttl, acquireBaseDelay)
+
     def forStateKey(stateKey: String): LeaseConfig =
-      LeaseConfig(
+      apply(
         key = stateKey + ".lease",
         ttl = DefaultTtl,
         acquireBaseDelay = DefaultAcquireBaseDelay
@@ -52,33 +65,53 @@ object S3QueueState {
     implicit val codec: JsonValueCodec[LeaseBody] = JsonCodecMaker.make
   }
 
-  val preconditionFailedStatusCode = 412
+  private[tasks] val preconditionFailedStatusCode = 412
 
-  val conflictingOperationStatusCode = 409
+  private[tasks] val conflictingOperationStatusCode = 409
 
-  val notModifiedStatusCode = 304
+  private[tasks] val notModifiedStatusCode = 304
 
-  val DefaultMaxReadRequestsPerSecond = 300
+  private[tasks] val DefaultMaxReadRequestsPerSecond = 300
 
-  val DefaultMaxReadBurst = 400
+  private[tasks] val DefaultMaxReadBurst = 400
 
-  val DefaultMaxWriteRequestsPerSecond = 100
+  private[tasks] val DefaultMaxWriteRequestsPerSecond = 100
 
-  val DefaultMaxWriteBurst = 200
+  private[tasks] val DefaultMaxWriteBurst = 200
 
-  val DefaultReadCacheTtl = 1.second
+  private[tasks] val DefaultReadCacheTtl = 1.second
 
-  val backpressureWarnInterval = 10.seconds
+  private[tasks] val backpressureWarnInterval = 10.seconds
 
-  case class RateLimits(
-      maxReadRequestsPerSecond: Int,
-      maxReadBurst: Int,
-      maxWriteRequestsPerSecond: Int,
-      maxWriteBurst: Int
-  )
+  sealed trait RateLimits {
+    def maxReadRequestsPerSecond: Int
+    def maxReadBurst: Int
+    def maxWriteRequestsPerSecond: Int
+    def maxWriteBurst: Int
+  }
 
   object RateLimits {
-    val default: RateLimits = RateLimits(
+    private[tasks] case class RateLimitsImpl(
+        maxReadRequestsPerSecond: Int,
+        maxReadBurst: Int,
+        maxWriteRequestsPerSecond: Int,
+        maxWriteBurst: Int
+    ) extends RateLimits
+
+    def apply(
+        maxReadRequestsPerSecond: Int,
+        maxReadBurst: Int,
+        maxWriteRequestsPerSecond: Int,
+        maxWriteBurst: Int
+    ): RateLimits =
+      RateLimitsImpl(
+        maxReadRequestsPerSecond,
+        maxReadBurst,
+        maxWriteRequestsPerSecond,
+        maxWriteBurst
+      )
+
+    val default: RateLimits = apply(
       maxReadRequestsPerSecond = DefaultMaxReadRequestsPerSecond,
       maxReadBurst = DefaultMaxReadBurst,
       maxWriteRequestsPerSecond = DefaultMaxWriteRequestsPerSecond,
