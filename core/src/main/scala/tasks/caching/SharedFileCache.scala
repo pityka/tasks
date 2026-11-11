@@ -54,30 +54,45 @@ private[tasks] class SharedFileCache(implicit
 
     val hash = hashedTaskDescription.hash
     val fileName = "__meta__result__" + hash
-    SharedFileHelper
-      .buffer(fileName)
-      .flatMap {
-        case None =>
-          IO {
-            scribe.debug(
-              s"Not found",
-              prefix,
-              hashedTaskDescription,
+
+    def readWithRetry(attemptsLeft: Int = 3): IO[Option[UntypedResult]] =
+      SharedFileHelper
+        .buffer(fileName)
+        .flatMap {
+          case None =>
+            IO {
+              scribe.debug(
+                s"Not found",
+                prefix,
+                hashedTaskDescription,
+                scribe.data("filename", fileName)
+              )
+              Option.empty[UntypedResult]
+            }
+          case Some(bytes) =>
+            IO(Some(deserializeResult(bytes)))
+        }
+        .handleErrorWith { case e =>
+          if (attemptsLeft > 0) {
+            scribe.warn(
+              e,
+              s"Failed to read cached result, retrying.",
+              scribe.data("filename", fileName),
+              scribe.data("attemptsLeft", attemptsLeft)
+            )
+            IO.sleep(scala.concurrent.duration.FiniteDuration(100L, scala.concurrent.duration.MILLISECONDS)) >>
+              readWithRetry(attemptsLeft - 1)
+          } else {
+            scribe.error(
+              e,
+              s"Failed to locate cached result file after retries.",
               scribe.data("filename", fileName)
             )
-            Option.empty[UntypedResult]
+            IO.raiseError(e)
           }
-        case Some(bytes) =>
-          IO(Some(deserializeResult(bytes)))
-      }
-      .handleError { case e =>
-        scribe.error(
-          e,
-          s"Failed to locate cached result file.",
-          scribe.data("filename", fileName)
-        )
-        None
-      }
+        }
+
+    readWithRetry()
 
   }
 
