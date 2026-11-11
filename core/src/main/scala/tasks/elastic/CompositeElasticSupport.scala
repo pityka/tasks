@@ -10,40 +10,59 @@ import tasks.util.SimpleSocketAddress
 import tasks.util.config.TasksConfig
 import tasks.util.message.Node
 
-final case class CompositeMember(
-    name: String,
-    support: ElasticSupport,
-    accepts: ResourceRequest => Boolean,
-    owns: String => Boolean
-) {
+sealed trait CompositeMember {
+  def name: String
+  def support: ElasticSupport
+  def accepts: ResourceRequest => Boolean
+  def owns: String => Boolean
 
-  require(name.nonEmpty, "CompositeMember.name must be non-empty")
-
-  def accepting(predicate: ResourceRequest => Boolean): CompositeMember =
-    copy(accepts = predicate)
-
-  def owning(predicate: String => Boolean): CompositeMember =
-    copy(owns = predicate)
-
-  def isCatchAll: Boolean = owns eq CompositeMember.anyNodeId
-
-  override def toString: String =
-    s"CompositeMember($name${if (isCatchAll) ", catch all" else ""})"
+  def accepting(predicate: ResourceRequest => Boolean): CompositeMember
+  def owning(predicate: String => Boolean): CompositeMember
+  def isCatchAll: Boolean
 }
 
 object CompositeMember {
+
+  private[tasks] final case class CompositeMemberImpl(
+      name: String,
+      support: ElasticSupport,
+      accepts: ResourceRequest => Boolean,
+      owns: String => Boolean
+  ) extends CompositeMember {
+
+    require(name.nonEmpty, "CompositeMember.name must be non-empty")
+
+    def accepting(predicate: ResourceRequest => Boolean): CompositeMember =
+      copy(accepts = predicate)
+
+    def owning(predicate: String => Boolean): CompositeMember =
+      copy(owns = predicate)
+
+    def isCatchAll: Boolean = owns eq CompositeMember.anyNodeId
+
+    override def toString: String =
+      s"CompositeMember($name${if (isCatchAll) ", catch all" else ""})"
+  }
 
   val anyNodeId: String => Boolean = _ => true
 
   def apply(
       name: String,
       support: ElasticSupport,
+      accepts: ResourceRequest => Boolean,
       owns: String => Boolean
   ): CompositeMember =
-    CompositeMember(name, support, _ => true, owns)
+    CompositeMemberImpl(name, support, accepts, owns)
+
+  def apply(
+      name: String,
+      support: ElasticSupport,
+      owns: String => Boolean
+  ): CompositeMember =
+    CompositeMemberImpl(name, support, _ => true, owns)
 
   def catchAll(name: String, support: ElasticSupport): CompositeMember =
-    CompositeMember(name, support, _ => true, anyNodeId)
+    CompositeMemberImpl(name, support, _ => true, anyNodeId)
 }
 
 object CompositeElasticSupport {

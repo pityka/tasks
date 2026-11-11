@@ -4,24 +4,37 @@ import cats.effect._
 import tasks.elastic.ElasticSupport
 import tasks.shared.ResourceAllocated
 
-final case class SecureShellConfig(
-    environment: Map[String, String],
-    contexts: List[ProcessContext]
-) extends ProcessConfig {
+sealed trait SecureShellConfig extends ProcessConfig {
+  def environment: Map[String, String]
 
-  val minimumResourceAllocation = false
-
-  def withEnvironment(entries: (String, String)*): SecureShellConfig =
-    copy(environment = environment ++ entries)
-
-  def withContext(value: ProcessContext): SecureShellConfig =
-    copy(contexts = contexts :+ value)
+  def withEnvironment(entries: (String, String)*): SecureShellConfig
+  def withContext(value: ProcessContext): SecureShellConfig
 }
 
 object SecureShellConfig {
 
+  private[tasks] final case class SecureShellConfigImpl(
+      environment: Map[String, String],
+      contexts: List[ProcessContext]
+  ) extends SecureShellConfig {
+
+    val minimumResourceAllocation = false
+
+    def withEnvironment(entries: (String, String)*): SecureShellConfig =
+      copy(environment = environment ++ entries)
+
+    def withContext(value: ProcessContext): SecureShellConfig =
+      copy(contexts = contexts :+ value)
+  }
+
+  def apply(
+      environment: Map[String, String],
+      contexts: List[ProcessContext]
+  ): SecureShellConfig =
+    SecureShellConfigImpl(environment, contexts)
+
   def apply(contexts: List[ProcessContext]): SecureShellConfig =
-    SecureShellConfig(environment = Map.empty, contexts = contexts)
+    SecureShellConfigImpl(environment = Map.empty, contexts = contexts)
 }
 
 object SecureShellElasticSupport {

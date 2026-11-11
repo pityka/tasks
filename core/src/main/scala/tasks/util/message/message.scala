@@ -33,7 +33,7 @@ object LauncherName {
   )
 }
 
-case class Address(value: String, listeningUri: Option[String]) {
+private[tasks] case class Address(value: String, listeningUri: Option[String]) {
   private[util] def withoutUri = Address(value, None)
   def withAddress(s: Option[String]) =
     copy(listeningUri = listeningUri.orElse(s))
@@ -46,7 +46,7 @@ case class Address(value: String, listeningUri: Option[String]) {
 
   override def hashCode(): Int = value.hashCode()
 }
-object Address {
+private[tasks] object Address {
   implicit def toLogFeature(rm: Address): scribe.LogFeature = scribe.data(
     Map(
       "address-name" -> rm.value,
@@ -57,8 +57,8 @@ object Address {
   def apply(value: String): Address = Address(value, None)
 }
 
-case class Message(data: MessageData, from: Address, to: Address)
-object Message {
+private[tasks] case class Message(data: MessageData, from: Address, to: Address)
+private[tasks] object Message {
 
   implicit def toLogFeature(m: Message): scribe.LogFeature = scribe.data(
     Map(
@@ -112,7 +112,7 @@ object Message {
 
 import tasks.fileservice.FileServicePrefix
 
-case class QueueStat(
+private[tasks] case class QueueStat(
     queued: List[(String, tasks.shared.VersionedResourceRequest)],
     running: List[(String, tasks.shared.VersionedResourceAllocated)]
 )

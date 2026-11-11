@@ -1,4 +1,4 @@
-package test
+package tasks
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
@@ -7,7 +7,9 @@ import com.github.plokhotnyuk.jsoniter_scala.core._
 
 import tasks.shared._
 import tasks.queue.{TaskId, HashedTaskDescription, Spore}
+import tasks.queue.QueueStateCodecs
 import tasks.util.Uri
+import tasks.util.message.{Node, LauncherName}
 import tasks.fileservice.{
   SharedFile,
   ManagedFilePath,
@@ -258,6 +260,19 @@ class WireGoldenTest extends AnyFunSuite with Matchers {
   test("ProposedManagedFilePath wire format is pinned") {
     wire(ProposedManagedFilePath(Vector("x", "y"))) shouldBe
       """{"list":["x","y"]}"""
+  }
+
+  test("Node wire format is pinned") {
+    wire[Option[Node]](
+      Some(
+        Node(
+          RunningJobId("rj"),
+          ResourceAvailable(1, 100, 0, Nil, None, Set.empty),
+          LauncherName("L")
+        )
+      )
+    )(QueueStateCodecs.optionalNodeCodec) shouldBe
+      """{"name":{"value":"rj"},"size":{"cpu":1,"memory":100,"scratch":0},"launcherActor":{"name":"L"}}"""
   }
 
 }

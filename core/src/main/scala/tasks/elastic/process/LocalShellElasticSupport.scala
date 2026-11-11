@@ -4,13 +4,26 @@ import cats.effect._
 import tasks.elastic.ElasticSupport
 import tasks.shared.ResourceAllocated
 
-final case class ShellConfig(contexts: List[ProcessContext])
-    extends ProcessConfig {
+sealed trait ShellConfig extends ProcessConfig {
+  def withContext(value: ProcessContext): ShellConfig
+}
 
-  val minimumResourceAllocation = false
+object ShellConfig {
+  private[tasks] final case class ShellConfigImpl(
+      contexts: List[ProcessContext]
+  ) extends ShellConfig {
 
-  def withContext(value: ProcessContext): ShellConfig =
-    copy(contexts = contexts :+ value)
+    val minimumResourceAllocation = false
+
+    def withContext(value: ProcessContext): ShellConfig =
+      copy(contexts = contexts :+ value)
+  }
+
+  def apply(contexts: List[ProcessContext]): ShellConfig =
+    ShellConfigImpl(contexts)
+
+  def unapply(c: ShellConfig): Some[List[ProcessContext]] =
+    Some(c.contexts)
 }
 
 object LocalShellElasticSupport {

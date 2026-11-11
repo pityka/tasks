@@ -30,13 +30,13 @@ package tasks.fileservice
 import com.github.plokhotnyuk.jsoniter_scala.macros._
 import com.github.plokhotnyuk.jsoniter_scala.core._
 
-case class FileServicePrefix(list: Vector[String]) {
+private[tasks] case class FileServicePrefix(list: Vector[String]) {
   def append(n: String) = FileServicePrefix(list :+ n)
   def append(ns: Seq[String]) = FileServicePrefix(list ++ ns)
   private[fileservice] def propose(name: String) =
     ProposedManagedFilePath(list :+ name)
 }
-object FileServicePrefix {
+private[tasks] object FileServicePrefix {
   implicit def toLogFeature(rm: FileServicePrefix): scribe.LogFeature =
     scribe.data(
       Map(
@@ -47,12 +47,12 @@ object FileServicePrefix {
 
 }
 
-case class ProposedManagedFilePath(list: Vector[String]) {
+private[tasks] case class ProposedManagedFilePath(list: Vector[String]) {
   def name = list.last
   def toManaged = ManagedFilePath(list)
 }
 
-object ProposedManagedFilePath {
+private[tasks] object ProposedManagedFilePath {
   implicit def toLogFeature(rm: ProposedManagedFilePath): scribe.LogFeature =
     scribe.data(
       Map(

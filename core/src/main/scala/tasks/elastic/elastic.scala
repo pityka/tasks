@@ -96,4 +96,19 @@ private[tasks] trait DecideNewNode {
   ): Map[ResourceRequest, Int]
 }
 
-case class CodeAddress(address: SimpleSocketAddress, codeVersion: CodeVersion)
+sealed trait CodeAddress {
+  def address: SimpleSocketAddress
+  def codeVersion: CodeVersion
+}
+object CodeAddress {
+  private[tasks] final case class CodeAddressImpl(
+      address: SimpleSocketAddress,
+      codeVersion: CodeVersion
+  ) extends CodeAddress
+  def apply(
+      address: SimpleSocketAddress,
+      codeVersion: CodeVersion
+  ): CodeAddress = CodeAddressImpl(address, codeVersion)
+  def unapply(c: CodeAddress): Some[(SimpleSocketAddress, CodeVersion)] =
+    Some((c.address, c.codeVersion))
+}

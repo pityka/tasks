@@ -1,6 +1,16 @@
 package tasks.queue
 
-case class Prefix(value: String) extends AnyVal
+sealed trait Prefix {
+  def value: String
+}
+
+object Prefix {
+  private[tasks] final case class PrefixImpl(value: String) extends Prefix
+
+  def apply(value: String): Prefix = PrefixImpl(value)
+
+  def unapply(p: Prefix): Some[String] = Some(p.value)
+}
 
 trait FilePrefix[A] {
   def prefix(a: A): Prefix

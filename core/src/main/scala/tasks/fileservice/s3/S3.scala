@@ -13,9 +13,35 @@ import fs2.Pipe
 
 object S3Client {
 
-  case class ObjectMetaData(contentLength: Long, eTag: String)
+  sealed trait ObjectMetaData {
+    def contentLength: Long
+    def eTag: String
+  }
+  object ObjectMetaData {
+    private[tasks] final case class ObjectMetaDataImpl(
+        contentLength: Long,
+        eTag: String
+    ) extends ObjectMetaData
+    def apply(contentLength: Long, eTag: String): ObjectMetaData =
+      ObjectMetaDataImpl(contentLength, eTag)
+    def unapply(o: ObjectMetaData): Some[(Long, String)] =
+      Some((o.contentLength, o.eTag))
+  }
 
-  case class S3UploadResponse(etag: String, contentLength: Long)
+  sealed trait S3UploadResponse {
+    def etag: String
+    def contentLength: Long
+  }
+  object S3UploadResponse {
+    private[tasks] final case class S3UploadResponseImpl(
+        etag: String,
+        contentLength: Long
+    ) extends S3UploadResponse
+    def apply(etag: String, contentLength: Long): S3UploadResponse =
+      S3UploadResponseImpl(etag, contentLength)
+    def unapply(r: S3UploadResponse): Some[(String, Long)] =
+      Some((r.etag, r.contentLength))
+  }
 
 }
 

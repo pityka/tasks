@@ -36,75 +36,97 @@ import cats.effect.kernel.Resource
 import cats.effect.kernel.Deferred
 import cats.effect.ExitCode
 
-final case class ProcessContext(
-    name: String,
-    hostname: String,
-    externalHostname: Option[String],
-    resources: ResourceAvailable
-) {
+sealed trait ProcessContext {
+  def name: String
+  def hostname: String
+  def externalHostname: Option[String]
+  def resources: ResourceAvailable
 
-  require(name.nonEmpty, "ProcessContext.name must be non-empty")
-
-  require(hostname.nonEmpty, "ProcessContext.hostname must be non-empty")
-
-  def withExternalHostname(value: String): ProcessContext =
-    copy(externalHostname = Some(value))
-
-  def withCpu(value: Int): ProcessContext =
-    copy(resources = ResourceAvailable(
-      value,
-      resources.memory,
-      resources.scratch,
-      resources.gpu,
-      resources.image,
-      resources.labels
-    ))
-
-  def withMemory(value: Int): ProcessContext =
-    copy(resources = ResourceAvailable(
-      resources.cpu,
-      value,
-      resources.scratch,
-      resources.gpu,
-      resources.image,
-      resources.labels
-    ))
-
-  def withScratch(value: Int): ProcessContext =
-    copy(resources = ResourceAvailable(
-      resources.cpu,
-      resources.memory,
-      value,
-      resources.gpu,
-      resources.image,
-      resources.labels
-    ))
-
-  def withGpu(value: List[Int]): ProcessContext =
-    copy(resources = ResourceAvailable(
-      resources.cpu,
-      resources.memory,
-      resources.scratch,
-      value.distinct.sorted,
-      resources.image,
-      resources.labels
-    ))
-
-  def withLabels(value: Set[String]): ProcessContext =
-    copy(resources = ResourceAvailable(
-      resources.cpu,
-      resources.memory,
-      resources.scratch,
-      resources.gpu,
-      resources.image,
-      value
-    ))
+  def withExternalHostname(value: String): ProcessContext
+  def withCpu(value: Int): ProcessContext
+  def withMemory(value: Int): ProcessContext
+  def withScratch(value: Int): ProcessContext
+  def withGpu(value: List[Int]): ProcessContext
+  def withLabels(value: Set[String]): ProcessContext
 }
 
 object ProcessContext {
 
+  private[tasks] final case class ProcessContextImpl(
+      name: String,
+      hostname: String,
+      externalHostname: Option[String],
+      resources: ResourceAvailable
+  ) extends ProcessContext {
+
+    require(name.nonEmpty, "ProcessContext.name must be non-empty")
+
+    require(hostname.nonEmpty, "ProcessContext.hostname must be non-empty")
+
+    def withExternalHostname(value: String): ProcessContext =
+      copy(externalHostname = Some(value))
+
+    def withCpu(value: Int): ProcessContext =
+      copy(resources = ResourceAvailable(
+        value,
+        resources.memory,
+        resources.scratch,
+        resources.gpu,
+        resources.image,
+        resources.labels
+      ))
+
+    def withMemory(value: Int): ProcessContext =
+      copy(resources = ResourceAvailable(
+        resources.cpu,
+        value,
+        resources.scratch,
+        resources.gpu,
+        resources.image,
+        resources.labels
+      ))
+
+    def withScratch(value: Int): ProcessContext =
+      copy(resources = ResourceAvailable(
+        resources.cpu,
+        resources.memory,
+        value,
+        resources.gpu,
+        resources.image,
+        resources.labels
+      ))
+
+    def withGpu(value: List[Int]): ProcessContext =
+      copy(resources = ResourceAvailable(
+        resources.cpu,
+        resources.memory,
+        resources.scratch,
+        value.distinct.sorted,
+        resources.image,
+        resources.labels
+      ))
+
+    def withLabels(value: Set[String]): ProcessContext =
+      copy(resources = ResourceAvailable(
+        resources.cpu,
+        resources.memory,
+        resources.scratch,
+        resources.gpu,
+        resources.image,
+        value
+      ))
+  }
+
+  def apply(
+      name: String,
+      hostname: String,
+      externalHostname: Option[String],
+      resources: ResourceAvailable
+  ): ProcessContext =
+    ProcessContextImpl(name, hostname, externalHostname, resources)
+
   def apply(name: String, hostname: String): ProcessContext =
-    ProcessContext(
+    ProcessContextImpl(
       name = name,
       hostname = hostname,
       externalHostname = None,
@@ -195,7 +217,12 @@ private class ProcessSettings(
       case Some(value) =>
         if (config.minimumResourceAllocation) {
           val list = hosts.filterNot(_.name == value.name) ++ List(
-            value.copy(resources = value.resources.substract(h))
+            ProcessContext(
+              value.name,
+              value.hostname,
+              value.externalHostname,
+              value.resources.substract(h)
+            )
           )
 
           (
@@ -204,7 +231,12 @@ private class ProcessSettings(
           )
         } else {
           val list = hosts.filterNot(_.name == value.name) ++ List(
-            value.copy(resources = value.resources.substractAll)
+            ProcessContext(
+              value.name,
+              value.hostname,
+              value.externalHostname,
+              value.resources.substractAll
+            )
           )
 
           (
@@ -219,7 +251,12 @@ private class ProcessSettings(
     list.filterNot(_.name == context) ++ List(
       {
         val ho = list.find(_.name == context).get
-        ho.copy(resources = ho.resources.addBack(h))
+        ProcessContext(
+          ho.name,
+          ho.hostname,
+          ho.externalHostname,
+          ho.resources.addBack(h)
+        )
       }
     )
   }
@@ -286,7 +323,14 @@ private class ProcessShutdownFromRegistry(
 }
 
 // private final case class NodeName(s: String)
-case class ProcessId(s: String)
+sealed trait ProcessId {
+  def s: String
+}
+object ProcessId {
+  private[tasks] final case class ProcessIdImpl(s: String) extends ProcessId
+  def apply(s: String): ProcessId = ProcessIdImpl(s)
+  def unapply(p: ProcessId): Some[String] = Some(p.s)
+}
 
 trait SpawnProcessCommand {
 
