@@ -13,7 +13,8 @@ import org.scalatest.matchers.should.Matchers
 import tasks.util.TempFile
 import tasks.util.config.TasksConfig
 
-class CountingManagedFileStorage(data: Array[Byte]) extends ManagedFileStorage {
+private[tasks] class CountingManagedFileStorage(data: Array[Byte])
+    extends ManagedFileStorage {
 
   val downloadCount = new AtomicInteger(0)
 
