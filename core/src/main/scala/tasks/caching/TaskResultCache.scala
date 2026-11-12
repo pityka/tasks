@@ -61,10 +61,6 @@ private[tasks] class TaskResultCache(
     def lookup =
       cacheMap
         .get(scheduleTask.description)(queryFileServicePrefix)
-        .handleError { case e =>
-          scribe.error(e, "Error while looking up in cache", scheduleTask)
-          None
-        }
 
     val answer = for {
       cacheLookup <- lookup
@@ -157,8 +153,8 @@ private[tasks] class TaskResultCache(
     cacheMap
       .set(sch, result)(prefix)
       .void
-      .handleErrorWith { case e =>
-        IO {
+      .onError { case e =>
+        IO(
           scribe.error(
             e,
             "Error while saving into cache",
@@ -167,7 +163,7 @@ private[tasks] class TaskResultCache(
             prefix,
             corr
           )
-        }
+        )
       }
   }
 }
