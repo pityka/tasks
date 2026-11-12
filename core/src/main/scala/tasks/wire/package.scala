@@ -7,7 +7,7 @@ import java.io.File
 
 package object wire {
 
-  implicit val throwableCodec: JsonValueCodec[Throwable] = {
+  private[tasks] implicit val throwableCodec: JsonValueCodec[Throwable] = {
     type DTO = (String, List[(String, String, String, Int)])
     val codec0: JsonValueCodec[DTO] = JsonCodecMaker.make
 
@@ -43,7 +43,7 @@ package object wire {
     }
   }
 
-  implicit val fileCodec: JsonValueCodec[File] = {
+  private[tasks] implicit val fileCodec: JsonValueCodec[File] = {
     implicit val codec0: JsonValueCodec[String] = JsonCodecMaker.make
     new JsonValueCodec[File] {
       val nullValue: File = null.asInstanceOf[File]

@@ -157,8 +157,8 @@ private[tasks] object UntypedResult {
 
 sealed trait ComputationEnvironment {
   implicit def components: TaskSystemComponents
-  implicit def launcher: LauncherHandle
-  def taskActor: Task
+  private[tasks] implicit def launcher: LauncherHandle
+  private[tasks] def taskActor: Task
   def taskHash: HashedTaskDescription
   def filePrefixValue: String
 
@@ -185,8 +185,8 @@ sealed trait LeafComputationEnvironment extends ComputationEnvironment {
 
 sealed trait ParentComputationEnvironment extends ComputationEnvironment {
   implicit def components: ExtendedTaskSystemComponents
-  implicit def queue: Queue
-  implicit def cache: TaskResultCache
+  private[tasks] implicit def queue: Queue
+  private[tasks] implicit def cache: TaskResultCache
   def toExtendedTaskSystemComponents: ExtendedTaskSystemComponents
 }
 

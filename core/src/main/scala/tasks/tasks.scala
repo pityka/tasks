@@ -40,7 +40,7 @@ trait HasSharedFiles extends Product {
 }
 
 object HasSharedFiles {
-  def allFiles(r: Any): Set[SharedFile] = recurse(r)(_.allFiles).toSet
+  private[tasks] def allFiles(r: Any): Set[SharedFile] = recurse(r)(_.allFiles).toSet
 
   private[tasks] def recurse(
       a: Any
@@ -102,8 +102,8 @@ final class TaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
     private[tasks] val taskId: TaskId
 ) {
 
-  def writer1 = implicitly[Serializer[A]]
-  def reader2 = implicitly[Deserializer[B]]
+  private[tasks] def writer1 = implicitly[Serializer[A]]
+  private[tasks] def reader2 = implicitly[Deserializer[B]]
 
   def apply(a: A)(resource: ResourceRequest)(implicit
       components: ExtendedTaskSystemComponents
@@ -170,8 +170,8 @@ final class ParentTaskDefinition[A: Serializer: FilePrefix, B: Deserializer](
     private[tasks] val taskId: TaskId
 ) {
 
-  def writer1 = implicitly[Serializer[A]]
-  def reader2 = implicitly[Deserializer[B]]
+  private[tasks] def writer1 = implicitly[Serializer[A]]
+  private[tasks] def reader2 = implicitly[Deserializer[B]]
 
   def apply(a: A)(implicit
       components: ExtendedTaskSystemComponents

@@ -51,7 +51,8 @@ package object util {
 
   private[tasks] def base64(b: Array[Byte]): String =
     java.util.Base64.getEncoder.encodeToString(b)
-  def base64(s: String): Array[Byte] = java.util.Base64.getDecoder.decode(s)
+  private[tasks] def base64(s: String): Array[Byte] =
+    java.util.Base64.getDecoder.decode(s)
 
   private def available(port: Int): Boolean = {
     var s: java.net.Socket = null

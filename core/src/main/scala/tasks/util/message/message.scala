@@ -117,7 +117,7 @@ private[tasks] case class QueueStat(
     running: List[(String, tasks.shared.VersionedResourceAllocated)]
 )
 
-sealed trait MessageData
+private[tasks] sealed trait MessageData
 private[tasks] object MessageData {
   import tasks.shared._
   import tasks.queue._
