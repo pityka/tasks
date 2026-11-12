@@ -91,14 +91,13 @@ private[tasks] class RemoteFileStorage(implicit
     }
 
   def contains(path: RemoteFilePath, size: Long, hash: Int): IO[Boolean] =
-    getSizeAndHash(path)
-      .map { case (size1, hash1) =>
-        size < 0 || (size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1))
-      }
-      .handleError { case e =>
-        scribe.debug("Exception while looking up remote file.", e, path)
-        false
-      }
+    tasks.util.retryIO(s"lookup remote file $path")(
+      getSizeAndHash(path)
+        .map { case (size1, hash1) =>
+          size < 0 || (size1 === size && (config.skipContentHashVerificationAfterCache || hash === hash1))
+        },
+      4
+    )(scribe.Logger[RemoteFileStorage])
 
   def exportFile(path: RemoteFilePath): Resource[IO, File] = {
     val localFile = path.uri.scheme == "file" && new File(
