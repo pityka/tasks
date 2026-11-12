@@ -496,6 +496,18 @@ private[tasks] object Launcher {
           }
         }
 
+    private def fatalShutdown: IO[Unit] =
+      (node, shutdown, exitCode) match {
+        case (Some(n), Some(sd), Some(ec)) =>
+          IO.both(
+            shutdownInitiated.set(true),
+            sd.shutdownRunningNode(ec, n.name)
+          ).void
+        case (_, _, Some(ec)) =>
+          ec.complete(ExitCode.Error).void
+        case _ => IO.unit
+      }
+
     private[tasks] def drainPendingReports: IO[Unit] =
       ref
         .modify(state =>
@@ -567,8 +579,14 @@ private[tasks] object Launcher {
               .flatMap {
                 case Left(e) =>
                   IO(
-                    scribe.error(e, s"Failed to save", scheduleTask, address)
-                  )
+                    scribe.error(
+                      e,
+                      s"Failed to save result to cache after retries. The storage backend is considered broken: failing the task and shutting down this node.",
+                      scheduleTask,
+                      address
+                    )
+                  ) *> queue.taskFailed(scheduleTask, address, e) *>
+                    fatalShutdown
                 case Right(_) =>
                   reportOrPark(report)
 
