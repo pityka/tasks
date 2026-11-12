@@ -42,8 +42,6 @@ class RemoteFileStorageErrorHandlingTest extends AnyFunSuite with Matchers {
 
   test("RemoteFileStorage.contains retries on transient failures") {
     var attempts = 0
-    implicit val config: TasksConfig =
-      tasks.util.config.parse(() => ConfigFactory.load())
 
     val failThenSucceedHelper = new StreamHelper(
       s3Client = None,
