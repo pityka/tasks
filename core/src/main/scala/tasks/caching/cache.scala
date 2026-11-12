@@ -42,8 +42,6 @@ private[tasks] abstract class Cache {
       p: FileServicePrefix
   ): IO[Unit]
 
-  def shutDown(): Unit
-
 }
 
 private[tasks] class DisabledCache extends Cache {
@@ -55,7 +53,5 @@ private[tasks] class DisabledCache extends Cache {
       p: FileServicePrefix
   ) =
     IO.pure(())
-
-  def shutDown() = {}
 
 }

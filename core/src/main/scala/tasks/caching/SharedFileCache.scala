@@ -46,8 +46,6 @@ private[tasks] class SharedFileCache(implicit
 
   override def toString = s"SharedFileCache($fileServiceComponent)"
 
-  def shutDown() = ()
-
   def get(
       hashedTaskDescription: HashedTaskDescription
   )(implicit prefix: FileServicePrefix): IO[Option[UntypedResult]] = {
@@ -101,34 +99,30 @@ private[tasks] class SharedFileCache(implicit
       untypedResult: UntypedResult
   )(implicit
       p: FileServicePrefix
-  ) = {
-    try {
-      implicit val historyContext = tasks.fileservice.NoHistory
-      val hash = hashedTaskDescription.hash
-      val value = serializeResult(untypedResult)
-      val fname = "__meta__result__" + hash
-      for {
-        _ <- SharedFileHelper
-          .createFromStream(
+  ): IO[Unit] = {
+    implicit val historyContext = tasks.fileservice.NoHistory
+    val hash = hashedTaskDescription.hash
+    val fname = "__meta__result__" + hash
+
+    IO(serializeResult(untypedResult))
+      .flatMap { value =>
+        tasks.util.retryIO(s"save cached result $fname")(
+          SharedFileHelper.createFromStream(
             fs2.Stream.chunk(Chunk.array(value)),
             name = fname
-          )
-        _ <- IO(
+          ),
+          3
+        )(scribe.Logger[SharedFileCache])
+      }
+      .flatMap { _ =>
+        IO(
           scribe.debug(
             s"Saved. ",
             scribe.data("filename", s"${p.list.mkString("/")}/$fname"),
             hashedTaskDescription
           )
         )
-
-      } yield ()
-
-    } catch {
-      case e: Throwable => {
-        shutDown()
-        throw e
       }
-    }
   }
 
 }
