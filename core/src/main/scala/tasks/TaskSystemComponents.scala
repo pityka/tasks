@@ -1069,7 +1069,7 @@ object ExtendedTaskSystemComponents {
               launcherName = launcherName,
               node = node,
               shutdown = elasticSupport.map(_.shutdownFromWorker),
-              exitCode = elasticSupport.map(_ => exitCode),
+              exitCode = Some(exitCode),
               shutdownInitiated = shutdownInitiated
             )
 

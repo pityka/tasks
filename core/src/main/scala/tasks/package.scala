@@ -432,7 +432,15 @@ package object tasks extends MacroCalls {
     resource.use { case ((tsc, hostConfig), exitCode) =>
       if (hostConfig.myRoles.contains(App)) {
 
-        f(tsc).map(Right(_))
+        IO.race(exitCode.get, f(tsc)).flatMap {
+          case Right(result) => IO.pure(Right(result))
+          case Left(ec) =>
+            IO.raiseError(
+              new RuntimeException(
+                s"Task system shut down abnormally (exit code $ec) while the application block was still running."
+              )
+            )
+        }
       } else {
         scribe.info(
           "Waiting for exit.."
