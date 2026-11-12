@@ -32,7 +32,7 @@ class CacheErrorPropagationTest extends AnyFunSuite with Matchers {
 
   val htd: HashedTaskDescription = HashedTaskDescription(TaskId("t", 1), "hash")
 
-  class StubManagedStorage(
+  private class StubManagedStorage(
       containsImpl: IO[Option[SharedFile]],
       calls: AtomicInteger
   ) extends ManagedFileStorage {
@@ -64,7 +64,7 @@ class CacheErrorPropagationTest extends AnyFunSuite with Matchers {
     ): IO[Boolean] = IO.pure(false)
   }
 
-  def makeCache(storage: ManagedFileStorage): SharedFileCache = {
+  private def makeCache(storage: ManagedFileStorage): SharedFileCache = {
     implicit val fsc: FileServiceComponent =
       FileServiceComponent(storage, new RemoteFileStorage)
     new SharedFileCache
