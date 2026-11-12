@@ -98,23 +98,9 @@ trait ConfigValuesForHostConfiguration {
 
 class TasksConfig(load: () => Config) extends ConfigValuesForHostConfiguration {
 
-  private val lastLoadedAt =
-    new java.util.concurrent.atomic.AtomicLong(System.nanoTime)
-  private var lastLoaded = load()
+  private val loadedConfig = load()
 
-  private def maxConfigLoadInterval =
-    lastLoaded.getDuration("tasks.maxConfigLoadInterval").toNanos
-
-  def raw: Config = {
-    val currentTime = System.nanoTime
-    if (false && currentTime - lastLoadedAt.get > maxConfigLoadInterval) {
-      scribe.debug("Reload config.")
-      val current = load()
-      lastLoaded = current
-      lastLoadedAt.set(currentTime)
-      current
-    } else lastLoaded
-  }
+  def raw: Config = loadedConfig
 
   private[tasks] val asString = raw.root.render
 

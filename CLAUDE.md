@@ -17,7 +17,7 @@ sbt scalafmtAll              # Format all source files
 sbt +testables/test versionPolicyCheck  # Full CI check
 ```
 
-- SBT 1.12.0, Java 17, Scala 2.13.18 / 3.6.4
+- SBT 1.12.15, Java 17, Scala 2.13.18 / 3.9.0
 - Formatting: scalafmt 3.8.3 (dialect: scala213, with scala3 override for `scala-3/` directories)
 
 ## Architecture

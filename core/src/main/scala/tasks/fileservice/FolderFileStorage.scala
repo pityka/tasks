@@ -179,20 +179,6 @@ private[tasks] class FolderFileStorage(val basePath: File)(implicit
         }
       }
 
-      pass.flatMap { pass =>
-        if (!pass) {
-          for {
-            canRead <- canRead
-            sizeMatch <- sizeMatch
-            contentMatch <- contentMatch
-          } yield {
-            scribe.debug(
-              s"$this does not contain $path due to: canRead:$canRead, sizeMatch:${sizeMatch._2}   (sizeOnDisk:${sizeMatch._1} vs expected:$size), contentMatch:$contentMatch. FileOnDisk: $f "
-            )
-            pass
-          }
-        } else IO.pure(pass)
-      }
       pass
     }
   }
