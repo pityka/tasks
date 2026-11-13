@@ -52,7 +52,10 @@ class CheckContentEqualityTestSuite
       // so no backup is created. With the bug, .old.0 would exist because
       // checkContentEquality wrongly returned false for non-empty identical files.
       val backup =
-        new java.io.File(folder, "test" + java.io.File.separator + "file.txt.old.0")
+        new java.io.File(
+          folder,
+          "test" + java.io.File.separator + "file.txt.old.0"
+        )
       backup.exists shouldBe false
     }).unsafeRunSync()
   }
@@ -83,7 +86,10 @@ class CheckContentEqualityTestSuite
     } yield {
       // Different content — old file should be renamed to .old.0
       val backup =
-        new java.io.File(folder, "test" + java.io.File.separator + "file.txt.old.0")
+        new java.io.File(
+          folder,
+          "test" + java.io.File.separator + "file.txt.old.0"
+        )
       backup.exists shouldBe true
     }).unsafeRunSync()
   }

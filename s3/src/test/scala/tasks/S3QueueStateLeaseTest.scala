@@ -42,12 +42,17 @@ class S3QueueStateLeaseTest extends FunSuite with Matchers {
       leaseConfig = lease
     )
 
-  test("a leased flatModify acquires the lease, writes state, and deletes the lease") {
+  test(
+    "a leased flatModify acquires the lease, writes state, and deletes the lease"
+  ) {
     val client = new FakeS3AsyncClient()
     val finalState = tx(client)
       .use { t =>
         t.flatModify(state =>
-          (state.update(QueueImpl.LauncherJoined(LauncherName("a"), None)), IO.unit)
+          (
+            state.update(QueueImpl.LauncherJoined(LauncherName("a"), None)),
+            IO.unit
+          )
         ) *> t.get
       }
       .unsafeRunSync()
@@ -58,9 +63,7 @@ class S3QueueStateLeaseTest extends FunSuite with Matchers {
   }
 
   private def pair(client: FakeS3AsyncClient, cfg: S3QueueState.LeaseConfig) =
-    tx(client, Some(cfg)).flatMap(a =>
-      tx(client, Some(cfg)).map(b => (a, b))
-    )
+    tx(client, Some(cfg)).flatMap(a => tx(client, Some(cfg)).map(b => (a, b)))
 
   test(
     "two transactions sharing a bucket both commit under a lease without any 412 on the state key"
@@ -70,10 +73,16 @@ class S3QueueStateLeaseTest extends FunSuite with Matchers {
     val stored = pair(client, cfg)
       .use { case (a, b) =>
         val joinA = a.flatModify(state =>
-          (state.update(QueueImpl.LauncherJoined(LauncherName("A"), None)), IO.unit)
+          (
+            state.update(QueueImpl.LauncherJoined(LauncherName("A"), None)),
+            IO.unit
+          )
         )
         val joinB = b.flatModify(state =>
-          (state.update(QueueImpl.LauncherJoined(LauncherName("B"), None)), IO.unit)
+          (
+            state.update(QueueImpl.LauncherJoined(LauncherName("B"), None)),
+            IO.unit
+          )
         )
         joinA.both(joinB)
       }
@@ -83,18 +92,27 @@ class S3QueueStateLeaseTest extends FunSuite with Matchers {
     val decoded = tasks.queue.SerializableQueueState.decode(
       S3QueueState.decompress(persisted._2)
     )
-    decoded.knownLaunchers.keySet shouldBe Set(LauncherName("A"), LauncherName("B"))
+    decoded.knownLaunchers.keySet shouldBe Set(
+      LauncherName("A"),
+      LauncherName("B")
+    )
   }
 
   test("an expired lease is stolen by a later acquirer") {
     val client = new FakeS3AsyncClient()
-    val cfg = leaseConfigWith(ttl = 50.milliseconds, acquireDelay = 20.milliseconds)
+    val cfg =
+      leaseConfigWith(ttl = 50.milliseconds, acquireDelay = 20.milliseconds)
 
     val finalState = pair(client, cfg)
       .use { case (a, b) =>
         for {
           _ <- a.flatModify(state =>
-            (state.update(QueueImpl.LauncherJoined(LauncherName("first"), None)), IO.unit)
+            (
+              state.update(
+                QueueImpl.LauncherJoined(LauncherName("first"), None)
+              ),
+              IO.unit
+            )
           )
           _ <- IO {
             val payload = com.github.plokhotnyuk.jsoniter_scala.core
@@ -103,7 +121,12 @@ class S3QueueStateLeaseTest extends FunSuite with Matchers {
           }
           _ <- IO.sleep(100.milliseconds)
           _ <- b.flatModify(state =>
-            (state.update(QueueImpl.LauncherJoined(LauncherName("second"), None)), IO.unit)
+            (
+              state.update(
+                QueueImpl.LauncherJoined(LauncherName("second"), None)
+              ),
+              IO.unit
+            )
           )
           state <- b.get
         } yield state
@@ -128,7 +151,10 @@ class S3QueueStateLeaseTest extends FunSuite with Matchers {
     val finalState = pair(client, cfg)
       .use { case (a, b) =>
         a.flatModify(state =>
-          (state.update(QueueImpl.LauncherJoined(LauncherName("one"), None)), IO.unit)
+          (
+            state.update(QueueImpl.LauncherJoined(LauncherName("one"), None)),
+            IO.unit
+          )
         ) *> IO {
           client.beforePut.set { () =>
             if (!raceOnce.getAndSet(true)) {
@@ -142,17 +168,20 @@ class S3QueueStateLeaseTest extends FunSuite with Matchers {
               client.setStored(leaseKey, ("\"stranger-etag\"", stolenPayload))
             }
           }
-        } *> b.flatModify(state => {
-          attemptsInBackground.incrementAndGet()
-          (
-            state.update(QueueImpl.LauncherJoined(LauncherName("two"), None)),
-            IO.unit
-          )
-        }).start.flatMap { fiber =>
-          IO.sleep(100.milliseconds) *> IO {
-            client.removeStored(leaseKey)
-          } *> fiber.joinWithNever
-        } *> b.get
+        } *> b
+          .flatModify(state => {
+            attemptsInBackground.incrementAndGet()
+            (
+              state.update(QueueImpl.LauncherJoined(LauncherName("two"), None)),
+              IO.unit
+            )
+          })
+          .start
+          .flatMap { fiber =>
+            IO.sleep(100.milliseconds) *> IO {
+              client.removeStored(leaseKey)
+            } *> fiber.joinWithNever
+          } *> b.get
       }
       .unsafeRunSync()
     finalState.knownLaunchers.keySet shouldBe Set(
@@ -167,7 +196,12 @@ class S3QueueStateLeaseTest extends FunSuite with Matchers {
     val finalState = tx(client, lease = None)
       .use { t =>
         t.flatModify(state =>
-          (state.update(QueueImpl.LauncherJoined(LauncherName("casonly"), None)), IO.unit)
+          (
+            state.update(
+              QueueImpl.LauncherJoined(LauncherName("casonly"), None)
+            ),
+            IO.unit
+          )
         ) *> t.get
       }
       .unsafeRunSync()

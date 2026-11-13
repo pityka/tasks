@@ -50,7 +50,8 @@ private[tasks] case class UntypedResult(
     mutableFiles: Option[Set[SharedFile]],
     spilled: Option[SharedFile]
 ) {
-  override def toString = s"UntypedResult($files,$mutableFiles, [b64 data omitted])"
+  override def toString =
+    s"UntypedResult($files,$mutableFiles, [b64 data omitted])"
 }
 
 private[tasks] case class DependenciesAndRuntimeMetadata(
@@ -451,9 +452,8 @@ private[tasks] class Task(
           tasks.queue
             .extractDataDependencies(deserializedInputData)(ce)
             .flatMap { meta =>
-              maybeSpillResult(UntypedResult.make(result)(w)).map(ur =>
-                (ur, meta)
-              )
+              maybeSpillResult(UntypedResult.make(result)(w))
+                .map(ur => (ur, meta))
             }
         }
       }

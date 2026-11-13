@@ -41,7 +41,10 @@ object ReloadConfigTest extends TestHelpers with Matchers {
       if (input.i > 1) {
         computationEnvironment.components.tasksConfig.workerMainClass shouldBe "Input(1)"
       }
-      System.getProperties.setProperty("tasks.worker-main-class", input.toString)
+      System.getProperties.setProperty(
+        "tasks.worker-main-class",
+        input.toString
+      )
       Thread.sleep(2100)
       IO(1)
   }

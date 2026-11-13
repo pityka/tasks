@@ -41,10 +41,16 @@ class DynamoMultiMasterTest extends FunSuite with Matchers {
     val finalCombined = pair(client)
       .use { case (txA, txB) =>
         txA.flatModify(state =>
-          (state.update(QueueImpl.LauncherJoined(LauncherName("a"), None)), IO.unit)
+          (
+            state.update(QueueImpl.LauncherJoined(LauncherName("a"), None)),
+            IO.unit
+          )
         ) *>
           txB.flatModify(state =>
-            (state.update(QueueImpl.LauncherJoined(LauncherName("b"), None)), IO.unit)
+            (
+              state.update(QueueImpl.LauncherJoined(LauncherName("b"), None)),
+              IO.unit
+            )
           ) *> txA.get
       }
       .unsafeRunSync()
@@ -61,10 +67,16 @@ class DynamoMultiMasterTest extends FunSuite with Matchers {
     val finalState = pair(client)
       .use { case (txA, txB) =>
         val joinA = txA.flatModify(state =>
-          (state.update(QueueImpl.LauncherJoined(LauncherName("ca"), None)), IO.unit)
+          (
+            state.update(QueueImpl.LauncherJoined(LauncherName("ca"), None)),
+            IO.unit
+          )
         )
         val joinB = txB.flatModify(state =>
-          (state.update(QueueImpl.LauncherJoined(LauncherName("cb"), None)), IO.unit)
+          (
+            state.update(QueueImpl.LauncherJoined(LauncherName("cb"), None)),
+            IO.unit
+          )
         )
         joinA.both(joinB) *> txA.get
       }
@@ -122,7 +134,9 @@ class DynamoMultiMasterTest extends FunSuite with Matchers {
     Set(launcherA, launcherB) should contain(scheduled.dispatches.head.launcher)
   }
 
-  test("resources ConditionCheck forces a retry when a competitor commits first") {
+  test(
+    "resources ConditionCheck forces a retry when a competitor commits first"
+  ) {
     val client = new FakeDynamoDbAsyncClient(tableName)
     val sch = SchedulerFixtures.scheduleTask("bar", "bar-hash")
     val proxy = Proxy(Address("p-bar"))
@@ -134,7 +148,12 @@ class DynamoMultiMasterTest extends FunSuite with Matchers {
         txA.get *> txB.get *>
           // Competitor commits resources change first.
           txB.flatModify(state =>
-            (state.update(QueueImpl.LauncherJoined(LauncherName("rival"), None)), IO.unit)
+            (
+              state.update(
+                QueueImpl.LauncherJoined(LauncherName("rival"), None)
+              ),
+              IO.unit
+            )
           ) *>
           // Now our task-only commit will see stale resources ver, retry, succeed.
           txA.flatModify { state =>

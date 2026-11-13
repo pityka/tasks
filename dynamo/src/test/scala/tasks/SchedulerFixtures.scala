@@ -54,7 +54,13 @@ private[tasks] object SchedulerFixtures {
   def allocated(cpu: Int = 1, memory: Int = 100): VersionedResourceAllocated =
     VersionedResourceAllocated(
       CodeVersion("v1"),
-      ResourceAllocated(cpu = cpu, memory = memory, scratch = 0, gpu = Nil, image = None)
+      ResourceAllocated(
+        cpu = cpu,
+        memory = memory,
+        scratch = 0,
+        gpu = Nil,
+        image = None
+      )
     )
 
   def untypedResult(): UntypedResult =

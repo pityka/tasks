@@ -107,9 +107,11 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
       SchedulerFixtures.scheduleTask(s"bulk-$i", s"bulk-h-$i")
     )
     val proxy = Proxy(Address("p-bulk"))
-    val newState = bulk.foldLeft(State.empty) { (acc, sch) =>
-      acc.update(QueueImpl.Enqueued(sch, List(proxy), 0L))
-    }.update(QueueImpl.MainProcessJoined("s"))
+    val newState = bulk
+      .foldLeft(State.empty) { (acc, sch) =>
+        acc.update(QueueImpl.Enqueued(sch, List(proxy), 0L))
+      }
+      .update(QueueImpl.MainProcessJoined("s"))
     val plan = DynamoDiff.plan(
       table = table,
       oldState = State.empty,
@@ -122,14 +124,17 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
     val resourcesPutInLast =
       plan.chunks.last.exists { op =>
         op.put() != null &&
-          op.put().item().get("pk").s() == DynamoQueueState.ResourcesPartitionKey
+        op.put().item().get("pk").s() == DynamoQueueState.ResourcesPartitionKey
       }
     resourcesPutInLast shouldBe true
     val resourcesPutInEarlier =
       plan.chunks.init.exists { chunk =>
         chunk.exists { op =>
           op.put() != null &&
-            op.put().item().get("pk").s() == DynamoQueueState.ResourcesPartitionKey
+          op.put()
+            .item()
+            .get("pk")
+            .s() == DynamoQueueState.ResourcesPartitionKey
         }
       }
     resourcesPutInEarlier shouldBe false
@@ -156,7 +161,10 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
     plan.chunks.size shouldBe 1
     val deleteOp = plan.chunks.head.find(_.delete() != null).get.delete()
     deleteOp.key().get("sk").s() shouldBe sch.description.hash
-    deleteOp.expressionAttributeValues().get(":ver").n() shouldBe baseVer.toString
+    deleteOp
+      .expressionAttributeValues()
+      .get(":ver")
+      .n() shouldBe baseVer.toString
   }
 
   test(
@@ -166,7 +174,8 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
     val proxyA = Proxy(Address("p-upd-a"))
     val proxyB = Proxy(Address("p-upd-b"))
     val oldState = State.empty.update(QueueImpl.Enqueued(sch, List(proxyA), 0L))
-    val newState = State.empty.update(QueueImpl.Enqueued(sch, List(proxyA), 0L))
+    val newState = State.empty
+      .update(QueueImpl.Enqueued(sch, List(proxyA), 0L))
       .update(QueueImpl.Enqueued(sch, List(proxyB), 0L))
     val baseVer = 3L
     val plan = DynamoDiff.plan(
@@ -177,10 +186,13 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
       baseResultChunkVersions = Map.empty,
       baseResourcesVersion = 0L
     )
-    val putOp = plan.chunks.head.find(op =>
-      op.put() != null &&
-        op.put().item().get("pk").s() == DynamoQueueState.TasksPartitionKey
-    ).get.put()
+    val putOp = plan.chunks.head
+      .find(op =>
+        op.put() != null &&
+          op.put().item().get("pk").s() == DynamoQueueState.TasksPartitionKey
+      )
+      .get
+      .put()
     putOp.conditionExpression() shouldBe "#ver = :ver"
     putOp.expressionAttributeValues().get(":ver").n() shouldBe baseVer.toString
     putOp.item().get("ver").n() shouldBe (baseVer + 1).toString
@@ -199,10 +211,13 @@ class DynamoDiffPlanTest extends FunSuite with Matchers {
       baseResultChunkVersions = Map.empty,
       baseResourcesVersion = 0L
     )
-    val putOp = plan.chunks.head.find(op =>
-      op.put() != null &&
-        op.put().item().get("pk").s() == DynamoQueueState.TasksPartitionKey
-    ).get.put()
+    val putOp = plan.chunks.head
+      .find(op =>
+        op.put() != null &&
+          op.put().item().get("pk").s() == DynamoQueueState.TasksPartitionKey
+      )
+      .get
+      .put()
     putOp.conditionExpression() shouldBe "attribute_not_exists(#pk)"
     putOp.item().get("ver").n() shouldBe "1"
   }
