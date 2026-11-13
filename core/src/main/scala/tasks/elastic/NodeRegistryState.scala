@@ -123,7 +123,9 @@ private[tasks] object NodeRegistryState {
             inFlightRequests = resource :: inFlightRequests
           )
         case NodeRequestFailed(committedResource) =>
-          copy(inFlightRequests = removeFirst(inFlightRequests, committedResource))
+          copy(inFlightRequests =
+            removeFirst(inFlightRequests, committedResource)
+          )
         case NodeIsUp(node, pendingJobId) =>
           copy(
             pending = pending - pendingJobId,

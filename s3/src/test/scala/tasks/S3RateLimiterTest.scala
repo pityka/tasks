@@ -18,8 +18,9 @@ class S3RateLimiterTest extends FunSuite with Matchers {
 
   test("the token bucket admits a burst then throttles to the refill rate") {
     val program =
-      S3QueueState.rateLimiter("read", maxRequestsPerSecond =10, maxBurst = 3).use {
-        limiter =>
+      S3QueueState
+        .rateLimiter("read", maxRequestsPerSecond = 10, maxBurst = 3)
+        .use { limiter =>
           for {
             start <- IO.monotonic
             _ <- limiter(IO.unit)
@@ -29,7 +30,7 @@ class S3RateLimiterTest extends FunSuite with Matchers {
             _ <- limiter(IO.unit)
             afterFourth <- IO.monotonic
           } yield (afterBurst - start, afterFourth - afterBurst)
-      }
+        }
 
     val (burstElapsed, fourthWait) =
       TestControl.executeEmbed(program).unsafeRunSync()
@@ -40,8 +41,9 @@ class S3RateLimiterTest extends FunSuite with Matchers {
 
   test("the bucket does not accumulate tokens beyond the burst while idle") {
     val program =
-      S3QueueState.rateLimiter("read", maxRequestsPerSecond =10, maxBurst = 2).use {
-        limiter =>
+      S3QueueState
+        .rateLimiter("read", maxRequestsPerSecond = 10, maxBurst = 2)
+        .use { limiter =>
           for {
             _ <- IO.sleep(950.milliseconds)
             _ <- limiter(IO.unit)
@@ -50,7 +52,7 @@ class S3RateLimiterTest extends FunSuite with Matchers {
             _ <- limiter(IO.unit)
             end <- IO.monotonic
           } yield end - start
-      }
+        }
 
     TestControl.executeEmbed(program).unsafeRunSync() shouldBe 100.milliseconds
   }
@@ -58,16 +60,19 @@ class S3RateLimiterTest extends FunSuite with Matchers {
   test("warns once (throttled) when backpressure kicks in") {
     val captured = scala.collection.mutable.ListBuffer.empty[scribe.LogRecord]
     val handler =
-      LogHandler(Level.Warn)(record => captured.synchronized(captured += record))
+      LogHandler(Level.Warn)(record =>
+        captured.synchronized(captured += record)
+      )
     val previousRoot = scribe.Logger.root
     scribe.Logger.root.withHandler(handler).replace()
 
     try {
       val program =
-        S3QueueState.rateLimiter("read", maxRequestsPerSecond =10, maxBurst = 1).use {
-          limiter =>
+        S3QueueState
+          .rateLimiter("read", maxRequestsPerSecond = 10, maxBurst = 1)
+          .use { limiter =>
             limiter(IO.unit) *> limiter(IO.unit) *> limiter(IO.unit)
-        }
+          }
       TestControl.executeEmbed(program).unsafeRunSync()
     } finally previousRoot.replace()
 
@@ -81,7 +86,9 @@ class S3RateLimiterTest extends FunSuite with Matchers {
     intercept[IllegalArgumentException] {
       TestControl
         .executeEmbed(
-          S3QueueState.rateLimiter("read", maxRequestsPerSecond =0, maxBurst = 1).use_
+          S3QueueState
+            .rateLimiter("read", maxRequestsPerSecond = 0, maxBurst = 1)
+            .use_
         )
         .unsafeRunSync()
     }

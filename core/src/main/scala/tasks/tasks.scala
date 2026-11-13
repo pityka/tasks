@@ -40,7 +40,8 @@ trait HasSharedFiles extends Product {
 }
 
 object HasSharedFiles {
-  private[tasks] def allFiles(r: Any): Set[SharedFile] = recurse(r)(_.allFiles).toSet
+  private[tasks] def allFiles(r: Any): Set[SharedFile] =
+    recurse(r)(_.allFiles).toSet
 
   private[tasks] def recurse(
       a: Any

@@ -26,8 +26,7 @@ import software.amazon.awssdk.services.s3.model.S3Exception
 final class FakeS3AsyncClient(
     initial: Map[String, (String, Array[Byte])] =
       Map.empty[String, (String, Array[Byte])],
-    val beforePut: AtomicReference[() => Unit] =
-      new AtomicReference(() => ())
+    val beforePut: AtomicReference[() => Unit] = new AtomicReference(() => ())
 ) extends S3AsyncClient {
 
   private val keyStore: AtomicReference[Map[String, (String, Array[Byte])]] =

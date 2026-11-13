@@ -40,8 +40,9 @@ object CacheErrorHandlingRegressionTest {
     }
 
   val cacheErrorTestTask: TaskDefinition[SimpleInput, SimpleOutput] =
-    Task[SimpleInput, SimpleOutput]("cache-compute-error-test", 1) { input => _ =>
-      IO(SimpleOutput(input.value * 2))
+    Task[SimpleInput, SimpleOutput]("cache-compute-error-test", 1) {
+      input => _ =>
+        IO(SimpleOutput(input.value * 2))
     }
 
   val resourceCacheTestTask: TaskDefinition[SimpleInput, SimpleOutput] =
@@ -98,8 +99,10 @@ tasks.fileservice.storageURI=${tmp.getAbsolutePath}
     "cache hit: repeated task executions use cache and skip computation"
   ) {
     val input = SimpleInput(5)
-    val result1 = cacheHitTestTask(input)(ResourceRequest(1, 500)).unsafeRunSync()
-    val result2 = cacheHitTestTask(input)(ResourceRequest(1, 500)).unsafeRunSync()
+    val result1 =
+      cacheHitTestTask(input)(ResourceRequest(1, 500)).unsafeRunSync()
+    val result2 =
+      cacheHitTestTask(input)(ResourceRequest(1, 500)).unsafeRunSync()
 
     result1 shouldBe SimpleOutput(10)
     result2 shouldBe SimpleOutput(10)
@@ -108,8 +111,10 @@ tasks.fileservice.storageURI=${tmp.getAbsolutePath}
   test(
     "cache miss: different inputs bypass cache and execute separately"
   ) {
-    val result1 = cacheMissTestTask(SimpleInput(5))(ResourceRequest(1, 500)).unsafeRunSync()
-    val result2 = cacheMissTestTask(SimpleInput(6))(ResourceRequest(1, 500)).unsafeRunSync()
+    val result1 =
+      cacheMissTestTask(SimpleInput(5))(ResourceRequest(1, 500)).unsafeRunSync()
+    val result2 =
+      cacheMissTestTask(SimpleInput(6))(ResourceRequest(1, 500)).unsafeRunSync()
 
     result1 shouldBe SimpleOutput(15)
     result2 shouldBe SimpleOutput(18)
@@ -142,11 +147,12 @@ tasks.fileservice.storageURI=${tmp.getAbsolutePath}
   ) {
     val input = SimpleInput(2)
 
-    val results = IO.parSequenceN(4)(
-      (1 to 4).toList.map(_ =>
-        concurrentCacheTestTask(input)(ResourceRequest(1, 500))
+    val results = IO
+      .parSequenceN(4)(
+        (1 to 4).toList
+          .map(_ => concurrentCacheTestTask(input)(ResourceRequest(1, 500)))
       )
-    ).unsafeRunSync()
+      .unsafeRunSync()
 
     results.foreach { r =>
       r shouldBe SimpleOutput(10)

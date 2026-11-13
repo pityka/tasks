@@ -96,7 +96,9 @@ class S3QueueStateFairnessTest extends FunSuite with Matchers {
         } *>
           IO.sleep(1500.milliseconds) *>
           IO.monotonic.flatMap { t0 =>
-            tx.flatModify(state => (state.update(join("after-read")), IO.unit)) *>
+            tx.flatModify(state =>
+              (state.update(join("after-read")), IO.unit)
+            ) *>
               IO.monotonic.map(t1 => (t1 - t0).toMillis)
           }
       }

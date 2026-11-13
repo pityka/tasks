@@ -90,7 +90,9 @@ class S3QueueStateTest extends FunSuite with Matchers {
     stateKeyPresentAtSideEffect.get shouldBe 1
   }
 
-  test("an update that leaves the state unchanged does not write the state object") {
+  test(
+    "an update that leaves the state unchanged does not write the state object"
+  ) {
     val client = new FakeS3AsyncClient()
     val sideEffectRan = new AtomicInteger(0)
 

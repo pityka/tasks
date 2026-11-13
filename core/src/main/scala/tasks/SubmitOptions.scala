@@ -22,5 +22,6 @@ object SubmitOptions {
     def withNoCache(n: Boolean): SubmitOptions = copy(noCache = n)
   }
 
-  val default: SubmitOptions = SubmitOptionsImpl(Priority(0), Labels.empty, false)
+  val default: SubmitOptions =
+    SubmitOptionsImpl(Priority(0), Labels.empty, false)
 }

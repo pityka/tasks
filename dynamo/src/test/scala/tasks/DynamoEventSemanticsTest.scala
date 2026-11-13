@@ -75,7 +75,10 @@ class DynamoEventSemanticsTest extends FunSuite with Matchers {
       )
     )
     val scheduled = state.scheduledTasks.values.head
-    scheduled.dispatches.map(_.launcher).toSet shouldBe Set(launcherA, launcherB)
+    scheduled.dispatches.map(_.launcher).toSet shouldBe Set(
+      launcherA,
+      launcherB
+    )
   }
 
   test("TaskDone on one of two dispatches leaves the task scheduled") {
