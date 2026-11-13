@@ -27,9 +27,6 @@ object History {
   def apply(self: SharedFile, context: Option[HistoryContext]): History =
     HistoryImpl(self, context)
 
-  def unapply(h: History): Some[(SharedFile, Option[HistoryContext])] =
-    Some((h.self, h.context))
-
   implicit val ordering: Ordering[History] = Ordering.by(_.self.toString)
 
   private[tasks] case class TaskVersion(taskID: String, taskVersion: Int)

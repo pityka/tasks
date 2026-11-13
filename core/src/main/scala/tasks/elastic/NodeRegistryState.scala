@@ -124,13 +124,13 @@ private[tasks] object NodeRegistryState {
           )
         case NodeRequestFailed(committedResource) =>
           copy(inFlightRequests = removeFirst(inFlightRequests, committedResource))
-        case NodeIsUp(Node(runningJobId, resource, _), pendingJobId) =>
+        case NodeIsUp(node, pendingJobId) =>
           copy(
             pending = pending - pendingJobId,
-            running = running + ((runningJobId, resource))
+            running = running + ((node.name, node.size))
           )
-        case NodeIsDown(Node(runningJobId, _, _)) =>
-          copy(running = running - runningJobId)
+        case NodeIsDown(node) =>
+          copy(running = running - node.name)
         case InitFailed(pendingJobId) => copy(pending = pending - pendingJobId)
         case NodeIsPending(pendingJobId, resource, committedResource) =>
           copy(

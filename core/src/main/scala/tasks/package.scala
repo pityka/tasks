@@ -388,13 +388,29 @@ package object tasks extends MacroCalls {
       config: Option[Config],
       s3Client: Resource[IO, Option[S3Client]],
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]],
+      externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]]
+  )(f: ExtendedTaskSystemComponents => IO[T]): IO[Either[ExitCode, T]] =
+    withTaskSystem(
+      config = config,
+      s3Client = s3Client,
+      elasticSupport = elasticSupport,
+      externalQueueState = externalQueueState,
+      meterProvider =
+        Resource.pure[IO, org.typelevel.otel4s.metrics.MeterProvider[IO]](
+          org.typelevel.otel4s.metrics.MeterProvider.noop[IO]
+        ),
+      mainProcessResource = Resource.unit[IO]
+    )(f)
+
+  def withTaskSystem[T](
+      config: Option[Config],
+      s3Client: Resource[IO, Option[S3Client]],
+      elasticSupport: Resource[IO, Option[elastic.ElasticSupport]],
       externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]],
       meterProvider: Resource[
         IO,
         org.typelevel.otel4s.metrics.MeterProvider[IO]
-      ] = Resource.pure[IO, org.typelevel.otel4s.metrics.MeterProvider[IO]](
-        org.typelevel.otel4s.metrics.MeterProvider.noop[IO]
-      )
+      ]
   )(f: ExtendedTaskSystemComponents => IO[T]): IO[Either[ExitCode, T]] =
     withTaskSystem(
       config = config,
@@ -532,13 +548,31 @@ package object tasks extends MacroCalls {
       s3Client: Resource[IO, Option[S3Client]],
       elasticSupport: Resource[IO, Option[elastic.ElasticSupport]],
       externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]],
+      exitCode: Deferred[IO, ExitCode]
+  ): Resource[IO, (ExtendedTaskSystemComponents, HostConfiguration)] =
+    defaultTaskSystem(
+      config = config,
+      s3Client = s3Client,
+      elasticSupport = elasticSupport,
+      externalQueueState = externalQueueState,
+      exitCode = exitCode,
+      meterProvider =
+        Resource.pure[IO, org.typelevel.otel4s.metrics.MeterProvider[IO]](
+          org.typelevel.otel4s.metrics.MeterProvider.noop[IO]
+        ),
+      mainProcessResource = Resource.unit[IO]
+    )
+
+  def defaultTaskSystem(
+      config: Option[Config],
+      s3Client: Resource[IO, Option[S3Client]],
+      elasticSupport: Resource[IO, Option[elastic.ElasticSupport]],
+      externalQueueState: Resource[IO, Option[Transaction[QueueImpl.State]]],
       exitCode: Deferred[IO, ExitCode],
       meterProvider: Resource[
         IO,
         org.typelevel.otel4s.metrics.MeterProvider[IO]
-      ] = Resource.pure[IO, org.typelevel.otel4s.metrics.MeterProvider[IO]](
-        org.typelevel.otel4s.metrics.MeterProvider.noop[IO]
-      )
+      ]
   ): Resource[IO, (ExtendedTaskSystemComponents, HostConfiguration)] =
     defaultTaskSystem(
       config = config,

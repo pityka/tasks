@@ -313,9 +313,6 @@ object ResourceAllocated {
   ): ResourceAllocated =
     ResourceAllocatedImpl(cpu, memory, scratch, gpu, image)
 
-  def unapply(r: ResourceAllocated): Some[(Int, Int, Int, List[Int], Option[String])] =
-    Some((r.cpu, r.memory, r.scratch, r.gpu, r.image))
-
   implicit val codec: JsonValueCodec[ResourceAllocated] = {
     val innerCodec: JsonValueCodec[ResourceAllocatedImpl] = JsonCodecMaker.make
     new JsonValueCodec[ResourceAllocated] {
@@ -522,9 +519,6 @@ object VersionedResourceRequest {
       ResourceRequest((cpu, cpu), memory, scratch, gpu, image)
     )
 
-  def unapply(v: VersionedResourceRequest): Some[(CodeVersion, ResourceRequest)] =
-    Some((v.codeVersion, v.cpuMemoryRequest))
-
   implicit val codec: JsonValueCodec[VersionedResourceRequest] = {
     val innerCodec: JsonValueCodec[VersionedResourceRequestImpl] =
       JsonCodecMaker.make
@@ -558,9 +552,6 @@ object VersionedResourceAllocated {
       cpuMemoryAllocated: ResourceAllocated
   ): VersionedResourceAllocated =
     VersionedResourceAllocatedImpl(codeVersion, cpuMemoryAllocated)
-
-  def unapply(v: VersionedResourceAllocated): Some[(CodeVersion, ResourceAllocated)] =
-    Some((v.codeVersion, v.cpuMemoryAllocated))
 
   implicit def toLogFeature(rm: VersionedResourceAllocated): scribe.LogFeature =
     scribe.data(
@@ -736,8 +727,6 @@ object LogRecord {
   ) extends LogRecord
   def apply(data: String, timestamp: Instant): LogRecord =
     LogRecordImpl(data, timestamp)
-  def unapply(l: LogRecord): Some[(String, Instant)] =
-    Some((l.data, l.timestamp))
   implicit val codec: JsonValueCodec[LogRecord] = {
     val innerCodec: JsonValueCodec[LogRecordImpl] = JsonCodecMaker.make
     new JsonValueCodec[LogRecord] {

@@ -171,9 +171,6 @@ object SharedFile {
   def apply(path: FilePath, byteSize: Long, hash: Int): SharedFile =
     SharedFileImpl(path, byteSize, hash)
 
-  def unapply(s: SharedFile): Some[(FilePath, Long, Int)] =
-    Some((s.path, s.byteSize, s.hash))
-
   implicit val codec: JsonValueCodec[SharedFile] = {
     val innerCodec: JsonValueCodec[SharedFileImpl] = JsonCodecMaker.make
     new JsonValueCodec[SharedFile] {

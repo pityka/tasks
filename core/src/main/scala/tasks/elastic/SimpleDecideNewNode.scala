@@ -43,8 +43,8 @@ private[tasks] class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
     val resourceRequests: List[ResourceRequest] = q.queued
       .map(_._2)
       .collect {
-        case VersionedResourceRequest(v, request) if v === codeVersion =>
-          request
+        case vrr if vrr.codeVersion === codeVersion =>
+          vrr.cpuMemoryRequest
       }
       .sortBy(r => (-r.gpu, -r.cpu._1, -r.memory, -r.scratch))
     val availableResources: List[ResourceAvailable] =

@@ -23,11 +23,6 @@ object Node {
       launcherActor: LauncherName
   ): Node = NodeImpl(name, size, launcherActor)
 
-  def unapply(n: Node): Some[
-    (tasks.shared.RunningJobId, tasks.shared.ResourceAvailable, LauncherName)
-  ] =
-    Some((n.name, n.size, n.launcherActor))
-
   implicit def toLogFeature(rm: Node): scribe.LogFeature = scribe.data(
     Map(
       "node-name" -> rm.name.value,

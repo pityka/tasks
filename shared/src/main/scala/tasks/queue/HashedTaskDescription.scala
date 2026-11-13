@@ -13,8 +13,6 @@ object TaskId {
 
   def apply(id: String, version: Int): TaskId = TaskIdImpl(id, version)
 
-  def unapply(t: TaskId): Some[(String, Int)] = Some((t.id, t.version))
-
   implicit val codec: JsonValueCodec[TaskId] = {
     val innerCodec: JsonValueCodec[TaskIdImpl] = JsonCodecMaker.make
     new JsonValueCodec[TaskId] {
@@ -46,9 +44,6 @@ object HashedTaskDescription {
 
   def apply(taskId: TaskId, dataHash: String): HashedTaskDescription =
     HashedTaskDescriptionImpl(taskId, dataHash)
-
-  def unapply(h: HashedTaskDescription): Some[(TaskId, String)] =
-    Some((h.taskId, h.dataHash))
 
   implicit def toLogFeature(rm: HashedTaskDescription): scribe.LogFeature =
     scribe.data(
