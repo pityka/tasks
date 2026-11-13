@@ -5,12 +5,29 @@ import com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonReader
 
-case class Node(
-    name: tasks.shared.RunningJobId,
-    size: tasks.shared.ResourceAvailable,
-    launcherActor: LauncherName
-)
+sealed trait Node {
+  def name: tasks.shared.RunningJobId
+  def size: tasks.shared.ResourceAvailable
+  def launcherActor: LauncherName
+}
 object Node {
+  private[tasks] final case class NodeImpl(
+      name: tasks.shared.RunningJobId,
+      size: tasks.shared.ResourceAvailable,
+      launcherActor: LauncherName
+  ) extends Node
+
+  def apply(
+      name: tasks.shared.RunningJobId,
+      size: tasks.shared.ResourceAvailable,
+      launcherActor: LauncherName
+  ): Node = NodeImpl(name, size, launcherActor)
+
+  def unapply(n: Node): Some[
+    (tasks.shared.RunningJobId, tasks.shared.ResourceAvailable, LauncherName)
+  ] =
+    Some((n.name, n.size, n.launcherActor))
+
   implicit def toLogFeature(rm: Node): scribe.LogFeature = scribe.data(
     Map(
       "node-name" -> rm.name.value,
@@ -22,15 +39,46 @@ object Node {
       "node-available-image" -> rm.size.image.getOrElse("none")
     )
   )
+
+  implicit val codec: JsonValueCodec[Node] = {
+    val innerCodec: JsonValueCodec[NodeImpl] = JsonCodecMaker.make
+    new JsonValueCodec[Node] {
+      val nullValue: Node = null
+      def encodeValue(x: Node, out: JsonWriter): Unit =
+        innerCodec.encodeValue(x.asInstanceOf[NodeImpl], out)
+      def decodeValue(in: JsonReader, default: Node): Node =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 }
 
-case class LauncherName(name: String)
+sealed trait LauncherName {
+  def name: String
+}
 object LauncherName {
+  private[tasks] final case class LauncherNameImpl(name: String)
+      extends LauncherName
+
+  def apply(name: String): LauncherName = LauncherNameImpl(name)
+
+  def unapply(l: LauncherName): Some[String] = Some(l.name)
+
   implicit def toLogFeature(rm: LauncherName): scribe.LogFeature = scribe.data(
     Map(
       "launcher-name" -> rm.name
     )
   )
+
+  implicit val codec: JsonValueCodec[LauncherName] = {
+    val innerCodec: JsonValueCodec[LauncherNameImpl] = JsonCodecMaker.make
+    new JsonValueCodec[LauncherName] {
+      val nullValue: LauncherName = null
+      def encodeValue(x: LauncherName, out: JsonWriter): Unit =
+        innerCodec.encodeValue(x.asInstanceOf[LauncherNameImpl], out)
+      def decodeValue(in: JsonReader, default: LauncherName): LauncherName =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 }
 
 private[tasks] case class Address(value: String, listeningUri: Option[String]) {

@@ -12,9 +12,23 @@ private[tasks] case class HistoryContextImpl(
 
 case object NoHistory extends HistoryContext
 
-case class History(self: SharedFile, context: Option[HistoryContext])
+sealed trait History {
+  def self: SharedFile
+  def context: Option[HistoryContext]
+}
 
 object History {
+
+  private[tasks] final case class HistoryImpl(
+      self: SharedFile,
+      context: Option[HistoryContext]
+  ) extends History
+
+  def apply(self: SharedFile, context: Option[HistoryContext]): History =
+    HistoryImpl(self, context)
+
+  def unapply(h: History): Some[(SharedFile, Option[HistoryContext])] =
+    Some((h.self, h.context))
 
   implicit val ordering: Ordering[History] = Ordering.by(_.self.toString)
 
@@ -24,7 +38,16 @@ object History {
 
   }
 
-  implicit val codec: JsonValueCodec[History] = JsonCodecMaker.make
+  implicit val codec: JsonValueCodec[History] = {
+    val innerCodec: JsonValueCodec[HistoryImpl] = JsonCodecMaker.make
+    new JsonValueCodec[History] {
+      val nullValue: History = null
+      def encodeValue(x: History, out: JsonWriter): Unit =
+        innerCodec.encodeValue(x.asInstanceOf[HistoryImpl], out)
+      def decodeValue(in: JsonReader, default: History): History =
+        innerCodec.decodeValue(in, null)
+    }
+  }
 
 }
 
