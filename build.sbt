@@ -1,4 +1,5 @@
 import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
+import com.typesafe.tools.mima.core._
 
 // new setting for the Central Portal
 ThisBuild / publishTo := {
@@ -168,6 +169,19 @@ lazy val core = project
   .in(file("core"))
   .settings(commonSettings: _*)
   .settings(stableBinarySettings)
+  .settings(
+    mimaBinaryIssueFilters ++= Seq(
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "tasks.util.message.MessageData#AskForWork.this"
+      ),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "tasks.util.message.MessageData#AskForWork.copy"
+      ),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "tasks.util.message.MessageData#AskForWork.apply"
+      )
+    )
+  )
   .settings(
     name := "tasks-core",
     libraryDependencies ++= Seq(
