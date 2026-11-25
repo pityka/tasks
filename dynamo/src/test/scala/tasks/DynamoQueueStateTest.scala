@@ -170,7 +170,7 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
         ) *>
           tx.flatModify(state =>
             (
-              state.update(QueueImpl.TaskScheduled(sch, launcher, allocated, None)),
+              state.update(QueueImpl.TaskScheduled(sch, launcher, allocated, None, 0L)),
               IO.unit
             )
           ) *> tx.get
@@ -197,7 +197,7 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
         ) *>
           tx.flatModify(state =>
             (
-              state.update(QueueImpl.TaskScheduled(sch, launcher, allocated, None)),
+              state.update(QueueImpl.TaskScheduled(sch, launcher, allocated, None, 0L)),
               IO.unit
             )
           ) *>
@@ -224,7 +224,7 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
         ) *>
           tx.flatModify(state =>
             (
-              state.update(QueueImpl.TaskScheduled(sch, launcher, allocated, None)),
+              state.update(QueueImpl.TaskScheduled(sch, launcher, allocated, None, 0L)),
               IO.unit
             )
           ) *>
@@ -336,7 +336,7 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
       QueueImpl.Incremented(launcher),
       QueueImpl.Enqueued(schQ, List(proxy), 0L),
       QueueImpl.Enqueued(schS, List(proxy), 0L),
-      QueueImpl.TaskScheduled(schS, launcher, allocated, Some("rack-A")),
+      QueueImpl.TaskScheduled(schS, launcher, allocated, Some("rack-A"), 0L),
       QueueImpl.ResultStoredForProxy(address, result),
       QueueImpl.NodeEvent(
         NodeRegistryState.NodeRequested(SchedulerFixtures.resourceAvailable())

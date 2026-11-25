@@ -80,7 +80,7 @@ class AskForWorkSelectionTest extends FunSuite with Matchers {
       .use { q =>
         queued
           .foldLeft(IO.unit)((acc, sch) => acc *> q.scheduleTask(sch))
-          .flatMap(_ => q.askForWork(launcher, available, None))
+          .flatMap(_ => q.askForWork(launcher, available, None, Set.empty))
       }
 
     program.unsafeRunSync() match {

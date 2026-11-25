@@ -113,12 +113,12 @@ private[tasks] final class QueueActorBehavior(
       )
 
     case Message(
-          MessageData.AskForWork(availableResource, launcher, node),
+          MessageData.AskForWork(availableResource, launcher, node, running),
           from,
           _
         ) =>
       impl
-        .askForWork(launcher, availableResource, node)
+        .askForWork(launcher, availableResource, node, running)
         .flatMap {
           case Left(t) =>
             messenger.submit(

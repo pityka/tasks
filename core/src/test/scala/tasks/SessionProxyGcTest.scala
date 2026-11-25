@@ -280,7 +280,7 @@ class SessionProxyGcTestSuite extends FunSuite with Matchers {
           .use { q =>
             for {
               _ <- q.scheduleTask(sch)
-              dispatched <- q.askForWork(launcher, offered, None)
+              dispatched <- q.askForWork(launcher, offered, None, Set.empty)
               _ <- q.handleLauncherStopped(
                 launcher,
                 QueueImpl.LauncherStopReason.TimedOutByFailureDetector

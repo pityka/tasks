@@ -168,8 +168,9 @@ private[tasks] object MessageData {
   case class AskForWork(
       resources: VersionedResourceAvailable,
       launcher: LauncherName,
-      node: Option[Node]
-  ) extends MessageData
+      node: Option[Node],
+      running: Set[HashedTaskDescription]
+  ) extends MessageData  
   case class TaskDone(
       sch: ScheduleTask,
       launcher: LauncherName,

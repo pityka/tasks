@@ -97,7 +97,7 @@ class DynamoMultiMasterTest extends FunSuite with Matchers {
               if (state.scheduledTasks.contains(QueueImpl.project(sch))) state
               else
                 state.update(
-                  QueueImpl.TaskScheduled(sch, launcherA, allocated, None)
+                  QueueImpl.TaskScheduled(sch, launcherA, allocated, None, 0L)
                 )
             (next, IO.unit)
           }
@@ -107,7 +107,7 @@ class DynamoMultiMasterTest extends FunSuite with Matchers {
               if (state.scheduledTasks.contains(QueueImpl.project(sch))) state
               else
                 state.update(
-                  QueueImpl.TaskScheduled(sch, launcherB, allocated, None)
+                  QueueImpl.TaskScheduled(sch, launcherB, allocated, None, 0L)
                 )
             (next, IO.unit)
           }

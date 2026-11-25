@@ -57,7 +57,8 @@ private[tasks] trait Queue {
   def askForWork(
       launcherAsking: LauncherName,
       availableResources: VersionedResourceAvailable,
-      node: Option[Node]
+      node: Option[Node],
+      running: Set[HashedTaskDescription]
   ): IO[
     Either[Throwable, Either[NothingForSchedule.type, MessageData.Schedule]]
   ]
@@ -105,11 +106,14 @@ private[tasks] final class QueueFromQueueImpl(
   def askForWork(
       launcherAsking: LauncherName,
       availableResources: VersionedResourceAvailable,
-      node: Option[Node]
+      node: Option[Node],
+      running: Set[HashedTaskDescription]
   ): IO[
     Either[Throwable, Either[NothingForSchedule.type, MessageData.Schedule]]
   ] =
-    queueImpl.askForWork(launcherAsking, availableResources, node).attempt
+    queueImpl
+      .askForWork(launcherAsking, availableResources, node, running)
+      .attempt
 
   def pollResult(proxy: Address): IO[Option[QueueImpl.ProxyResult]] =
     queueImpl.pollResult(proxy)
@@ -186,14 +190,16 @@ private[tasks] class QueueWithActor(
   def askForWork(
       launcherAsking: LauncherName,
       availableResources: VersionedResourceAvailable,
-      node: Option[Node]
+      node: Option[Node],
+      running: Set[HashedTaskDescription]
   ): IO[
     Either[Throwable, Either[NothingForSchedule.type, MessageData.Schedule]]
   ] = {
     tasks.util.Ask
       .ask(
         target = queueActor.address0,
-        data = MessageData.AskForWork(availableResources, launcherAsking, node),
+        data = MessageData
+          .AskForWork(availableResources, launcherAsking, node, running),
         timeout = config.askForWorkTimeout,
         messenger = messenger
       )

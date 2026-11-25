@@ -57,7 +57,8 @@ object QueueImpl {
       sch: ScheduleTask,
       launcher: LauncherName,
       allocated: VersionedResourceAllocated,
-      placementValue: Option[String]
+      placementValue: Option[String],
+      scheduledAtMillis: Long
   ) extends Event
   private[tasks] case class TaskDone(
       sch: ScheduleTask,
@@ -117,8 +118,9 @@ object QueueImpl {
 
   private[tasks] case class Dispatch(
       launcher: LauncherName,
-      allocated: VersionedResourceAllocated
-  )
+      allocated: VersionedResourceAllocated,
+      dispatchedAtMillis: Option[Long]
+  )  
 
   private[tasks] case class ScheduledTask(
       sch: ScheduleTask,
@@ -159,7 +161,7 @@ object QueueImpl {
     ): ScheduledTask =
       ScheduledTask(
         sch = sch,
-        dispatches = List(Dispatch(launcher, allocated)),
+        dispatches = List(Dispatch(launcher, allocated, None)),
         proxies = proxies,
         placementValue = None,
         resultDelivered = false
@@ -268,8 +270,14 @@ object QueueImpl {
           )
         case LauncherJoined(launcher, node) =>
           copy(knownLaunchers = knownLaunchers + (launcher -> node))
-        case TaskScheduled(sch, launcher, allocated, placementValue) =>
-          val dispatch = Dispatch(launcher, allocated)
+        case TaskScheduled(
+              sch,
+              launcher,
+              allocated,
+              placementValue,
+              scheduledAtMillis
+            ) =>
+          val dispatch = Dispatch(launcher, allocated, Some(scheduledAtMillis))
           val droppedTimestamp =
             copy(enqueueTimestamps = enqueueTimestamps - project(sch))
           scheduledTasks.get(project(sch)) match {
@@ -395,6 +403,40 @@ object QueueImpl {
           scheduled.sch.resource.cpuMemoryRequest.maximumCopies - scheduled.copies
         )(scheduled.sch)
       )
+
+    def reconcileRunning(
+        launcher: LauncherName,
+        reportedRunning: Set[HashedTaskDescription],
+        graceMillis: Long,
+        nowMillis: Long
+    ): State = {
+      import tasks.util.eq._
+      val stale = scheduledTasks.toSeq.collect {
+        case (projection, scheduled)
+            if scheduled.dispatchedTo(launcher) &&
+              !reportedRunning.contains(projection.description) &&
+              scheduled.dispatches
+                .find(_.launcher === launcher)
+                .exists(
+                  _.dispatchedAtMillis
+                    .forall(ts => nowMillis - ts > graceMillis)
+                ) =>
+          projection
+      }
+      stale.foldLeft(this) { (state, projection) =>
+        val scheduled = state.scheduledTasks(projection)
+        val released =
+          state.update(TaskLauncherStoppedFor(scheduled.sch, launcher))
+        val lastCopyIsGone =
+          !released.scheduledTasks.contains(projection) &&
+            !scheduled.resultDelivered
+        if (lastCopyIsGone)
+          released.update(
+            Enqueued(scheduled.sch, scheduled.proxies, nowMillis)
+          )
+        else released
+      }
+    }
 
   }
 
@@ -1245,152 +1287,168 @@ private[tasks] class QueueImpl(
   def askForWork(
       launcher: LauncherName,
       availableResource: VersionedResourceAvailable,
-      node: Option[Node]
+      node: Option[Node],
+      running: Set[HashedTaskDescription]
   ): IO[Either[MessageData.NothingForSchedule.type, MessageData.Schedule]] = {
 
-    val askIO = ref.flatModify { state =>
-      val num = CorrelationId.make
-      scribe.debug(
-        s"AskForWork",
-        scribe.data(
-          "queued-tasks",
-          state.queuedTasks.map { case (_, (sch, _)) =>
-            (sch.description.taskId, sch.resource)
-          }.toSeq
-        ),
-        availableResource,
-        num,
-        launcher,
-        node.map(v => Node.toLogFeature(v)).getOrElse(scribe.data(Map.empty))
-      )
-
-      val invocationIdsAppearingInLineage: Set[TaskInvocationId] =
-        (state.queuedTasks.valuesIterator.map(_._1) ++
-          state.scheduledTasks.valuesIterator.map(_.sch))
-          .flatMap(_.lineage.lineage.iterator)
-          .toSet
-
-      val offeredLabels = availableResource.cpuMemoryAvailable.labels
-
-      def placementValueFor(sch: ScheduleTask): Option[String] =
-        sch.resource.cpuMemoryRequest.placementAttribute
-          .flatMap(Label.valueOf(offeredLabels, _))
-
-      def admitsPlacement(sch: ScheduleTask): Boolean =
-        state.scheduledTasks.get(project(sch)) match {
-          case Some(scheduled) =>
-            scheduled.admitsPlacement(placementValueFor(sch))
-          case None =>
-            sch.resource.cpuMemoryRequest.placementAttribute.isEmpty ||
-            placementValueFor(sch).isDefined
-        }
-
-      def fits(sch: ScheduleTask): Boolean = {
-        val invId = TaskInvocationId(sch.description.taskId, sch.description)
-        val hasPendingDescendant =
-          invocationIdsAppearingInLineage.contains(invId)
-        val ret = availableResource.canFulfillRequest(sch.resource)
-        if (!ret) {
-          scribe.debug(
-            s"CantFulfillRequest",
-            num,
-            sch,
-            availableResource,
-            scribe.data(
-              "explain",
-              "No available resources for this task"
-            )
-          )
-        }
-        ret && !hasPendingDescendant && admitsPlacement(sch)
-      }
-
-      val anotherCopy = state.underReplicated.map(_.sch)
-
-      val eligible =
-        (state.queuedTasks.valuesIterator.map(_._1).toList ::: anotherCopy)
-          .filter(fits)
-
-      val selected = eligible.maxByOption { sch =>
-        val request = sch.resource.cpuMemoryRequest
-        (
-          sch.priority.s,
-          request.gpu,
-          request.cpu._1,
-          request.memory,
-          request.scratch,
-          sch.lineage.lineage.length
+    val askIO = IO.realTime.flatMap { nowDuration =>
+      val nowMillis = nowDuration.toMillis
+      ref.flatModify { state0 =>
+        val state = state0.reconcileRunning(
+          launcher,
+          running,
+          config.askForWorkTimeout.toMillis,
+          nowMillis
         )
-      }
+        val num = CorrelationId.make
+        scribe.debug(
+          s"AskForWork",
+          scribe.data(
+            "queued-tasks",
+            state.queuedTasks.map { case (_, (sch, _)) =>
+              (sch.description.taskId, sch.resource)
+            }.toSeq
+          ),
+          availableResource,
+          num,
+          launcher,
+          node.map(v => Node.toLogFeature(v)).getOrElse(scribe.data(Map.empty))
+        )
 
-      // Register the launcher / mark the node up on FIRST contact, regardless of
-      // whether there is work to hand it. Doing this inside the `Some(sch)`
-      // branch (the previous behaviour) meant a worker that came up while the
-      // queue was momentarily empty was never recorded as up, so its pending
-      // entry would hit `pendingNodeTimeout` and trigger `NodeInitFailed` even
-      // though the worker was fully alive and polling for work.
-      val isNewLauncher = !state.knownLaunchers.contains(launcher)
-      val stateWithJoin =
-        if (isNewLauncher) state.update(LauncherJoined(launcher, node))
-        else state
-      val joinIO =
-        if (isNewLauncher)
-          node
-            .flatMap(n =>
-              convertRunningToPending.map(convert => handleNewNode(n, convert))
-            )
-            .getOrElse(IO.unit)
-        else IO.unit
+        val invocationIdsAppearingInLineage: Set[TaskInvocationId] =
+          (state.queuedTasks.valuesIterator.map(_._1) ++
+            state.scheduledTasks.valuesIterator.map(_.sch))
+            .flatMap(_.lineage.lineage.iterator)
+            .toSet
 
-      selected match {
-        case None =>
-          scribe.debug(
-            s"FoundNothingToSchedule",
-            num,
-            launcher,
-            availableResource,
-            scribe.data("queued-tasks", state.queuedTasks)
-          )
-          stateWithJoin -> (joinIO *> IO.pure(
-            Left(MessageData.NothingForSchedule)
-          ))
+        val offeredLabels = availableResource.cpuMemoryAvailable.labels
 
-        case Some(sch) =>
-          val allocated = availableResource.maximum(sch.resource)
-          scribe.debug(
-            s"Dequeue",
-            num,
-            sch,
-            launcher,
-            allocated,
-            scribe.data("explain", "Scheduling task to launcher.")
-          )
+        def placementValueFor(sch: ScheduleTask): Option[String] =
+          sch.resource.cpuMemoryRequest.placementAttribute
+            .flatMap(Label.valueOf(offeredLabels, _))
 
-          val startMillisOpt = state.enqueueTimestamps.get(project(sch))
-
-          val newState = stateWithJoin
-            .update(
-              TaskScheduled(sch, launcher, allocated, placementValueFor(sch))
-            )
-
-          val recordWait = startMillisOpt match {
-            case None => IO.unit
-            case Some(startMillis) =>
-              IO.realTime.flatMap { now =>
-                metrics.onTaskScheduled(
-                  sch.description,
-                  Some((now.toMillis - startMillis) / 1000.0)
-                )
-              }
+        def admitsPlacement(sch: ScheduleTask): Boolean =
+          state.scheduledTasks.get(project(sch)) match {
+            case Some(scheduled) =>
+              scheduled.admitsPlacement(placementValueFor(sch))
+            case None =>
+              sch.resource.cpuMemoryRequest.placementAttribute.isEmpty ||
+              placementValueFor(sch).isDefined
           }
 
-          val io =
-            recordWait *> joinIO *> IO.pure(
-              Right(MessageData.Schedule(sch))
+        def fits(sch: ScheduleTask): Boolean = {
+          val invId = TaskInvocationId(sch.description.taskId, sch.description)
+          val hasPendingDescendant =
+            invocationIdsAppearingInLineage.contains(invId)
+          val ret = availableResource.canFulfillRequest(sch.resource)
+          if (!ret) {
+            scribe.debug(
+              s"CantFulfillRequest",
+              num,
+              sch,
+              availableResource,
+              scribe.data(
+                "explain",
+                "No available resources for this task"
+              )
+            )
+          }
+          ret && !hasPendingDescendant && admitsPlacement(sch)
+        }
+
+        val anotherCopy = state.underReplicated.map(_.sch)
+
+        val eligible =
+          (state.queuedTasks.valuesIterator.map(_._1).toList ::: anotherCopy)
+            .filter(fits)
+
+        val selected = eligible.maxByOption { sch =>
+          val request = sch.resource.cpuMemoryRequest
+          (
+            sch.priority.s,
+            request.gpu,
+            request.cpu._1,
+            request.memory,
+            request.scratch,
+            sch.lineage.lineage.length
+          )
+        }
+
+        // Register the launcher / mark the node up on FIRST contact, regardless of
+        // whether there is work to hand it. Doing this inside the `Some(sch)`
+        // branch (the previous behaviour) meant a worker that came up while the
+        // queue was momentarily empty was never recorded as up, so its pending
+        // entry would hit `pendingNodeTimeout` and trigger `NodeInitFailed` even
+        // though the worker was fully alive and polling for work.
+        val isNewLauncher = !state.knownLaunchers.contains(launcher)
+        val stateWithJoin =
+          if (isNewLauncher) state.update(LauncherJoined(launcher, node))
+          else state
+        val joinIO =
+          if (isNewLauncher)
+            node
+              .flatMap(n =>
+                convertRunningToPending.map(convert => handleNewNode(n, convert))
+              )
+              .getOrElse(IO.unit)
+          else IO.unit
+
+        selected match {
+          case None =>
+            scribe.debug(
+              s"FoundNothingToSchedule",
+              num,
+              launcher,
+              availableResource,
+              scribe.data("queued-tasks", state.queuedTasks)
+            )
+            stateWithJoin -> (joinIO *> IO.pure(
+              Left(MessageData.NothingForSchedule)
+            ))
+
+          case Some(sch) =>
+            val allocated = availableResource.maximum(sch.resource)
+            scribe.debug(
+              s"Dequeue",
+              num,
+              sch,
+              launcher,
+              allocated,
+              scribe.data("explain", "Scheduling task to launcher.")
             )
 
-          newState -> io
+            val startMillisOpt = state.enqueueTimestamps.get(project(sch))
 
+            val newState = stateWithJoin
+              .update(
+                TaskScheduled(
+                  sch,
+                  launcher,
+                  allocated,
+                  placementValueFor(sch),
+                  nowMillis
+                )
+              )
+
+            val recordWait = startMillisOpt match {
+              case None => IO.unit
+              case Some(startMillis) =>
+                IO.realTime.flatMap { now =>
+                  metrics.onTaskScheduled(
+                    sch.description,
+                    Some((now.toMillis - startMillis) / 1000.0)
+                  )
+                }
+            }
+
+            val io =
+              recordWait *> joinIO *> IO.pure(
+                Right(MessageData.Schedule(sch))
+              )
+
+            newState -> io
+
+        }
       }
     }
 

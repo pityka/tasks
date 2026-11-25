@@ -98,7 +98,7 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
       List("w1", "w2", "w3", "w4")
         .foldLeft(IO.pure(List.empty[Boolean])) { (acc, name) =>
           acc.flatMap(soFar =>
-            q.askForWork(LauncherName(name), worker(4), None)
+            q.askForWork(LauncherName(name), worker(4), None, Set.empty)
               .map(answer => soFar :+ took(answer))
           )
         }
@@ -112,8 +112,8 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
 
     val taken = withQueue(sch) { q =>
       for {
-        a <- q.askForWork(LauncherName("w1"), worker(4), None)
-        b <- q.askForWork(LauncherName("w2"), worker(4), None)
+        a <- q.askForWork(LauncherName("w1"), worker(4), None, Set.empty)
+        b <- q.askForWork(LauncherName("w2"), worker(4), None, Set.empty)
       } yield (took(a), took(b))
     }
 
@@ -125,8 +125,8 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
 
     val taken = withQueue(sch) { q =>
       for {
-        a <- q.askForWork(LauncherName("w1"), worker(4), None)
-        b <- q.askForWork(LauncherName("w2"), worker(4), None)
+        a <- q.askForWork(LauncherName("w1"), worker(4), None, Set.empty)
+        b <- q.askForWork(LauncherName("w2"), worker(4), None, Set.empty)
       } yield (took(a), took(b))
     }
 
@@ -140,7 +140,7 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
       List(16, 12, 8, 4)
         .foldLeft(IO.pure(List.empty[Boolean])) { (acc, free) =>
           acc.flatMap(soFar =>
-            q.askForWork(LauncherName("w1"), worker(free), None)
+            q.askForWork(LauncherName("w1"), worker(free), None, Set.empty)
               .map(answer => soFar :+ took(answer))
           )
         }
@@ -154,8 +154,8 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
 
     val (offeredAgain, delivered) = withQueue(sch) { q =>
       for {
-        _ <- q.askForWork(LauncherName("w1"), worker(16), None)
-        _ <- q.askForWork(LauncherName("w1"), worker(12), None)
+        _ <- q.askForWork(LauncherName("w1"), worker(16), None, Set.empty)
+        _ <- q.askForWork(LauncherName("w1"), worker(12), None, Set.empty)
         _ <- q.taskSuccess(
           sch,
           LauncherName("w1"),
@@ -164,7 +164,7 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
           ResourceAllocated(4, 100, 0, Nil, None)
         )
         polled <- q.pollResult(proxyAddress)
-        again <- q.askForWork(LauncherName("w2"), worker(4), None)
+        again <- q.askForWork(LauncherName("w2"), worker(4), None, Set.empty)
       } yield (took(again), polled.isDefined)
     }
 
@@ -177,15 +177,15 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
 
     val (offeredAgain, delivered) = withQueue(sch) { q =>
       for {
-        _ <- q.askForWork(LauncherName("w1"), worker(16), None)
-        _ <- q.askForWork(LauncherName("w1"), worker(12), None)
+        _ <- q.askForWork(LauncherName("w1"), worker(16), None, Set.empty)
+        _ <- q.askForWork(LauncherName("w1"), worker(12), None, Set.empty)
         _ <- q.taskFailed(
           sch,
           LauncherName("w1"),
           new RuntimeException("boom")
         )
         polled <- q.pollResult(proxyAddress)
-        again <- q.askForWork(LauncherName("w2"), worker(4), None)
+        again <- q.askForWork(LauncherName("w2"), worker(4), None, Set.empty)
       } yield (took(again), polled.isDefined)
     }
 
@@ -198,18 +198,20 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
 
     val (sameZone, otherZone, noZone) = withQueue(sch) { q =>
       for {
-        _ <- q.askForWork(LauncherName("w1"), workerIn(4, "eu-west-1a"), None)
+        _ <- q.askForWork(LauncherName("w1"), workerIn(4, "eu-west-1a"), None, Set.empty)
         same <- q.askForWork(
           LauncherName("w2"),
           workerIn(4, "eu-west-1a"),
-          None
+          None,
+          Set.empty
         )
         other <- q.askForWork(
           LauncherName("w3"),
           workerIn(4, "eu-west-1b"),
-          None
+          None,
+          Set.empty
         )
-        bare <- q.askForWork(LauncherName("w4"), worker(4), None)
+        bare <- q.askForWork(LauncherName("w4"), worker(4), None, Set.empty)
       } yield (took(same), took(other), took(bare))
     }
 
@@ -222,7 +224,7 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
     val sch = task(Some(Replication(2, zone)))
 
     withQueue(sch) { q =>
-      q.askForWork(LauncherName("w1"), worker(4), None).map(took)
+      q.askForWork(LauncherName("w1"), worker(4), None, Set.empty).map(took)
     } shouldBe false
   }
 
@@ -230,7 +232,7 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
     val sch = task(Some(Replication(1, zone)))
 
     withQueue(sch) { q =>
-      q.askForWork(LauncherName("w1"), worker(4), None).map(took)
+      q.askForWork(LauncherName("w1"), worker(4), None, Set.empty).map(took)
     } shouldBe true
   }
 
@@ -239,12 +241,12 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
 
     val (inA, inB) = withQueue(sch) { q =>
       for {
-        a <- q.askForWork(LauncherName("w1"), workerIn(4, "eu-west-1a"), None)
+        a <- q.askForWork(LauncherName("w1"), workerIn(4, "eu-west-1a"), None, Set.empty)
         _ <- q.handleLauncherStopped(
           LauncherName("w1"),
           QueueImpl.LauncherStopReason.SelfReportedByThisProcess
         )
-        b <- q.askForWork(LauncherName("w2"), workerIn(4, "eu-west-1b"), None)
+        b <- q.askForWork(LauncherName("w2"), workerIn(4, "eu-west-1b"), None, Set.empty)
       } yield (took(a), took(b))
     }
 
@@ -257,8 +259,8 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
 
     val (delivered, offeredAfter) = withQueue(sch) { q =>
       for {
-        _ <- q.askForWork(LauncherName("w1"), worker(4), None)
-        _ <- q.askForWork(LauncherName("w2"), worker(4), None)
+        _ <- q.askForWork(LauncherName("w1"), worker(4), None, Set.empty)
+        _ <- q.askForWork(LauncherName("w2"), worker(4), None, Set.empty)
         _ <- q.taskSuccess(
           sch,
           LauncherName("w1"),
@@ -267,7 +269,7 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
           ResourceAllocated(4, 100, 0, Nil, None)
         )
         polled <- q.pollResult(proxyAddress)
-        late <- q.askForWork(LauncherName("w3"), worker(4), None)
+        late <- q.askForWork(LauncherName("w3"), worker(4), None, Set.empty)
       } yield (polled.isDefined, took(late))
     }
 
@@ -280,8 +282,8 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
 
     val delivered = withQueue(sch) { q =>
       for {
-        _ <- q.askForWork(LauncherName("w1"), worker(4), None)
-        _ <- q.askForWork(LauncherName("w2"), worker(4), None)
+        _ <- q.askForWork(LauncherName("w1"), worker(4), None, Set.empty)
+        _ <- q.askForWork(LauncherName("w2"), worker(4), None, Set.empty)
         _ <- q.taskFailed(
           sch,
           LauncherName("w1"),
@@ -299,8 +301,8 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
 
     val delivered = withQueue(sch) { q =>
       for {
-        _ <- q.askForWork(LauncherName("w1"), worker(4), None)
-        _ <- q.askForWork(LauncherName("w2"), worker(4), None)
+        _ <- q.askForWork(LauncherName("w1"), worker(4), None, Set.empty)
+        _ <- q.askForWork(LauncherName("w2"), worker(4), None, Set.empty)
         _ <- q.taskFailed(
           sch,
           LauncherName("w1"),
@@ -326,8 +328,8 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
 
     val delivered = withQueue(sch) { q =>
       for {
-        _ <- q.askForWork(LauncherName("w1"), worker(4), None)
-        _ <- q.askForWork(LauncherName("w2"), worker(4), None)
+        _ <- q.askForWork(LauncherName("w1"), worker(4), None, Set.empty)
+        _ <- q.askForWork(LauncherName("w2"), worker(4), None, Set.empty)
         _ <- q.taskFailed(
           sch,
           LauncherName("w1"),
@@ -355,7 +357,7 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
 
     val delivered = withQueue(sch) { q =>
       for {
-        _ <- q.askForWork(LauncherName("w1"), worker(4), None)
+        _ <- q.askForWork(LauncherName("w1"), worker(4), None, Set.empty)
         _ <- q.taskFailed(
           sch,
           LauncherName("w1"),
@@ -376,8 +378,8 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
 
     val (first, second) = withQueue(sch) { q =>
       for {
-        _ <- q.askForWork(LauncherName("w1"), worker(4), None)
-        _ <- q.askForWork(LauncherName("w2"), worker(4), None)
+        _ <- q.askForWork(LauncherName("w1"), worker(4), None, Set.empty)
+        _ <- q.askForWork(LauncherName("w2"), worker(4), None, Set.empty)
         _ <- q.taskSuccess(
           sch,
           LauncherName("w1"),
@@ -406,8 +408,8 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
 
     val (delivered, afterFailure) = withQueue(sch) { q =>
       for {
-        _ <- q.askForWork(LauncherName("w1"), worker(4), None)
-        _ <- q.askForWork(LauncherName("w2"), worker(4), None)
+        _ <- q.askForWork(LauncherName("w1"), worker(4), None, Set.empty)
+        _ <- q.askForWork(LauncherName("w2"), worker(4), None, Set.empty)
         _ <- q.taskSuccess(
           sch,
           LauncherName("w1"),
@@ -434,13 +436,13 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
 
     val (offeredAgain, delivered) = withQueue(sch) { q =>
       for {
-        _ <- q.askForWork(LauncherName("w1"), worker(4), None)
-        _ <- q.askForWork(LauncherName("w2"), worker(4), None)
+        _ <- q.askForWork(LauncherName("w1"), worker(4), None, Set.empty)
+        _ <- q.askForWork(LauncherName("w2"), worker(4), None, Set.empty)
         _ <- q.handleLauncherStopped(
           LauncherName("w1"),
           QueueImpl.LauncherStopReason.SelfReportedByThisProcess
         )
-        again <- q.askForWork(LauncherName("w3"), worker(4), None)
+        again <- q.askForWork(LauncherName("w3"), worker(4), None, Set.empty)
         _ <- q.taskSuccess(
           sch,
           LauncherName("w2"),
@@ -461,12 +463,12 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
 
     val (queuedAfter, offeredAgain) = withQueue(sch) { q =>
       for {
-        _ <- q.askForWork(LauncherName("w1"), worker(4), None)
+        _ <- q.askForWork(LauncherName("w1"), worker(4), None, Set.empty)
         _ <- q.handleLauncherStopped(
           LauncherName("w1"),
           QueueImpl.LauncherStopReason.SelfReportedByThisProcess
         )
-        again <- q.askForWork(LauncherName("w2"), worker(4), None)
+        again <- q.askForWork(LauncherName("w2"), worker(4), None, Set.empty)
       } yield (true, took(again))
     }
 
@@ -489,8 +491,8 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
         QueueImpl.project(sch) -> QueueImpl.ScheduledTask(
           sch = sch,
           dispatches = List(
-            QueueImpl.Dispatch(w1, allocated),
-            QueueImpl.Dispatch(w2, allocated)
+            QueueImpl.Dispatch(w1, allocated, None),
+            QueueImpl.Dispatch(w2, allocated, None)
           ),
           proxies = Nil,
           placementValue = None,
@@ -541,15 +543,15 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
       .use { q =>
         for {
           _ <- q.scheduleTask(sch)
-          _ <- q.askForWork(LauncherName("w1"), worker(4), None)
-          _ <- q.askForWork(LauncherName("w2"), worker(4), None)
+          _ <- q.askForWork(LauncherName("w1"), worker(4), None, Set.empty)
+          _ <- q.askForWork(LauncherName("w2"), worker(4), None, Set.empty)
           _ <- q.taskFailed(
             sch,
             LauncherName("w1"),
             new RuntimeException("boom")
           )
           polled <- q.pollResult(proxyAddress)
-          again <- q.askForWork(LauncherName("w3"), worker(4), None)
+          again <- q.askForWork(LauncherName("w3"), worker(4), None, Set.empty)
         } yield (polled.isDefined, took(again))
       }
       .unsafeRunSync()

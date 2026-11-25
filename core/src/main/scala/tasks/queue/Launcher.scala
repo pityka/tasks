@@ -399,9 +399,16 @@ private[tasks] object Launcher {
           } else {
 
             scribe.debug(s"WillAskForWork ", state.availableResources, address)
+            val runningDescriptions =
+              state.runningTasks.map(_._2.description).toSet
             val effect: IO[Unit] = poll(
               queue
-                .askForWork(address, state.availableResources, node)
+                .askForWork(
+                  address,
+                  state.availableResources,
+                  node,
+                  runningDescriptions
+                )
             )
               .onCancel(ref.update { state =>
                 state.copy(waitingForWork = false)

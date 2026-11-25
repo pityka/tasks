@@ -37,7 +37,8 @@ class DynamoCodecRoundTripTest extends FunSuite with Matchers {
   test("Dispatch round-trips through jsoniter") {
     val original = QueueImpl.Dispatch(
       launcher = LauncherName("l-1"),
-      allocated = SchedulerFixtures.allocated(cpu = 2, memory = 500)
+      allocated = SchedulerFixtures.allocated(cpu = 2, memory = 500),
+      dispatchedAtMillis = None
     )
     val bytes = encode(original)
     decode[QueueImpl.Dispatch](bytes) shouldBe original
@@ -105,8 +106,16 @@ class DynamoCodecRoundTripTest extends FunSuite with Matchers {
       status = QueueStateDiff.StatusScheduled,
       proxies = List(Proxy(Address("p-a")), Proxy(Address("p-b"))),
       dispatches = List(
-        QueueImpl.Dispatch(LauncherName("l-x"), SchedulerFixtures.allocated()),
-        QueueImpl.Dispatch(LauncherName("l-y"), SchedulerFixtures.allocated(cpu = 4))
+        QueueImpl.Dispatch(
+          LauncherName("l-x"),
+          SchedulerFixtures.allocated(),
+          None
+        ),
+        QueueImpl.Dispatch(
+          LauncherName("l-y"),
+          SchedulerFixtures.allocated(cpu = 4),
+          None
+        )
       ),
       placementValue = Some("rack-7"),
       resultDelivered = true,

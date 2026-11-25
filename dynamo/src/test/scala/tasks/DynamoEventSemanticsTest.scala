@@ -70,8 +70,8 @@ class DynamoEventSemanticsTest extends FunSuite with Matchers {
     val state = runEvents(
       List(
         QueueImpl.Enqueued(sch, List(proxy), 0L),
-        QueueImpl.TaskScheduled(sch, launcherA, allocated, None),
-        QueueImpl.TaskScheduled(sch, launcherB, allocated, None)
+        QueueImpl.TaskScheduled(sch, launcherA, allocated, None, 0L),
+        QueueImpl.TaskScheduled(sch, launcherB, allocated, None, 0L)
       )
     )
     val scheduled = state.scheduledTasks.values.head
@@ -87,8 +87,8 @@ class DynamoEventSemanticsTest extends FunSuite with Matchers {
     val state = runEvents(
       List(
         QueueImpl.Enqueued(sch, List(proxy), 0L),
-        QueueImpl.TaskScheduled(sch, launcherA, allocated, None),
-        QueueImpl.TaskScheduled(sch, launcherB, allocated, None),
+        QueueImpl.TaskScheduled(sch, launcherA, allocated, None, 0L),
+        QueueImpl.TaskScheduled(sch, launcherB, allocated, None, 0L),
         SchedulerFixtures.taskDoneEvent(sch, launcherA, allocated)
       )
     )
@@ -134,8 +134,8 @@ class DynamoEventSemanticsTest extends FunSuite with Matchers {
     val state = runEvents(
       List(
         QueueImpl.Enqueued(sch, List(proxy), 0L),
-        QueueImpl.TaskScheduled(sch, launcherA, allocated, None),
-        QueueImpl.TaskScheduled(sch, launcherB, allocated, None),
+        QueueImpl.TaskScheduled(sch, launcherA, allocated, None, 0L),
+        QueueImpl.TaskScheduled(sch, launcherB, allocated, None, 0L),
         QueueImpl.TaskLauncherStoppedFor(sch, launcherA)
       )
     )
@@ -153,7 +153,7 @@ class DynamoEventSemanticsTest extends FunSuite with Matchers {
     val state = runEvents(
       List(
         QueueImpl.Enqueued(sch, List(proxyA), 0L),
-        QueueImpl.TaskScheduled(sch, launcher, allocated, None),
+        QueueImpl.TaskScheduled(sch, launcher, allocated, None, 0L),
         QueueImpl.ProxyAddedToScheduledMessage(sch, List(proxyB))
       )
     )

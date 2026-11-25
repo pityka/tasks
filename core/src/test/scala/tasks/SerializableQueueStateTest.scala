@@ -67,14 +67,16 @@ class SerializableQueueStateTest extends FunSuite with Matchers {
             VersionedResourceAllocated(
               CodeVersion("code-version-1"),
               ResourceAllocated(1, 500, 10, List(0), Some("img"))
-            )
+            ),
+            None
           ),
           QueueImpl.Dispatch(
             LauncherName("launcher-2"),
             VersionedResourceAllocated(
               CodeVersion("code-version-1"),
               ResourceAllocated(1, 500, 10, List(0), Some("img"))
-            )
+            ),
+            None
           )
         ),
         proxies = List(Proxy(proxyAddress)),
@@ -143,6 +145,56 @@ class SerializableQueueStateTest extends FunSuite with Matchers {
     SerializableQueueState.decode(
       SerializableQueueState.emptyStateAsString
     ) shouldBe QueueImpl.State.empty
+  }
+
+  test(
+    "a dispatch without a timestamp encodes to the pre-upgrade form and decodes to None"
+  ) {
+    val encoded = new String(
+      SerializableQueueState.encode(state),
+      java.nio.charset.StandardCharsets.UTF_8
+    )
+    encoded should not include "dispatchedAtMillis"
+
+    val decoded =
+      SerializableQueueState.decode(SerializableQueueState.encode(state))
+    decoded.scheduledTasks.values
+      .flatMap(_.dispatches)
+      .map(_.dispatchedAtMillis)
+      .toList shouldBe List(None, None)
+  }
+
+  test("a dispatch timestamp round trips when present") {
+    val stamped = state.copy(scheduledTasks = state.scheduledTasks.map {
+      case (projection, scheduled) =>
+        projection -> scheduled.copy(dispatches =
+          scheduled.dispatches.map(_.copy(dispatchedAtMillis = Some(123L)))
+        )
+    })
+
+    val decoded =
+      SerializableQueueState.decode(SerializableQueueState.encode(stamped))
+    decoded.scheduledTasks.values
+      .flatMap(_.dispatches)
+      .map(_.dispatchedAtMillis)
+      .toList shouldBe List(Some(123L), Some(123L))
+  }
+
+  test("the dispatch decoder skips unknown fields from a newer writer") {
+    import com.github.plokhotnyuk.jsoniter_scala.core._
+    val codec = tasks.queue.QueueStateCodecs.dispatchCodec
+    val dispatch = QueueImpl.Dispatch(
+      launcher,
+      VersionedResourceAllocated(
+        CodeVersion("code-version-1"),
+        ResourceAllocated(1, 500, 10, List(0), Some("img"))
+      ),
+      Some(99L)
+    )
+    val json = writeToString(dispatch)(codec)
+    val withUnknown =
+      json.replaceFirst("\\{", "{\"fieldFromAFutureVersion\":1,")
+    readFromString(withUnknown)(codec) shouldBe dispatch
   }
 
 }

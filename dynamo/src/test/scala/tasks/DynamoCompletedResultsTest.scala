@@ -343,7 +343,7 @@ class DynamoCompletedResultsTest extends FunSuite with Matchers {
           tx.flatModify(state =>
             (
               state.update(
-                QueueImpl.TaskScheduled(sch, launcher, allocated, None)
+                QueueImpl.TaskScheduled(sch, launcher, allocated, None, 0L)
               ),
               IO.unit
             )

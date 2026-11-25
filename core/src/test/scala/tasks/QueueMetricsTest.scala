@@ -248,7 +248,13 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
     val afterSchedule = QueueImpl.State.empty
       .update(QueueImpl.Enqueued(sch, Nil, enqueueMillis = 1_000L))
       .update(
-        QueueImpl.TaskScheduled(sch, launcher, allocated, placementValue = None)
+        QueueImpl.TaskScheduled(
+          sch,
+          launcher,
+          allocated,
+          placementValue = None,
+          scheduledAtMillis = 0L
+        )
       )
 
     afterSchedule.enqueueTimestamps

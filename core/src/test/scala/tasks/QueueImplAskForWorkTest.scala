@@ -48,7 +48,7 @@ class QueueImplAskForWorkTestSuite extends FunSuite with Matchers {
       .use { q =>
         for {
           before <- q.knownLaunchers
-          result <- q.askForWork(launcher, resource, None)
+          result <- q.askForWork(launcher, resource, None, Set.empty)
           after <- q.knownLaunchers
         } yield (before, result, after)
       }
