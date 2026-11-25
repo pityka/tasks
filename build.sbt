@@ -214,6 +214,10 @@ lazy val batch = project
   .in(file("batch"))
   .settings(commonSettings: _*)
   .settings(
+    versionCheck := {},
+    versionPolicyCheck := {}
+  )
+  .settings(
     name := "tasks-batch",
     libraryDependencies ++= Seq(
       "software.amazon.awssdk" % "batch" % "2.28.0", // scala-steward:off
@@ -228,6 +232,10 @@ lazy val batch = project
 lazy val ecs = project
   .in(file("ecs"))
   .settings(commonSettings: _*)
+  .settings(
+    versionCheck := {},
+    versionPolicyCheck := {}
+  )
   .settings(
     name := "tasks-ecs",
     libraryDependencies ++= Seq(
@@ -291,6 +299,10 @@ lazy val dynamo = project
 lazy val kubernetes = project
   .in(file("kubernetes"))
   .settings(commonSettings: _*)
+  .settings(
+    versionCheck := {},
+    versionPolicyCheck := {}
+  )
   .settings(
     name := "tasks-kubernetes",
     libraryDependencies ++= Seq(
