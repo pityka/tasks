@@ -217,7 +217,13 @@ private[tasks] class StreamHelper(
 
     fs2.Stream.force(length.map { length =>
       if (length > s3MultipartThreshold)
-        s3Client.get.readFileMultipart(bucket = bucket, key = key, partSize = s3DownloadPartSizeMB, multiPartConcurrency = s3DownloadParallelism, fromOffset = fromOffset)
+        s3Client.get.readFileMultipart(
+          bucket = bucket,
+          key = key,
+          partSize = s3DownloadPartSizeMB,
+          multiPartConcurrency = s3DownloadParallelism,
+          fromOffset = fromOffset
+        )
       else s3Client.get.readFile(bucket, key, fromOffset = fromOffset)
     })
   }
@@ -252,14 +258,15 @@ private[tasks] class StreamHelper(
       "http client is not started (enable in config)"
     )
 
-    httpClientFollowRedirects.get.run(Request(uri = uri.http4s, method = Method.HEAD)).use {
-      response =>
+    httpClientFollowRedirects.get
+      .run(Request(uri = uri.http4s, method = Method.HEAD))
+      .use { response =>
         val etag = response.headers.get[ETag].map(_.tag.tag)
         val clength = response.contentLength
         response.body.compile.drain.map { _ =>
           clength -> etag
         }
-    }
+      }
   }
 
   private def getContentLengthAndETagS3(

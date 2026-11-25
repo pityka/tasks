@@ -27,7 +27,9 @@ class DynamoTransientConflictRetryTest extends FunSuite with Matchers {
           .build()
       }
 
-  test("read via query retries TransactionConflictException instead of crashing") {
+  test(
+    "read via query retries TransactionConflictException instead of crashing"
+  ) {
     val client = new FakeDynamoDbAsyncClient(tableName)
     val thrown = new AtomicInteger(0)
     client.beforeQuery.set(throwConflicts(3, thrown))
@@ -45,7 +47,9 @@ class DynamoTransientConflictRetryTest extends FunSuite with Matchers {
     state.knownLaunchers.keySet shouldBe empty
   }
 
-  test("read via getItem retries TransactionConflictException instead of crashing") {
+  test(
+    "read via getItem retries TransactionConflictException instead of crashing"
+  ) {
     val client = new FakeDynamoDbAsyncClient(tableName)
     val thrown = new AtomicInteger(0)
     client.beforeGetItem.set(throwConflicts(3, thrown))

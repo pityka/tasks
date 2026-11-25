@@ -91,15 +91,15 @@ class JoiningExternalQueueStateTestSuite extends FunSuite with Matchers {
       .withHandler(handler)
       .replace()
     try {
-      val program = Ref.of[IO, QueueImpl.State](initialState).flatMap {
-        queueStateRef =>
+      val program =
+        Ref.of[IO, QueueImpl.State](initialState).flatMap { queueStateRef =>
           mainProcess(queueStateRef, clearOnJoin).use { implicit ts =>
             for {
               result <- testTask(Input(1))(tasks.ResourceRequest(1, 500))
               state <- queueStateRef.get
             } yield (result, state)
           }
-      }
+        }
       val (result, state) = program
         .unsafeRunTimed(90.seconds)
         .getOrElse(throw new RuntimeException("timeout"))

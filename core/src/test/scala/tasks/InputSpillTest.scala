@@ -62,7 +62,9 @@ tasks.fileservice.storageURI=$storageURI
 """
     )
 
-  test("a task input larger than maxInlinePayloadBytes spills and round-trips") {
+  test(
+    "a task input larger than maxInlinePayloadBytes spills and round-trips"
+  ) {
     val tmp = tasks.util.TempFile.createTempFile(".temp")
     tmp.delete
     val storage = tmp.getAbsolutePath
@@ -93,7 +95,9 @@ tasks.fileservice.storageURI=$storageURI
     spilledHit shouldBe Right(Out(input.xs.sum))
   }
 
-  test("a task output larger than maxInlinePayloadBytes spills and round-trips") {
+  test(
+    "a task output larger than maxInlinePayloadBytes spills and round-trips"
+  ) {
     val tmp = tasks.util.TempFile.createTempFile(".temp")
     tmp.delete
     val storage = tmp.getAbsolutePath
@@ -138,7 +142,9 @@ tasks.fileservice.storageURI=$storageURI
     second shouldBe Right(BigOut(input.xs))
   }
 
-  test("UntypedResult codec omits spilled=None and decodes an absent spilled as None") {
+  test(
+    "UntypedResult codec omits spilled=None and decodes an absent spilled as None"
+  ) {
     val sf = tasks.fileservice.SharedFileHelper.createForTesting("x")
     val inline = tasks.queue.UntypedResult(
       Set(sf),

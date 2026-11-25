@@ -78,7 +78,10 @@ private[tasks] class SharedFileCache(implicit
               scribe.data("filename", fileName),
               scribe.data("attemptsLeft", attemptsLeft)
             )
-            IO.sleep(scala.concurrent.duration.FiniteDuration(100L, scala.concurrent.duration.MILLISECONDS)) >>
+            IO.sleep(
+              scala.concurrent.duration
+                .FiniteDuration(100L, scala.concurrent.duration.MILLISECONDS)
+            ) >>
               readWithRetry(attemptsLeft - 1)
           } else {
             scribe.error(

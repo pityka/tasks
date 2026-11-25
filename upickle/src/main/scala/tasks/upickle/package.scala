@@ -41,8 +41,10 @@ package object upicklesupport {
   }
 
   implicit val rpath: ReadWriter[tasks.fileservice.RemoteFilePath] = {
-    val implRW: ReadWriter[tasks.fileservice.RemoteFilePath.RemoteFilePathImpl] =
-      upickle.default.macroRW[tasks.fileservice.RemoteFilePath.RemoteFilePathImpl]
+    val implRW
+        : ReadWriter[tasks.fileservice.RemoteFilePath.RemoteFilePathImpl] =
+      upickle.default
+        .macroRW[tasks.fileservice.RemoteFilePath.RemoteFilePathImpl]
     implRW.bimap[tasks.fileservice.RemoteFilePath](
       r => r.asInstanceOf[tasks.fileservice.RemoteFilePath.RemoteFilePathImpl],
       impl => impl
@@ -50,10 +52,13 @@ package object upicklesupport {
   }
 
   implicit val mpath: ReadWriter[tasks.fileservice.ManagedFilePath] = {
-    val implRW: ReadWriter[tasks.fileservice.ManagedFilePath.ManagedFilePathImpl] =
-      upickle.default.macroRW[tasks.fileservice.ManagedFilePath.ManagedFilePathImpl]
+    val implRW
+        : ReadWriter[tasks.fileservice.ManagedFilePath.ManagedFilePathImpl] =
+      upickle.default
+        .macroRW[tasks.fileservice.ManagedFilePath.ManagedFilePathImpl]
     implRW.bimap[tasks.fileservice.ManagedFilePath](
-      m => m.asInstanceOf[tasks.fileservice.ManagedFilePath.ManagedFilePathImpl],
+      m =>
+        m.asInstanceOf[tasks.fileservice.ManagedFilePath.ManagedFilePathImpl],
       impl => impl
     )
   }

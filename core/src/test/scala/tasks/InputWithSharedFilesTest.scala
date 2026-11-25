@@ -124,10 +124,11 @@ object InputWithSharedFilesTest extends TestHelpers with Matchers {
     _ => implicit computationEnvironment =>
       sideEffect += "execution of task 6"
 
-      SharedFile.scoped(
-        fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))),
-        "mutable"
-      )
+      SharedFile
+        .scoped(
+          fs2.Stream.chunk(fs2.Chunk.array("abcd".getBytes("UTF-8"))),
+          "mutable"
+        )
         .map(MutableResult(_))
 
   }

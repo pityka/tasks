@@ -126,10 +126,14 @@ sealed trait SharedFile extends HasSharedFiles {
   final def file(implicit tsc: TaskSystemComponents): Resource[IO, File] =
     SharedFileHelper.getPathToFile(this)
 
-  final def filePersistent(implicit tsc: TaskSystemComponents): Resource[IO, File] =
+  final def filePersistent(implicit
+      tsc: TaskSystemComponents
+  ): Resource[IO, File] =
     SharedFileHelper.getPathToFile(this, keepLocalCache = true)
 
-  final def fileNonCached(implicit tsc: TaskSystemComponents): Resource[IO, File] =
+  final def fileNonCached(implicit
+      tsc: TaskSystemComponents
+  ): Resource[IO, File] =
     SharedFileHelper.getPathToFileNonCachedFile(this)
 
   final def history(implicit tsc: TaskSystemComponents): IO[History] =
@@ -156,7 +160,9 @@ sealed trait SharedFile extends HasSharedFiles {
 
   final def utf8(implicit tsc: TaskSystemComponents): IO[String] =
     stream(0L).through(fs2.text.utf8.decode).compile.string
-  final def bytes(implicit tsc: TaskSystemComponents): IO[scodec.bits.ByteVector] =
+  final def bytes(implicit
+      tsc: TaskSystemComponents
+  ): IO[scodec.bits.ByteVector] =
     stream.compile.to(scodec.bits.ByteVector)
 }
 
@@ -175,9 +181,15 @@ object SharedFile {
     val innerCodec: JsonValueCodec[SharedFileImpl] = JsonCodecMaker.make
     new JsonValueCodec[SharedFile] {
       val nullValue: SharedFile = null
-      def encodeValue(x: SharedFile, out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter): Unit =
+      def encodeValue(
+          x: SharedFile,
+          out: com.github.plokhotnyuk.jsoniter_scala.core.JsonWriter
+      ): Unit =
         innerCodec.encodeValue(x.asInstanceOf[SharedFileImpl], out)
-      def decodeValue(in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader, default: SharedFile): SharedFile =
+      def decodeValue(
+          in: com.github.plokhotnyuk.jsoniter_scala.core.JsonReader,
+          default: SharedFile
+      ): SharedFile =
         innerCodec.decodeValue(in, null)
     }
   }
@@ -295,4 +307,3 @@ object SharedFile {
   }
 
 }
-
