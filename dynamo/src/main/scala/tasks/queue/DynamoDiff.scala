@@ -492,9 +492,12 @@ private[tasks] object DynamoDiff {
         TransactionalStateDiff.WriteUnit(List(item), bytes)
       }
 
-    val resultUnits: List[TransactionalStateDiff.WriteUnit[TransactWriteItem]] = {
+    val resultUnits
+        : List[TransactionalStateDiff.WriteUnit[TransactWriteItem]] = {
       val grouped: Map[String, List[TransactionalStateDiff.Op[Array[Byte]]]] =
-        diff.resultChunkOps.groupBy(op => QueueStateDiff.parseAddressFromSk(op.key))
+        diff.resultChunkOps.groupBy(op =>
+          QueueStateDiff.parseAddressFromSk(op.key)
+        )
       grouped.toList.map { case (addressValue, opsForAddress) =>
         val items = opsForAddress.map(op => toResultChunkTransact(table, op))
         val bytes = items.map(estimateOpBytes).sum
@@ -530,7 +533,9 @@ private[tasks] object DynamoDiff {
           units = units,
           maxOpsPerChunk = MaxDataOpsPerChunk,
           maxBytesPerChunk = MaxDataBytesPerTransaction,
-          describeOversized = (u: TransactionalStateDiff.WriteUnit[TransactWriteItem]) =>
+          describeOversized = (u: TransactionalStateDiff.WriteUnit[
+            TransactWriteItem
+          ]) =>
             s"DynamoDB TransactWriteItems unit of ${u.bytes} bytes " +
               s"exceeds the per-transaction limit of $MaxDataBytesPerTransaction bytes " +
               s"(${u.ops.size} ops)"
@@ -566,8 +571,10 @@ private[tasks] object DynamoDiff {
       op: TransactionalStateDiff.Op[TaskItemFields]
   ): Option[(ScheduleTask, String)] = {
     val sk = op.key
-    val fromNew = QueueStateDiff.taskItemsOf(newState).get(sk).map(f => (f.sch, f.status))
-    val fromOld = QueueStateDiff.taskItemsOf(oldState).get(sk).map(f => (f.sch, f.status))
+    val fromNew =
+      QueueStateDiff.taskItemsOf(newState).get(sk).map(f => (f.sch, f.status))
+    val fromOld =
+      QueueStateDiff.taskItemsOf(oldState).get(sk).map(f => (f.sch, f.status))
     fromNew.orElse(fromOld)
   }
 
@@ -618,7 +625,9 @@ private[tasks] object DynamoDiff {
     case QueueImpl.ProxyResultFailure(cause) =>
       val stack = cause.getStackTrace
         .take(5)
-        .map(e => s"    at ${e.getClassName}.${e.getMethodName}(${e.getFileName}:${e.getLineNumber})")
+        .map(e =>
+          s"    at ${e.getClassName}.${e.getMethodName}(${e.getFileName}:${e.getLineNumber})"
+        )
         .mkString("\n")
       val msg = Option(cause.getMessage).getOrElse("<null>")
       s"ProxyResultFailure(" +

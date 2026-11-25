@@ -198,7 +198,12 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
 
     val (sameZone, otherZone, noZone) = withQueue(sch) { q =>
       for {
-        _ <- q.askForWork(LauncherName("w1"), workerIn(4, "eu-west-1a"), None, Set.empty)
+        _ <- q.askForWork(
+          LauncherName("w1"),
+          workerIn(4, "eu-west-1a"),
+          None,
+          Set.empty
+        )
         same <- q.askForWork(
           LauncherName("w2"),
           workerIn(4, "eu-west-1a"),
@@ -241,12 +246,22 @@ class ReplicatedTaskTest extends FunSuite with Matchers {
 
     val (inA, inB) = withQueue(sch) { q =>
       for {
-        a <- q.askForWork(LauncherName("w1"), workerIn(4, "eu-west-1a"), None, Set.empty)
+        a <- q.askForWork(
+          LauncherName("w1"),
+          workerIn(4, "eu-west-1a"),
+          None,
+          Set.empty
+        )
         _ <- q.handleLauncherStopped(
           LauncherName("w1"),
           QueueImpl.LauncherStopReason.SelfReportedByThisProcess
         )
-        b <- q.askForWork(LauncherName("w2"), workerIn(4, "eu-west-1b"), None, Set.empty)
+        b <- q.askForWork(
+          LauncherName("w2"),
+          workerIn(4, "eu-west-1b"),
+          None,
+          Set.empty
+        )
       } yield (took(a), took(b))
     }
 

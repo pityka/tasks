@@ -170,7 +170,7 @@ private[tasks] object MessageData {
       launcher: LauncherName,
       node: Option[Node],
       running: Set[HashedTaskDescription]
-  ) extends MessageData  
+  ) extends MessageData
   case class TaskDone(
       sch: ScheduleTask,
       launcher: LauncherName,

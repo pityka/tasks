@@ -46,7 +46,9 @@ class SporeMacroNegativeTest extends FunSuite with Matchers {
     """ shouldNot typeCheck
   }
 
-  test("spore closing over a local val from a method scope should not compile") {
+  test(
+    "spore closing over a local val from a method scope should not compile"
+  ) {
     """
     import tasks.queue.SporeMacros.spore
 

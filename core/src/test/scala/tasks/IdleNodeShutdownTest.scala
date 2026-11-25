@@ -69,9 +69,8 @@ object IdleNodeShutdownTest extends TestHelpers {
         es,
         Resource.pure(None)
       ) { implicit ts =>
-        val ios = (1 to 3).toList.map(i =>
-          testTask(Input(i))(ResourceRequest(1, 500))
-        )
+        val ios =
+          (1 to 3).toList.map(i => testTask(Input(i))(ResourceRequest(1, 500)))
         for {
           results <- ios.parSequence
           // Wait > idleNodeTimeout (3s) plus a couple of askInterval ticks

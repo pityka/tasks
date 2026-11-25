@@ -46,7 +46,12 @@ object JvmElasticSupport {
 
   case class State(
       taskSystems: List[
-        (String, FiberIO[((ExtendedTaskSystemComponents, HostConfiguration), IO[Unit])])
+        (
+            String,
+            FiberIO[
+              ((ExtendedTaskSystemComponents, HostConfiguration), IO[Unit])
+            ]
+        )
       ],
       nodesShutdown: List[String]
   )
@@ -105,7 +110,8 @@ object JvmElasticSupport {
       val workerLabels = labelsForRequest(requestSize)
       val labelsConfig =
         if (workerLabels.nonEmpty)
-          s"""hosts.labelsAsCommaString = "${workerLabels.toList.sorted.mkString(",")}""""
+          s"""hosts.labelsAsCommaString = "${workerLabels.toList.sorted
+              .mkString(",")}""""
         else ""
 
       val imageConfig = requestSize.image match {

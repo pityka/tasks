@@ -103,19 +103,26 @@ class DynamoCompletedResultsTest extends FunSuite with Matchers {
         Address(s"bulk-$i"),
         QueueImpl.ProxyResultFailure(
           new RuntimeException(
-            new String(sampleBytes, java.nio.charset.StandardCharsets.ISO_8859_1)
+            new String(
+              sampleBytes,
+              java.nio.charset.StandardCharsets.ISO_8859_1
+            )
           )
         )
       )
     }
     runEvents(client, events)
 
-    val resourceItemCount = client.rawStore.keys.count(_.pk ==
-      DynamoQueueState.ResourcesPartitionKey)
+    val resourceItemCount = client.rawStore.keys.count(
+      _.pk ==
+        DynamoQueueState.ResourcesPartitionKey
+    )
     resourceItemCount shouldBe 1
 
-    val perProxyItemCount = client.rawStore.keys.count(_.pk ==
-      DynamoQueueState.ResultsPartitionKey)
+    val perProxyItemCount = client.rawStore.keys.count(
+      _.pk ==
+        DynamoQueueState.ResultsPartitionKey
+    )
     perProxyItemCount shouldBe N
 
     val resources = client
@@ -181,7 +188,10 @@ class DynamoCompletedResultsTest extends FunSuite with Matchers {
     chunkKeys.size should be > 1
     val stored = state.completedResults(address)
     stored shouldBe a[QueueImpl.ProxyResultFailure]
-    stored.asInstanceOf[QueueImpl.ProxyResultFailure].cause.getMessage shouldBe bigMessage
+    stored
+      .asInstanceOf[QueueImpl.ProxyResultFailure]
+      .cause
+      .getMessage shouldBe bigMessage
   }
 
   test(
@@ -246,8 +256,10 @@ class DynamoCompletedResultsTest extends FunSuite with Matchers {
   ) {
     val client = newClient()
     val address = Address("ginormous")
-    val serializedBytes = DynamoQueueState.MaxDataBytesPerTransaction + 512 * 1024
-    val payload = DynamoCompletedResultsTest.randomIso(serializedBytes, seed = 300)
+    val serializedBytes =
+      DynamoQueueState.MaxDataBytesPerTransaction + 512 * 1024
+    val payload =
+      DynamoCompletedResultsTest.randomIso(serializedBytes, seed = 300)
     val result = QueueImpl.ProxyResultFailure(new RuntimeException(payload))
     val outcome = DynamoQueueState
       .makeTransaction(
@@ -257,7 +269,10 @@ class DynamoCompletedResultsTest extends FunSuite with Matchers {
       )
       .use { tx =>
         tx.flatModify(state =>
-          (state.update(QueueImpl.ResultStoredForProxy(address, result)), IO.unit)
+          (
+            state.update(QueueImpl.ResultStoredForProxy(address, result)),
+            IO.unit
+          )
         )
       }
       .attempt
@@ -273,7 +288,8 @@ class DynamoCompletedResultsTest extends FunSuite with Matchers {
     msg should include("messagePrefix=")
     msg should include("stackHead=")
 
-    val resultChunks = client.rawStore.keys.count(_.pk == DynamoQueueState.ResultsPartitionKey)
+    val resultChunks =
+      client.rawStore.keys.count(_.pk == DynamoQueueState.ResultsPartitionKey)
     resultChunks shouldBe 0
   }
 
@@ -302,7 +318,10 @@ class DynamoCompletedResultsTest extends FunSuite with Matchers {
       )
       .use { tx =>
         tx.flatModify(state =>
-          (state.update(QueueImpl.ResultStoredForProxy(address, result)), IO.unit)
+          (
+            state.update(QueueImpl.ResultStoredForProxy(address, result)),
+            IO.unit
+          )
         )
       }
       .attempt
@@ -397,7 +416,10 @@ class DynamoCompletedResultsTest extends FunSuite with Matchers {
   }
 
   private def estimateSize(
-      attrs: Map[String, software.amazon.awssdk.services.dynamodb.model.AttributeValue]
+      attrs: Map[
+        String,
+        software.amazon.awssdk.services.dynamodb.model.AttributeValue
+      ]
   ): Int = {
     import software.amazon.awssdk.services.dynamodb.model.AttributeValue
     def one(av: AttributeValue): Int = {

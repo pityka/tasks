@@ -397,7 +397,9 @@ object EcsGetNodeName extends GetNodeName {
     }
 
   private def hostname: IO[RunningJobId] =
-    IO.interruptible(RunningJobId(java.net.InetAddress.getLocalHost.getHostName))
+    IO.interruptible(
+      RunningJobId(java.net.InetAddress.getLocalHost.getHostName)
+    )
 
   def getNodeName(config: TasksConfig): IO[RunningJobId] = {
     val explicit = config.nodeName

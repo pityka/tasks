@@ -43,7 +43,8 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
     }
   }
 
-  private val store: AtomicReference[Map[ItemKey, Map[String, AttributeValue]]] =
+  private val store
+      : AtomicReference[Map[ItemKey, Map[String, AttributeValue]]] =
     new AtomicReference(Map.empty)
 
   val transactWriteCount = new AtomicInteger(0)
@@ -65,7 +66,11 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
   def currentItem(pk: String, sk: String): Option[Map[String, AttributeValue]] =
     store.get.get(ItemKey(pk, sk))
 
-  def setItem(pk: String, sk: String, attrs: Map[String, AttributeValue]): Unit =
+  def setItem(
+      pk: String,
+      sk: String,
+      attrs: Map[String, AttributeValue]
+  ): Unit =
     store.updateAndGet { current =>
       current + (ItemKey(pk, sk) -> attrs)
     }
@@ -91,9 +96,15 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
     ItemKey(pk, sk)
   }
 
-  override def putItem(request: PutItemRequest): CompletableFuture[PutItemResponse] = this.synchronized {
+  override def putItem(
+      request: PutItemRequest
+  ): CompletableFuture[PutItemResponse] = this.synchronized {
     putItemCount.incrementAndGet()
-    if (request.hasExpressionAttributeNames && request.expressionAttributeNames().isEmpty)
+    if (
+      request.hasExpressionAttributeNames && request
+        .expressionAttributeNames()
+        .isEmpty
+    )
       return failed(
         DynamoDbException
           .builder()
@@ -101,7 +112,11 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
           .message("ExpressionAttributeNames must not be empty")
           .build()
       )
-    if (request.hasExpressionAttributeValues && request.expressionAttributeValues().isEmpty)
+    if (
+      request.hasExpressionAttributeValues && request
+        .expressionAttributeValues()
+        .isEmpty
+    )
       return failed(
         DynamoDbException
           .builder()
@@ -119,7 +134,9 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
           .build()
       )
     if (request.tableName() != tableName)
-      return failed(new RuntimeException(s"wrong table: ${request.tableName()}"))
+      return failed(
+        new RuntimeException(s"wrong table: ${request.tableName()}")
+      )
     val item = request.item().asScala.toMap
     val key = extractKey(item, Map.empty)
     val existing = store.get.get(key)
@@ -144,12 +161,17 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
     }
   }
 
-  override def getItem(request: GetItemRequest): CompletableFuture[GetItemResponse] = {
+  override def getItem(
+      request: GetItemRequest
+  ): CompletableFuture[GetItemResponse] = {
     beforeGetItem.get.apply()
     getItemCount.incrementAndGet()
     val key = request.key().asScala.toMap
     val itemKey =
-      ItemKey(key.get("pk").map(_.s()).getOrElse(""), key.get("sk").map(_.s()).getOrElse(""))
+      ItemKey(
+        key.get("pk").map(_.s()).getOrElse(""),
+        key.get("sk").map(_.s()).getOrElse("")
+      )
     store.get.get(itemKey) match {
       case None =>
         completed(GetItemResponse.builder().build())
@@ -158,7 +180,9 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
     }
   }
 
-  override def query(request: QueryRequest): CompletableFuture[QueryResponse] = {
+  override def query(
+      request: QueryRequest
+  ): CompletableFuture[QueryResponse] = {
     beforeQuery.get.apply()
     queryCount.incrementAndGet()
     val values = Option(request.expressionAttributeValues())
@@ -168,7 +192,9 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
     val items = store.get.collect {
       case (k, attrs) if k.pk == pk => attrs
     }.toList
-    val sorted = items.sortBy(_.getOrElse("sk", AttributeValue.builder().s("").build()).s())
+    val sorted = items.sortBy(
+      _.getOrElse("sk", AttributeValue.builder().s("").build()).s()
+    )
     completed(
       QueryResponse
         .builder()
@@ -266,7 +292,9 @@ final class FakeDynamoDbAsyncClient(val tableName: String)
 
     val snapshot = store.get
 
-    val evaluations: List[Either[CancellationReason, Map[ItemKey, Option[Map[String, AttributeValue]]]]] =
+    val evaluations: List[Either[CancellationReason, Map[ItemKey, Option[
+      Map[String, AttributeValue]
+    ]]]] =
       items.map { tw =>
         if (tw.put() != null) {
           val put = tw.put()

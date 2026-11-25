@@ -88,7 +88,9 @@ class EcsConfigTest extends AnyFunSuite with Matchers {
     )
   }
 
-  test("resolveTaskDefinition falls back to the default when the selector abstains") {
+  test(
+    "resolveTaskDefinition falls back to the default when the selector abstains"
+  ) {
     minimal.resolveTaskDefinition(ResourceRequest(1, 128, 0, 0)) shouldBe
       Right("default-td")
   }
@@ -107,10 +109,14 @@ class EcsConfigTest extends AnyFunSuite with Matchers {
     c.resolveTaskDefinition(
       ResourceRequest((1, 1), 128, 0, 0, Some("my-image:v2"))
     ) shouldBe Right("my-td-v2")
-    c.resolveTaskDefinition(ResourceRequest(1, 128, 0, 0)) shouldBe Right("default-td")
+    c.resolveTaskDefinition(ResourceRequest(1, 128, 0, 0)) shouldBe Right(
+      "default-td"
+    )
   }
 
-  test("a selector may key the task definition on the node selector, not the image") {
+  test(
+    "a selector may key the task definition on the node selector, not the image"
+  ) {
     val c = minimal.withTaskDefinitionSelector { req =>
       if (req.nodeSelector.contains(NodeSelector.Has("device.fpga")))
         Some("fpga-td")
@@ -126,7 +132,9 @@ class EcsConfigTest extends AnyFunSuite with Matchers {
         Some(NodeSelector.Has("device.fpga"))
       )
     ) shouldBe Right("fpga-td")
-    c.resolveTaskDefinition(ResourceRequest(1, 128, 0, 0)) shouldBe Right("default-td")
+    c.resolveTaskDefinition(ResourceRequest(1, 128, 0, 0)) shouldBe Right(
+      "default-td"
+    )
   }
 
   test("withPlacementConstraints accumulates and converts to SDK constraints") {

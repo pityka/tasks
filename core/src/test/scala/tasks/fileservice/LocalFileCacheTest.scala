@@ -19,7 +19,8 @@ private[tasks] class CountingManagedFileStorage(data: Array[Byte])
   val downloadCount = new AtomicInteger(0)
 
   def uri(mp: ManagedFilePath): IO[tasks.util.Uri] = ???
-  def stream(path: ManagedFilePath, fromOffset: Long): fs2.Stream[IO, Byte] = ???
+  def stream(path: ManagedFilePath, fromOffset: Long): fs2.Stream[IO, Byte] =
+    ???
   def contains(path: ManagedFilePath, size: Long, hash: Int): IO[Boolean] = ???
   def contains(
       path: ManagedFilePath,
@@ -29,7 +30,11 @@ private[tasks] class CountingManagedFileStorage(data: Array[Byte])
       path: ProposedManagedFilePath
   ): fs2.Pipe[IO, Byte, (Long, Int, ManagedFilePath)] = ???
   def sharedFolder(prefix: Seq[String]): IO[Option[File]] = IO.pure(None)
-  def delete(path: ManagedFilePath, expectedSize: Long, expectedHash: Int): IO[Boolean] =
+  def delete(
+      path: ManagedFilePath,
+      expectedSize: Long,
+      expectedHash: Int
+  ): IO[Boolean] =
     IO.pure(false)
 
   def exportFile(path: ManagedFilePath): Resource[IO, File] =
@@ -70,8 +75,14 @@ class LocalFileCacheTest extends AnyFunSuite with Matchers {
 
   def sharedFileFor(data: Array[Byte]): SharedFile = {
     val hash =
-      FileStorage.getContentHash(fs2.Stream.chunk(fs2.Chunk.array(data))).unsafeRunSync()
-    SharedFileHelper.create(data.length.toLong, hash, ManagedFilePath(Vector("proba")))
+      FileStorage
+        .getContentHash(fs2.Stream.chunk(fs2.Chunk.array(data)))
+        .unsafeRunSync()
+    SharedFileHelper.create(
+      data.length.toLong,
+      hash,
+      ManagedFilePath(Vector("proba"))
+    )
   }
 
   def freshCacheRoot(): File = {
@@ -80,7 +91,9 @@ class LocalFileCacheTest extends AnyFunSuite with Matchers {
     f
   }
 
-  test("filePersistent avoids re-download across separate sessions and keeps the file") {
+  test(
+    "filePersistent avoids re-download across separate sessions and keeps the file"
+  ) {
     val data = Array[Byte](1, 2, 3, 4, 5, 6, 7, 8)
     val sf = sharedFileFor(data)
     val cacheRoot = freshCacheRoot()
@@ -96,7 +109,9 @@ class LocalFileCacheTest extends AnyFunSuite with Matchers {
       .unsafeRunSync()
 
     backend.downloadCount.get() should equal(1)
-    readBinaryFile(firstPath.getCanonicalPath).toVector should equal(data.toVector)
+    readBinaryFile(firstPath.getCanonicalPath).toVector should equal(
+      data.toVector
+    )
     firstPath.exists() should be(true)
 
     val secondContent = SharedFileHelper
@@ -144,7 +159,10 @@ class LocalFileCacheTest extends AnyFunSuite with Matchers {
 
     backend.downloadCount.get() should equal(1)
 
-    tasks.util.writeBinaryToFile(firstPath.getAbsolutePath, Array[Byte](0, 0, 0, 0, 0, 0))
+    tasks.util.writeBinaryToFile(
+      firstPath.getAbsolutePath,
+      Array[Byte](0, 0, 0, 0, 0, 0)
+    )
 
     val repairedContent = SharedFileHelper
       .getPathToFileNonCachedFile(sf, keepLocalCache = true)

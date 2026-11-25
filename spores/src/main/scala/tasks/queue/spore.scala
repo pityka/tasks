@@ -26,7 +26,10 @@ object Spore {
       dependencies: Seq[Spore[Any, Any]]
   ) extends Spore[A, B]
 
-  def apply[A, B](fqcn: String, dependencies: Seq[Spore[Any, Any]]): Spore[A, B] =
+  def apply[A, B](
+      fqcn: String,
+      dependencies: Seq[Spore[Any, Any]]
+  ): Spore[A, B] =
     SporeImpl[A, B](fqcn, dependencies)
 
   def unapply[A, B](s: Spore[A, B]): Some[(String, Seq[Spore[Any, Any]])] =

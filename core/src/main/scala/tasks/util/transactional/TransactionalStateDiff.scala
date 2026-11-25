@@ -66,7 +66,8 @@ private[tasks] object TransactionalStateDiff {
 
   final case class WriteUnit[O](ops: List[O], bytes: Int)
 
-  class OversizedUnitException(message: String) extends RuntimeException(message)
+  class OversizedUnitException(message: String)
+      extends RuntimeException(message)
 
   def packUnits[O](
       units: List[WriteUnit[O]],

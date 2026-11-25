@@ -227,7 +227,6 @@ private[tasks] object Launcher {
       resourceAllocated: ResourceAllocated
   )
 
-
   /** Per-launcher mutable state.
     *
     * @param lastTaskFinished

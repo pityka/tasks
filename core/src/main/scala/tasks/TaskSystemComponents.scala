@@ -96,10 +96,14 @@ final class ExtendedTaskSystemComponents private[tasks] (
   override def withChildPrefix(name: String): ExtendedTaskSystemComponents =
     copyWithFilePrefix(this.filePrefix.append(name))
 
-  override def withChildPrefix(names: Seq[String]): ExtendedTaskSystemComponents =
+  override def withChildPrefix(
+      names: Seq[String]
+  ): ExtendedTaskSystemComponents =
     copyWithFilePrefix(this.filePrefix.append(names))
 
-  override def replaceFilePrefix(names: Seq[String]): ExtendedTaskSystemComponents =
+  override def replaceFilePrefix(
+      names: Seq[String]
+  ): ExtendedTaskSystemComponents =
     copyWithFilePrefix(FileServicePrefix(names.toVector))
 
   override def withFilePrefix[B](
