@@ -32,6 +32,11 @@ ThisBuild / credentials ++= {
     token)
 }.toSeq
 
+ThisBuild / resolvers ++= Seq(
+  "GitHub Package Registry" at "https://maven.pkg.github.com/pityka/tasks"
+  // + your GitLab Maven endpoint: https://gitlab.com/api/v4/projects/<ID>/packages/maven
+)
+
 ThisBuild / versionScheme := Some("early-semver")
 
 ThisBuild / versionPolicyIntention := Compatibility.None
