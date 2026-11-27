@@ -12,7 +12,13 @@ import scala.concurrent.duration._
 import tasks.elastic.NodeRegistryState
 import tasks.elastic.ShutdownNode
 import tasks.queue.QueueImpl
-import tasks.shared.{PendingJobId, ResourceAvailable, RunningJobId}
+import tasks.shared.{
+  CodeVersion,
+  PendingJobId,
+  ResourceAvailable,
+  RunningJobId,
+  VersionedResourceAvailable
+}
 import tasks.util.{LocalMessenger, Transaction}
 import tasks.util.message.{LauncherName, Node}
 
@@ -30,23 +36,33 @@ class ReleaseShutdownNodeSelectionTest extends FunSuite with Matchers {
   }
 
   private val shape =
-    ResourceAvailable(cpu = 1, memory = 100, scratch = 0, gpu = Nil, image = None)
+    ResourceAvailable(
+      cpu = 1,
+      memory = 100,
+      scratch = 0,
+      gpu = Nil,
+      image = None
+    )
+
+  private val cv = CodeVersion("test")
+  private val vshape = VersionedResourceAvailable(cv, shape)
 
   private val runningId = RunningJobId("running-1")
   private val pendingSeedId = PendingJobId("pending-seed")
   private val pendingOrphanId = PendingJobId("pending-orphan")
 
   private val seededNodes = NodeRegistryState.State.empty
-    .update(NodeRegistryState.NodeRequested(shape))
-    .update(NodeRegistryState.NodeIsPending(pendingSeedId, shape, shape))
+    .update(NodeRegistryState.NodeRequested(vshape))
+    .update(NodeRegistryState.NodeIsPending(pendingSeedId, vshape, vshape))
     .update(
       NodeRegistryState.NodeIsUp(
         Node(runningId, shape, LauncherName("launcher-1")),
+        cv,
         pendingSeedId
       )
     )
-    .update(NodeRegistryState.NodeRequested(shape))
-    .update(NodeRegistryState.NodeIsPending(pendingOrphanId, shape, shape))
+    .update(NodeRegistryState.NodeRequested(vshape))
+    .update(NodeRegistryState.NodeIsPending(pendingOrphanId, vshape, vshape))
 
   private val seededState =
     QueueImpl.State.empty.copy(nodes = seededNodes)
@@ -65,8 +81,7 @@ class ReleaseShutdownNodeSelectionTest extends FunSuite with Matchers {
       createNode = None,
       convertRunningToPending = None,
       unmanagedResource = ResourceAvailable.empty,
-      meterProvider =
-        org.typelevel.otel4s.metrics.MeterProvider.noop[IO],
+      meterProvider = org.typelevel.otel4s.metrics.MeterProvider.noop[IO],
       mainProcessSession = Some(session)
     )
   }

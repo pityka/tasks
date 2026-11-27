@@ -170,7 +170,9 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
         ) *>
           tx.flatModify(state =>
             (
-              state.update(QueueImpl.TaskScheduled(sch, launcher, allocated, None, 0L)),
+              state.update(
+                QueueImpl.TaskScheduled(sch, launcher, allocated, None, 0L)
+              ),
               IO.unit
             )
           ) *> tx.get
@@ -197,7 +199,9 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
         ) *>
           tx.flatModify(state =>
             (
-              state.update(QueueImpl.TaskScheduled(sch, launcher, allocated, None, 0L)),
+              state.update(
+                QueueImpl.TaskScheduled(sch, launcher, allocated, None, 0L)
+              ),
               IO.unit
             )
           ) *>
@@ -206,7 +210,8 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
       .unsafeRunSync()
     finalState.scheduledTasks shouldBe empty
     finalState.queuedTasks shouldBe empty
-    val taskItems = client.rawStore.keys.count(_.pk == DynamoQueueState.TasksPartitionKey)
+    val taskItems =
+      client.rawStore.keys.count(_.pk == DynamoQueueState.TasksPartitionKey)
     taskItems shouldBe 0
   }
 
@@ -224,7 +229,9 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
         ) *>
           tx.flatModify(state =>
             (
-              state.update(QueueImpl.TaskScheduled(sch, launcher, allocated, None, 0L)),
+              state.update(
+                QueueImpl.TaskScheduled(sch, launcher, allocated, None, 0L)
+              ),
               IO.unit
             )
           ) *>
@@ -234,7 +241,8 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
       }
       .unsafeRunSync()
     finalState.scheduledTasks shouldBe empty
-    val taskItems = client.rawStore.keys.count(_.pk == DynamoQueueState.TasksPartitionKey)
+    val taskItems =
+      client.rawStore.keys.count(_.pk == DynamoQueueState.TasksPartitionKey)
     taskItems shouldBe 0
   }
 
@@ -276,7 +284,9 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
     finalState.knownLaunchers.keySet shouldBe Set(LauncherName("race"))
   }
 
-  test("SessionProxiesDropped sweeps proxies and chunks beyond the 100-op cap") {
+  test(
+    "SessionProxiesDropped sweeps proxies and chunks beyond the 100-op cap"
+  ) {
     val client = newClient()
     val deadSession = "dead-session"
     val liveProxy = Proxy(Address("live"))
@@ -307,7 +317,10 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
         } *>
           IO { writesBeforeSweep.set(client.transactWriteCount.get); () } *>
           tx.flatModify(state =>
-            (state.update(QueueImpl.SessionProxiesDropped(deadSession)), IO.unit)
+            (
+              state.update(QueueImpl.SessionProxiesDropped(deadSession)),
+              IO.unit
+            )
           ) *> tx.get
       }
       .unsafeRunSync()
@@ -328,7 +341,10 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
     val proxy = Proxy(Address("p-rt"))
     val address = Address("p-stored")
     val result =
-      QueueImpl.ProxyResultSuccess(SchedulerFixtures.untypedResult(), retrievedFromCache = false)
+      QueueImpl.ProxyResultSuccess(
+        SchedulerFixtures.untypedResult(),
+        retrievedFromCache = false
+      )
 
     val events: List[QueueImpl.Event] = List(
       QueueImpl.MainProcessJoined("session-1"),
@@ -339,7 +355,9 @@ class DynamoQueueStateTest extends FunSuite with Matchers {
       QueueImpl.TaskScheduled(schS, launcher, allocated, Some("rack-A"), 0L),
       QueueImpl.ResultStoredForProxy(address, result),
       QueueImpl.NodeEvent(
-        NodeRegistryState.NodeRequested(SchedulerFixtures.resourceAvailable())
+        NodeRegistryState.NodeRequested(
+          SchedulerFixtures.versionedResourceAvailable()
+        )
       )
     )
 

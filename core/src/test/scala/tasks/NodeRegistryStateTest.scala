@@ -15,8 +15,11 @@ import scala.concurrent.duration._
 
 class NodeRegistryStateTest extends AnyFunSuite with Matchers {
 
-  private val shapeA = ResourceAvailable(1, 100, 0, Nil, None)
-  private val shapeB = ResourceAvailable(4, 500, 0, Nil, None)
+  private val cv = CodeVersion("test")
+  private val shapeA =
+    VersionedResourceAvailable(cv, ResourceAvailable(1, 100, 0, Nil, None))
+  private val shapeB =
+    VersionedResourceAvailable(cv, ResourceAvailable(4, 500, 0, Nil, None))
 
   test("NodeIsPending removes the matching committed shape, not the head") {
     val s0 = NodeRegistryState.State.empty
@@ -28,13 +31,16 @@ class NodeRegistryStateTest extends AnyFunSuite with Matchers {
     val s1 = s0.update(
       NodeIsPending(
         PendingJobId("job-a"),
-        resource = ResourceAvailable(
-          2,
-          shapeA.memory,
-          shapeA.scratch,
-          shapeA.gpu,
-          shapeA.image,
-          shapeA.labels
+        resource = VersionedResourceAvailable(
+          cv,
+          ResourceAvailable(
+            2,
+            shapeA.cpuMemoryAvailable.memory,
+            shapeA.cpuMemoryAvailable.scratch,
+            shapeA.cpuMemoryAvailable.gpu,
+            shapeA.cpuMemoryAvailable.image,
+            shapeA.cpuMemoryAvailable.labels
+          )
         ),
         committedResource = shapeA
       )
@@ -112,16 +118,18 @@ class NodeRegistryStateTest extends AnyFunSuite with Matchers {
       )
       committedResource = shapeA
       recordFailure = ref.update(_.update(NodeRequestFailed(committedResource)))
-      hangingRequest = IO.uncancelable { poll =>
-        poll(IO.never[Either[String, (PendingJobId, ResourceAvailable)]])
-          .flatMap {
-            case Left(_)  => recordFailure
-            case Right(_) => IO.unit
-          }
-      }.guaranteeCase {
-        case cats.effect.Outcome.Canceled() => recordFailure
-        case _                              => IO.unit
-      }
+      hangingRequest = IO
+        .uncancelable { poll =>
+          poll(IO.never[Either[String, (PendingJobId, ResourceAvailable)]])
+            .flatMap {
+              case Left(_)  => recordFailure
+              case Right(_) => IO.unit
+            }
+        }
+        .guaranteeCase {
+          case cats.effect.Outcome.Canceled() => recordFailure
+          case _                              => IO.unit
+        }
       fiber <- hangingRequest.start
       _ <- IO.sleep(50.millis)
       _ <- fiber.cancel

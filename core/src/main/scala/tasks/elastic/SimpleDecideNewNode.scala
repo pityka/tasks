@@ -31,14 +31,14 @@ import tasks.util._
 import tasks.util.eq._
 import tasks.util.config._
 
-private[tasks] class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
+private[tasks] class SimpleDecideNewNode(val codeVersion: CodeVersion)(implicit
     config: TasksConfig
 ) extends DecideNewNode {
 
   def needNewNode(
       q: QueueStat,
-      freeOnRegisteredNodes: Seq[ResourceAvailable],
-      pendingNodes: Seq[ResourceAvailable]
+      freeOnRegisteredNodes: Seq[VersionedResourceAvailable],
+      pendingNodes: Seq[VersionedResourceAvailable]
   ): Map[ResourceRequest, Int] = {
     val resourceRequests: List[ResourceRequest] = q.queued
       .map(_._2)
@@ -48,7 +48,10 @@ private[tasks] class SimpleDecideNewNode(codeVersion: CodeVersion)(implicit
       }
       .sortBy(r => (-r.gpu, -r.cpu._1, -r.memory, -r.scratch))
     val availableResources: List[ResourceAvailable] =
-      (freeOnRegisteredNodes ++ pendingNodes).toList
+      (freeOnRegisteredNodes ++ pendingNodes).toList.collect {
+        case versioned if versioned.codeVersion === codeVersion =>
+          versioned.cpuMemoryAvailable
+      }
 
     val (_, allocatedRequests) =
       resourceRequests.foldLeft(

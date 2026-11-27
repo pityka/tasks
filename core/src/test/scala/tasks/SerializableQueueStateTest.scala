@@ -12,11 +12,20 @@ import tasks.util.message._
 class SerializableQueueStateTest extends FunSuite with Matchers {
 
   private val resource =
-    ResourceAvailable(cpu = 2, memory = 500, scratch = 10, gpu = List(0), image = Some("img"))
+    ResourceAvailable(
+      cpu = 2,
+      memory = 500,
+      scratch = 10,
+      gpu = List(0),
+      image = Some("img")
+    )
 
   private val launcher = LauncherName("launcher-1")
 
   private val node = Node(RunningJobId("running-1"), resource, launcher)
+
+  private val versionedResource =
+    VersionedResourceAvailable(CodeVersion("code-version-1"), resource)
 
   private val proxyAddress =
     Address("ProxyTask-name.1-12345-abcdef", Some("http://worker:1234/prefix"))
@@ -87,10 +96,10 @@ class SerializableQueueStateTest extends FunSuite with Matchers {
     knownLaunchers = Map(launcher -> Some(node)),
     counters = Map(launcher -> 42L),
     nodes = NodeRegistryState.State(
-      running = Map(RunningJobId("running-1") -> resource),
-      pending = Map(PendingJobId("pending-1") -> resource),
+      running = Map(RunningJobId("running-1") -> versionedResource),
+      pending = Map(PendingJobId("pending-1") -> versionedResource),
       cumulativeRequested = 5,
-      inFlightRequests = List(resource)
+      inFlightRequests = List(versionedResource)
     ),
     enqueueTimestamps = Map(QueueImpl.project(queued) -> 7L),
     completedCount = Map(TaskId("completed", 1) -> 11L),
@@ -114,7 +123,9 @@ class SerializableQueueStateTest extends FunSuite with Matchers {
     decodedProxies.map(_.listeningUri) shouldBe List(
       Some("http://worker:1234/prefix")
     )
-    decoded.queuedTasks.values.map(_._1.proxy.listeningUri).toList shouldBe List(
+    decoded.queuedTasks.values
+      .map(_._1.proxy.listeningUri)
+      .toList shouldBe List(
       Some("http://worker:1234/prefix")
     )
   }

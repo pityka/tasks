@@ -120,7 +120,6 @@ private[tasks] final class QueueMetrics(
       }
   }
 
-
   def onTaskScheduled(
       description: HashedTaskDescription,
       waitSeconds: Option[Double]
@@ -522,13 +521,17 @@ private[tasks] object QueueMetrics {
         "tasks.nodes.running.by_label",
         "Worker nodes currently running, broken down by every label they advertise. " +
           "A node with N labels contributes one point per label.",
-        countByLabel(_.nodes.running.valuesIterator.map(_.labels))
+        countByLabel(
+          _.nodes.running.valuesIterator.map(_.cpuMemoryAvailable.labels)
+        )
       )
       nodesPendingByLabel <- labelGauge(
         "tasks.nodes.pending.by_label",
         "Worker nodes allocated but not yet up, broken down by every label they " +
           "advertise. A node with N labels contributes one point per label.",
-        countByLabel(_.nodes.pending.valuesIterator.map(_.labels))
+        countByLabel(
+          _.nodes.pending.valuesIterator.map(_.cpuMemoryAvailable.labels)
+        )
       )
       queuedByAffinityLabel <- labelGauge(
         "tasks.queued.affinity_label",
@@ -589,10 +592,12 @@ private[tasks] object QueueMetrics {
     ): Resource[IO, Binding] =
       scalarGauge(meter, name, description, unit, select)
 
-    def fromRunning(st: QueueImpl.State) = sumResources(st.nodes.running.values)
-    def fromPending(st: QueueImpl.State) = sumResources(st.nodes.pending.values)
+    def fromRunning(st: QueueImpl.State) =
+      sumResources(st.nodes.running.values.map(_.cpuMemoryAvailable))
+    def fromPending(st: QueueImpl.State) =
+      sumResources(st.nodes.pending.values.map(_.cpuMemoryAvailable))
     def fromInflight(st: QueueImpl.State) =
-      sumResources(st.nodes.inFlightRequests)
+      sumResources(st.nodes.inFlightRequests.map(_.cpuMemoryAvailable))
 
     for {
       runningCpu <- gauge(
@@ -705,7 +710,8 @@ private[tasks] object QueueMetrics {
     }
 
     def availableFor(st: QueueImpl.State): (Long, Long, Long, Long) = {
-      val (rCpu, rMem, rScr, rGpu) = sumResources(st.nodes.running.values)
+      val (rCpu, rMem, rScr, rGpu) =
+        sumResources(st.nodes.running.values.map(_.cpuMemoryAvailable))
       val (aCpu, aMem, aScr, aGpu) = allocatedSums(st)
       (rCpu - aCpu, rMem - aMem, rScr - aScr, rGpu - aGpu)
     }

@@ -60,7 +60,10 @@ class DynamoCodecRoundTripTest extends FunSuite with Matchers {
     val bytes = encode(original)
     val decoded = decode[QueueImpl.ProxyResult](bytes)
     decoded shouldBe a[QueueImpl.ProxyResultFailure]
-    decoded.asInstanceOf[QueueImpl.ProxyResultFailure].cause.getMessage shouldBe "boom"
+    decoded
+      .asInstanceOf[QueueImpl.ProxyResultFailure]
+      .cause
+      .getMessage shouldBe "boom"
   }
 
   test("Option[Node] round-trips for Some and None") {
@@ -77,13 +80,15 @@ class DynamoCodecRoundTripTest extends FunSuite with Matchers {
   test("NodeRegistryState.State with populated maps round-trips") {
     val original = NodeRegistryState.State.empty
       .update(
-        NodeRegistryState.NodeRequested(SchedulerFixtures.resourceAvailable())
+        NodeRegistryState.NodeRequested(
+          SchedulerFixtures.versionedResourceAvailable()
+        )
       )
       .update(
         NodeRegistryState.NodeIsPending(
           PendingJobId("p-1"),
-          SchedulerFixtures.resourceAvailable(),
-          SchedulerFixtures.resourceAvailable()
+          SchedulerFixtures.versionedResourceAvailable(),
+          SchedulerFixtures.versionedResourceAvailable()
         )
       )
       .update(
@@ -93,6 +98,7 @@ class DynamoCodecRoundTripTest extends FunSuite with Matchers {
             SchedulerFixtures.resourceAvailable(),
             LauncherName("l-r")
           ),
+          CodeVersion("v1"),
           PendingJobId("p-1")
         )
       )
@@ -159,13 +165,15 @@ class DynamoCodecRoundTripTest extends FunSuite with Matchers {
     )
     val nodes = NodeRegistryState.State.empty
       .update(
-        NodeRegistryState.NodeRequested(SchedulerFixtures.resourceAvailable())
+        NodeRegistryState.NodeRequested(
+          SchedulerFixtures.versionedResourceAvailable()
+        )
       )
       .update(
         NodeRegistryState.NodeIsPending(
           PendingJobId("p-9"),
-          SchedulerFixtures.resourceAvailable(),
-          SchedulerFixtures.resourceAvailable()
+          SchedulerFixtures.versionedResourceAvailable(),
+          SchedulerFixtures.versionedResourceAvailable()
         )
       )
     val attrs = DynamoDiff.encodeResources(
@@ -181,7 +189,10 @@ class DynamoCodecRoundTripTest extends FunSuite with Matchers {
       scala.jdk.CollectionConverters.MapHasAsJava(attrs).asJava
     val (fields, ver) = DynamoDiff.decodeResources(javaAttrs)
     ver shouldBe 99L
-    fields.knownLaunchers shouldBe Map(launcherA -> Some(node), launcherB -> None)
+    fields.knownLaunchers shouldBe Map(
+      launcherA -> Some(node),
+      launcherB -> None
+    )
     fields.counters shouldBe Map(launcherA -> 7L, launcherB -> 11L)
     fields.nodes shouldBe nodes
     fields.mainProcesses shouldBe Set("session-x", "session-y")

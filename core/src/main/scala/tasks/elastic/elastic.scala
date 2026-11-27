@@ -89,10 +89,11 @@ trait CreateNodeFactory {
 }
 
 private[tasks] trait DecideNewNode {
+  def codeVersion: CodeVersion
   def needNewNode(
       q: QueueStat,
-      freeOnRegisteredNodes: Seq[ResourceAvailable],
-      pendingNodes: Seq[ResourceAvailable]
+      freeOnRegisteredNodes: Seq[VersionedResourceAvailable],
+      pendingNodes: Seq[VersionedResourceAvailable]
   ): Map[ResourceRequest, Int]
 }
 

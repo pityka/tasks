@@ -86,32 +86,37 @@ private[tasks] object NodeRegistryState {
     */
   sealed trait Event
   case object AllStop extends Event
-  case class NodeRequested(committedResource: ResourceAvailable) extends Event
-  case class NodeRequestFailed(committedResource: ResourceAvailable)
+  case class NodeRequested(committedResource: VersionedResourceAvailable)
+      extends Event
+  case class NodeRequestFailed(committedResource: VersionedResourceAvailable)
       extends Event
   case class NodeIsPending(
       pendingJobId: PendingJobId,
-      resource: ResourceAvailable,
-      committedResource: ResourceAvailable
+      resource: VersionedResourceAvailable,
+      committedResource: VersionedResourceAvailable
   ) extends Event
-  case class NodeIsUp(node: Node, pendingJobId: PendingJobId) extends Event
+  case class NodeIsUp(
+      node: Node,
+      codeVersion: CodeVersion,
+      pendingJobId: PendingJobId
+  ) extends Event
   case class NodeIsDown(node: Node) extends Event
   case class InitFailed(pending: PendingJobId) extends Event
 
   private def removeFirst(
-      xs: List[ResourceAvailable],
-      x: ResourceAvailable
-  ): List[ResourceAvailable] = {
+      xs: List[VersionedResourceAvailable],
+      x: VersionedResourceAvailable
+  ): List[VersionedResourceAvailable] = {
     val (before, after) = xs.span(_ != x)
     if (after.isEmpty) xs
     else before ++ after.tail
   }
 
   case class State(
-      running: Map[RunningJobId, ResourceAvailable],
-      pending: Map[PendingJobId, ResourceAvailable],
+      running: Map[RunningJobId, VersionedResourceAvailable],
+      pending: Map[PendingJobId, VersionedResourceAvailable],
       cumulativeRequested: Int,
-      inFlightRequests: List[ResourceAvailable]
+      inFlightRequests: List[VersionedResourceAvailable]
   ) {
     def update(e: Event): State = {
       e match {
@@ -123,11 +128,16 @@ private[tasks] object NodeRegistryState {
             inFlightRequests = resource :: inFlightRequests
           )
         case NodeRequestFailed(committedResource) =>
-          copy(inFlightRequests = removeFirst(inFlightRequests, committedResource))
-        case NodeIsUp(node, pendingJobId) =>
+          copy(inFlightRequests =
+            removeFirst(inFlightRequests, committedResource)
+          )
+        case NodeIsUp(node, codeVersion, pendingJobId) =>
           copy(
             pending = pending - pendingJobId,
-            running = running + ((node.name, node.size))
+            running = running + ((
+              node.name,
+              VersionedResourceAvailable(codeVersion, node.size)
+            ))
           )
         case NodeIsDown(node) =>
           copy(running = running - node.name)

@@ -38,7 +38,11 @@ class SimpleDecideNewNodeTestSuite extends FunSuite with Matchers {
       )
     )
 
-    val result = decider.needNewNode(queueStat, registeredNodes, Seq.empty)
+    val result = decider.needNewNode(
+      queueStat,
+      registeredNodes.map(VersionedResourceAvailable(cv, _)),
+      Seq.empty
+    )
 
     result shouldBe empty
   }
@@ -65,7 +69,11 @@ class SimpleDecideNewNodeTestSuite extends FunSuite with Matchers {
       )
     )
 
-    val result = decider.needNewNode(queueStat, registeredNodes, Seq.empty)
+    val result = decider.needNewNode(
+      queueStat,
+      registeredNodes.map(VersionedResourceAvailable(cv, _)),
+      Seq.empty
+    )
 
     result should not be empty
     result(queuedRequest) should equal(1)
@@ -93,7 +101,11 @@ class SimpleDecideNewNodeTestSuite extends FunSuite with Matchers {
     )
 
     val result =
-      decider.needNewNode(queueStat, freeOnRegisteredNodes, Seq.empty)
+      decider.needNewNode(
+        queueStat,
+        freeOnRegisteredNodes.map(VersionedResourceAvailable(cv, _)),
+        Seq.empty
+      )
 
     result shouldBe empty
   }
@@ -120,9 +132,42 @@ class SimpleDecideNewNodeTestSuite extends FunSuite with Matchers {
     )
 
     val result =
-      decider.needNewNode(queueStat, freeOnRegisteredNodes, Seq.empty)
+      decider.needNewNode(
+        queueStat,
+        freeOnRegisteredNodes.map(VersionedResourceAvailable(cv, _)),
+        Seq.empty
+      )
 
     result should not be empty
+  }
+
+  test(
+    "idle capacity on a node of a different code version is not counted, so a new node is still requested"
+  ) {
+    val queuedRequest = ResourceRequest((2, 2), 1000, 0, 0, None)
+    val queueStat = QueueStat(
+      queued = List(
+        ("task1", VersionedResourceRequest(cv, queuedRequest))
+      ),
+      running = Nil
+    )
+
+    val foreignIdleNode = ResourceAvailable(
+      cpu = 64,
+      memory = 256000,
+      scratch = 100000,
+      gpu = Nil,
+      image = None
+    )
+
+    val result = decider.needNewNode(
+      queueStat,
+      Seq(VersionedResourceAvailable(CodeVersion("other"), foreignIdleNode)),
+      Seq.empty
+    )
+
+    result should not be empty
+    result(queuedRequest) should equal(1)
   }
 
 }

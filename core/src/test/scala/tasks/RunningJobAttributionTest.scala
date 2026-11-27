@@ -94,8 +94,8 @@ class RunningJobAttributionTest extends FunSuite with Matchers {
       ),
       nodes = NodeRegistryState.State.empty.copy(
         running = Map(
-          RunningJobId("node-a") -> nodeA.size,
-          RunningJobId("node-b") -> nodeB.size
+          RunningJobId("node-a") -> VersionedResourceAvailable(cv, nodeA.size),
+          RunningJobId("node-b") -> VersionedResourceAvailable(cv, nodeB.size)
         )
       )
     )
@@ -103,19 +103,25 @@ class RunningJobAttributionTest extends FunSuite with Matchers {
     val free = state.freeCapacityOfRunningNodes.toSet
 
     free shouldBe Set(
-      ResourceAvailable(
-        cpu = 2,
-        memory = 1000,
-        scratch = 0,
-        gpu = Nil,
-        image = None
+      VersionedResourceAvailable(
+        cv,
+        ResourceAvailable(
+          cpu = 2,
+          memory = 1000,
+          scratch = 0,
+          gpu = Nil,
+          image = None
+        )
       ),
-      ResourceAvailable(
-        cpu = 4,
-        memory = 2000,
-        scratch = 0,
-        gpu = Nil,
-        image = None
+      VersionedResourceAvailable(
+        cv,
+        ResourceAvailable(
+          cpu = 4,
+          memory = 2000,
+          scratch = 0,
+          gpu = Nil,
+          image = None
+        )
       )
     )
   }

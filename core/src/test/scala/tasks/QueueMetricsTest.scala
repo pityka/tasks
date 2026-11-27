@@ -243,7 +243,13 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
     val launcher = tasks.util.message.LauncherName("w1")
     val allocated = tasks.shared.VersionedResourceAllocated(
       tasks.shared.CodeVersion("v1"),
-      tasks.shared.ResourceAllocated(cpu = 1, memory = 1, scratch = 0, gpu = Nil, image = None)
+      tasks.shared.ResourceAllocated(
+        cpu = 1,
+        memory = 1,
+        scratch = 0,
+        gpu = Nil,
+        image = None
+      )
     )
     val afterSchedule = QueueImpl.State.empty
       .update(QueueImpl.Enqueued(sch, Nil, enqueueMillis = 1_000L))
@@ -380,6 +386,8 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
       gpu = Nil,
       image = None
     )
+    val cv = tasks.shared.CodeVersion("test")
+    val vshape = tasks.shared.VersionedResourceAvailable(cv, shape)
     val node1 = tasks.util.message.Node(
       tasks.shared.RunningJobId("r1"),
       shape,
@@ -392,42 +400,43 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
     )
 
     val nodeRegistry = tasks.elastic.NodeRegistryState.State.empty
-      .update(tasks.elastic.NodeRegistryState.NodeRequested(shape))
+      .update(tasks.elastic.NodeRegistryState.NodeRequested(vshape))
       .update(
         tasks.elastic.NodeRegistryState.NodeIsPending(
           tasks.shared.PendingJobId("p1"),
-          shape,
-          shape
+          vshape,
+          vshape
         )
       )
       .update(
         tasks.elastic.NodeRegistryState.NodeIsUp(
           node1,
+          cv,
           tasks.shared.PendingJobId("p1")
         )
       )
-      .update(tasks.elastic.NodeRegistryState.NodeRequested(shape))
+      .update(tasks.elastic.NodeRegistryState.NodeRequested(vshape))
       .update(
         tasks.elastic.NodeRegistryState.NodeIsPending(
           tasks.shared.PendingJobId("p2"),
-          shape,
-          shape
+          vshape,
+          vshape
         )
       )
       .update(
         tasks.elastic.NodeRegistryState
-          .NodeIsUp(node2, tasks.shared.PendingJobId("p2"))
+          .NodeIsUp(node2, cv, tasks.shared.PendingJobId("p2"))
       )
-      .update(tasks.elastic.NodeRegistryState.NodeRequested(shape))
+      .update(tasks.elastic.NodeRegistryState.NodeRequested(vshape))
       .update(
         tasks.elastic.NodeRegistryState.NodeIsPending(
           tasks.shared.PendingJobId("p3"),
-          shape,
-          shape
+          vshape,
+          vshape
         )
       )
-      .update(tasks.elastic.NodeRegistryState.NodeRequested(shape))
-      .update(tasks.elastic.NodeRegistryState.NodeRequested(shape))
+      .update(tasks.elastic.NodeRegistryState.NodeRequested(vshape))
+      .update(tasks.elastic.NodeRegistryState.NodeRequested(vshape))
 
     nodeRegistry.running.size shouldBe 2
     nodeRegistry.pending.size shouldBe 1
@@ -539,6 +548,10 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
       image = None,
       labels = Set("aws-batch-queue:spot")
     )
+    val cv = tasks.shared.CodeVersion("test")
+    val va = tasks.shared.VersionedResourceAvailable(cv, a)
+    val vb = tasks.shared.VersionedResourceAvailable(cv, b)
+    val vc = tasks.shared.VersionedResourceAvailable(cv, c)
 
     val node1 = tasks.util.message.Node(
       tasks.shared.RunningJobId("r1"),
@@ -553,37 +566,37 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
 
     val nodeRegistry = tasks.elastic.NodeRegistryState.State.empty
       // Two running with shared "aws-batch-queue:prod"; one of them also has "zone:us-east-1a".
-      .update(tasks.elastic.NodeRegistryState.NodeRequested(a))
+      .update(tasks.elastic.NodeRegistryState.NodeRequested(va))
       .update(
         tasks.elastic.NodeRegistryState.NodeIsPending(
           tasks.shared.PendingJobId("p1"),
-          a,
-          a
+          va,
+          va
         )
       )
       .update(
         tasks.elastic.NodeRegistryState
-          .NodeIsUp(node1, tasks.shared.PendingJobId("p1"))
+          .NodeIsUp(node1, cv, tasks.shared.PendingJobId("p1"))
       )
-      .update(tasks.elastic.NodeRegistryState.NodeRequested(b))
+      .update(tasks.elastic.NodeRegistryState.NodeRequested(vb))
       .update(
         tasks.elastic.NodeRegistryState.NodeIsPending(
           tasks.shared.PendingJobId("p2"),
-          b,
-          b
+          vb,
+          vb
         )
       )
       .update(
         tasks.elastic.NodeRegistryState
-          .NodeIsUp(node2, tasks.shared.PendingJobId("p2"))
+          .NodeIsUp(node2, cv, tasks.shared.PendingJobId("p2"))
       )
       // One pending with "aws-batch-queue:spot" — still waiting to come up.
-      .update(tasks.elastic.NodeRegistryState.NodeRequested(c))
+      .update(tasks.elastic.NodeRegistryState.NodeRequested(vc))
       .update(
         tasks.elastic.NodeRegistryState.NodeIsPending(
           tasks.shared.PendingJobId("p3"),
-          c,
-          c
+          vc,
+          vc
         )
       )
 
@@ -682,21 +695,25 @@ class QueueMetricsTest extends AnyFunSuite with Matchers {
         tasks.util.message.LauncherName(s"launcher-$id")
       )
 
+    val cv = tasks.shared.CodeVersion("test")
+
     val registry = List("a", "b", "c").foldLeft(
       tasks.elastic.NodeRegistryState.State.empty
     ) { (st, l) =>
       val r = labeled(l)
-      st.update(tasks.elastic.NodeRegistryState.NodeRequested(r))
+      val vr = tasks.shared.VersionedResourceAvailable(cv, r)
+      st.update(tasks.elastic.NodeRegistryState.NodeRequested(vr))
         .update(
           tasks.elastic.NodeRegistryState.NodeIsPending(
             tasks.shared.PendingJobId(s"p-$l"),
-            r,
-            r
+            vr,
+            vr
           )
         )
         .update(
           tasks.elastic.NodeRegistryState.NodeIsUp(
             node(s"r-$l", r),
+            cv,
             tasks.shared.PendingJobId(s"p-$l")
           )
         )

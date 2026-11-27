@@ -16,6 +16,7 @@ import tasks.shared.ResourceRequest
 import tasks.util.config.TasksConfig
 import tasks.util.message.LauncherName
 import tasks.shared.VersionedResourceAvailable
+import tasks.shared.CodeVersion
 import tasks.util.HeartBeatIO
 import tasks.util.eq._
 import tasks.shared.VersionedResourceAllocated
@@ -51,8 +52,10 @@ object QueueImpl {
       sch: ScheduleTask,
       proxies: List[Proxy]
   ) extends Event
-  private[tasks] case class LauncherJoined(launcher: LauncherName, node: Option[Node])
-      extends Event
+  private[tasks] case class LauncherJoined(
+      launcher: LauncherName,
+      node: Option[Node]
+  ) extends Event
   private[tasks] case class TaskScheduled(
       sch: ScheduleTask,
       launcher: LauncherName,
@@ -76,7 +79,8 @@ object QueueImpl {
       sch: ScheduleTask,
       launcher: LauncherName
   ) extends Event
-  private[tasks] case class LauncherCrashed(crashedLauncher: LauncherName) extends Event
+  private[tasks] case class LauncherCrashed(crashedLauncher: LauncherName)
+      extends Event
   private[tasks] case class SessionProxiesDropped(session: String) extends Event
   private[tasks] case class MainProcessJoined(session: String) extends Event
   private[tasks] case class MainProcessLeft(session: String) extends Event
@@ -99,11 +103,14 @@ object QueueImpl {
       def shouldRequestReplacementNodes = true
     }
   }
-  private[tasks] case class CacheHit(sch: ScheduleTask, result: UntypedResult) extends Event
+  private[tasks] case class CacheHit(sch: ScheduleTask, result: UntypedResult)
+      extends Event
   private[tasks] case class NodeEvent(ev: NodeRegistryState.Event) extends Event
 
-  private[tasks] case class ResultStoredForProxy(proxy: Address, result: ProxyResult)
-      extends Event
+  private[tasks] case class ResultStoredForProxy(
+      proxy: Address,
+      result: ProxyResult
+  ) extends Event
   private[tasks] case class ResultDeliveredToProxy(proxy: Address) extends Event
 
   private[tasks] sealed trait ProxyResult
@@ -111,7 +118,8 @@ object QueueImpl {
       result: UntypedResult,
       retrievedFromCache: Boolean
   ) extends ProxyResult
-  private[tasks] case class ProxyResultFailure(cause: Throwable) extends ProxyResult
+  private[tasks] case class ProxyResultFailure(cause: Throwable)
+      extends ProxyResult
 
   private[tasks] def project(sch: ScheduleTask) =
     ScheduleTaskEqualityProjection(sch.description)
@@ -120,7 +128,7 @@ object QueueImpl {
       launcher: LauncherName,
       allocated: VersionedResourceAllocated,
       dispatchedAtMillis: Option[Long]
-  )  
+  )
 
   private[tasks] case class ScheduledTask(
       sch: ScheduleTask,
@@ -184,7 +192,7 @@ object QueueImpl {
       failedCount: Map[TaskId, Long]
   ) {
 
-    def freeCapacityOfRunningNodes: List[ResourceAvailable] = {
+    def freeCapacityOfRunningNodes: List[VersionedResourceAvailable] = {
       val nodeOfLauncher: Map[LauncherName, RunningJobId] =
         knownLaunchers.collect { case (launcher, Some(node)) =>
           launcher -> node.name
@@ -203,9 +211,12 @@ object QueueImpl {
           }
 
       nodes.running.toList.map { case (runningJobId, total) =>
-        allocationsByNode
+        val free = allocationsByNode
           .getOrElse(runningJobId, Nil)
-          .foldLeft(total)((free, allocated) => free.substract(allocated))
+          .foldLeft(total.cpuMemoryAvailable)((free, allocated) =>
+            free.substract(allocated)
+          )
+        VersionedResourceAvailable(total.codeVersion, free)
       }
     }
 
@@ -315,8 +326,10 @@ object QueueImpl {
           copy(
             scheduledTasks = releaseCopy(sch, launcher, delivered = true),
             queuedTasks = queuedTasks - project(sch),
-            completedCount =
-              completedCount.updated(taskId, completedCount.getOrElse(taskId, 0L) + 1L)
+            completedCount = completedCount.updated(
+              taskId,
+              completedCount.getOrElse(taskId, 0L) + 1L
+            )
           )
         case TaskFailed(sch, launcher, completesCaller) =>
           val taskId = sch.description.taskId
@@ -325,8 +338,10 @@ object QueueImpl {
               releaseCopy(sch, launcher, delivered = completesCaller),
             queuedTasks =
               if (completesCaller) queuedTasks - project(sch) else queuedTasks,
-            failedCount =
-              failedCount.updated(taskId, failedCount.getOrElse(taskId, 0L) + 1L)
+            failedCount = failedCount.updated(
+              taskId,
+              failedCount.getOrElse(taskId, 0L) + 1L
+            )
           )
         case TaskLauncherStoppedFor(sch, launcher) =>
           copy(scheduledTasks = releaseCopy(sch, launcher, delivered = false))
@@ -919,7 +934,9 @@ private[tasks] class QueueImpl(
               "Scheduletask received multiple times from different proxies. Not queueing this one, but delivering result if ready. "
             )
           )
-          state.update(ProxyAddedToScheduledMessage(sch, List(proxy))) -> IO.unit
+          state.update(
+            ProxyAddedToScheduledMessage(sch, List(proxy))
+          ) -> IO.unit
 
         } else {
           enqueueOrCacheHit(sch, List(proxy), state, nowMillis)
@@ -931,6 +948,7 @@ private[tasks] class QueueImpl(
 
   private def handleNewNode(
       node: Node,
+      codeVersion: CodeVersion,
       convert: ConvertRunningToPending
   ): IO[Unit] = {
     val runningId = node.name
@@ -938,7 +956,9 @@ private[tasks] class QueueImpl(
       case Some(convertedRunningId) =>
         ref.update { state =>
           state.update(
-            NodeEvent(NodeRegistryState.NodeIsUp(node, convertedRunningId))
+            NodeEvent(
+              NodeRegistryState.NodeIsUp(node, codeVersion, convertedRunningId)
+            )
           )
         }
       case None =>
@@ -992,9 +1012,12 @@ private[tasks] class QueueImpl(
       } else IO.unit
       val (newState, io) =
         try {
+          val codeVersion = decideNewNode.codeVersion
           val plannedSpawns = decideNewNode.needNewNode(
             queueStat,
-            state.freeCapacityOfRunningNodes ++ Seq(unmanagedResource),
+            state.freeCapacityOfRunningNodes ++ Seq(
+              VersionedResourceAvailable(codeVersion, unmanagedResource)
+            ),
             state.nodes.pending.toSeq.map(_._2)
           )
           val noWorkerKnown =
@@ -1019,7 +1042,7 @@ private[tasks] class QueueImpl(
               image = req.image
             )
 
-          val inFlightByShape: Map[ResourceAvailable, Int] =
+          val inFlightByShape: Map[VersionedResourceAvailable, Int] =
             state.nodes.inFlightRequests
               .groupBy(identity)
               .map { case (k, v) => k -> v.size }
@@ -1027,7 +1050,13 @@ private[tasks] class QueueImpl(
           val neededNodes: Map[ResourceRequest, Int] =
             rawNeededNodes.flatMap { case (req, count) =>
               val alreadyInFlight =
-                inFlightByShape.getOrElse(committedResourceFor(req), 0)
+                inFlightByShape.getOrElse(
+                  VersionedResourceAvailable(
+                    codeVersion,
+                    committedResourceFor(req)
+                  ),
+                  0
+                )
               val adjusted = count - alreadyInFlight
               if (adjusted > 0) Some(req -> adjusted) else None
             }
@@ -1074,7 +1103,12 @@ private[tasks] class QueueImpl(
                 requestedList.foldLeft(state) { (s, req) =>
                   s.update(
                     NodeEvent(
-                      NodeRegistryState.NodeRequested(committedResourceFor(req))
+                      NodeRegistryState.NodeRequested(
+                        VersionedResourceAvailable(
+                          codeVersion,
+                          committedResourceFor(req)
+                        )
+                      )
                     )
                   )
                 }
@@ -1104,7 +1138,11 @@ private[tasks] class QueueImpl(
                 )
               ) *> IO
                 .parSequenceN(1)(requestedList.map { request =>
-                  val committedResource = committedResourceFor(request)
+                  val committedResource =
+                    VersionedResourceAvailable(
+                      codeVersion,
+                      committedResourceFor(request)
+                    )
                   val recordFailure: IO[Unit] = ref.update(
                     _.update(
                       NodeEvent(
@@ -1124,7 +1162,7 @@ private[tasks] class QueueImpl(
                             NodeEvent(
                               NodeRegistryState.NodeIsPending(
                                 jobId,
-                                size,
+                                VersionedResourceAvailable(codeVersion, size),
                                 committedResource
                               )
                             )
@@ -1388,7 +1426,9 @@ private[tasks] class QueueImpl(
           if (isNewLauncher)
             node
               .flatMap(n =>
-                convertRunningToPending.map(convert => handleNewNode(n, convert))
+                convertRunningToPending.map(convert =>
+                  handleNewNode(n, availableResource.codeVersion, convert)
+                )
               )
               .getOrElse(IO.unit)
           else IO.unit
@@ -1535,36 +1575,38 @@ private[tasks] class QueueImpl(
   }
 
   def pollResult(proxy: Address): IO[Option[ProxyResult]] =
-    localResults.modify { current =>
-      current.get(proxy) match {
-        case Some(result) => (current - proxy, Some(result))
-        case None         => (current, None)
-      }
-    }.flatMap {
-      case delivered @ Some(_) =>
-        IO(
-          scribe.debug(s"ResultPolled", scribe.data("proxy", proxy.toString))
-        ).as(delivered)
-      case None =>
-        ref.get.flatMap { current =>
-          if (!current.completedResults.contains(proxy))
-            IO.pure(Option.empty[ProxyResult])
-          else
-            ref.flatModify { state =>
-              state.completedResults.get(proxy) match {
-                case None => state -> IO.pure(Option.empty[ProxyResult])
-                case Some(result) =>
-                  scribe.debug(
-                    s"ResultPolled",
-                    scribe.data("proxy", proxy.toString)
-                  )
-                  state.update(ResultDeliveredToProxy(proxy)) -> IO.pure(
-                    Some(result)
-                  )
-              }
-            }
+    localResults
+      .modify { current =>
+        current.get(proxy) match {
+          case Some(result) => (current - proxy, Some(result))
+          case None         => (current, None)
         }
-    }
+      }
+      .flatMap {
+        case delivered @ Some(_) =>
+          IO(
+            scribe.debug(s"ResultPolled", scribe.data("proxy", proxy.toString))
+          ).as(delivered)
+        case None =>
+          ref.get.flatMap { current =>
+            if (!current.completedResults.contains(proxy))
+              IO.pure(Option.empty[ProxyResult])
+            else
+              ref.flatModify { state =>
+                state.completedResults.get(proxy) match {
+                  case None => state -> IO.pure(Option.empty[ProxyResult])
+                  case Some(result) =>
+                    scribe.debug(
+                      s"ResultPolled",
+                      scribe.data("proxy", proxy.toString)
+                    )
+                    state.update(ResultDeliveredToProxy(proxy)) -> IO.pure(
+                      Some(result)
+                    )
+                }
+              }
+          }
+      }
 
   def taskFailed(
       sch: ScheduleTask,
@@ -1595,7 +1637,9 @@ private[tasks] class QueueImpl(
               List.empty[IO[Unit]]
             )
           } else if (!known) (state, List.empty[IO[Unit]])
-          else if (state.scheduledTasks.get(project(sch)).exists(_.copies > 1)) {
+          else if (
+            state.scheduledTasks.get(project(sch)).exists(_.copies > 1)
+          ) {
             scribe.info(
               "CopyFailedWhileSiblingsRun",
               sch,

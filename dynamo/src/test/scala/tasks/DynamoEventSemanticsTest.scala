@@ -12,6 +12,7 @@ import tasks.elastic.NodeRegistryState
 import tasks.queue.DynamoQueueState
 import tasks.queue.Proxy
 import tasks.queue.QueueImpl
+import tasks.shared.CodeVersion
 import tasks.shared.PendingJobId
 import tasks.shared.RunningJobId
 import tasks.util.message.Address
@@ -75,7 +76,10 @@ class DynamoEventSemanticsTest extends FunSuite with Matchers {
       )
     )
     val scheduled = state.scheduledTasks.values.head
-    scheduled.dispatches.map(_.launcher).toSet shouldBe Set(launcherA, launcherB)
+    scheduled.dispatches.map(_.launcher).toSet shouldBe Set(
+      launcherA,
+      launcherB
+    )
   }
 
   test("TaskDone on one of two dispatches leaves the task scheduled") {
@@ -209,13 +213,16 @@ class DynamoEventSemanticsTest extends FunSuite with Matchers {
       LauncherName("l-ne")
     )
     val pendingId = PendingJobId("pj-ne")
+    val vresource = SchedulerFixtures.versionedResourceAvailable()
     val state = runEvents(
       List(
-        QueueImpl.NodeEvent(NodeRegistryState.NodeRequested(resource)),
+        QueueImpl.NodeEvent(NodeRegistryState.NodeRequested(vresource)),
         QueueImpl.NodeEvent(
-          NodeRegistryState.NodeIsPending(pendingId, resource, resource)
+          NodeRegistryState.NodeIsPending(pendingId, vresource, vresource)
         ),
-        QueueImpl.NodeEvent(NodeRegistryState.NodeIsUp(node, pendingId))
+        QueueImpl.NodeEvent(
+          NodeRegistryState.NodeIsUp(node, CodeVersion("v1"), pendingId)
+        )
       )
     )
     state.nodes.cumulativeRequested shouldBe 1
