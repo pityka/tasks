@@ -11,7 +11,7 @@ ThisBuild / publishTo := {
 
 ThisBuild / credentials ++= {
   for {
-    actor <- sys.env.get("GITHUB_ACTOR")
+    actor <- sys.env.get("GITHUB_ACTOR").orElse(Some("_"))
     token <- sys.env.get("GITHUB_TOKEN")
   } yield Credentials(
     "GitHub Package Registry",
@@ -184,6 +184,84 @@ lazy val core = project
       ),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "tasks.util.message.MessageData#AskForWork.apply"
+      ),
+      ProblemFilters.exclude[IncompatibleMethTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeIsPending.this"
+      ),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeIsPending.resource"
+      ),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeIsPending.committedResource"
+      ),
+      ProblemFilters.exclude[IncompatibleMethTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeIsPending.copy"
+      ),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeIsPending.copy$default$2"
+      ),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeIsPending.copy$default$3"
+      ),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeIsPending._2"
+      ),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeIsPending._3"
+      ),
+      ProblemFilters.exclude[IncompatibleMethTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeIsPending.apply"
+      ),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "tasks.elastic.NodeRegistryState#NodeIsUp.this"
+      ),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "tasks.elastic.NodeRegistryState#NodeIsUp.copy"
+      ),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeIsUp.copy$default$2"
+      ),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeIsUp._2"
+      ),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "tasks.elastic.NodeRegistryState#NodeIsUp.apply"
+      ),
+      ProblemFilters.exclude[IncompatibleMethTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeRequestFailed.this"
+      ),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeRequestFailed.committedResource"
+      ),
+      ProblemFilters.exclude[IncompatibleMethTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeRequestFailed.copy"
+      ),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeRequestFailed.copy$default$1"
+      ),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeRequestFailed._1"
+      ),
+      ProblemFilters.exclude[IncompatibleMethTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeRequestFailed.apply"
+      ),
+      ProblemFilters.exclude[IncompatibleMethTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeRequested.this"
+      ),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeRequested.committedResource"
+      ),
+      ProblemFilters.exclude[IncompatibleMethTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeRequested.copy"
+      ),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeRequested.copy$default$1"
+      ),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeRequested._1"
+      ),
+      ProblemFilters.exclude[IncompatibleMethTypeProblem](
+        "tasks.elastic.NodeRegistryState#NodeRequested.apply"
       )
     )
   )
